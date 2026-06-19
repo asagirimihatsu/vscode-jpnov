@@ -1,0 +1,250 @@
+{
+  "name": "jpnov",
+  "displayName": "Japanese Novel",
+  "version": "0.0.1",
+  "description": "A plugin for Visual Studio Code for formatting, previewing, and generating ebooks of Japanese novels annotated by Aozora Bunko",
+  "keywords": [
+    "plugin",
+    "novel",
+    "japanese"
+  ],
+  "homepage": "https://github.com/asagirimihatsu/vscode-jpnov#readme",
+  "bugs": {
+    "url": "https://github.com/asagirimihatsu/vscode-jpnov/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/asagirimihatsu/vscode-jpnov.git"
+  },
+  "license": "MIT",
+  "author": "Mihatsu Asagiri",
+  "type": "module",
+  "main": "dist/client/extension.js",
+  "engines": {
+    "vscode": "^1.120.0"
+  },
+  "categories": [
+    "Formatters",
+    "Other"
+  ],
+  "activationEvents": [
+    "workspaceContains:novel.jp.json",
+    "workspaceContains:novel.jp.js",
+    "workspaceContains:novel.jp.cjs",
+    "workspaceContains:novel.jp.mjs",
+    "workspaceContains:novel.jp.ts"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "novel-jp",
+        "aliases": [
+          "Japanese Novel"
+        ],
+        "extensions": [
+          ".jpnov"
+        ],
+        "configuration": "./jpnov.language-configuration.json"
+      },
+      {
+        "id": "novel-jp-filelist",
+        "aliases": [
+          "Japanese Novel Filelist"
+        ],
+        "extensions": [
+          ".filelist"
+        ],
+        "configuration": "./filelist.language-configuration.json"
+      }
+    ],
+    "configurationDefaults": {
+      "[novel-jp]": {
+        "editor.semanticHighlighting.enabled": true
+      }
+    },
+    "debuggers": [
+      {
+        "type": "jpnov-build",
+        "label": "Japanese Novel: Build",
+        "configurationAttributes": {
+          "launch": {
+            "properties": {
+              "format": {
+                "type": "string",
+                "enum": [
+                  "html",
+                  "txt"
+                ],
+                "default": "html",
+                "description": "Output format the selected books are built to."
+              }
+            }
+          }
+        }
+      }
+    ],
+    "commands": [
+      {
+        "command": "jpnov.books.buildHtml",
+        "category": "Japanese Novel",
+        "title": "Build to HTML",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "jpnov.books.buildTxt",
+        "category": "Japanese Novel",
+        "title": "Build to Text",
+        "icon": "$(file)"
+      },
+      {
+        "command": "jpnov.books.selectAll",
+        "category": "Japanese Novel",
+        "title": "Select All Books",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "jpnov.books.deselectAll",
+        "category": "Japanese Novel",
+        "title": "Deselect All Books",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "jpnov.books.refresh",
+        "category": "Japanese Novel",
+        "title": "Refresh Books",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "jpnov.preview",
+        "category": "Japanese Novel",
+        "title": "Open Preview"
+      },
+      {
+        "command": "jpnov.previewToSide",
+        "category": "Japanese Novel",
+        "title": "Open Preview to the Side",
+        "icon": "$(open-preview)"
+      }
+    ],
+    "views": {
+      "debug": [
+        {
+          "id": "jpnov.books",
+          "name": "Books",
+          "icon": "$(book)",
+          "when": "jpnov.hasConfig",
+          "contextualTitle": "Japanese Novel Books"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "jpnov.books",
+        "contents": "No books found yet.\nAdd a *.filelist manifest under your novel.jp source directory — each lists, in reading order, the .jpnov chapters of one book — then refresh.",
+        "when": "jpnov.hasConfig"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "jpnov.books.buildHtml",
+          "group": "navigation@1",
+          "when": "view == jpnov.books"
+        },
+        {
+          "command": "jpnov.books.buildTxt",
+          "group": "navigation@2",
+          "when": "view == jpnov.books"
+        },
+        {
+          "command": "jpnov.books.selectAll",
+          "group": "navigation@3",
+          "when": "view == jpnov.books"
+        },
+        {
+          "command": "jpnov.books.deselectAll",
+          "group": "navigation@4",
+          "when": "view == jpnov.books"
+        },
+        {
+          "command": "jpnov.books.refresh",
+          "group": "navigation@5",
+          "when": "view == jpnov.books"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "jpnov.previewToSide",
+          "group": "navigation",
+          "when": "editorLangId == novel-jp"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "jpnov.preview",
+          "when": "editorLangId == novel-jp"
+        },
+        {
+          "command": "jpnov.previewToSide",
+          "when": "editorLangId == novel-jp"
+        },
+        {
+          "command": "jpnov.books.buildHtml",
+          "when": "false"
+        },
+        {
+          "command": "jpnov.books.buildTxt",
+          "when": "false"
+        },
+        {
+          "command": "jpnov.books.selectAll",
+          "when": "false"
+        },
+        {
+          "command": "jpnov.books.deselectAll",
+          "when": "false"
+        },
+        {
+          "command": "jpnov.books.refresh",
+          "when": "false"
+        }
+      ]
+    }
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Data configs (novel.jp.json) are read in untrusted workspaces; executable configs (novel.jp.js/cjs/mjs/ts) run only in a trusted workspace."
+    }
+  },
+  "imports": {
+    "#/*": "./src/*"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "lint": "eslint .",
+    "build": "node esbuild.config.js --production",
+    "build:dev": "node esbuild.config.js",
+    "watch:esbuild": "node esbuild.config.js --watch",
+    "watch:tsc": "tsc --noEmit --watch",
+    "watch": "npm run watch:tsc & npm run watch:esbuild & wait",
+    "pretest": "npm run type-check",
+    "test": "node --test --experimental-test-module-mocks \"test/shared/**/*.test.ts\" \"test/server/highlight/**/*.test.ts\"",
+    "vscode:prepublish": "npm run type-check && npm run lint && npm run build",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^10",
+    "vscode-languageserver": "^10",
+    "vscode-languageserver-textdocument": "^1.0.12"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "@types/vscode": "^1.120.0",
+    "@vscode/vsce": "^3.9.1",
+    "esbuild": "^0.28.0",
+    "eslint": "^10.4.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.60.1"
+  }
+}

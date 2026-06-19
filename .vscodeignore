@@ -1,0 +1,12 @@
+# Allowlist strategy: ignore everything, then ship only the bundled ESM entries
+# (client + server) and the metadata vsce needs. esbuild inlines all deps, so no
+# node_modules ship.
+**
+
+!dist/client/extension.js
+!dist/server/server.js
+!package.json
+!filelist.language-configuration.json
+!jpnov.language-configuration.json
+!LICENSE
+!README.md
