@@ -60,6 +60,14 @@
     "configurationDefaults": {
       "[novel-jp]": {
         "editor.semanticHighlighting.enabled": true
+      },
+      "github.copilot.enable": {
+        "*": true,
+        "plaintext": false,
+        "markdown": false,
+        "scminput": false,
+        "novel-jp": false,
+        "novel-jp-filelist": false
       }
     },
     "debuggers": [
