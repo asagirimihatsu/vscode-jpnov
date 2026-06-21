@@ -2,6 +2,16 @@
 
 A Visual Studio Code extension for formatting, previewing, and generating vertical writing books of Japanese novels annotated with [Aozora Bunko annotations](https://www.aozora.gr.jp/annotation/index.html).
 
+## Novel Publishment
+
+Publishing a novel is a serious matter. Many editors explicitly forbid the use of **any AI**. This rule is very broad, so this tool will **NOT** introduce any AI tools for writing, and will disable the Copilot extension by default for `*.jpnov` / `*.filelist`.
+
+All `*.filelist` completion relies entirely on non-AI programs.
+
+**Writing must be done entirely by human author from beginning to end.**
+
+Some authors might think this is "making a mountain out of a molehill". But, commercial publishing is indeed a complex issue. Determining copyright boundaries and resolving infringement disputes incurs high costs in terms of human and material resources.
+
 ## Status
 
 Early scaffolding. Novel sources are written in `.jpnov` files (the editor binds them
