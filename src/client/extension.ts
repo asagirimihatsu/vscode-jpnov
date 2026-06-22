@@ -29,7 +29,8 @@ import {
 } from '#/shared/protocol.ts';
 
 import { BooksView } from './booksView.ts';
-import { ensureLaunchConfig, registerBuildDebugger } from './buildDebug.ts';
+import { registerBuildDebugger } from './buildDebug.ts';
+import { registerInitWorkspace } from './initWorkspace.ts';
 import { Preview } from './preview.ts';
 import { StatusBar } from './statusBar.ts';
 
@@ -86,10 +87,6 @@ export function activate(context: vscode.ExtensionContext): void {
     client.onNotification(ConfigStateNotification, (params: ConfigStateParams) => {
       statusBar?.update(params.root, params.state, params.error);
       booksView?.onConfigState(params);
-      // First valid config: seed launch.json so the ▶ dropdown shows the build entries persistently.
-      if (params.state === 'valid') {
-        void ensureLaunchConfig(context, vscode.Uri.parse(params.root));
-      }
     }),
   );
 
@@ -124,6 +121,9 @@ export function activate(context: vscode.ExtensionContext): void {
   // checkbox selection; there is no command-palette build entry — a build needs a resolved
   // config plus at least one selected book, so the palette is the wrong home for it.
   context.subscriptions.push(
+    // Scaffold a fresh novel project (.vscode/, novel.jp.json, a sample chapter). Palette-only;
+    // available in an empty workspace via the implicit onCommand activation (vscode >= 1.74).
+    registerInitWorkspace(),
     vscode.commands.registerCommand('jpnov.books.buildHtml', () => {
       booksView?.buildHtml();
     }),

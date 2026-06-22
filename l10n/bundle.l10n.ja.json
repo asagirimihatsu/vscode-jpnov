@@ -1,0 +1,21 @@
+{
+  "Disable AI assistants (Copilot, etc.) in this workspace?": "このワークスペースで AI アシスタント（Copilot など）を無効にしますか？",
+  "Yes — disable AI in this workspace": "はい — このワークスペースで AI を無効にする",
+  "Writes .vscode/settings.json turning off Copilot and inline suggestions.": "Copilot とインライン候補を無効にする .vscode/settings.json を作成します。",
+  "No — leave AI settings unchanged": "いいえ — AI 設定を変更しない",
+  "Characters per line": "1 行の文字数",
+  "Lines per page": "1 ページの行数",
+  "Enter a whole number from 1 to 1000.": "1〜1000 の整数を入力してください。",
+  "Enable kinsoku shori (avoid awkward line breaks)?": "禁則処理（行頭・行末の調整）を有効にしますか？",
+  "No (default)": "いいえ（既定）",
+  "Line breaks are not adjusted.": "行の折り返しを調整しません。",
+  "Yes — enable kinsoku shori": "はい — 禁則処理を有効にする",
+  "Keeps closing brackets/punctuation off line start and opening brackets off line end.": "閉じ括弧・句読点を行頭に、開き括弧を行末に置かないようにします。",
+  "Pick the folder to initialize as a Japanese Novel project.": "小説プロジェクトとして初期化するフォルダーを選択してください。",
+  "Japanese Novel: open a folder first, then run Init Workspace.": "小説: 先にフォルダーを開いてから「ワークスペースを初期化」を実行してください。",
+  "Japanese Novel: {0} already exists; initialization aborted.": "小説: {0} が既に存在します。初期化を中止しました。",
+  "Japanese Novel: {0} exists as a file; a directory is needed.": "小説: {0} はファイルとして存在します。ディレクトリが必要です。",
+  "Japanese Novel: cannot inspect {0}.": "小説: {0} を確認できませんでした。",
+  "Japanese Novel: failed to write {0}.": "小説: {0} を書き込めませんでした。",
+  "Japanese Novel: workspace initialized. Start writing in {0}.": "小説: ワークスペースを初期化しました。{0} から執筆を始められます。"
+}

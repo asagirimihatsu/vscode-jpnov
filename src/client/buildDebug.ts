@@ -1,11 +1,12 @@
 /**
- * "Build" entries for the Run and Debug launch dropdown. That selector only hosts DEBUG
- * configurations and only renders once a `launch.json` exists, so we (a) seed a `launch.json` with
- * two entries ("Build selected as HTML/Text") via {@link ensureLaunchConfig}, and (b) register an
- * inline {@link vscode.DebugAdapter} that turns pressing ▶ on one into a build of the Books panel's
- * CURRENT checkbox selection — then immediately terminates the (otherwise empty) debug session. No
- * real debugging happens; this is purely to put a prominent build button where users look for "run
- * this project".
+ * The inline DEBUG adapter behind the "Build" entries in the Run and Debug launch dropdown. That
+ * selector only hosts DEBUG configurations, so pressing ▶ on a `jpnov-build` entry is turned into a
+ * build of the Books panel's CURRENT checkbox selection, then the (otherwise empty) debug session
+ * terminates immediately. No real debugging happens; this is purely to put a prominent build button
+ * where users look for "run this project".
+ *
+ * {@link BUILD_CONFIGS} is the canonical pair of launch entries; the `Init Workspace` command
+ * (initWorkspace.ts) writes them into a scaffolded `.vscode/launch.json`.
  *
  * The debug TYPE (`jpnov-build`) must ALSO be declared in package.json `contributes.debuggers`:
  * VS Code only lets an extension register an adapter factory for a type it contributes.
@@ -21,7 +22,7 @@ const DEBUG_TYPE = 'jpnov-build';
  * The two launch entries seeded into `launch.json`. `format` is read back by the adapter; the
  * `name`s are what show in the ▶ dropdown.
  */
-const BUILD_CONFIGS: readonly vscode.DebugConfiguration[] = [
+export const BUILD_CONFIGS: readonly vscode.DebugConfiguration[] = [
   { type: DEBUG_TYPE, request: 'launch', name: 'Build selected as HTML', format: 'html' },
   { type: DEBUG_TYPE, request: 'launch', name: 'Build selected as Text', format: 'txt' },
 ];
@@ -42,40 +43,6 @@ export function registerBuildDebugger(runner: BuildRunner): vscode.Disposable {
     },
   };
   return vscode.debug.registerDebugAdapterDescriptorFactory(DEBUG_TYPE, factory);
-}
-
-/**
- * Seeds `.vscode/launch.json` with the two build entries the FIRST time a config-bearing workspace
- * has NO launch configuration at all — so the green-▶ dropdown shows them without the user authoring
- * a launch.json by hand (the dropdown only renders when a launch.json exists). It never touches an
- * existing launch.json, and a one-shot workspace-state flag means a user who deletes the file is not
- * re-nagged. No-op on fs failures (virtual/readonly workspaces) — the Books panel buttons still build.
- */
-export async function ensureLaunchConfig(
-  context: vscode.ExtensionContext,
-  folderUri: vscode.Uri,
-): Promise<void> {
-  const SEED_KEY = 'jpnov.launchSeeded';
-  if (context.workspaceState.get<boolean>(SEED_KEY) === true) {
-    return;
-  }
-  const launch = vscode.workspace.getConfiguration('launch', folderUri);
-  const configs = launch.get<readonly unknown[]>('configurations') ?? [];
-  if (configs.length === 0) {
-    try {
-      await launch.update(
-        'configurations',
-        BUILD_CONFIGS.map((c) => ({ ...c })),
-        vscode.ConfigurationTarget.WorkspaceFolder,
-      );
-      void vscode.window.showInformationMessage(
-        'Japanese Novel: added “Build selected as HTML / Text” to the Run and Debug dropdown (.vscode/launch.json).',
-      );
-    } catch {
-      // Virtual/readonly workspace: can't write launch.json. The Books panel buttons still build.
-    }
-  }
-  await context.workspaceState.update(SEED_KEY, true);
 }
 
 /** The minimal subset of an inbound DAP request we read off the opaque message. */
