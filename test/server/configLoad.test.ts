@@ -104,8 +104,9 @@ test('escaping sourceDir produces an error state + diagnostic, retains lastGood'
     const latest = conn.latestConfigState(ws.uri);
     assert.ok(latest);
     assert.equal(latest.state, 'error');
-    const error = latest.error as { message: string; configUri: string };
-    assert.match(error.message, /sourceDir/);
+    const error = latest.error as { code: string; args: unknown[]; configUri: string };
+    assert.equal(error.code, 'path.escapesRoot');
+    assert.deepEqual(error.args, ['sourceDir']);
     assert.ok(error.configUri.endsWith('novel.jp.json'));
     assert.ok(state.lastGood, 'error state should retain lastGood');
     // A diagnostic with at least one entry should have been published on the config uri.
@@ -149,7 +150,8 @@ test('executable config is gated out (error) when the workspace is untrusted', a
     const latest = conn.latestConfigState(ws.uri);
     assert.ok(latest);
     assert.equal(latest.state, 'error');
-    assert.match((latest.error as { message: string }).message, /untrusted|trust/i);
+    assert.equal((latest.error as { code: string }).code, 'config.execNeedsTrust');
+    assert.deepEqual((latest.error as { args: unknown[] }).args, ['mjs']);
   } finally {
     ws.cleanup();
   }

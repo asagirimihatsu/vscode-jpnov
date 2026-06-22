@@ -26,6 +26,51 @@ export interface InitializationOptions {
 }
 
 // ---------------------------------------------------------------------------
+// Localizable server messages (S->C)
+// ---------------------------------------------------------------------------
+
+/**
+ * The forked server is vscode-free (no `vscode.l10n`), so it never produces final UI text.
+ * It emits a CODE plus positional ARGS; the CLIENT renders the localized string via
+ * `renderMessage()` (`src/client/messages.ts`) -> `vscode.l10n.t()`. The server fills the
+ * English `Diagnostic.message` FALLBACK via the vscode-free `renderEnglish()`
+ * (`src/shared/messages.ts`). `args` are IPC-safe primitives, indexed by the `{0}`/`{1}`
+ * in each message's English template.
+ */
+export type MsgCode =
+  | 'config.execNeedsFileScheme' // args: [format]
+  | 'config.execNeedsTrust' // args: [format]
+  | 'config.loadFailed' // args: [detail]  (detail = raw parse/load error, untranslatable)
+  | 'book.entryNeedsFileScheme' // args: [value]
+  | 'book.entryFileNotFound' // args: [value]  (ENOENT)
+  | 'book.entryReadFailed' // args: [value, why]  (why = raw OS error, untranslatable)
+  | 'build.outPathCollision' // args: [outRel, list]
+  | 'build.failed' // args: [detail]  (detail = raw build error, untranslatable)
+  | 'filelist.backslashSeparator' // args: [value]
+  | 'filelist.notJpnov' // args: [value]
+  | 'filelist.duplicateEntry' // args: [value]
+  | 'filelist.entryIsDirectory' // args: [value]
+  | 'filelist.fileNotFound' // args: [value]
+  | 'path.empty' // args: [LabelId]
+  | 'path.rootDot' // args: [LabelId]  (the root "." or a path collapsing to it)
+  | 'path.homeRelative' // args: [LabelId]
+  | 'path.absolute' // args: [LabelId]
+  | 'path.invalid' // args: [LabelId]
+  | 'path.escapesRoot'; // args: [LabelId]
+
+/**
+ * Config-field labels carried by the `path.*` codes. `sourceDir`/`outDir` name a literal JSON
+ * key the user typed and render VERBATIM; `filelistEntry` is prose and is localized client-side.
+ */
+export type LabelId = 'sourceDir' | 'outDir' | 'filelistEntry';
+
+/** A server-produced message: a code plus the positional args its template substitutes. */
+export interface LocalizableMessage {
+  readonly code: MsgCode;
+  readonly args?: readonly (string | number)[];
+}
+
+// ---------------------------------------------------------------------------
 // jpnov/configState (S->C notification)
 // ---------------------------------------------------------------------------
 
@@ -46,8 +91,8 @@ export type ConfigState = 'valid' | 'error' | 'absent' | 'removed';
 export interface ConfigStateParams {
   readonly root: string;
   readonly state: ConfigState;
-  readonly error?: {
-    readonly message: string;
+  /** Present only for `error`: the localizable cause + the config uri to open on click. */
+  readonly error?: LocalizableMessage & {
     readonly configUri: string;
   };
 }
@@ -93,10 +138,9 @@ export interface BuildArtifact {
   readonly content: string;
 }
 
-export interface BuildError {
+export interface BuildError extends LocalizableMessage {
   /** Book identity (e.g. the book dir relative to sourceDir). */
   readonly book: string;
-  readonly message: string;
 }
 
 export interface BuildResult {

@@ -1,0 +1,88 @@
+/**
+ * The English message templates for every {@link MsgCode}, single-sourced and vscode-free.
+ *
+ * The forked server (no `vscode.l10n`) uses {@link renderEnglish} to fill the English
+ * `Diagnostic.message` FALLBACK and to give thrown {@link LocalizedError}s a readable message.
+ * The CLIENT does NOT use this file — it localizes via `vscode.l10n.t()` in
+ * `src/client/messages.ts`, whose English literals MUST match these byte-for-byte (a unit test
+ * asserts parity across every code). Keep the two in lockstep when adding a code.
+ *
+ * Imports only the wire types; never `vscode` (this stays a dependency-free leaf the server can use).
+ */
+import type { LabelId, LocalizableMessage, MsgCode } from './protocol.ts';
+
+/** English text for a label id. All three are verbatim in English (only JA localizes the prose one). */
+function englishLabel(label: LabelId): string {
+  switch (label) {
+    case 'sourceDir':
+      return 'sourceDir';
+    case 'outDir':
+      return 'outDir';
+    case 'filelistEntry':
+      return 'filelist entry';
+  }
+}
+
+/** Render a code + positional args to its English string (byte-identical to the pre-l10n source). */
+export function renderEnglish(code: MsgCode, args: readonly (string | number)[] = []): string {
+  const a = (i: number): string => String(args[i] ?? '');
+  switch (code) {
+    case 'config.execNeedsFileScheme':
+      return `executable config (${a(0)}) requires a file:// workspace`;
+    case 'config.execNeedsTrust':
+      return `executable config (${a(0)}) is not loaded in an untrusted workspace`;
+    case 'config.loadFailed':
+      return `cannot load config: ${a(0)}`;
+    case 'book.entryNeedsFileScheme':
+      return `cannot read "${a(0)}": book files require a file:// workspace`;
+    case 'book.entryFileNotFound':
+      return `cannot read "${a(0)}": file not found`;
+    case 'book.entryReadFailed':
+      return `cannot read "${a(0)}": ${a(1)}`;
+    case 'build.outPathCollision':
+      return `output path "${a(0)}" is claimed by multiple filelists: ${a(1)}`;
+    case 'build.failed':
+      return `build failed: ${a(0)}`;
+    case 'filelist.backslashSeparator':
+      return `use "/" as the path separator, not "\\": ${a(0)}`;
+    case 'filelist.notJpnov':
+      return `filelist entries must be .jpnov files: ${a(0)}`;
+    case 'filelist.duplicateEntry':
+      return `duplicate entry "${a(0)}" (already listed above)`;
+    case 'filelist.entryIsDirectory':
+      return `"${a(0)}" is a directory, not a .jpnov file`;
+    case 'filelist.fileNotFound':
+      return `file not found: ${a(0)}`;
+    case 'path.empty':
+      return `${englishLabel(args[0] as LabelId)} must not be empty`;
+    case 'path.rootDot':
+      return `${englishLabel(args[0] as LabelId)} must name a subpath, not the root "."`;
+    case 'path.homeRelative':
+      return `${englishLabel(args[0] as LabelId)} must not start with "~" (home-relative)`;
+    case 'path.absolute':
+      return `${englishLabel(args[0] as LabelId)} must be a relative path, not absolute`;
+    case 'path.invalid':
+      return `${englishLabel(args[0] as LabelId)} is not a valid path`;
+    case 'path.escapesRoot':
+      return `${englishLabel(args[0] as LabelId)} must not escape the workspace root`;
+    default: {
+      const exhaustive: never = code;
+      throw new Error(`renderEnglish: unhandled code ${String(exhaustive)}`);
+    }
+  }
+}
+
+/**
+ * An Error that carries a {@link LocalizableMessage}. Server code throws it where it used to
+ * `throw new Error(text)`; the catch site reads `.localized` to push a code (diagnostic / build
+ * error / config-state) instead of a raw string. The `Error.message` is the English render, so
+ * stack traces and logs stay readable.
+ */
+export class LocalizedError extends Error {
+  readonly localized: LocalizableMessage;
+
+  constructor(localized: LocalizableMessage) {
+    super(renderEnglish(localized.code, localized.args));
+    this.localized = localized;
+  }
+}

@@ -54,8 +54,23 @@ test('resolveContained rejects leading "~" (home-relative)', () => {
   }
 });
 
-test('resolveContained surfaces the label in the rejection reason', () => {
+test('resolveContained carries the label in the rejection args', () => {
   const got = resolveContained(ROOT, '', 'sourceDir');
   assert.ok(!got.ok);
-  assert.match(got.reason, /sourceDir/);
+  assert.equal(got.code, 'path.empty');
+  assert.deepEqual(got.args, ['sourceDir']);
+});
+
+test('resolveContained maps each rejection family to its code (C18 merged into path.rootDot)', () => {
+  const code = (rel: string): string => {
+    const got = resolveContained(ROOT, rel, 'sourceDir');
+    assert.ok(!got.ok, `should reject ${JSON.stringify(rel)}`);
+    return got.code;
+  };
+  assert.equal(code(''), 'path.empty');
+  assert.equal(code('.'), 'path.rootDot');
+  assert.equal(code('foo/..'), 'path.rootDot');
+  assert.equal(code('~'), 'path.homeRelative');
+  assert.equal(code('/etc/passwd'), 'path.absolute');
+  assert.equal(code('..'), 'path.escapesRoot');
 });

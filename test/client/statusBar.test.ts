@@ -49,13 +49,16 @@ test('any error root wins: red-cross text, error color, and opens that config', 
   const sb = new StatusBar();
   sb.update('file:///workspace/alpha', 'valid');
   sb.update('file:///workspace/beta', 'error', {
-    message: 'sourceDir escapes root',
+    code: 'path.escapesRoot',
+    args: ['sourceDir'],
     configUri: 'file:///workspace/beta/novel.jp.json',
   });
 
   const item = only();
   assert.equal(item.shown, true);
-  assert.equal(item.text, '$(error) Japanese Novel: beta config error');
+  // B13 dropped the per-root name from the text; the brand + icon identify the source,
+  // and the offending root is still listed in the tooltip / opened by the click command.
+  assert.equal(item.text, '$(error) Japanese Novel: config error');
   // errorForeground themecolor applied.
   assert.equal((item.color as { id: string }).id, 'statusBarItem.errorForeground');
   assert.equal(
@@ -70,23 +73,25 @@ test('any error root wins: red-cross text, error color, and opens that config', 
   assert.equal(arg.toString(), 'file:///workspace/beta/novel.jp.json');
 });
 
-test('tooltip lists every failing root with its message', () => {
+test('tooltip lists every failing root with its rendered message', () => {
   const sb = new StatusBar();
   sb.update('file:///w/one', 'error', {
-    message: 'bad number',
+    code: 'config.loadFailed',
+    args: ['bad number'],
     configUri: 'file:///w/one/novel.jp.json',
   });
   sb.update('file:///w/two', 'error', {
-    message: 'not trusted',
+    code: 'config.execNeedsTrust',
+    args: ['ts'],
     configUri: 'file:///w/two/novel.jp.ts',
   });
 
   const item = only();
   const tip = (item.tooltip as { value: string }).value;
   assert.match(tip, /one/);
-  assert.match(tip, /bad number/);
+  assert.match(tip, /bad number/); // rendered from config.loadFailed's arg
   assert.match(tip, /two/);
-  assert.match(tip, /not trusted/);
+  assert.match(tip, /untrusted/); // rendered from config.execNeedsTrust
 });
 
 test('removing the only valid root hides the item', () => {
@@ -107,10 +112,11 @@ test('absent-only roots keep the item hidden', () => {
 test('clearing an error back to valid drops the red cross', () => {
   const sb = new StatusBar();
   sb.update('file:///r', 'error', {
-    message: 'boom',
+    code: 'config.loadFailed',
+    args: ['boom'],
     configUri: 'file:///r/novel.jp.json',
   });
-  assert.equal(only().text, '$(error) Japanese Novel: r config error');
+  assert.equal(only().text, '$(error) Japanese Novel: config error');
 
   sb.update('file:///r', 'valid');
   const item = only();

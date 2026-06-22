@@ -126,7 +126,7 @@ test('opening with no active editor shows the empty-state shell', async () => {
   await new Promise((r) => setTimeout(r, 0));
 
   const html = firstPanel().webview.html;
-  assert.match(html, /Open a Japanese Novel \(\.jpnov\) file/);
+  assert.match(html, /Open a \.jpnov file to preview/);
   assert.match(html, /Content-Security-Policy/);
 });
 

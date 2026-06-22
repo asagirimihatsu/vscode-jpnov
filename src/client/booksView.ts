@@ -31,6 +31,7 @@ import {
 } from '#/shared/protocol.ts';
 
 import { buildForest, type TreeDir } from './bookTree.ts';
+import { renderMessage } from './messages.ts';
 import { lastPathSegment } from './paths.ts';
 
 /**
@@ -166,7 +167,7 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
     // Clicking the label (not the checkbox) opens the underlying `.filelist`.
     item.command = {
       command: 'vscode.open',
-      title: 'Open Filelist',
+      title: vscode.l10n.t('Open Filelist'),
       arguments: [vscode.Uri.parse(entry.uri)],
     };
     return item;
@@ -312,10 +313,12 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
    */
   async buildSelected(format: BuildFormat): Promise<void> {
     const books = [...this.checked];
-    const label = format === 'html' ? 'HTML' : 'text';
+    // 'HTML' is a proper noun (not localized); 'text' translates. The label is passed
+    // already-localized into the count templates below.
+    const label = format === 'html' ? 'HTML' : vscode.l10n.t('text');
     if (books.length === 0) {
       void vscode.window.showInformationMessage(
-        'Japanese Novel: no books checked — tick at least one book in the Books panel to build.',
+        vscode.l10n.t('Japanese Novel: no books selected. Check a book in the Books panel, then build.'),
       );
       return;
     }
@@ -324,7 +327,11 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        title: `Japanese Novel: building ${String(books.length)} book${books.length === 1 ? '' : 's'} to ${label}…`,
+        // l10n.t has no plural support, so branch into a singular/plural pair of bundle keys;
+        // Japanese maps both to one (number-invariant) string.
+        title: books.length === 1
+          ? vscode.l10n.t('Japanese Novel: building 1 book to {0}…', label)
+          : vscode.l10n.t('Japanese Novel: building {0} books to {1}…', String(books.length), label),
         cancellable: false,
       },
       async () => {
@@ -334,7 +341,7 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
           result = await c.sendRequest<BuildResult>(BuildRequest, params);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          void vscode.window.showErrorMessage(`Japanese Novel build failed: ${message}`);
+          void vscode.window.showErrorMessage(vscode.l10n.t('Japanese Novel: build failed. {0}', message));
           return;
         }
 
@@ -350,25 +357,30 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             void vscode.window.showErrorMessage(
-              `Japanese Novel: failed to write ${artifact.path}: ${message}`,
+              vscode.l10n.t("Japanese Novel: couldn't write {0}. {1}", artifact.path, message),
             );
           }
         }
 
-        // Per-book build errors (each isolated server-side; never aborts the rest).
+        // Per-book build errors (each isolated server-side; never aborts the rest). The server
+        // sends a {code,args}; the client renders it to localized text.
         const errors = result.errors ?? [];
         for (const e of errors) {
-          void vscode.window.showErrorMessage(`Japanese Novel build (${e.book}): ${e.message}`);
+          void vscode.window.showErrorMessage(
+            vscode.l10n.t('Japanese Novel: build error for {0}. {1}', e.book, renderMessage(e)),
+          );
         }
 
         if (written.length > 0) {
           // One artifact per book now (a single format), so the file count IS the book count.
           void vscode.window.showInformationMessage(
-            `Japanese Novel: built ${String(written.length)} ${label} file${written.length === 1 ? '' : 's'}.`,
+            written.length === 1
+              ? vscode.l10n.t('Japanese Novel: built 1 {0} file.', label)
+              : vscode.l10n.t('Japanese Novel: built {0} {1} files.', String(written.length), label),
           );
         } else if (errors.length === 0) {
           void vscode.window.showInformationMessage(
-            'Japanese Novel: nothing to build for the selected books.',
+            vscode.l10n.t('Japanese Novel: nothing to build.'),
           );
         }
       },

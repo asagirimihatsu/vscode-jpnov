@@ -1,10 +1,20 @@
+import type { LabelId, MsgCode } from '#/shared/protocol.ts';
+
+/** Failure of {@link resolveContained}: a `path.*` code plus the config-field label it concerns. */
+export interface ContainmentError {
+  ok: false;
+  code: MsgCode;
+  args: readonly [LabelId];
+}
+
 /**
  * Resolves a user-supplied relative path against a workspace-root URI, refusing any
  * value that escapes the root or names an absolute / home-relative location.
  *
  * Pure + vscode-free: `rootUri` and the returned `abs` are URI strings
  * (e.g. `file:///Users/x/proj`). On success `abs` is guaranteed to be at or below
- * `rootUri`. `label` only flavors the rejection message (e.g. `"sourceDir"`).
+ * `rootUri`. On failure it returns a `path.*` {@link MsgCode} plus `label` as the sole arg;
+ * the CLIENT renders the localized text (the server fills the English diagnostic fallback).
  *
  * Rejected:
  * - `""` and whitespace-only
@@ -16,18 +26,18 @@
 export function resolveContained(
   rootUri: string,
   rel: string,
-  label: string,
-): { ok: true; abs: string } | { ok: false; reason: string } {
+  label: LabelId,
+): { ok: true; abs: string } | ContainmentError {
   const trimmed = rel.trim();
 
   if (trimmed === '') {
-    return { ok: false, reason: `${label} must not be empty` };
+    return { ok: false, code: 'path.empty', args: [label] };
   }
   if (trimmed === '.') {
-    return { ok: false, reason: `${label} must name a subpath, not the root "."` };
+    return { ok: false, code: 'path.rootDot', args: [label] };
   }
   if (trimmed.startsWith('~')) {
-    return { ok: false, reason: `${label} must not start with "~" (home-relative)` };
+    return { ok: false, code: 'path.homeRelative', args: [label] };
   }
 
   // Reject absolute POSIX paths, Windows drive/UNC paths, and full URIs (scheme:).
@@ -37,7 +47,7 @@ export function resolveContained(
     /^[A-Za-z]:[\\/]/.test(trimmed) ||
     /^[A-Za-z][A-Za-z\d+.-]*:/.test(trimmed)
   ) {
-    return { ok: false, reason: `${label} must be a relative path, not absolute` };
+    return { ok: false, code: 'path.absolute', args: [label] };
   }
 
   // Resolve against the root using URL semantics (handles ./ and ../ collapsing).
@@ -47,7 +57,7 @@ export function resolveContained(
   try {
     resolved = new URL(trimmed.split('\\').join('/'), base);
   } catch {
-    return { ok: false, reason: `${label} is not a valid path` };
+    return { ok: false, code: 'path.invalid', args: [label] };
   }
 
   const baseUrl = new URL(base);
@@ -63,14 +73,14 @@ export function resolveContained(
       resolved.pathname.startsWith(containedPath)
     )
   ) {
-    return { ok: false, reason: `${label} must not escape the workspace root` };
+    return { ok: false, code: 'path.escapesRoot', args: [label] };
   }
 
   // Equal to the root after collapsing (e.g. "foo/..") is also a rejection: a config
-  // field must name a real subpath.
+  // field must name a real subpath. (Shares `path.rootDot` with the literal "." case.)
   const rootNoSlash = basePath.replace(/\/$/, '');
   if (resolved.pathname === rootNoSlash || resolved.pathname === basePath) {
-    return { ok: false, reason: `${label} must name a subpath, not the root` };
+    return { ok: false, code: 'path.rootDot', args: [label] };
   }
 
   return { ok: true, abs: resolved.href.replace(/\/$/, '') };

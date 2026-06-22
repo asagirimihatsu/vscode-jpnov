@@ -63,7 +63,7 @@ export class Preview {
     if (this.panel === undefined) {
       this.panel = vscode.window.createWebviewPanel(
         VIEW_TYPE,
-        'Japanese Novel Preview',
+        vscode.l10n.t('Japanese Novel Preview'),
         { viewColumn: column, preserveFocus },
         // Scripts are enabled but locked to a per-render nonce via CSP; the only script
         // is our own cursor-follow scroller (no remote/inline-eval scripts can run).
@@ -100,7 +100,7 @@ export class Preview {
       void this.renderDocument(editor.document);
     } else {
       this.panel.webview.html = this.shell(
-        '<p>Open a Japanese Novel (.jpnov) file to preview.</p>',
+        `<p>${escapeHtml(vscode.l10n.t('Open a .jpnov file to preview.'))}</p>`,
         this.panel.webview,
       );
     }
@@ -133,7 +133,7 @@ export class Preview {
       return;
     }
     this.currentDocUri = doc.uri.toString();
-    panel.title = `Japanese Novel: ${this.basename(doc.uri)}`;
+    panel.title = vscode.l10n.t('{0} — Preview', this.basename(doc.uri));
 
     // The line to scroll to after (re)render — keeps an edit from snapping to the start.
     const activeLine = this.topCursorLine(doc.uri.toString()) ?? 0;
@@ -150,7 +150,7 @@ export class Preview {
       if (seq === this.renderSeq) {
         const message = err instanceof Error ? err.message : String(err);
         panel.webview.html = this.shell(
-          `<p>Preview failed: ${escapeHtml(message)}</p>`,
+          `<p>${vscode.l10n.t('Preview failed. {0}', escapeHtml(message))}</p>`,
           panel.webview,
         );
       }

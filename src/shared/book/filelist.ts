@@ -14,6 +14,7 @@
  * available. An `'ok'` line here means "a backslash-free relative `.jpnov` path"; the server
  * still resolves it through {@link resolveContained} and stats it before trusting it.
  */
+import type { LocalizableMessage } from '#/shared/protocol.ts';
 
 /** A column span within a single document line (`endChar` exclusive). */
 export interface FilelistRange {
@@ -27,8 +28,13 @@ export interface FilelistRange {
  * - `'ok'`        — a syntactically valid `.jpnov` path (existence/containment unverified).
  * - `'duplicate'` — a valid path that repeats an earlier `'ok'` line; a Warning, not built.
  * - `{ error }`   — a syntax problem (e.g. backslash, non-`.jpnov`) to surface as an Error.
+ *                  Its value is a {@link LocalizableMessage} the server renders/diagnoses.
  */
-export type FilelistLineKind = 'blank' | 'ok' | 'duplicate' | { readonly error: string };
+export type FilelistLineKind =
+  | 'blank'
+  | 'ok'
+  | 'duplicate'
+  | { readonly error: LocalizableMessage };
 
 export interface ParsedLine {
   /** 0-based line number within the document (LSP line coordinate). */
@@ -78,9 +84,9 @@ export function parseFilelist(text: string): ParsedLine[] {
     const range = { startChar: start, endChar: end };
     let kind: FilelistLineKind;
     if (value.includes('\\')) {
-      kind = { error: `use "/" as the path separator, not "\\": ${value}` };
+      kind = { error: { code: 'filelist.backslashSeparator', args: [value] } };
     } else if (!value.endsWith('.jpnov')) {
-      kind = { error: `filelist entries must be .jpnov files: ${value}` };
+      kind = { error: { code: 'filelist.notJpnov', args: [value] } };
     } else if (seen.has(value)) {
       kind = 'duplicate';
     } else {

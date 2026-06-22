@@ -11,6 +11,9 @@
 import { DiagnosticSeverity } from 'vscode-languageserver/node';
 import type { Diagnostic, Range } from 'vscode-languageserver/node';
 
+import { renderEnglish } from '#/shared/messages.ts';
+import type { LocalizableMessage } from '#/shared/protocol.ts';
+
 /** The `source` field stamped on every diagnostic this server emits. */
 const DIAGNOSTIC_SOURCE = 'jpnov';
 
@@ -20,16 +23,27 @@ const FILE_START_RANGE = {
   end: { line: 0, character: 0 },
 } as const;
 
-/** Builds a `Diagnostic` over an explicit range. */
+/**
+ * Builds a `Diagnostic` over an explicit range from a {@link LocalizableMessage}. The English
+ * render goes in `.message` (the fallback VS Code shows directly), and the `{code, args}` ride
+ * in `.data` so the client's `handleDiagnostics` middleware can replace `.message` with the
+ * localized text. Callers never hand-write English — it is single-sourced in `renderEnglish`.
+ */
 export function diagnostic(
   range: Range,
-  message: string,
+  message: LocalizableMessage,
   severity: DiagnosticSeverity,
 ): Diagnostic {
-  return { range, severity, source: DIAGNOSTIC_SOURCE, message };
+  return {
+    range,
+    severity,
+    source: DIAGNOSTIC_SOURCE,
+    message: renderEnglish(message.code, message.args),
+    data: message,
+  };
 }
 
 /** An Error-severity, document-start ("file level") diagnostic. */
-export function fileLevelError(message: string): Diagnostic {
+export function fileLevelError(message: LocalizableMessage): Diagnostic {
   return diagnostic(FILE_START_RANGE, message, DiagnosticSeverity.Error);
 }

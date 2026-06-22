@@ -40,7 +40,7 @@
       {
         "id": "novel-jp",
         "aliases": [
-          "Japanese Novel"
+          "%language.novelJp.alias%"
         ],
         "extensions": [
           ".jpnov"
@@ -50,7 +50,7 @@
       {
         "id": "novel-jp-filelist",
         "aliases": [
-          "Japanese Novel Filelist"
+          "%language.novelJpFilelist.alias%"
         ],
         "extensions": [
           ".filelist"
@@ -70,7 +70,7 @@
     "debuggers": [
       {
         "type": "jpnov-build",
-        "label": "Japanese Novel: Build",
+        "label": "%debugger.build.label%",
         "configurationAttributes": {
           "launch": {
             "properties": {
@@ -81,7 +81,7 @@
                   "txt"
                 ],
                 "default": "html",
-                "description": "Output format the selected books are built to."
+                "description": "%debugger.build.format.description%"
               }
             }
           }
@@ -91,48 +91,48 @@
     "commands": [
       {
         "command": "jpnov.books.buildHtml",
-        "category": "Japanese Novel",
-        "title": "Build to HTML",
+        "category": "%command.category%",
+        "title": "%command.books.buildHtml.title%",
         "icon": "$(globe)"
       },
       {
         "command": "jpnov.books.buildTxt",
-        "category": "Japanese Novel",
-        "title": "Build to Text",
+        "category": "%command.category%",
+        "title": "%command.books.buildTxt.title%",
         "icon": "$(file)"
       },
       {
         "command": "jpnov.books.selectAll",
-        "category": "Japanese Novel",
-        "title": "Select All Books",
+        "category": "%command.category%",
+        "title": "%command.books.selectAll.title%",
         "icon": "$(check-all)"
       },
       {
         "command": "jpnov.books.deselectAll",
-        "category": "Japanese Novel",
-        "title": "Deselect All Books",
+        "category": "%command.category%",
+        "title": "%command.books.deselectAll.title%",
         "icon": "$(clear-all)"
       },
       {
         "command": "jpnov.books.refresh",
-        "category": "Japanese Novel",
-        "title": "Refresh Books",
+        "category": "%command.category%",
+        "title": "%command.books.refresh.title%",
         "icon": "$(refresh)"
       },
       {
         "command": "jpnov.preview",
-        "category": "Japanese Novel",
-        "title": "Open Preview"
+        "category": "%command.category%",
+        "title": "%command.preview.title%"
       },
       {
         "command": "jpnov.previewToSide",
-        "category": "Japanese Novel",
-        "title": "Open Preview to the Side",
+        "category": "%command.category%",
+        "title": "%command.previewToSide.title%",
         "icon": "$(open-preview)"
       },
       {
         "command": "jpnov.initWorkspace",
-        "category": "Japanese Novel",
+        "category": "%command.category%",
         "title": "%command.initWorkspace.title%"
       }
     ],
@@ -140,17 +140,17 @@
       "debug": [
         {
           "id": "jpnov.books",
-          "name": "Books",
+          "name": "%view.books.name%",
           "icon": "$(book)",
           "when": "jpnov.hasConfig",
-          "contextualTitle": "Japanese Novel Books"
+          "contextualTitle": "%view.books.contextualTitle%"
         }
       ]
     },
     "viewsWelcome": [
       {
         "view": "jpnov.books",
-        "contents": "No books found yet.\nAdd a *.filelist manifest under your novel.jp source directory — each lists, in reading order, the .jpnov chapters of one book — then refresh.",
+        "contents": "%view.books.welcome%",
         "when": "jpnov.hasConfig"
       }
     ],
@@ -224,7 +224,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "Data configs (novel.jp.json) are read in untrusted workspaces; executable configs (novel.jp.js/cjs/mjs/ts) run only in a trusted workspace."
+      "description": "%capabilities.untrustedWorkspaces.description%"
     }
   },
   "imports": {

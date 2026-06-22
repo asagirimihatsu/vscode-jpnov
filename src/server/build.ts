@@ -27,6 +27,7 @@ import type { WorkDoneProgressReporter } from 'vscode-languageserver/node';
 import { filelistOutRel, parseFilelist } from '#/shared/book/filelist.ts';
 import { concatBookText, renderBook } from '#/shared/compiler/document.ts';
 import type { BookInput } from '#/shared/compiler/document.ts';
+import { LocalizedError } from '#/shared/messages.ts';
 import { resolveContained } from '#/shared/config/validate.ts';
 import type { ResolvedConfig } from '#/shared/config/types.ts';
 import type {
@@ -38,6 +39,7 @@ import type {
   BuildResult,
   ListBooksParams,
   ListBooksResult,
+  LocalizableMessage,
 } from '#/shared/protocol.ts';
 
 import { fileLevelError } from './diagnostics.ts';
@@ -122,27 +124,34 @@ async function readFilelistFiles(fl: DiscoveredFilelist, text: string): Promise<
     if (pl.kind !== 'ok') {
       continue;
     }
-    const resolved = resolveContained(fl.dirUri, pl.value, 'filelist entry');
+    const resolved = resolveContained(fl.dirUri, pl.value, 'filelistEntry');
     if (!resolved.ok) {
-      throw new Error(resolved.reason);
+      throw new LocalizedError({ code: resolved.code, args: resolved.args });
     }
     if (!isFileScheme(resolved.abs)) {
-      throw new Error(`cannot read "${pl.value}": book files require a file:// workspace`);
+      throw new LocalizedError({ code: 'book.entryNeedsFileScheme', args: [pl.value] });
     }
     let bytes: Buffer;
     try {
       bytes = await readFile(fileURLToPath(resolved.abs));
     } catch (cause) {
-      const why = (cause as NodeJS.ErrnoException).code === 'ENOENT'
-        ? 'file not found'
-        : cause instanceof Error
-          ? cause.message
-          : String(cause);
-      throw new Error(`cannot read "${pl.value}": ${why}`);
+      if ((cause as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new LocalizedError({ code: 'book.entryFileNotFound', args: [pl.value] });
+      }
+      const why = cause instanceof Error ? cause.message : String(cause);
+      throw new LocalizedError({ code: 'book.entryReadFailed', args: [pl.value, why] });
     }
     files.push({ name: pl.value, src: UTF8.decode(bytes) });
   }
   return { files };
+}
+
+/** A thrown cause as a {@link LocalizableMessage}: a carried code, else raw text under `build.failed`. */
+function toBuildMessage(cause: unknown): LocalizableMessage {
+  if (cause instanceof LocalizedError) {
+    return cause.localized;
+  }
+  return { code: 'build.failed', args: [cause instanceof Error ? cause.message : String(cause)] };
 }
 
 /**
@@ -190,12 +199,13 @@ async function buildRoot(
     const colliding = (byOutRel.get(outRel) ?? []).filter((other) => other !== fl);
 
     if (colliding.length > 0) {
-      const message = `output path "${outRel}" is claimed by multiple filelists: ${[fl.fileRel, ...colliding.map((c) => c.fileRel)].sort().join(', ')}`;
+      const list = [fl.fileRel, ...colliding.map((c) => c.fileRel)].sort().join(', ');
+      const error = { code: 'build.outPathCollision' as const, args: [outRel, list] };
       void ctx.connection.sendDiagnostics({
         uri: fl.uri,
-        diagnostics: [...lineDiags, fileLevelError(message)],
+        diagnostics: [...lineDiags, fileLevelError(error)],
       });
-      errors.push({ book: fl.fileRel, message });
+      errors.push({ book: fl.fileRel, ...error });
       continue;
     }
 
@@ -203,9 +213,8 @@ async function buildRoot(
     try {
       input = await readFilelistFiles(fl, text);
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : String(cause);
       void ctx.connection.sendDiagnostics({ uri: fl.uri, diagnostics: lineDiags });
-      errors.push({ book: fl.fileRel, message });
+      errors.push({ book: fl.fileRel, ...toBuildMessage(cause) });
       continue;
     }
 
@@ -259,7 +268,9 @@ export async function handleBuild(
     format: params.format,
   };
 
-  progress?.begin('Japanese Novel: Building', 0, undefined, false);
+  // The server cannot localize a $/progress title (no vscode.l10n in the fork); the client shows
+  // its own localized progress notification, so begin with no English label.
+  progress?.begin('', 0, undefined, false);
 
   let done = 0;
   for (const state of roots) {
@@ -268,8 +279,7 @@ export async function handleBuild(
       try {
         await buildRoot(ctx, config, selection, artifacts, errors);
       } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
-        errors.push({ book: state.rootUri, message });
+        errors.push({ book: state.rootUri, ...toBuildMessage(cause) });
       }
     }
     done += 1;

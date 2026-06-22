@@ -2,7 +2,7 @@
  * The single aggregated status-bar item (bottom-left, high priority).
  *
  * It folds together the latest `jpnov/configState` for every workspace root:
- *   - ANY root in `error` state -> red-cross item `$(error) Japanese Novel: <root> config error`
+ *   - ANY root in `error` state -> red-cross item `$(error) Japanese Novel: config error`
  *     (themeColor statusBarItem.errorForeground), clicking opens that config's uri,
  *     and the tooltip lists EVERY failing root + its message.
  *   - otherwise, if AT LEAST ONE root is `valid` (and none error) -> `$(book) Japanese Novel`.
@@ -12,15 +12,15 @@
  */
 import * as vscode from 'vscode';
 
-import type { ConfigState } from '#/shared/protocol.ts';
+import type { ConfigState, LocalizableMessage } from '#/shared/protocol.ts';
 
+import { renderMessage } from './messages.ts';
 import { lastPathSegment } from './paths.ts';
 
-/** A config error for one root: its message and the config uri to open on click. */
-interface ConfigError {
-  readonly message: string;
+/** A config error for one root: the localizable cause + the config uri to open on click. */
+type ConfigError = LocalizableMessage & {
   readonly configUri: string;
-}
+};
 
 /** What we remember per root to render the aggregate. */
 interface RootStatus {
@@ -48,7 +48,7 @@ export class StatusBar {
       vscode.StatusBarAlignment.Left,
       1000,
     );
-    this.item.name = 'Japanese Novel';
+    this.item.name = vscode.l10n.t('Japanese Novel');
   }
 
   /**
@@ -82,13 +82,13 @@ export class StatusBar {
 
     const first = failing[0];
     if (first !== undefined) {
-      const firstRoot = lastPathSegment(first.root);
-      this.item.text = `$(error) Japanese Novel: ${firstRoot} config error`;
+      // The $(error) icon + brand identify the source; per-root detail lives in the tooltip.
+      this.item.text = `$(error) ${vscode.l10n.t('Japanese Novel: config error')}`;
       this.item.color = new vscode.ThemeColor('statusBarItem.errorForeground');
       this.item.backgroundColor = ERROR_BG;
       // Click opens the (first) offending config so the user lands on the problem.
       this.item.command = {
-        title: 'Open Japanese Novel config',
+        title: vscode.l10n.t('Open Japanese Novel config'),
         command: 'vscode.open',
         arguments: [vscode.Uri.parse(first.error.configUri)],
       };
@@ -99,11 +99,11 @@ export class StatusBar {
 
     const anyValid = [...this.states.values()].some((s) => s.state === 'valid');
     if (anyValid) {
-      this.item.text = '$(book) Japanese Novel';
+      this.item.text = `$(book) ${vscode.l10n.t('Japanese Novel')}`;
       this.item.color = undefined;
       this.item.backgroundColor = undefined;
       this.item.command = undefined;
-      this.item.tooltip = 'Japanese Novel: novel-jp config active';
+      this.item.tooltip = vscode.l10n.t('Japanese Novel config active');
       this.item.show();
       return;
     }
@@ -113,9 +113,9 @@ export class StatusBar {
 
   private buildTooltip(failing: readonly FailingRoot[]): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
-    md.appendMarkdown('**Japanese Novel config errors**\n');
+    md.appendMarkdown(`**${vscode.l10n.t('Config errors')}**\n`);
     for (const { root, error } of failing) {
-      md.appendMarkdown(`\n- \`${lastPathSegment(root)}\`: ${error.message}`);
+      md.appendMarkdown(`\n- \`${lastPathSegment(root)}\`: ${renderMessage(error)}`);
     }
     return md;
   }
