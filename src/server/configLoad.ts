@@ -13,9 +13,10 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { FILE_TYPE_FILE, isDataFormat, matchConfig, parseDataConfig, loadModuleConfig } from '#/shared/config/parser.ts';
+import { LocalizedError } from '#/shared/messages.ts';
 import type { NovelConfigFormat, RawNovelConfig, ResolvedConfig } from '#/shared/config/types.ts';
 import { resolveContained } from '#/shared/config/validate.ts';
-import type { ConfigStateParams } from '#/shared/protocol.ts';
+import type { ConfigStateParams, LocalizableMessage } from '#/shared/protocol.ts';
 import type { ReadFileParams, ReadFileResult } from '#/shared/protocol.ts';
 
 import { fileLevelError } from './diagnostics.ts';
@@ -118,12 +119,12 @@ async function importModuleConfig(uri: string): Promise<RawNovelConfig> {
 function resolveConfig(rootUri: string, raw: RawNovelConfig): ResolvedConfig {
   const sourceDir = resolveContained(rootUri, raw.sourceDir, 'sourceDir');
   if (!sourceDir.ok) {
-    throw new Error(sourceDir.reason);
+    throw new LocalizedError({ code: sourceDir.code, args: sourceDir.args });
   }
   const outRel = raw.outDir ?? 'dist';
   const outDir = resolveContained(rootUri, outRel, 'outDir');
   if (!outDir.ok) {
-    throw new Error(outDir.reason);
+    throw new LocalizedError({ code: outDir.code, args: outDir.args });
   }
   return {
     ...raw,
@@ -193,14 +194,10 @@ export async function loadRootConfig(
     } else {
       // Executable config: gated on file: scheme AND workspace trust.
       if (!isFileScheme(configUri)) {
-        throw new Error(
-          `executable config (${format}) requires a file:// workspace`,
-        );
+        throw new LocalizedError({ code: 'config.execNeedsFileScheme', args: [format] });
       }
       if (!ctx.lastKnownTrust) {
-        throw new Error(
-          `executable config (${format}) is not loaded in an untrusted workspace`,
-        );
+        throw new LocalizedError({ code: 'config.execNeedsTrust', args: [format] });
       }
       raw = await importModuleConfig(configUri);
     }
@@ -212,13 +209,15 @@ export async function loadRootConfig(
     state.lastGood = resolved;
     pushConfigState(ctx, { root: rootUri, state: 'valid' });
   } catch (cause) {
-    const message = cause instanceof Error ? cause.message : String(cause);
+    const message: LocalizableMessage = cause instanceof LocalizedError
+      ? cause.localized
+      : { code: 'config.loadFailed', args: [cause instanceof Error ? cause.message : String(cause)] };
     state.resolved = undefined;
     void ctx.connection.sendDiagnostics({ uri: configUri, diagnostics: [fileLevelError(message)] });
     pushConfigState(ctx, {
       root: rootUri,
       state: 'error',
-      error: { message, configUri },
+      error: { ...message, configUri },
     });
   }
 }

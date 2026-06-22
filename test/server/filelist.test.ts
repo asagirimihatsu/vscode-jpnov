@@ -25,17 +25,19 @@ test('diagnoseFilelist flags missing / directory / backslash / non-.jpnov as Err
     const text = ['ok.jpnov', 'missing.jpnov', 'adir.jpnov', 'sub\\bad.jpnov', 'note.md', 'ok.jpnov'].join('\n');
 
     const diags = await diagnoseFilelist(uri, text);
-    // Diagnostic.message is `string | MarkupContent` in LSP types; ours are always strings.
-    const messages = diags.map((d) => (typeof d.message === 'string' ? d.message : d.message.value));
+    // The localized text lives client-side; each diagnostic carries its {code,args} in `.data`.
+    const codes = diags.map((d) => (d.data as { code: string }).code);
 
     assert.equal(diags.length, 5, 'ok.jpnov (first) produces no diagnostic');
     assert.equal(diags.filter((d) => d.severity === DiagnosticSeverity.Error).length, 4);
     assert.equal(diags.filter((d) => d.severity === DiagnosticSeverity.Warning).length, 1);
-    assert.ok(messages.some((m) => m.includes('not found')));
-    assert.ok(messages.some((m) => m.includes('directory')));
-    assert.ok(messages.some((m) => m.includes('\\')));
-    assert.ok(messages.some((m) => m.includes('.jpnov') && m.includes('note.md')));
-    assert.ok(messages.some((m) => m.includes('duplicate')));
+    assert.ok(codes.includes('filelist.fileNotFound')); // missing.jpnov
+    assert.ok(codes.includes('filelist.entryIsDirectory')); // adir.jpnov
+    assert.ok(codes.includes('filelist.backslashSeparator')); // sub\bad.jpnov
+    assert.ok(codes.includes('filelist.notJpnov')); // note.md
+    assert.ok(codes.includes('filelist.duplicateEntry')); // 2nd ok.jpnov
+    const notJp = diags.find((d) => (d.data as { code: string }).code === 'filelist.notJpnov');
+    assert.deepEqual((notJp?.data as { args: unknown[] }).args, ['note.md']);
   } finally {
     ws.cleanup();
   }

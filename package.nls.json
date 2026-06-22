@@ -1,3 +1,19 @@
 {
-  "command.initWorkspace.title": "Init Workspace"
+  "command.category": "Japanese Novel",
+  "command.books.buildHtml.title": "Build to HTML",
+  "command.books.buildTxt.title": "Build to Text",
+  "command.books.selectAll.title": "Select All Books",
+  "command.books.deselectAll.title": "Deselect All Books",
+  "command.books.refresh.title": "Refresh Books",
+  "command.preview.title": "Open Preview",
+  "command.previewToSide.title": "Open Preview to the Side",
+  "command.initWorkspace.title": "Init Workspace",
+  "language.novelJp.alias": "Japanese Novel",
+  "language.novelJpFilelist.alias": "Japanese Novel Filelist",
+  "view.books.name": "Books",
+  "view.books.contextualTitle": "Japanese Novel Books",
+  "view.books.welcome": "No books yet.\nAdd a `*.filelist` in your source folder listing one book's `.jpnov` chapters in reading order, then Refresh.",
+  "debugger.build.label": "Japanese Novel: Build",
+  "debugger.build.format.description": "Output format for the selected books.",
+  "capabilities.untrustedWorkspaces.description": "Data config (`novel.jp.json`) loads in any workspace; executable config (`.js/.cjs/.mjs/.ts`) runs only when the workspace is trusted."
 }

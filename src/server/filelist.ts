@@ -83,13 +83,13 @@ export async function diagnoseFilelist(filelistUri: string, text: string): Promi
     }
     if (pl.kind === 'duplicate') {
       diagnostics.push(
-        diagnostic(range, `duplicate entry "${pl.value}" (already listed above)`, DiagnosticSeverity.Warning),
+        diagnostic(range, { code: 'filelist.duplicateEntry', args: [pl.value] }, DiagnosticSeverity.Warning),
       );
       continue;
     }
-    const resolved = resolveContained(dir, pl.value, 'filelist entry');
+    const resolved = resolveContained(dir, pl.value, 'filelistEntry');
     if (!resolved.ok) {
-      diagnostics.push(diagnostic(range, resolved.reason, DiagnosticSeverity.Error));
+      diagnostics.push(diagnostic(range, { code: resolved.code, args: resolved.args }, DiagnosticSeverity.Error));
       continue;
     }
     if (!canCheckFs) {
@@ -97,10 +97,10 @@ export async function diagnoseFilelist(filelistUri: string, text: string): Promi
     }
     const verdict = await statEntry(resolved.abs);
     if (verdict === 'missing') {
-      diagnostics.push(diagnostic(range, `file not found: ${pl.value}`, DiagnosticSeverity.Error));
+      diagnostics.push(diagnostic(range, { code: 'filelist.fileNotFound', args: [pl.value] }, DiagnosticSeverity.Error));
     } else if (verdict === 'dir') {
       diagnostics.push(
-        diagnostic(range, `"${pl.value}" is a directory, not a .jpnov file`, DiagnosticSeverity.Error),
+        diagnostic(range, { code: 'filelist.entryIsDirectory', args: [pl.value] }, DiagnosticSeverity.Error),
       );
     }
   }
@@ -120,7 +120,7 @@ export function documentLinksForFilelist(filelistUri: string, text: string): Doc
     if (pl.kind === 'blank' || typeof pl.kind === 'object') {
       continue;
     }
-    const resolved = resolveContained(dir, pl.value, 'filelist entry');
+    const resolved = resolveContained(dir, pl.value, 'filelistEntry');
     if (resolved.ok) {
       links.push({ range: lineRange(pl), target: resolved.abs });
     }
@@ -149,7 +149,7 @@ export async function completeFilelist(
   // Suppress when nothing meaningful follows the cursor and the line already names a file.
   const whole = lineText.trim();
   if (whole !== '' && prefix.trim() === whole) {
-    const resolvedWhole = resolveContained(dir, whole, 'filelist entry');
+    const resolvedWhole = resolveContained(dir, whole, 'filelistEntry');
     if (resolvedWhole.ok && (await statEntry(resolvedWhole.abs)) === 'file') {
       return [];
     }
@@ -171,7 +171,8 @@ export async function completeFilelist(
     // No directory part, or an explicit "./" — list the filelist's own directory.
     listDirUri = dir;
   } else {
-    const resolvedDir = resolveContained(dir, dirPortion, 'filelist path');
+    // The label is irrelevant here — a containment failure just yields no completions.
+    const resolvedDir = resolveContained(dir, dirPortion, 'filelistEntry');
     if (!resolvedDir.ok) {
       return [];
     }

@@ -31,6 +31,7 @@ import {
 import { BooksView } from './booksView.ts';
 import { registerBuildDebugger } from './buildDebug.ts';
 import { registerInitWorkspace } from './initWorkspace.ts';
+import { isLocalizableMessage, renderMessage } from './messages.ts';
 import { Preview } from './preview.ts';
 import { StatusBar } from './statusBar.ts';
 
@@ -61,11 +62,25 @@ export function activate(context: vscode.ExtensionContext): void {
       isTrusted: vscode.workspace.isTrusted,
       configBaseName: 'novel.jp',
     },
+    middleware: {
+      // Server diagnostics carry English in `.message` (the fallback VS Code shows) and the
+      // localizable `{code,args}` in `.data`. Replace `.message` with the localized render when
+      // data is present; otherwise leave the English fallback untouched.
+      handleDiagnostics(uri, diagnostics, next) {
+        for (const d of diagnostics) {
+          const data = (d as vscode.Diagnostic & { data?: unknown }).data;
+          if (isLocalizableMessage(data)) {
+            d.message = renderMessage(data);
+          }
+        }
+        next(uri, diagnostics);
+      },
+    },
   };
 
   client = new LanguageClient(
     'jpnov',
-    'Japanese Novel Language Server',
+    vscode.l10n.t('Japanese Novel Language Server'),
     serverOptions,
     clientOptions,
   );
@@ -150,7 +165,9 @@ export function activate(context: vscode.ExtensionContext): void {
   // Start the client (and the server process). Surface a hard startup failure.
   client.start().catch((err: unknown) => {
     const message = err instanceof Error ? err.message : String(err);
-    void vscode.window.showErrorMessage(`Japanese Novel: failed to start language server: ${message}`);
+    void vscode.window.showErrorMessage(
+      vscode.l10n.t("Japanese Novel: couldn't start the language server. {0}", message),
+    );
   });
 }
 

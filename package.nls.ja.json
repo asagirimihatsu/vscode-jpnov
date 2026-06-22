@@ -1,3 +1,19 @@
 {
-  "command.initWorkspace.title": "ワークスペースを初期化"
+  "command.category": "小説",
+  "command.books.buildHtml.title": "HTML をビルド",
+  "command.books.buildTxt.title": "テキストをビルド",
+  "command.books.selectAll.title": "すべての本を選択",
+  "command.books.deselectAll.title": "すべての本の選択を解除",
+  "command.books.refresh.title": "本を更新",
+  "command.preview.title": "プレビューを開く",
+  "command.previewToSide.title": "プレビューを横に開く",
+  "command.initWorkspace.title": "ワークスペースを初期化",
+  "language.novelJp.alias": "日本語小説",
+  "language.novelJpFilelist.alias": "日本語小説ファイルリスト",
+  "view.books.name": "本",
+  "view.books.contextualTitle": "小説: 本",
+  "view.books.welcome": "まだ本がありません。\nソースフォルダーに `*.filelist` を追加し、1 冊分の `.jpnov` 章を読む順に並べてから「更新」してください。",
+  "debugger.build.label": "小説: ビルド",
+  "debugger.build.format.description": "選択した本のビルド出力形式。",
+  "capabilities.untrustedWorkspaces.description": "データ設定（`novel.jp.json`）はすべてのワークスペースで読み込みます。実行可能な設定（`.js/.cjs/.mjs/.ts`）は信頼済みワークスペースでのみ実行します。"
 }

@@ -161,7 +161,8 @@ test('a missing referenced .jpnov is a per-book error + diagnostic; other books 
     const err = result.errors[0];
     assert.ok(err);
     assert.equal(err.book, 'bad/index.filelist');
-    assert.match(err.message, /gone\.jpnov/);
+    assert.equal(err.code, 'book.entryFileNotFound');
+    assert.ok(String(err.args?.[0]).includes('gone.jpnov'));
     // The good book still produced its two artifacts (.txt + .html).
     assert.equal(result.artifacts.length, 2);
     assert.ok(result.artifacts.every((a) => a.path.startsWith(`${ws.uri}/dist/good.`)));
@@ -190,8 +191,8 @@ test('two filelists colliding on the output path error BOTH and emit neither', a
     assert.ok(result.artifacts);
     assert.ok(result.errors.length >= 2, 'both colliding filelists error');
     assert.ok(
-      result.errors.every((e) => /claimed by multiple/i.test(e.message)),
-      'collision message present on both',
+      result.errors.every((e) => e.code === 'build.outPathCollision'),
+      'collision code present on both',
     );
     assert.equal(result.artifacts.length, 0, 'neither colliding book is emitted');
     for (const rel of ['src/volume01/index.filelist', 'src/volume01.filelist']) {
@@ -392,7 +393,7 @@ test('a selected book still errors when it collides with an UNSELECTED one', asy
     assert.equal(result.ok, false);
     assert.ok(result.errors);
     assert.equal(result.errors.length, 1);
-    assert.match(result.errors[0]?.message ?? '', /claimed by multiple/i);
+    assert.equal(result.errors[0]?.code, 'build.outPathCollision');
     assert.deepEqual(result.artifacts, []);
   } finally {
     ws.cleanup();
@@ -411,7 +412,10 @@ test('a txt-only build still reports a missing .jpnov as a per-book error + diag
     assert.equal(result.ok, false);
     assert.ok(result.errors);
     assert.equal(result.errors.length, 1);
-    assert.match(result.errors[0]?.message ?? '', /gone\.jpnov/);
+    const err = result.errors[0];
+    assert.ok(err);
+    assert.equal(err.code, 'book.entryFileNotFound');
+    assert.ok(String(err.args?.[0]).includes('gone.jpnov'));
     // Format gating only skips artifact emission — diagnosis still runs.
     const badUri = `${ws.uri}/src/bad/index.filelist`;
     assert.ok(conn.diagnostics.some((d) => d.uri === badUri && d.count > 0));

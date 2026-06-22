@@ -64,14 +64,14 @@ test('parseFilelist allows subdir paths', () => {
 test('parseFilelist rejects backslash with an error carrying the path range', () => {
   const l = parseFilelist('sub\\a.jpnov')[0];
   assert.ok(l);
-  assert.ok(typeof l.kind === 'object' && l.kind.error.includes('\\'), 'backslash is an error');
+  assert.deepEqual(l.kind, { error: { code: 'filelist.backslashSeparator', args: ['sub\\a.jpnov'] } });
   assert.deepEqual(l.range, { startChar: 0, endChar: 11 });
 });
 
 test('parseFilelist rejects non-.jpnov entries', () => {
   const l = parseFilelist('note.md')[0];
   assert.ok(l);
-  assert.ok(typeof l.kind === 'object' && l.kind.error.includes('.jpnov'));
+  assert.deepEqual(l.kind, { error: { code: 'filelist.notJpnov', args: ['note.md'] } });
 });
 
 test('parseFilelist marks later exact repeats as duplicate; first stays ok', () => {
