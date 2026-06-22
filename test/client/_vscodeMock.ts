@@ -69,11 +69,34 @@ export class Uri {
   static file(path: string): Uri {
     return new Uri('file', '', path);
   }
+  static joinPath(base: Uri, ...segments: string[]): Uri {
+    const joined = [base.path.replace(/\/+$/, ''), ...segments].join('/');
+    return new Uri(base.scheme, base.authority, joined);
+  }
   toString(): string {
     return `${this.scheme}://${this.authority}${this.path}`;
   }
   get fsPath(): string {
     return this.path;
+  }
+}
+
+/** vscode.FileType bitmask. */
+export const FileType = { Unknown: 0, File: 1, Directory: 2, SymbolicLink: 64 } as const;
+
+/** vscode.FileSystemError: an Error carrying the `.code` the client narrows on. */
+export class FileSystemError extends Error {
+  readonly code: string;
+  constructor(code: string, message?: string) {
+    super(message ?? code);
+    this.code = code;
+    this.name = 'FileSystemError';
+  }
+  static FileNotFound(uri?: Uri | string): FileSystemError {
+    return new FileSystemError('FileNotFound', uri === undefined ? undefined : String(uri));
+  }
+  static FileExists(uri?: Uri | string): FileSystemError {
+    return new FileSystemError('FileExists', uri === undefined ? undefined : String(uri));
   }
 }
 
@@ -174,6 +197,22 @@ export interface MockState {
   /** Editors the preview's cursor-follow consults via `window.visibleTextEditors`. */
   visibleEditors: FakeTextEditor[];
   onDidChangeSelection: EventEmitter<FakeSelectionChange>;
+  /** Programmed responses for the init-workspace prompts (FIFO; undefined = Esc/cancel). */
+  quickPickQueue: unknown[];
+  quickPickCalls: { items: unknown; options: unknown }[];
+  inputBoxQueue: (string | undefined)[];
+  inputBoxCalls: { options: unknown }[];
+  /** Folders the init command may scaffold into; undefined = no folder open. */
+  workspaceFolders: { uri: Uri; name: string; index: number }[] | undefined;
+  workspaceFolderPickResult: { uri: Uri } | undefined;
+  /** In-memory filesystem the init guard probes: uri string → FileType. */
+  fsEntries: Map<string, number>;
+  /** File contents for readFile (uri string → utf8 text). */
+  fsContent: Map<string, string>;
+  createdDirs: string[];
+  openedDocs: string[];
+  errorMessages: string[];
+  infoMessages: string[];
 }
 
 export function createMockState(): MockState {
@@ -192,6 +231,18 @@ export function createMockState(): MockState {
     activeEditor: undefined,
     visibleEditors: [],
     onDidChangeSelection: new EventEmitter<FakeSelectionChange>(),
+    quickPickQueue: [],
+    quickPickCalls: [],
+    inputBoxQueue: [],
+    inputBoxCalls: [],
+    workspaceFolders: undefined,
+    workspaceFolderPickResult: undefined,
+    fsEntries: new Map<string, number>(),
+    fsContent: new Map<string, string>(),
+    createdDirs: [],
+    openedDocs: [],
+    errorMessages: [],
+    infoMessages: [],
   };
 }
 
@@ -214,6 +265,18 @@ export function resetMockState(s: MockState): void {
   s.onDidGrantTrust.dispose();
   s.onDidChangeDoc.dispose();
   s.onDidChangeActiveEditor.dispose();
+  s.quickPickQueue.length = 0;
+  s.quickPickCalls.length = 0;
+  s.inputBoxQueue.length = 0;
+  s.inputBoxCalls.length = 0;
+  s.workspaceFolders = undefined;
+  s.workspaceFolderPickResult = undefined;
+  s.fsEntries.clear();
+  s.fsContent.clear();
+  s.createdDirs.length = 0;
+  s.openedDocs.length = 0;
+  s.errorMessages.length = 0;
+  s.infoMessages.length = 0;
 }
 
 /**
@@ -296,12 +359,31 @@ export function buildVscode(state: MockState): Record<string, unknown> {
       return panel;
     },
     showErrorMessage(...args: unknown[]): Promise<undefined> {
-      void args;
+      if (typeof args[0] === 'string') {
+        state.errorMessages.push(args[0]);
+      }
       return Promise.resolve(undefined);
     },
     showInformationMessage(...args: unknown[]): Promise<undefined> {
-      void args;
+      if (typeof args[0] === 'string') {
+        state.infoMessages.push(args[0]);
+      }
       return Promise.resolve(undefined);
+    },
+    showQuickPick(items: unknown, options?: unknown): Promise<unknown> {
+      state.quickPickCalls.push({ items, options });
+      return Promise.resolve(state.quickPickQueue.shift());
+    },
+    showInputBox(options?: unknown): Promise<string | undefined> {
+      state.inputBoxCalls.push({ options });
+      return Promise.resolve(state.inputBoxQueue.shift());
+    },
+    showWorkspaceFolderPick(options?: unknown): Promise<{ uri: Uri } | undefined> {
+      void options;
+      return Promise.resolve(state.workspaceFolderPickResult);
+    },
+    showTextDocument(document: unknown): Promise<unknown> {
+      return Promise.resolve(document);
     },
     withProgress<R>(_opts: unknown, task: () => Thenable<R>): Thenable<R> {
       return task();
@@ -310,10 +392,28 @@ export function buildVscode(state: MockState): Record<string, unknown> {
 
   const fsApi = {
     writeFile(uri: Uri, content: Uint8Array): Promise<void> {
-      state.writtenFiles.push({
-        uri: uri.toString(),
-        content: Buffer.from(content).toString('utf8'),
-      });
+      const text = Buffer.from(content).toString('utf8');
+      state.writtenFiles.push({ uri: uri.toString(), content: text });
+      state.fsEntries.set(uri.toString(), FileType.File);
+      state.fsContent.set(uri.toString(), text);
+      return Promise.resolve();
+    },
+    readFile(uri: Uri): Promise<Uint8Array> {
+      if (!state.fsEntries.has(uri.toString())) {
+        return Promise.reject(FileSystemError.FileNotFound(uri));
+      }
+      return Promise.resolve(Buffer.from(state.fsContent.get(uri.toString()) ?? '', 'utf8'));
+    },
+    stat(uri: Uri): Promise<{ type: number }> {
+      const type = state.fsEntries.get(uri.toString());
+      if (type === undefined) {
+        return Promise.reject(FileSystemError.FileNotFound(uri));
+      }
+      return Promise.resolve({ type });
+    },
+    createDirectory(uri: Uri): Promise<void> {
+      state.createdDirs.push(uri.toString());
+      state.fsEntries.set(uri.toString(), FileType.Directory);
       return Promise.resolve();
     },
   };
@@ -325,9 +425,16 @@ export function buildVscode(state: MockState): Record<string, unknown> {
     get textDocuments() {
       return state.textDocuments;
     },
+    get workspaceFolders() {
+      return state.workspaceFolders;
+    },
     fs: fsApi,
     onDidGrantWorkspaceTrust: state.onDidGrantTrust.event,
     onDidChangeTextDocument: state.onDidChangeDoc.event,
+    openTextDocument(uri: Uri): Promise<FakeTextDocument> {
+      state.openedDocs.push(uri.toString());
+      return Promise.resolve(doc(uri.toString(), 'novel-jp'));
+    },
   };
 
   const commands = {
@@ -340,11 +447,25 @@ export function buildVscode(state: MockState): Record<string, unknown> {
     },
   };
 
+  // l10n.t passthrough: returns the English source literal with {0}/{1}… substituted, so tests
+  // assert against the source strings (no ja bundle is loaded under `node --test`).
+  const l10n = {
+    t(message: string, ...args: unknown[]): string {
+      return message.replace(/\{(\d+)\}/g, (whole, index: string) => {
+        const i = Number(index);
+        return i < args.length ? String(args[i]) : whole;
+      });
+    },
+  };
+
   return {
     window,
     workspace,
     commands,
+    l10n,
     Uri,
+    FileType,
+    FileSystemError,
     RelativePattern,
     ThemeColor,
     MarkdownString,

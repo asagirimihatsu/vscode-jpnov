@@ -6,6 +6,9 @@
 !dist/client/extension.js
 !dist/server/server.js
 !package.json
+!package.nls.json
+!package.nls.ja.json
+!l10n/**
 !filelist.language-configuration.json
 !jpnov.language-configuration.json
 !LICENSE
