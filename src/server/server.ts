@@ -12,11 +12,13 @@
  */
 import {
   createConnection,
+  DiagnosticSeverity,
   ProposedFeatures,
   TextDocuments,
   TextDocumentSyncKind,
 } from 'vscode-languageserver/node';
 import type {
+  Diagnostic,
   DidChangeWatchedFilesParams,
   InitializeParams,
   InitializeResult,
@@ -40,6 +42,8 @@ import type {
 } from '#/shared/protocol.ts';
 
 import { handleBuild, handleListBooks } from './build.ts';
+import { diagnostic } from './diagnostics.ts';
+import { findHalfWidthSpaces } from './prose.ts';
 import {
   addRoot,
   reparseAllRoots,
@@ -306,10 +310,49 @@ function scheduleFilelistDiagnostics(doc: TextDocument): void {
   );
 }
 
+// Live half-width-space Warnings for an open .jpnov (see prose.ts for the smart rule). The scan is
+// pure + synchronous (no fs), so there is no async stale-result window like the filelist path — a
+// short debounce just keeps typing snappy on long chapters.
+const proseDebounce = new Map<string, ReturnType<typeof setTimeout>>();
+const PROSE_DEBOUNCE_MS = 200;
+
+/** Map the prose scan's spans to `lint.halfWidthSpace` Warning diagnostics. */
+function proseDiagnostics(text: string): Diagnostic[] {
+  return findHalfWidthSpaces(text).map((s) =>
+    diagnostic(
+      {
+        start: { line: s.line, character: s.startChar },
+        end: { line: s.line, character: s.endChar },
+      },
+      { code: 'lint.halfWidthSpace' },
+      DiagnosticSeverity.Warning,
+    ),
+  );
+}
+
+function scheduleProseDiagnostics(doc: TextDocument): void {
+  const uri = doc.uri;
+  const scheduledVersion = doc.version;
+  clearTimeout(proseDebounce.get(uri));
+  proseDebounce.set(
+    uri,
+    setTimeout(() => {
+      proseDebounce.delete(uri);
+      const current = documents.get(uri);
+      if (current?.languageId !== 'novel-jp' || current.version !== scheduledVersion) {
+        return;
+      }
+      void connection.sendDiagnostics({ uri, diagnostics: proseDiagnostics(current.getText()) });
+    }, PROSE_DEBOUNCE_MS),
+  );
+}
+
 // onDidChangeContent fires on open AND on every edit, so it covers initial validation too.
 documents.onDidChangeContent((e) => {
   if (e.document.languageId === 'novel-jp-filelist') {
     scheduleFilelistDiagnostics(e.document);
+  } else if (e.document.languageId === 'novel-jp') {
+    scheduleProseDiagnostics(e.document);
   }
 });
 
@@ -317,7 +360,9 @@ documents.onDidChangeContent((e) => {
 documents.onDidClose((e) => {
   clearTimeout(filelistDebounce.get(e.document.uri));
   filelistDebounce.delete(e.document.uri);
-  if (e.document.languageId === 'novel-jp-filelist') {
+  clearTimeout(proseDebounce.get(e.document.uri));
+  proseDebounce.delete(e.document.uri);
+  if (e.document.languageId === 'novel-jp-filelist' || e.document.languageId === 'novel-jp') {
     void connection.sendDiagnostics({ uri: e.document.uri, diagnostics: [] });
   }
 });

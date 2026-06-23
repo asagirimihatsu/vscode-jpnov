@@ -60,7 +60,45 @@
     ],
     "configurationDefaults": {
       "[novel-jp]": {
-        "editor.semanticHighlighting.enabled": true
+        "editor.semanticHighlighting.enabled": true,
+        "editor.unicodeHighlight.nonBasicASCII": false,
+        "editor.unicodeHighlight.allowedCharacters": {
+          "　": true,
+          "！": true,
+          "？": true,
+          "（": true,
+          "）": true,
+          "：": true,
+          "；": true,
+          "，": true,
+          "．": true,
+          "｜": true,
+          "＃": true,
+          "［": true,
+          "］": true,
+          "～": true,
+          "〜": true
+        }
+      },
+      "[novel-jp-filelist]": {
+        "editor.unicodeHighlight.nonBasicASCII": false,
+        "editor.unicodeHighlight.allowedCharacters": {
+          "　": true,
+          "！": true,
+          "？": true,
+          "（": true,
+          "）": true,
+          "：": true,
+          "；": true,
+          "，": true,
+          "．": true,
+          "｜": true,
+          "＃": true,
+          "［": true,
+          "］": true,
+          "～": true,
+          "〜": true
+        }
       },
       "github.copilot.enable": {
         "novel-jp": false,
@@ -239,7 +277,7 @@
     "watch:tsc": "tsc --noEmit --watch",
     "watch": "npm run watch:tsc & npm run watch:esbuild & wait",
     "pretest": "npm run type-check",
-    "test": "node --test --experimental-test-module-mocks \"test/shared/**/*.test.ts\" \"test/server/highlight/**/*.test.ts\"",
+    "test": "node --test --experimental-test-module-mocks \"test/shared/**/*.test.ts\" \"test/server/highlight/**/*.test.ts\" \"test/server/prose.test.ts\"",
     "vscode:prepublish": "npm run type-check && npm run lint && npm run build",
     "package": "vsce package"
   },

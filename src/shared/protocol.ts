@@ -56,7 +56,8 @@ export type MsgCode =
   | 'path.homeRelative' // args: [LabelId]
   | 'path.absolute' // args: [LabelId]
   | 'path.invalid' // args: [LabelId]
-  | 'path.escapesRoot'; // args: [LabelId]
+  | 'path.escapesRoot' // args: [LabelId]
+  | 'lint.halfWidthSpace'; // args: [] — static prose diagnostic, no substitution
 
 /**
  * Config-field labels carried by the `path.*` codes. `sourceDir`/`outDir` name a literal JSON
