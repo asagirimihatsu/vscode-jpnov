@@ -4,7 +4,7 @@ A Visual Studio Code extension for formatting, previewing, and generating vertic
 
 ## Novel Publishment
 
-Publishing a novel is a serious matter. Many editors explicitly forbid the use of **any AI**. This rule is very broad, so this tool will **NOT** introduce any AI tools **for writing**, and will disable the Copilot extension by default for `*.jpnov` / `*.filelist`.
+Publishing a novel is a serious matter. Many editors explicitly forbid the use of **any AI**. This tool will **NOT** introduce any AI tools **for writing**, and will disable the Copilot extension by default for `*.jpnov` / `*.filelist`.
 
 All `*.filelist` completion relies entirely on non-AI programs.
 

@@ -78,6 +78,8 @@ export function renderMessage(msg: LocalizableMessage): string {
       return vscode.l10n.t('{0} is not a valid path', labelText(a[0] as LabelId));
     case 'path.escapesRoot':
       return vscode.l10n.t('{0} must not escape the workspace root', labelText(a[0] as LabelId));
+    case 'lint.halfWidthSpace':
+      return vscode.l10n.t('half-width space; use a full-width space in Japanese prose');
     default: {
       const exhaustive: never = msg.code;
       throw new Error(`renderMessage: unhandled code ${String(exhaustive)}`);

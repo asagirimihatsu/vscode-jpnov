@@ -65,6 +65,8 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return `${englishLabel(args[0] as LabelId)} is not a valid path`;
     case 'path.escapesRoot':
       return `${englishLabel(args[0] as LabelId)} must not escape the workspace root`;
+    case 'lint.halfWidthSpace':
+      return 'half-width space; use a full-width space in Japanese prose';
     default: {
       const exhaustive: never = code;
       throw new Error(`renderEnglish: unhandled code ${String(exhaustive)}`);

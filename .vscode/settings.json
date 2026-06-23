@@ -1,4 +1,21 @@
 {
   "eslint.useFlatConfig": true,
-  "js/ts.tsdk.path": "node_modules/typescript/lib"
+  "js/ts.tsdk.path": "node_modules/typescript/lib",
+  "editor.unicodeHighlight.allowedCharacters": {
+    "　": true,
+    "！": true,
+    "？": true,
+    "（": true,
+    "）": true,
+    "：": true,
+    "；": true,
+    "，": true,
+    "．": true,
+    "｜": true,
+    "＃": true,
+    "［": true,
+    "］": true,
+    "～": true,
+    "〜": true
+  }
 }

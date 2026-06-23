@@ -61,5 +61,6 @@
   "{0} must be a relative path, not absolute": "{0} は絶対パスではなく相対パスにしてください",
   "{0} is not a valid path": "{0} が有効なパスではありません",
   "{0} must not escape the workspace root": "{0} はワークスペース内に収めてください",
+  "half-width space; use a full-width space in Japanese prose": "半角スペースがあります。小説では全角スペースを使ってください",
   "filelist entry": "ファイルリストの項目"
 }
