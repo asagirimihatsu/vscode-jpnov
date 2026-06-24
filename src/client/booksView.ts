@@ -120,11 +120,14 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
         this.onCheckboxChanged(e);
       }),
       watcher,
+      // Fire-and-forget re-list on a .filelist appearing/disappearing: refresh() self-catches its
+      // sendRequest (returns on failure) and is sequenced by refreshSeq, so a dropped result is safe.
       watcher.onDidCreate(() => void this.refresh()),
       watcher.onDidDelete(() => void this.refresh()),
     );
 
-    // Start hidden until the first configState proves a config exists.
+    // Start hidden until the first configState proves a config exists. setContext rejects only on a
+    // dead connection (extension shutting down); the gate then no longer matters, so void it.
     void vscode.commands.executeCommand('setContext', 'jpnov.hasConfig', false);
   }
 
@@ -204,13 +207,13 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
   // --- commands (wired in extension.ts) ------------------------------------
 
   /** `jpnov.books.buildHtml`: render the checked books to `.html` only. */
-  buildHtml(): void {
-    void this.buildSelected('html');
+  buildHtml(): Promise<void> {
+    return this.buildSelected('html');
   }
 
   /** `jpnov.books.buildTxt`: render the checked books to `.txt` only. */
-  buildTxt(): void {
-    void this.buildSelected('txt');
+  buildTxt(): Promise<void> {
+    return this.buildSelected('txt');
   }
 
   /** `jpnov.books.selectAll`: tick every book. */
@@ -277,8 +280,11 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
     const hasConfig = this.presentRoots.size > 0;
     if (hasConfig !== this.hasConfig) {
       this.hasConfig = hasConfig;
+      // setContext rejects only on a dead connection (shutdown); the gate is then irrelevant.
       void vscode.commands.executeCommand('setContext', 'jpnov.hasConfig', hasConfig);
     }
+    // Fire-and-forget re-list driven by a server notification: refresh() self-catches and is
+    // refreshSeq-serialized, so a dropped/superseded result is harmless.
     void this.refresh();
   }
 
@@ -317,6 +323,7 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
     // already-localized into the count templates below.
     const label = format === 'html' ? 'HTML' : vscode.l10n.t('text');
     if (books.length === 0) {
+      // UI notification: showInformationMessage never rejects, so void is safe.
       void vscode.window.showInformationMessage(
         vscode.l10n.t('Japanese Novel: no books selected. Check a book in the Books panel, then build.'),
       );
@@ -341,6 +348,8 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
           result = await c.sendRequest<BuildResult>(BuildRequest, params);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
+          // UI notification: showErrorMessage never rejects, so void is safe. This granular popup
+          // means buildSelected returns normally (no rethrow) -> no boundary double-popup.
           void vscode.window.showErrorMessage(vscode.l10n.t('Japanese Novel: build failed. {0}', message));
           return;
         }
@@ -356,6 +365,7 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
             written.push(artifact.path);
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
+            // UI notification: showErrorMessage never rejects, so void is safe.
             void vscode.window.showErrorMessage(
               vscode.l10n.t("Japanese Novel: couldn't write {0}. {1}", artifact.path, message),
             );
@@ -366,6 +376,7 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
         // sends a {code,args}; the client renders it to localized text.
         const errors = result.errors ?? [];
         for (const e of errors) {
+          // UI notification: showErrorMessage never rejects, so void is safe.
           void vscode.window.showErrorMessage(
             vscode.l10n.t('Japanese Novel: build error for {0}. {1}', e.book, renderMessage(e)),
           );
@@ -373,12 +384,14 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
 
         if (written.length > 0) {
           // One artifact per book now (a single format), so the file count IS the book count.
+          // UI notification: showInformationMessage never rejects, so void is safe.
           void vscode.window.showInformationMessage(
             written.length === 1
               ? vscode.l10n.t('Japanese Novel: built 1 {0} file.', label)
               : vscode.l10n.t('Japanese Novel: built {0} {1} files.', String(written.length), label),
           );
         } else if (errors.length === 0) {
+          // UI notification: showInformationMessage never rejects, so void is safe.
           void vscode.window.showInformationMessage(
             vscode.l10n.t('Japanese Novel: nothing to build.'),
           );

@@ -134,10 +134,12 @@ function resolveConfig(rootUri: string, raw: RawNovelConfig): ResolvedConfig {
 }
 
 function clearConfigDiagnostics(ctx: ServerContext, configUri: string): void {
+  // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
   void ctx.connection.sendDiagnostics({ uri: configUri, diagnostics: [] });
 }
 
 function pushConfigState(ctx: ServerContext, params: ConfigStateParams): void {
+  // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
   void ctx.connection.sendNotification('jpnov/configState', params);
 }
 
@@ -213,6 +215,7 @@ export async function loadRootConfig(
       ? cause.localized
       : { code: 'config.loadFailed', args: [cause instanceof Error ? cause.message : String(cause)] };
     state.resolved = undefined;
+    // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
     void ctx.connection.sendDiagnostics({ uri: configUri, diagnostics: [fileLevelError(message)] });
     pushConfigState(ctx, {
       root: rootUri,

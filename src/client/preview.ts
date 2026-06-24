@@ -76,12 +76,16 @@ export class Preview {
         // Re-render when the user switches which file is active...
         vscode.window.onDidChangeActiveTextEditor((next) => {
           if (next !== undefined && this.isPreviewable(next.document)) {
+            // Fire-and-forget re-render: renderDocument() self-catches its sendRequest (shows a
+            // placeholder on failure) and is renderSeq-serialized, so a dropped result is safe.
             void this.renderDocument(next.document);
           }
         }),
         // ...on every edit to the file currently shown (live dirty buffer)...
         vscode.workspace.onDidChangeTextDocument((e) => {
           if (e.document.uri.toString() === this.currentDocUri) {
+            // Fire-and-forget re-render: renderDocument() self-catches its sendRequest (shows a
+            // placeholder on failure) and is renderSeq-serialized, so a dropped result is safe.
             void this.renderDocument(e.document);
           }
         }),
@@ -97,6 +101,8 @@ export class Preview {
     }
 
     if (editor !== undefined && this.isPreviewable(editor.document)) {
+      // Fire-and-forget initial render: renderDocument() self-catches its sendRequest (shows a
+      // placeholder on failure) and is renderSeq-serialized, so a dropped result is safe.
       void this.renderDocument(editor.document);
     } else {
       this.panel.webview.html = this.shell(
@@ -124,6 +130,7 @@ export class Preview {
 
   /** Posts a scroll-to-line message to the live webview (no re-render). */
   private reveal(line: number): void {
+    // Posts to the webview; postMessage never rejects (resolves false if the panel is gone), so void is safe.
     void this.panel?.webview.postMessage({ type: 'reveal', line });
   }
 

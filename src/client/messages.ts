@@ -80,6 +80,8 @@ export function renderMessage(msg: LocalizableMessage): string {
       return vscode.l10n.t('{0} must not escape the workspace root', labelText(a[0] as LabelId));
     case 'lint.halfWidthSpace':
       return vscode.l10n.t('half-width space; use a full-width space in Japanese prose');
+    case 'server.unexpected':
+      return vscode.l10n.t('unexpected error: {0}', s(0));
     default: {
       const exhaustive: never = msg.code;
       throw new Error(`renderMessage: unhandled code ${String(exhaustive)}`);
