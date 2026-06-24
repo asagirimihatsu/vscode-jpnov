@@ -43,6 +43,7 @@ import type {
 
 import { handleBuild, handleListBooks } from './build.ts';
 import { diagnostic } from './diagnostics.ts';
+import { reportError } from './report.ts';
 import { findHalfWidthSpaces } from './prose.ts';
 import {
   addRoot,
@@ -158,14 +159,29 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 // `onDidChangeWorkspaceFolders` getter before `initialized` throws — which previously
 // crashed the forked server on load.
 connection.onInitialized(() => {
-  void Promise.all(initialFolderUris.map((uri) => addRoot(context, uri)));
+  // Seed the initial roots. addRoot() never rejects today (loadRootConfig funnels every failure
+  // into the 'error' config-state, and registerConfigWatch self-catches), so this catch is
+  // DEFENSIVE per the error-reporting policy: any future-introduced rejection becomes a client
+  // popup instead of an unhandled rejection. The IIFE is voided because onInitialized is sync;
+  // the catch is what makes that void safe.
+  void Promise.all(initialFolderUris.map((uri) => addRoot(context, uri))).catch((err: unknown) => {
+    reportError(context, err);
+  });
 
   if (hasWorkspaceFolderCapability) {
     connection.workspace.onDidChangeWorkspaceFolders(
       (event: WorkspaceFoldersChangeEvent) => {
+        // Multi-root add/remove. removeRoot awaits connection.sendNotification (can reject only on
+        // a dead connection); addRoot is defensive per above. Either rejection is reported to the
+        // client rather than dropped. The IIFE is voided because the event callback is sync; the
+        // inner try/catch is what makes that void safe.
         void (async () => {
-          await Promise.all(event.removed.map((f) => removeRoot(context, f.uri)));
-          await Promise.all(event.added.map((f) => addRoot(context, f.uri)));
+          try {
+            await Promise.all(event.removed.map((f) => removeRoot(context, f.uri)));
+            await Promise.all(event.added.map((f) => addRoot(context, f.uri)));
+          } catch (err) {
+            reportError(context, err);
+          }
         })();
       },
     );
@@ -185,12 +201,17 @@ connection.onDidChangeWatchedFiles((params: DidChangeWatchedFilesParams) => {
     }
   }
   void (async () => {
-    for (const rootUri of dirtyRoots) {
-      // Re-add reuses the existing RootState (watcher kept) and reparses the config.
-      await addRoot(context, rootUri);
+    try {
+      for (const rootUri of dirtyRoots) {
+        // Re-add reuses the existing RootState (watcher kept) and reparses the config.
+        await addRoot(context, rootUri);
+      }
+    } catch (err) {
+      reportError(context, err);
     }
     // A config edit may have changed the cast / keywords; re-request semantic tokens so open
     // documents recolor (recognizerForUri rebuilds the root's recognizer on the new config arrays).
+    // LSP send: rejects only on a dead connection (nothing to recover), so the promise is dropped.
     void connection.languages.semanticTokens.refresh();
   })();
 });
@@ -202,7 +223,12 @@ connection.onNotification(
     const wasTrusted = context.lastKnownTrust;
     context.lastKnownTrust = params.isTrusted;
     if (!wasTrusted && params.isTrusted) {
-      void reparseAllRoots(context);
+      // DEFENSIVE per the error-reporting policy: reparseAllRoots maps to loadRootConfig, which
+      // never throws today, so this effectively cannot reject — but route any future rejection to
+      // a client popup instead of dropping it. void because onNotification's callback is sync.
+      void reparseAllRoots(context).catch((err: unknown) => {
+        reportError(context, err);
+      });
     }
   },
 );
@@ -300,10 +326,15 @@ function scheduleFilelistDiagnostics(doc: TextDocument): void {
         return;
       }
       void (async () => {
-        const diagnostics = await diagnoseFilelist(uri, current.getText());
-        // Re-check after the async fs work: a newer edit (with its own schedule) wins.
-        if (documents.get(uri)?.version === scheduledVersion) {
-          void connection.sendDiagnostics({ uri, diagnostics });
+        try {
+          const diagnostics = await diagnoseFilelist(uri, current.getText());
+          // Re-check after the async fs work: a newer edit (with its own schedule) wins.
+          if (documents.get(uri)?.version === scheduledVersion) {
+            // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
+            void connection.sendDiagnostics({ uri, diagnostics });
+          }
+        } catch (err) {
+          reportError(context, err);
         }
       })();
     }, FILELIST_DEBOUNCE_MS),
@@ -342,6 +373,7 @@ function scheduleProseDiagnostics(doc: TextDocument): void {
       if (current?.languageId !== 'novel-jp' || current.version !== scheduledVersion) {
         return;
       }
+      // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
       void connection.sendDiagnostics({ uri, diagnostics: proseDiagnostics(current.getText()) });
     }, PROSE_DEBOUNCE_MS),
   );
@@ -363,6 +395,7 @@ documents.onDidClose((e) => {
   clearTimeout(proseDebounce.get(e.document.uri));
   proseDebounce.delete(e.document.uri);
   if (e.document.languageId === 'novel-jp-filelist' || e.document.languageId === 'novel-jp') {
+    // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
     void connection.sendDiagnostics({ uri: e.document.uri, diagnostics: [] });
   }
 });

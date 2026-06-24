@@ -67,6 +67,8 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return `${englishLabel(args[0] as LabelId)} must not escape the workspace root`;
     case 'lint.halfWidthSpace':
       return 'half-width space; use a full-width space in Japanese prose';
+    case 'server.unexpected':
+      return `unexpected error: ${a(0)}`;
     default: {
       const exhaustive: never = code;
       throw new Error(`renderEnglish: unhandled code ${String(exhaustive)}`);

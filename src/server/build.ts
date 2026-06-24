@@ -201,6 +201,7 @@ async function buildRoot(
     if (colliding.length > 0) {
       const list = [fl.fileRel, ...colliding.map((c) => c.fileRel)].sort().join(', ');
       const error = { code: 'build.outPathCollision' as const, args: [outRel, list] };
+      // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
       void ctx.connection.sendDiagnostics({
         uri: fl.uri,
         diagnostics: [...lineDiags, fileLevelError(error)],
@@ -213,11 +214,13 @@ async function buildRoot(
     try {
       input = await readFilelistFiles(fl, text);
     } catch (cause) {
+      // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
       void ctx.connection.sendDiagnostics({ uri: fl.uri, diagnostics: lineDiags });
       errors.push({ book: fl.fileRel, ...toBuildMessage(cause) });
       continue;
     }
 
+    // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
     void ctx.connection.sendDiagnostics({ uri: fl.uri, diagnostics: lineDiags });
 
     // Emit only the requested kind(s); `format` absent => BOTH. renderBook (the paginator) is

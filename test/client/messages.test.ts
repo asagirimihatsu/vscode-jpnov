@@ -45,6 +45,7 @@ const ARGS: Record<MsgCode, readonly (string | number)[]> = {
   'path.invalid': ['outDir'],
   'path.escapesRoot': ['sourceDir'],
   'lint.halfWidthSpace': [],
+  'server.unexpected': ['boom'],
 };
 
 test('renderEnglish and renderMessage share byte-identical English templates', () => {

@@ -57,7 +57,8 @@ export type MsgCode =
   | 'path.absolute' // args: [LabelId]
   | 'path.invalid' // args: [LabelId]
   | 'path.escapesRoot' // args: [LabelId]
-  | 'lint.halfWidthSpace'; // args: [] — static prose diagnostic, no substitution
+  | 'lint.halfWidthSpace' // args: [] — static prose diagnostic, no substitution
+  | 'server.unexpected'; // args: [detail]  (detail = raw unexpected server error, untranslatable)
 
 /**
  * Config-field labels carried by the `path.*` codes. `sourceDir`/`outDir` name a literal JSON
@@ -101,6 +102,18 @@ export interface ConfigStateParams {
 // ---------------------------------------------------------------------------
 // jpnov/workspaceTrustChanged (C->S notification)
 // ---------------------------------------------------------------------------
+
+export const ServerErrorNotification = 'jpnov/serverError';
+
+/**
+ * An unexpected server-side failure surfaced to the user as a popup. The server is vscode-free,
+ * so it cannot show UI itself; its lifecycle paths funnel thrown errors through `reportError()`
+ * (`src/server/report.ts`), which sends this notification carrying a localizable cause. The client
+ * renders `.message` via `renderMessage()` and shows it with `vscode.window.showErrorMessage`.
+ */
+export interface ServerErrorParams {
+  readonly message: LocalizableMessage;
+}
 
 export const WorkspaceTrustChangedNotification = 'jpnov/workspaceTrustChanged';
 

@@ -78,6 +78,9 @@ class BuildAdapter implements vscode.DebugAdapter {
       this.respond(req.command, req.seq, {});
       this.send({ seq: 0, type: 'event', event: 'initialized' });
     } else if (req.command === 'launch') {
+      // handleMessage is a synchronous DAP callback (can't be async). runAndTerminate() delegates to
+      // buildSelected (which self-handles its own errors) and its `finally` ALWAYS sends the response
+      // + 'terminated' event, so the session closes cleanly even on failure -> safe void.
       void this.runAndTerminate(req.command, req.seq);
     } else {
       // disconnect / threads / …: ack so the session can settle and close cleanly.

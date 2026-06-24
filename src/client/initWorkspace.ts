@@ -18,6 +18,7 @@ import * as vscode from 'vscode';
 import { DEFAULT, type RawNovelConfig } from '#/shared/config/types.ts';
 
 import { BUILD_CONFIGS } from './buildDebug.ts';
+import { command } from './commands.ts';
 
 /** Fixed scaffold names. The source directory stays the config default (`./src`). */
 const SOURCE_DIR_NAME = 'src';
@@ -53,7 +54,7 @@ const CHAPTER_CONTENT = `　ようこそ、小説の執筆へ。
 `;
 
 export function registerInitWorkspace(): vscode.Disposable {
-  return vscode.commands.registerCommand('jpnov.initWorkspace', () => runInit());
+  return command('jpnov.initWorkspace', () => runInit());
 }
 
 async function runInit(): Promise<void> {
@@ -66,6 +67,7 @@ async function runInit(): Promise<void> {
   // re-checks the full set authoritatively.
   const early = await checkTargets(root, false);
   if (early !== null) {
+    // UI notification: showErrorMessage never rejects, so void is safe.
     void vscode.window.showErrorMessage(early);
     return;
   }
@@ -93,6 +95,7 @@ async function runInit(): Promise<void> {
   // Guard #2 — authoritative TOCTOU re-check with the real answers (now including settings.json).
   const conflict = await checkTargets(root, disableAi);
   if (conflict !== null) {
+    // UI notification: showErrorMessage never rejects, so void is safe.
     void vscode.window.showErrorMessage(conflict);
     return;
   }
@@ -114,6 +117,7 @@ async function runInit(): Promise<void> {
   } catch {
     // Opening the sample chapter is a nicety; a failure here doesn't undo a successful scaffold.
   }
+  // UI notification: showInformationMessage never rejects, so void is safe.
   void vscode.window.showInformationMessage(
     vscode.l10n.t(
       'Japanese Novel: workspace initialized. Start writing in {0}.',
@@ -126,6 +130,7 @@ async function runInit(): Promise<void> {
 async function pickFolder(): Promise<vscode.Uri | undefined> {
   const folders = vscode.workspace.workspaceFolders;
   if (folders === undefined || folders.length === 0) {
+    // UI notification: showErrorMessage never rejects, so void is safe.
     void vscode.window.showErrorMessage(
       vscode.l10n.t('Japanese Novel: open a folder first, then run Init Workspace.'),
     );
@@ -304,6 +309,7 @@ async function writeScaffold(root: vscode.Uri, answers: InitAnswers): Promise<bo
     try {
       await op.run();
     } catch {
+      // UI notification: showErrorMessage never rejects, so void is safe.
       void vscode.window.showErrorMessage(
         vscode.l10n.t('Japanese Novel: failed to write {0}.', op.rel),
       );

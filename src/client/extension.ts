@@ -21,15 +21,18 @@ import {
 import {
   ConfigStateNotification,
   ReadFileRequest,
+  ServerErrorNotification,
   WorkspaceTrustChangedNotification,
   type ConfigStateParams,
   type ReadFileParams,
   type ReadFileResult,
+  type ServerErrorParams,
   type WorkspaceTrustChangedParams,
 } from '#/shared/protocol.ts';
 
 import { BooksView } from './booksView.ts';
 import { registerBuildDebugger } from './buildDebug.ts';
+import { command } from './commands.ts';
 import { registerInitWorkspace } from './initWorkspace.ts';
 import { isLocalizableMessage, renderMessage } from './messages.ts';
 import { Preview } from './preview.ts';
@@ -128,7 +131,17 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.workspace.onDidGrantWorkspaceTrust(() => {
       const params: WorkspaceTrustChangedParams = { isTrusted: true };
+      // Fire-and-forget C->S notify: sendNotification rejects only if the connection is already
+      // dead (server gone), in which case there is nothing to (re)load and nothing to report.
       void client?.sendNotification(WorkspaceTrustChangedNotification, params);
+    }),
+  );
+
+  // Server-reported unexpected errors: the vscode-free server emits a LocalizableMessage; render
+  // it to localized text and surface it as a popup. showErrorMessage never rejects, so void it.
+  context.subscriptions.push(
+    client.onNotification(ServerErrorNotification, (params: ServerErrorParams) => {
+      void vscode.window.showErrorMessage(renderMessage(params.message));
     }),
   );
 
@@ -139,32 +152,19 @@ export function activate(context: vscode.ExtensionContext): void {
     // Scaffold a fresh novel project (.vscode/, novel.jp.json, a sample chapter). Palette-only;
     // available in an empty workspace via the implicit onCommand activation (vscode >= 1.74).
     registerInitWorkspace(),
-    vscode.commands.registerCommand('jpnov.books.buildHtml', () => {
-      booksView?.buildHtml();
-    }),
-    vscode.commands.registerCommand('jpnov.books.buildTxt', () => {
-      booksView?.buildTxt();
-    }),
-    vscode.commands.registerCommand('jpnov.books.selectAll', () => {
-      booksView?.selectAll();
-    }),
-    vscode.commands.registerCommand('jpnov.books.deselectAll', () => {
-      booksView?.deselectAll();
-    }),
-    vscode.commands.registerCommand('jpnov.books.refresh', () => {
-      void booksView?.refresh();
-    }),
-    vscode.commands.registerCommand('jpnov.preview', () => {
-      preview?.open(false);
-    }),
-    vscode.commands.registerCommand('jpnov.previewToSide', () => {
-      preview?.open(true);
-    }),
+    command('jpnov.books.buildHtml', () => booksView?.buildHtml()),
+    command('jpnov.books.buildTxt', () => booksView?.buildTxt()),
+    command('jpnov.books.selectAll', () => booksView?.selectAll()),
+    command('jpnov.books.deselectAll', () => booksView?.deselectAll()),
+    command('jpnov.books.refresh', () => booksView?.refresh()),
+    command('jpnov.preview', () => preview?.open(false)),
+    command('jpnov.previewToSide', () => preview?.open(true)),
   );
 
   // Start the client (and the server process). Surface a hard startup failure.
   client.start().catch((err: unknown) => {
     const message = err instanceof Error ? err.message : String(err);
+    // Terminal popup inside a .catch(); showErrorMessage never rejects so void is safe here.
     void vscode.window.showErrorMessage(
       vscode.l10n.t("Japanese Novel: couldn't start the language server. {0}", message),
     );
