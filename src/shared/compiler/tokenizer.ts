@@ -290,12 +290,12 @@ function isKanji(cp: number): boolean {
 }
 
 /** Hiragana block (U+3041..U+3096); the small ヶ is intentionally NOT hiragana. */
-function isHiragana(cp: number): boolean {
+export function isHiragana(cp: number): boolean {
   return cp >= 0x3041 && cp <= 0x3096;
 }
 
 /** Katakana (U+30A1..U+30FA) plus the prolonged-sound mark ー (U+30FC). */
-function isKatakana(cp: number): boolean {
+export function isKatakana(cp: number): boolean {
   // ヶ (U+30F6) is classed as kanji above, so exclude it here.
   if (cp === 0x30f6) {
     return false;

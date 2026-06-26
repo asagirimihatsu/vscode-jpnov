@@ -19,6 +19,7 @@ import type {
 } from 'vscode-languageserver/node';
 
 import type { ResolvedConfig } from '#/shared/config/types.ts';
+import type { RuleSelection } from '#/shared/lint/select.ts';
 
 import { loadRootConfig } from './configLoad.ts';
 
@@ -35,6 +36,9 @@ export interface ServerContext {
   readonly configBaseName: string;
   /** Latest workspace-trust state; gates executable-config import(). */
   lastKnownTrust: boolean;
+  /** Enabled prose-lint rules, resolved from the client's `jpnov.lint.*` settings snapshot. Workspace-
+   *  (not root-) scoped, so it lives on the context rather than per-{@link RootState}. */
+  lintSelection: RuleSelection;
 }
 
 /**

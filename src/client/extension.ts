@@ -13,6 +13,7 @@ import * as vscode from 'vscode';
 
 import {
   LanguageClient,
+  State,
   TransportKind,
   type LanguageClientOptions,
   type ServerOptions,
@@ -20,10 +21,12 @@ import {
 
 import {
   ConfigStateNotification,
+  LintConfigChangedNotification,
   ReadFileRequest,
   ServerErrorNotification,
   WorkspaceTrustChangedNotification,
   type ConfigStateParams,
+  type LintConfigChangedParams,
   type ReadFileParams,
   type ReadFileResult,
   type ServerErrorParams,
@@ -34,6 +37,7 @@ import { BooksView } from './booksView.ts';
 import { registerBuildDebugger } from './buildDebug.ts';
 import { command } from './commands.ts';
 import { registerInitWorkspace } from './initWorkspace.ts';
+import { buildLintSnapshot } from './lintConfig.ts';
 import { isLocalizableMessage, renderMessage } from './messages.ts';
 import { Preview } from './preview.ts';
 import { StatusBar } from './statusBar.ts';
@@ -64,6 +68,7 @@ export function activate(context: vscode.ExtensionContext): void {
     initializationOptions: {
       isTrusted: vscode.workspace.isTrusted,
       configBaseName: 'novel.jp',
+      lintConfig: buildLintSnapshot(),
     },
     middleware: {
       // Server diagnostics carry English in `.message` (the fallback VS Code shows) and the
@@ -77,6 +82,29 @@ export function activate(context: vscode.ExtensionContext): void {
           }
         }
         next(uri, diagnostics);
+      },
+      // Lint code actions come from the vscode-free server with English titles. Localize them:
+      // the fix-all bundle is recognized by its source.fixAll kind; a quick-fix reuses the localized
+      // message of its diagnostic (the same data the diagnostic middleware above renders).
+      async provideCodeActions(document, range, context, token, next) {
+        const actions = await next(document, range, context, token);
+        if (!actions) {
+          return actions;
+        }
+        for (const action of actions) {
+          if (!(action instanceof vscode.CodeAction)) {
+            continue; // Command-shaped actions carry no localizable title
+          }
+          if (action.kind !== undefined && vscode.CodeActionKind.SourceFixAll.contains(action.kind)) {
+            action.title = vscode.l10n.t('Fix all auto-fixable problems (Japanese Novel)');
+            continue;
+          }
+          const diag = action.diagnostics?.[0] as (vscode.Diagnostic & { data?: unknown }) | undefined;
+          if (isLocalizableMessage(diag?.data)) {
+            action.title = renderMessage(diag.data);
+          }
+        }
+        return actions;
       },
     },
   };
@@ -134,6 +162,17 @@ export function activate(context: vscode.ExtensionContext): void {
       // Fire-and-forget C->S notify: sendNotification rejects only if the connection is already
       // dead (server gone), in which case there is nothing to (re)load and nothing to report.
       void client?.sendNotification(WorkspaceTrustChangedNotification, params);
+    }),
+  );
+
+  // Push jpnov.lint.* changes so the server re-lints open files live. Gated on Running: a change
+  // during start/stop is dropped (the next start re-seeds the selection via initializationOptions).
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('jpnov.lint') && client?.state === State.Running) {
+        const params: LintConfigChangedParams = { lintConfig: buildLintSnapshot() };
+        void client.sendNotification(LintConfigChangedNotification, params);
+      }
     }),
   );
 

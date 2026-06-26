@@ -11,14 +11,15 @@
  * - `jpnov/build`, `jpnov/renderFile`, `jpnov/workspaceTrustChanged` handlers.
  */
 import {
+  CodeActionKind,
   createConnection,
-  DiagnosticSeverity,
   ProposedFeatures,
   TextDocuments,
   TextDocumentSyncKind,
 } from 'vscode-languageserver/node';
 import type {
-  Diagnostic,
+  CodeAction,
+  CodeActionParams,
   DidChangeWatchedFilesParams,
   InitializeParams,
   InitializeResult,
@@ -30,10 +31,12 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { renderPreview } from '#/shared/compiler/preview.ts';
 import { DEFAULT } from '#/shared/config/types.ts';
 import type { ResolvedConfig } from '#/shared/config/types.ts';
+import { selectRules } from '#/shared/lint/select.ts';
 import type { InitializationOptions } from '#/shared/protocol.ts';
 import type {
   BuildParams,
   BuildResult,
+  LintConfigChangedParams,
   ListBooksParams,
   ListBooksResult,
   RenderFileParams,
@@ -42,9 +45,10 @@ import type {
 } from '#/shared/protocol.ts';
 
 import { handleBuild, handleListBooks } from './build.ts';
-import { diagnostic } from './diagnostics.ts';
+import { buildCodeActions } from './lint/codeActions.ts';
+import { computeLintFindings } from './lint/kernel.ts';
+import type { LintFinding } from './lint/kernel.ts';
 import { reportError } from './report.ts';
-import { findHalfWidthSpaces } from './prose.ts';
 import {
   addRoot,
   reparseAllRoots,
@@ -64,6 +68,7 @@ const context: ServerContext = {
   roots: new Map(),
   configBaseName: 'novel.jp',
   lastKnownTrust: false,
+  lintSelection: selectRules({}), // all rules off until the client's snapshot arrives at initialize
 };
 
 // Open-document tracker (so semantic-tokens requests have document text to highlight) plus the
@@ -114,6 +119,7 @@ let initialFolderUris: string[] = [];
 connection.onInitialize((params: InitializeParams): InitializeResult => {
   const options = params.initializationOptions as InitializationOptions | undefined;
   context.lastKnownTrust = options?.isTrusted ?? false;
+  context.lintSelection = selectRules(options?.lintConfig ?? {});
   hasWorkspaceFolderCapability = Boolean(params.capabilities.workspace?.workspaceFolders);
   // configBaseName is frozen to "novel.jp" and already seeded on the context, so there
   // is nothing to reconcile from initializationOptions here.
@@ -140,6 +146,11 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         triggerCharacters: ['/', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
       },
       documentLinkProvider: { resolveProvider: false },
+      // Auto-fix for the fixable lint rules: per-diagnostic quick-fixes + a source.fixAll bundle
+      // (the latter also enables fix-on-save via the user's editor.codeActionsOnSave).
+      codeActionProvider: {
+        codeActionKinds: [CodeActionKind.QuickFix, CodeActionKind.SourceFixAll],
+      },
       workspace: {
         workspaceFolders: {
           supported: true,
@@ -230,6 +241,19 @@ connection.onNotification(
         reportError(context, err);
       });
     }
+  },
+);
+
+// Prose-lint settings changed (jpnov.lint.*): re-resolve the enabled-rule selection from the fresh
+// snapshot and re-lint every open .jpnov so toggles take effect immediately. The findings cache is
+// keyed by document VERSION, which a settings toggle does NOT bump — so clear it explicitly, or a
+// code-action requested in the re-lint debounce window would be served from the stale selection.
+connection.onNotification(
+  'jpnov/lintConfigChanged',
+  (params: LintConfigChangedParams) => {
+    context.lintSelection = selectRules(params.lintConfig);
+    findingsCache.clear();
+    revalidateOpenNovels();
   },
 );
 
@@ -341,24 +365,23 @@ function scheduleFilelistDiagnostics(doc: TextDocument): void {
   );
 }
 
-// Live half-width-space Warnings for an open .jpnov (see prose.ts for the smart rule). The scan is
-// pure + synchronous (no fs), so there is no async stale-result window like the filelist path — a
-// short debounce just keeps typing snappy on long chapters.
+// Live prose-lint Warnings for an open .jpnov. The enabled rules run through the textlint kernel
+// (see lint/kernel.ts), which is async once any rule is on — so, like the filelist path, a version
+// recheck AFTER the await guards against publishing results for stale text. With no rule enabled the
+// driver returns synchronously (a plain []), so the common case still publishes at once. The short
+// debounce keeps typing snappy on long chapters.
 const proseDebounce = new Map<string, ReturnType<typeof setTimeout>>();
 const PROSE_DEBOUNCE_MS = 200;
 
-/** Map the prose scan's spans to `lint.halfWidthSpace` Warning diagnostics. */
-function proseDiagnostics(text: string): Diagnostic[] {
-  return findHalfWidthSpaces(text).map((s) =>
-    diagnostic(
-      {
-        start: { line: s.line, character: s.startChar },
-        end: { line: s.line, character: s.endChar },
-      },
-      { code: 'lint.halfWidthSpace' },
-      DiagnosticSeverity.Warning,
-    ),
-  );
+// Last published findings per open .jpnov (uri -> {version, findings}); the code-action handler reuses
+// them so it never re-lints when the cache is current. Kept in lockstep with what is published.
+const findingsCache = new Map<string, { version: number; findings: LintFinding[] }>();
+
+/** Cache the findings and publish their diagnostics (one place keeps cache and diagnostics aligned). */
+function publishFindings(uri: string, version: number, findings: LintFinding[]): void {
+  findingsCache.set(uri, { version, findings });
+  // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
+  void connection.sendDiagnostics({ uri, diagnostics: findings.map((f) => f.diagnostic) });
 }
 
 function scheduleProseDiagnostics(doc: TextDocument): void {
@@ -373,10 +396,59 @@ function scheduleProseDiagnostics(doc: TextDocument): void {
       if (current?.languageId !== 'novel-jp' || current.version !== scheduledVersion) {
         return;
       }
-      // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
-      void connection.sendDiagnostics({ uri, diagnostics: proseDiagnostics(current.getText()) });
+      const result = computeLintFindings(current.getText(), context.lintSelection, current);
+      if (Array.isArray(result)) {
+        // No rule enabled (or only sync pre-scans): nothing async to race.
+        publishFindings(uri, scheduledVersion, result);
+        return;
+      }
+      void result
+        .then((findings) => {
+          // A newer edit (or a config change) since scheduling supersedes this run.
+          if (documents.get(uri)?.version === scheduledVersion) {
+            publishFindings(uri, scheduledVersion, findings);
+          }
+        })
+        .catch((err: unknown) => {
+          reportError(context, err);
+        });
     }, PROSE_DEBOUNCE_MS),
   );
+}
+
+// Quick-fix + fix-all code actions for an open .jpnov. Reuse the cached findings when they match the
+// document version; otherwise recompute (e.g. an action requested before the debounced lint landed).
+connection.onCodeAction((params: CodeActionParams): CodeAction[] | Promise<CodeAction[]> => {
+  const doc = documents.get(params.textDocument.uri);
+  if (doc?.languageId !== 'novel-jp') {
+    return [];
+  }
+  const uri = doc.uri;
+  const version = doc.version;
+  const cached = findingsCache.get(uri);
+  if (cached?.version === version) {
+    return buildCodeActions(uri, cached.findings, params.range, params.context.only);
+  }
+  const result = computeLintFindings(doc.getText(), context.lintSelection, doc);
+  if (Array.isArray(result)) {
+    findingsCache.set(uri, { version, findings: result });
+    return buildCodeActions(uri, result, params.range, params.context.only);
+  }
+  return result.then((findings) => {
+    if (documents.get(uri)?.version === version) {
+      findingsCache.set(uri, { version, findings });
+    }
+    return buildCodeActions(uri, findings, params.range, params.context.only);
+  });
+});
+
+/** Re-lint every open .jpnov — used when the lint selection changes (no text edit drives it). */
+function revalidateOpenNovels(): void {
+  for (const doc of documents.all()) {
+    if (doc.languageId === 'novel-jp') {
+      scheduleProseDiagnostics(doc);
+    }
+  }
 }
 
 // onDidChangeContent fires on open AND on every edit, so it covers initial validation too.
@@ -394,6 +466,7 @@ documents.onDidClose((e) => {
   filelistDebounce.delete(e.document.uri);
   clearTimeout(proseDebounce.get(e.document.uri));
   proseDebounce.delete(e.document.uri);
+  findingsCache.delete(e.document.uri);
   if (e.document.languageId === 'novel-jp-filelist' || e.document.languageId === 'novel-jp') {
     // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
     void connection.sendDiagnostics({ uri: e.document.uri, diagnostics: [] });

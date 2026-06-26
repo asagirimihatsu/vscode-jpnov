@@ -9,20 +9,31 @@
  * Every custom payload below is defined with plain strings so it survives IPC
  * (structured-clone over the forked-process channel) without vscode value types.
  */
+import type { LintCode } from './lint/catalog.ts';
 
 // ---------------------------------------------------------------------------
 // initialize (C->S)
 // ---------------------------------------------------------------------------
 
 /**
+ * A flat snapshot of the user's `jpnov.lint.*` settings, keyed by full setting key
+ * (`jpnov.lint.<stream>.<id>`) -> primitive. Plain primitives only, so it survives IPC; the server
+ * resolves it to enabled rules via `selectRules()` (`src/shared/lint/select.ts`). Absent keys (and
+ * `null`) mean "off", so the client may ship a sparse object.
+ */
+export type RawLintConfigWire = Readonly<Record<string, boolean | number | string | null>>;
+
+/**
  * Carried on the standard LSP `initialize` request as `initializationOptions`.
  * `isTrusted` reflects the host workspace-trust state at startup; the server keeps
  * a `lastKnownTrust` and gates executable-config import() on it. `configBaseName`
- * is the fixed `"novel.jp"` stem the server watches/matches per root.
+ * is the fixed `"novel.jp"` stem the server watches/matches per root. `lintConfig` seeds the
+ * prose-lint selection at startup (omitted = no rules enabled).
  */
 export interface InitializationOptions {
   readonly isTrusted: boolean;
   readonly configBaseName: 'novel.jp';
+  readonly lintConfig?: RawLintConfigWire;
 }
 
 // ---------------------------------------------------------------------------
@@ -57,7 +68,7 @@ export type MsgCode =
   | 'path.absolute' // args: [LabelId]
   | 'path.invalid' // args: [LabelId]
   | 'path.escapesRoot' // args: [LabelId]
-  | 'lint.halfWidthSpace' // args: [] — static prose diagnostic, no substitution
+  | LintCode // args: [] — one static prose-lint code per (stream, rule); see lint/catalog.ts
   | 'server.unexpected'; // args: [detail]  (detail = raw unexpected server error, untranslatable)
 
 /**
@@ -119,6 +130,21 @@ export const WorkspaceTrustChangedNotification = 'jpnov/workspaceTrustChanged';
 
 export interface WorkspaceTrustChangedParams {
   readonly isTrusted: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// jpnov/lintConfigChanged (C->S notification)
+// ---------------------------------------------------------------------------
+
+export const LintConfigChangedNotification = 'jpnov/lintConfigChanged';
+
+/**
+ * Pushed when the user edits any `jpnov.lint.*` setting (mirrors the workspace-trust push). The
+ * server keeps a vscode-free `RuleSelection`; this carries a fresh full snapshot, which the server
+ * re-resolves and then re-lints all open `.jpnov` documents against.
+ */
+export interface LintConfigChangedParams {
+  readonly lintConfig: RawLintConfigWire;
 }
 
 // ---------------------------------------------------------------------------

@@ -107,6 +107,123 @@
         "novel-jp-filelist": false
       }
     },
+    "configuration": [
+      {
+        "title": "%jpnov.lint.common.title%",
+        "properties": {
+          "jpnov.lint.common.sentenceLength": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null,
+            "minimum": 1,
+            "maximum": 1000,
+            "markdownDescription": "%jpnov.lint.common.sentenceLength.description%"
+          },
+          "jpnov.lint.common.maxTen": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null,
+            "minimum": 1,
+            "maximum": 20,
+            "markdownDescription": "%jpnov.lint.common.maxTen.description%"
+          },
+          "jpnov.lint.common.maxKanjiRun": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null,
+            "minimum": 1,
+            "maximum": 20,
+            "markdownDescription": "%jpnov.lint.common.maxKanjiRun.description%"
+          },
+          "jpnov.lint.common.noEmDash": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "%jpnov.lint.common.noEmDash.description%"
+          },
+          "jpnov.lint.common.noUnmatchedPair": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "%jpnov.lint.common.noUnmatchedPair.description%"
+          },
+          "jpnov.lint.common.noHankakuKana": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "%jpnov.lint.common.noHankakuKana.description%"
+          },
+          "jpnov.lint.common.noNfd": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "%jpnov.lint.common.noNfd.description%"
+          },
+          "jpnov.lint.common.noZeroWidth": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "%jpnov.lint.common.noZeroWidth.description%"
+          },
+          "jpnov.lint.common.noControlChar": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "%jpnov.lint.common.noControlChar.description%"
+          },
+          "jpnov.lint.common.jaNoSpaceBetweenFullWidth": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "%jpnov.lint.common.jaNoSpaceBetweenFullWidth.description%"
+          },
+          "jpnov.lint.common.jaUnnaturalAlphabet": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "%jpnov.lint.common.jaUnnaturalAlphabet.description%"
+          },
+          "jpnov.lint.common.minusPosition": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "%jpnov.lint.common.minusPosition.description%"
+          }
+        }
+      },
+      {
+        "title": "%jpnov.lint.narration.title%",
+        "properties": {
+          "jpnov.lint.narration.generalNovelStyle": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "%jpnov.lint.narration.generalNovelStyle.description%"
+          },
+          "jpnov.lint.narration.jaNoMixedPeriod": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "%jpnov.lint.narration.jaNoMixedPeriod.description%"
+          }
+        }
+      },
+      {
+        "title": "%jpnov.lint.ruby.title%",
+        "properties": {
+          "jpnov.lint.ruby.kana": {
+            "type": "string",
+            "enum": [
+              "off",
+              "hiragana",
+              "katakana"
+            ],
+            "default": "off",
+            "enumDescriptions": [
+              "%jpnov.lint.ruby.kana.off%",
+              "%jpnov.lint.ruby.kana.hiragana%",
+              "%jpnov.lint.ruby.kana.katakana%"
+            ],
+            "markdownDescription": "%jpnov.lint.ruby.kana.description%"
+          }
+        }
+      }
+    ],
     "debuggers": [
       {
         "type": "jpnov-build",
@@ -279,11 +396,23 @@
     "watch:tsc": "tsc --noEmit --watch",
     "watch": "npm run watch:tsc & npm run watch:esbuild & wait",
     "pretest": "npm run type-check",
-    "test": "node --test --experimental-test-module-mocks \"test/shared/**/*.test.ts\" \"test/server/highlight/**/*.test.ts\" \"test/server/prose.test.ts\"",
+    "test": "node --test --experimental-test-module-mocks \"test/shared/**/*.test.ts\" \"test/server/highlight/**/*.test.ts\" \"test/server/lint/**/*.test.ts\"",
     "vscode:prepublish": "npm run type-check && npm run lint && npm run build",
     "package": "vsce package"
   },
   "dependencies": {
+    "@textlint-rule/textlint-rule-no-invalid-control-character": "^3.0.0",
+    "@textlint-rule/textlint-rule-no-unmatched-pair": "^2.0.4",
+    "@textlint/kernel": "^15.7.1",
+    "@textlint/textlint-plugin-text": "^15.7.1",
+    "textlint-rule-general-novel-style-ja": "^1.3.0",
+    "textlint-rule-ja-no-mixed-period": "^3.0.2",
+    "textlint-rule-ja-unnatural-alphabet": "^2.0.1",
+    "textlint-rule-max-kanji-continuous-len": "^1.1.1",
+    "textlint-rule-no-hankaku-kana": "^2.0.1",
+    "textlint-rule-no-nfd": "^2.0.2",
+    "textlint-rule-no-zero-width-spaces": "^1.0.1",
+    "textlint-rule-sentence-length": "^5.2.1",
     "vscode-languageclient": "^10",
     "vscode-languageserver": "^10",
     "vscode-languageserver-textdocument": "^1.0.12"
