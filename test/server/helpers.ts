@@ -11,6 +11,7 @@ import { pathToFileURL } from 'node:url';
 
 import type { Connection } from 'vscode-languageserver/node';
 
+import { selectRules } from '../../src/shared/lint/select.ts';
 import type { ServerContext } from '../../src/server/roots.ts';
 
 export interface RecordedNotification {
@@ -116,6 +117,7 @@ export function makeContext(
     roots: new Map(),
     configBaseName: 'novel.jp',
     lastKnownTrust: opts?.isTrusted ?? false,
+    lintSelection: selectRules({}),
   };
 }
 

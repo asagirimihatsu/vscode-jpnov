@@ -78,8 +78,37 @@ export function renderMessage(msg: LocalizableMessage): string {
       return vscode.l10n.t('{0} is not a valid path', labelText(a[0] as LabelId));
     case 'path.escapesRoot':
       return vscode.l10n.t('{0} must not escape the workspace root', labelText(a[0] as LabelId));
-    case 'lint.halfWidthSpace':
-      return vscode.l10n.t('half-width space; use a full-width space in Japanese prose');
+    // --- prose lint (kept byte-identical to renderEnglish). ---
+    case 'lint.common.sentenceLength':
+      return vscode.l10n.t('this sentence is too long');
+    case 'lint.common.maxTen':
+      return vscode.l10n.t('too many commas (、) in one sentence');
+    case 'lint.common.maxKanjiRun':
+      return vscode.l10n.t('too many consecutive kanji');
+    case 'lint.common.noEmDash':
+      return vscode.l10n.t('use a double dash (――), not a single em dash (—)');
+    case 'lint.common.noUnmatchedPair':
+      return vscode.l10n.t('unmatched bracket or quote');
+    case 'lint.common.noHankakuKana':
+      return vscode.l10n.t('half-width kana; use full-width kana');
+    case 'lint.common.noNfd':
+      return vscode.l10n.t('decomposed (NFD) characters; use composed (NFC) form');
+    case 'lint.common.noZeroWidth':
+      return vscode.l10n.t('zero-width space');
+    case 'lint.common.noControlChar':
+      return vscode.l10n.t('invalid control character');
+    case 'lint.common.jaNoSpaceBetweenFullWidth':
+      return vscode.l10n.t('space between full-width characters');
+    case 'lint.common.jaUnnaturalAlphabet':
+      return vscode.l10n.t('unnatural alphabet usage');
+    case 'lint.common.minusPosition':
+      return vscode.l10n.t('a minus sign is allowed only before a number');
+    case 'lint.narration.generalNovelStyle':
+      return vscode.l10n.t('does not follow Japanese novel style (paragraph indent / line head)');
+    case 'lint.narration.jaNoMixedPeriod':
+      return vscode.l10n.t('this sentence does not end with a period (。)');
+    case 'lint.ruby.kana':
+      return vscode.l10n.t('ruby reading should be all hiragana or all katakana');
     case 'server.unexpected':
       return vscode.l10n.t('unexpected error: {0}', s(0));
     default: {

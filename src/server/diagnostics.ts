@@ -11,8 +11,8 @@
 import { DiagnosticSeverity } from 'vscode-languageserver/node';
 import type { Diagnostic, Range } from 'vscode-languageserver/node';
 
-import { renderEnglish } from '#/shared/messages.ts';
-import type { LocalizableMessage } from '#/shared/protocol.ts';
+import { renderEnglish } from '../shared/messages.ts';
+import type { LocalizableMessage } from '../shared/protocol.ts';
 
 /** The `source` field stamped on every diagnostic this server emits. */
 const DIAGNOSTIC_SOURCE = 'jpnov';

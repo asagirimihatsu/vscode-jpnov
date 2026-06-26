@@ -65,8 +65,38 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return `${englishLabel(args[0] as LabelId)} is not a valid path`;
     case 'path.escapesRoot':
       return `${englishLabel(args[0] as LabelId)} must not escape the workspace root`;
-    case 'lint.halfWidthSpace':
-      return 'half-width space; use a full-width space in Japanese prose';
+    // --- prose lint (one static, arg-less code per (scope, rule); see lint/catalog.ts).
+    // `common` rules run on both 地の文 + 台詞 under one code; JA lives in bundle.l10n.ja.json.
+    case 'lint.common.sentenceLength':
+      return 'this sentence is too long';
+    case 'lint.common.maxTen':
+      return 'too many commas (、) in one sentence';
+    case 'lint.common.maxKanjiRun':
+      return 'too many consecutive kanji';
+    case 'lint.common.noEmDash':
+      return 'use a double dash (――), not a single em dash (—)';
+    case 'lint.common.noUnmatchedPair':
+      return 'unmatched bracket or quote';
+    case 'lint.common.noHankakuKana':
+      return 'half-width kana; use full-width kana';
+    case 'lint.common.noNfd':
+      return 'decomposed (NFD) characters; use composed (NFC) form';
+    case 'lint.common.noZeroWidth':
+      return 'zero-width space';
+    case 'lint.common.noControlChar':
+      return 'invalid control character';
+    case 'lint.common.jaNoSpaceBetweenFullWidth':
+      return 'space between full-width characters';
+    case 'lint.common.jaUnnaturalAlphabet':
+      return 'unnatural alphabet usage';
+    case 'lint.common.minusPosition':
+      return 'a minus sign is allowed only before a number';
+    case 'lint.narration.generalNovelStyle':
+      return 'does not follow Japanese novel style (paragraph indent / line head)';
+    case 'lint.narration.jaNoMixedPeriod':
+      return 'this sentence does not end with a period (。)';
+    case 'lint.ruby.kana':
+      return 'ruby reading should be all hiragana or all katakana';
     case 'server.unexpected':
       return `unexpected error: ${a(0)}`;
     default: {
