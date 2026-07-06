@@ -127,6 +127,23 @@ export function activate(context: vscode.ExtensionContext): void {
   // Books panel's checkbox selection. See buildDebug.ts for why this is modeled as a debugger.
   context.subscriptions.push(registerBuildDebugger(booksView));
 
+  // Revive the preview panel the workbench restored from the previous session (window
+  // reload); without a registered serializer the restored tab would stay blank forever.
+  // Registered in this same synchronous activate() body as client.start() below: by the
+  // time any deserialize can dispatch, the client is at least Starting, so adopt()'s
+  // first render simply queues behind server startup inside sendRequest.
+  context.subscriptions.push(
+    vscode.window.registerWebviewPanelSerializer(Preview.viewType, {
+      deserializeWebviewPanel: (panel: vscode.WebviewPanel, state: unknown) => {
+        preview?.adopt(panel, state);
+        // adopt() is synchronous through its first paint and never throws; returning
+        // already-resolved keeps VS Code's revival pipeline unblocked (a rejection
+        // would surface an "error restoring view" page instead).
+        return Promise.resolve();
+      },
+    }),
+  );
+
   // The server emits one configState per root whenever a root's config changes; the
   // client only needs it to refresh the aggregated status-bar item.
   context.subscriptions.push(

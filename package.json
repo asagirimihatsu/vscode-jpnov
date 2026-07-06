@@ -33,7 +33,8 @@
     "workspaceContains:novel.jp.js",
     "workspaceContains:novel.jp.cjs",
     "workspaceContains:novel.jp.mjs",
-    "workspaceContains:novel.jp.ts"
+    "workspaceContains:novel.jp.ts",
+    "onWebviewPanel:jpnov.preview"
   ],
   "contributes": {
     "languages": [

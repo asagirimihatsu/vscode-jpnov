@@ -179,7 +179,6 @@ export interface FakeWebviewPanel {
   reveal(): void;
   dispose(): void;
   onDidDispose(listener: Listener<void>): Disposable;
-  _fireDispose(): void;
 }
 
 /** Mutable test harness backing the mocked `vscode` namespace. */
@@ -205,6 +204,8 @@ export interface MockState {
   /** Folders the init command may scaffold into; undefined = no folder open. */
   workspaceFolders: { uri: Uri; name: string; index: number }[] | undefined;
   workspaceFolderPickResult: { uri: Uri } | undefined;
+  /** Uris `workspace.openTextDocument` must reject (simulates deleted/unloadable files). */
+  unopenableDocs: Set<string>;
   /** In-memory filesystem the init guard probes: uri string → FileType. */
   fsEntries: Map<string, number>;
   /** File contents for readFile (uri string → utf8 text). */
@@ -237,6 +238,7 @@ export function createMockState(): MockState {
     inputBoxCalls: [],
     workspaceFolders: undefined,
     workspaceFolderPickResult: undefined,
+    unopenableDocs: new Set<string>(),
     fsEntries: new Map<string, number>(),
     fsContent: new Map<string, string>(),
     createdDirs: [],
@@ -271,6 +273,7 @@ export function resetMockState(s: MockState): void {
   s.inputBoxCalls.length = 0;
   s.workspaceFolders = undefined;
   s.workspaceFolderPickResult = undefined;
+  s.unopenableDocs.clear();
   s.fsEntries.clear();
   s.fsContent.clear();
   s.createdDirs.length = 0;
@@ -328,33 +331,7 @@ export function buildVscode(state: MockState): Record<string, unknown> {
       _show: unknown,
       _opts: unknown,
     ): FakeWebviewPanel {
-      const disposeEmitter = new EventEmitter<void>();
-      const panel: FakeWebviewPanel = {
-        viewType,
-        title,
-        webview: {
-          html: '',
-          cspSource: 'vscode-webview://test',
-          options: _opts,
-          posted: [],
-          postMessage(message: unknown): Promise<boolean> {
-            this.posted.push(message);
-            return Promise.resolve(true);
-          },
-        },
-        disposed: false,
-        reveal() {
-          /* no-op */
-        },
-        dispose() {
-          this.disposed = true;
-          disposeEmitter.fire();
-        },
-        onDidDispose: disposeEmitter.event,
-        _fireDispose() {
-          disposeEmitter.fire();
-        },
-      };
+      const panel = createFakePanel(viewType, title, _opts);
       state.panels.push(panel);
       return panel;
     },
@@ -433,7 +410,15 @@ export function buildVscode(state: MockState): Record<string, unknown> {
     onDidChangeTextDocument: state.onDidChangeDoc.event,
     openTextDocument(uri: Uri): Promise<FakeTextDocument> {
       state.openedDocs.push(uri.toString());
-      return Promise.resolve(doc(uri.toString(), 'novel-jp'));
+      if (state.unopenableDocs.has(uri.toString())) {
+        return Promise.reject(FileSystemError.FileNotFound(uri));
+      }
+      // Prefer a registered document (lets tests control languageId/text); fall back
+      // to fabricating a novel-jp doc so pre-existing tests keep working unchanged.
+      const existing = state.textDocuments.find(
+        (d) => d.uri.toString() === uri.toString(),
+      );
+      return Promise.resolve(existing ?? doc(uri.toString(), 'novel-jp'));
     },
   };
 
@@ -479,4 +464,41 @@ export function buildVscode(state: MockState): Record<string, unknown> {
 
 export function doc(uri: string, languageId: string, text = ''): FakeTextDocument {
   return { uri: Uri.parse(uri), languageId, getText: () => text };
+}
+
+/**
+ * A standalone webview panel fake. `window.createWebviewPanel` delegates here (and
+ * records into `state.panels`); tests can also build one directly to stand in for a
+ * workbench-restored panel handed to `Preview.adopt()` — the extension never created
+ * that panel, so it is deliberately NOT recorded in `state.panels`.
+ */
+export function createFakePanel(
+  viewType = 'jpnov.preview',
+  title = '',
+  opts?: unknown,
+): FakeWebviewPanel {
+  const disposeEmitter = new EventEmitter<void>();
+  return {
+    viewType,
+    title,
+    webview: {
+      html: '',
+      cspSource: 'vscode-webview://test',
+      options: opts,
+      posted: [],
+      postMessage(message: unknown): Promise<boolean> {
+        this.posted.push(message);
+        return Promise.resolve(true);
+      },
+    },
+    disposed: false,
+    reveal() {
+      /* no-op */
+    },
+    dispose() {
+      this.disposed = true;
+      disposeEmitter.fire();
+    },
+    onDidDispose: disposeEmitter.event,
+  };
 }

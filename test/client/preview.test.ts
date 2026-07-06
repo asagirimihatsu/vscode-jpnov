@@ -1,5 +1,7 @@
 /**
- * Integration test for the live preview's webview hardening + render plumbing.
+ * Integration test for the live preview's webview hardening + render plumbing, plus
+ * window-reload revival: `adopt()` re-wiring a workbench-restored panel and
+ * re-rendering from the persisted `{uri, line}` webview state.
  *
  * The interesting, load-bearing client logic here is turning the SERVER's standalone
  * preview document into a webview-safe one: a strict CSP `<meta>` plus a per-render
@@ -15,6 +17,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildVscode,
+  createFakePanel,
   createMockState,
   doc,
   resetMockState,
@@ -34,6 +37,11 @@ beforeEach(() => {
 /** A fake LanguageClient: only `sendRequest` is used by the preview. */
 function fakeClient(html: string): { sendRequest: () => Promise<{ html: string }> } {
   return { sendRequest: () => Promise.resolve({ html }) };
+}
+
+/** Drain pending microtasks/timers so fire-and-forget renders settle. */
+function tick(): Promise<void> {
+  return new Promise((r) => setTimeout(r, 0));
 }
 
 const SERVER_HTML =
@@ -56,7 +64,7 @@ async function openPreviewWith(html: string) {
 
   preview.open(true);
   // open() renders asynchronously (awaits sendRequest); let microtasks drain.
-  await new Promise((r) => setTimeout(r, 0));
+  await tick();
   return { preview, panel: firstPanel() };
 }
 
@@ -110,7 +118,7 @@ test('a server render error is surfaced inside a hardened shell, not thrown', as
   state.activeEditor = { document: d, viewColumn: 1 };
 
   preview.open(true);
-  await new Promise((r) => setTimeout(r, 0));
+  await tick();
 
   const html = firstPanel().webview.html;
   assert.match(html, /Preview failed/);
@@ -123,7 +131,7 @@ test('opening with no active editor shows the empty-state shell', async () => {
   state.activeEditor = undefined;
 
   preview.open(true);
-  await new Promise((r) => setTimeout(r, 0));
+  await tick();
 
   const html = firstPanel().webview.html;
   assert.match(html, /Open a \.jpnov file to preview/);
@@ -161,7 +169,7 @@ test('render bakes the top-most cursor line into the scroll script', async () =>
   });
 
   preview.open(true);
-  await new Promise((r) => setTimeout(r, 0));
+  await tick();
 
   assert.match(firstPanel().webview.html, /reveal\(4\)/);
 });
@@ -182,4 +190,238 @@ test('a cursor move posts a reveal for the top-most (earliest) cursor line', asy
   );
   assert.ok(reveal, 'a reveal message was posted on cursor move');
   assert.equal(reveal.line, 3, 'follows the earliest cursor, not selections[0]');
+});
+
+// --- window-reload revival (adopt) -----------------------------------------
+
+/** Adopt a workbench-restored fake panel, as extension.ts's serializer glue does. */
+function adoptWith(
+  client: { sendRequest: () => Promise<{ html: string }> },
+  state_: unknown,
+) {
+  const preview = new Preview(client as never);
+  const panel = createFakePanel();
+  preview.adopt(panel as never, state_);
+  return { preview, panel };
+}
+
+test('rendered html persists {uri, line} via setState for the next reload', async () => {
+  const { panel } = await openPreviewWith(SERVER_HTML);
+  const html = panel.webview.html;
+  assert.match(html, /acquireVsCodeApi\(\)/);
+  assert.ok(
+    html.includes('setState({uri:"file:///proj/src/a.jpnov",line:line})'),
+    'setState carries the previewed uri',
+  );
+});
+
+test('adopt() with persisted state renders that document and bakes its cursor line', async () => {
+  state.textDocuments.push(doc('file:///proj/src/a.jpnov', 'novel-jp', '本文です。'));
+
+  const { panel } = adoptWith(fakeClient(SERVER_HTML), {
+    uri: 'file:///proj/src/a.jpnov',
+    line: 5,
+  });
+  await tick();
+
+  assert.deepEqual(state.openedDocs, ['file:///proj/src/a.jpnov']);
+  assert.match(panel.webview.html, /本文/);
+  // No editor is visible, so the persisted line drives the initial scroll.
+  assert.match(panel.webview.html, /reveal\(5\)/);
+});
+
+test('adopt() prefers the active previewable editor over stale persisted state', async () => {
+  const active = doc('file:///proj/src/b.jpnov', 'novel-jp', 'アクティブ');
+  state.textDocuments.push(active);
+  state.activeEditor = { document: active, viewColumn: 1 };
+
+  const { panel } = adoptWith(fakeClient(SERVER_HTML), {
+    uri: 'file:///proj/src/a.jpnov',
+    line: 9,
+  });
+  await tick();
+
+  assert.equal(state.openedDocs.length, 0, 'the stale uri is never loaded');
+  assert.equal(panel.title, 'b.jpnov — Preview');
+  // A different document's persisted line must not leak into this render.
+  assert.match(panel.webview.html, /reveal\(0\)/);
+});
+
+test('adopt() with the active editor matching the persisted uri restores its line', async () => {
+  const active = doc('file:///proj/src/a.jpnov', 'novel-jp', '本文');
+  state.textDocuments.push(active);
+  state.activeEditor = { document: active, viewColumn: 1 };
+  // No visibleTextEditors entry: startup editor restoration hasn't resolved yet.
+
+  const { panel } = adoptWith(fakeClient(SERVER_HTML), {
+    uri: 'file:///proj/src/a.jpnov',
+    line: 7,
+  });
+  await tick();
+
+  assert.match(panel.webview.html, /reveal\(7\)/);
+});
+
+test('adopt() with no state and no editor shows the empty-state shell (pre-fix sessions)', async () => {
+  const { panel } = adoptWith(fakeClient(SERVER_HTML), undefined);
+
+  // Synchronous first paint — the day-one migration path must never stay blank.
+  assert.match(panel.webview.html, /Open a \.jpnov file to preview/);
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+  await tick();
+  assert.match(panel.webview.html, /Open a \.jpnov file to preview/);
+});
+
+test('adopt() tolerates garbage state shapes without throwing', async () => {
+  for (const garbage of [42, 'x', ['file:///a.jpnov'], { uri: 99, line: 'y' }]) {
+    resetMockState(state);
+    const { panel } = adoptWith(fakeClient(SERVER_HTML), garbage);
+    await tick();
+    assert.match(panel.webview.html, /Open a \.jpnov file to preview/);
+  }
+});
+
+test('adopt() paints the loading shell synchronously before the restored render lands', () => {
+  state.textDocuments.push(doc('file:///proj/src/a.jpnov', 'novel-jp', 'x'));
+
+  const { panel } = adoptWith(fakeClient(SERVER_HTML), {
+    uri: 'file:///proj/src/a.jpnov',
+  });
+
+  // Asserted BEFORE draining microtasks: a wedged server start must never leave blank.
+  assert.match(panel.webview.html, /Loading preview/);
+  assert.match(panel.webview.html, /class="spinner"/);
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+});
+
+test('adopt() paints the loading shell synchronously in the active-editor branch too', () => {
+  const active = doc('file:///proj/src/b.jpnov', 'novel-jp', 'x');
+  state.textDocuments.push(active);
+  state.activeEditor = { document: active, viewColumn: 1 };
+
+  const { panel } = adoptWith(fakeClient(SERVER_HTML), undefined);
+
+  // The server is cold right after a reload; the wait shows a spinner, not a blank tab.
+  assert.match(panel.webview.html, /Loading preview/);
+  assert.match(panel.webview.html, /class="spinner"/);
+});
+
+test('adopt() falls back to the empty-state shell when the persisted file is gone', async () => {
+  state.unopenableDocs.add('file:///proj/src/gone.jpnov');
+
+  const { panel } = adoptWith(fakeClient(SERVER_HTML), {
+    uri: 'file:///proj/src/gone.jpnov',
+    line: 2,
+  });
+  await tick();
+
+  assert.match(panel.webview.html, /Open a \.jpnov file to preview/);
+  assert.equal(panel.disposed, false, 'the panel stays; only its content degrades');
+
+  // The adopted panel is fully live: focusing a previewable editor re-renders it.
+  state.onDidChangeActiveEditor.fire({
+    document: doc('file:///proj/src/c.jpnov', 'novel-jp', 'x'),
+  });
+  await tick();
+  assert.match(panel.webview.html, /本文/);
+});
+
+test('adopt() rejects a persisted doc that is no longer previewable', async () => {
+  state.textDocuments.push(doc('file:///proj/notes.txt', 'plaintext', 'x'));
+
+  const { panel } = adoptWith(fakeClient(SERVER_HTML), {
+    uri: 'file:///proj/notes.txt',
+  });
+  await tick();
+
+  assert.match(panel.webview.html, /Open a \.jpnov file to preview/);
+});
+
+test('adopt() while a live panel exists disposes the incoming panel', async () => {
+  const { preview, panel } = await openPreviewWith(SERVER_HTML);
+
+  const revived = createFakePanel();
+  preview.adopt(revived as never, { uri: 'file:///proj/src/a.jpnov' });
+  await tick();
+
+  assert.equal(revived.disposed, true, 'the redundant revival is closed');
+  assert.equal(panel.disposed, false, 'the live panel is untouched');
+  assert.match(panel.webview.html, /本文/);
+});
+
+test('open() after adoption reveals the adopted panel instead of creating a second one', async () => {
+  const d = doc('file:///proj/src/a.jpnov', 'novel-jp', 'x');
+  state.textDocuments.push(d);
+  state.activeEditor = { document: d, viewColumn: 1 };
+
+  const { preview } = adoptWith(fakeClient(SERVER_HTML), undefined);
+  await tick();
+
+  preview.open(true);
+  await tick();
+
+  assert.equal(state.panels.length, 0, 'createWebviewPanel is never called');
+});
+
+test('adoption wires the live-update listeners (edit re-render + cursor reveal)', async () => {
+  let renders = 0;
+  const counting = {
+    sendRequest: () => {
+      renders++;
+      return Promise.resolve({ html: SERVER_HTML });
+    },
+  };
+  const d = doc('file:///proj/src/a.jpnov', 'novel-jp', '一');
+  state.textDocuments.push(d);
+
+  const { panel } = adoptWith(counting, { uri: 'file:///proj/src/a.jpnov', line: 0 });
+  await tick();
+  assert.equal(renders, 1);
+
+  // An edit to the shown document re-renders...
+  state.onDidChangeDoc.fire({ document: d });
+  await tick();
+  assert.equal(renders, 2);
+
+  // ...and a cursor move posts a reveal for the shown document.
+  const ed = { document: d, selections: [{ active: { line: 8 } }] };
+  state.onDidChangeSelection.fire({ textEditor: ed, selections: ed.selections });
+  const reveal = panel.webview.posted.find(
+    (m): m is { type: string; line: number } =>
+      typeof m === 'object' &&
+      m !== null &&
+      (m as { type?: unknown }).type === 'reveal',
+  );
+  assert.ok(reveal, 'a reveal message was posted');
+  assert.equal(reveal.line, 8);
+});
+
+test('adopt() re-enables scripts on the revived webview', () => {
+  const { panel } = adoptWith(fakeClient(SERVER_HTML), undefined);
+  assert.deepEqual(panel.webview.options, { enableScripts: true });
+});
+
+test('a render resolving after the panel closed writes nothing and does not throw', async () => {
+  // Definitely assigned: open() below calls sendRequest synchronously.
+  let resolveRender!: (r: { html: string }) => void;
+  const deferred = {
+    sendRequest: () =>
+      new Promise<{ html: string }>((res) => {
+        resolveRender = res;
+      }),
+  };
+  const preview = new Preview(deferred as never);
+  const d = doc('file:///proj/src/a.jpnov', 'novel-jp', 'x');
+  state.textDocuments.push(d);
+  state.activeEditor = { document: d, viewColumn: 1 };
+
+  preview.open(true);
+  const panel = firstPanel();
+  assert.equal(panel.webview.html, '', 'render still in flight');
+
+  panel.dispose(); // the user closes the tab mid-render
+  resolveRender({ html: SERVER_HTML });
+  await tick();
+
+  assert.equal(panel.webview.html, '', 'no write to a disposed panel');
 });
