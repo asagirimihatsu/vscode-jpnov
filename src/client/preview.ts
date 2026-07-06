@@ -12,6 +12,10 @@
  * the paragraph for the active cursor line into view — on load and on `reveal` messages —
  * so an edit no longer snaps the view back to the start.
  *
+ * The panel survives window reloads: the injected script persists `{uri, line}` through
+ * the webview state API, and extension.ts registers a WebviewPanelSerializer that hands
+ * the workbench-restored panel back to `adopt()` to re-wire listeners and re-render.
+ *
  * Scope (per spec): a SINGLE current file, no filelist assembly, no pagination; lines wrap at the
  * owning root's `charsPerLine`; ［＃改ページ］ appears as a visible `<hr>` marker.
  */
@@ -28,15 +32,29 @@ import {
   type RenderFileResult,
 } from '#/shared/protocol.ts';
 
-const VIEW_TYPE = 'jpnov.preview';
+/** Spinner styles for {@link Preview.loadingShell} (nonce'd `<style>`, theme-driven). */
+const LOADING_CSS =
+  '.loading{display:flex;align-items:center;gap:.6em;color:var(--vscode-descriptionForeground,#888);}' +
+  '.spinner{width:1em;height:1em;border-radius:50%;flex:none;' +
+  'border:2px solid var(--vscode-progressBar-background,#0e70c0);border-top-color:transparent;' +
+  'animation:spin 1s linear infinite;}' +
+  '@keyframes spin{to{transform:rotate(360deg)}}' +
+  '@media (prefers-reduced-motion:reduce){.spinner{animation:none;}}';
 
 export class Preview {
+  /** The panel's viewType — the key the window-reload serializer registers under. */
+  static readonly viewType = 'jpnov.preview';
+
   private panel: vscode.WebviewPanel | undefined;
   /** Listeners active only while the panel is open; torn down on dispose. */
   private readonly panelDisposables: vscode.Disposable[] = [];
   /** URI string of the document currently shown, to scope edit/cursor re-renders. */
   private currentDocUri: string | undefined;
-  /** Serializes renders so a slow request can't clobber a newer buffer's output. */
+  /**
+   * Serializes renders so a slow request can't clobber a newer buffer's output.
+   * teardown() bumps it, so an in-flight render can never write to a disposed or
+   * replaced panel (every panel transition funnels through teardown()).
+   */
   private renderSeq = 0;
 
   private readonly client: LanguageClient;
@@ -60,44 +78,19 @@ export class Preview {
       : (editor?.viewColumn ?? vscode.ViewColumn.One);
     const preserveFocus = toSide;
 
-    if (this.panel === undefined) {
-      this.panel = vscode.window.createWebviewPanel(
-        VIEW_TYPE,
+    let panel = this.panel;
+    if (panel === undefined) {
+      panel = vscode.window.createWebviewPanel(
+        Preview.viewType,
         vscode.l10n.t('Japanese Novel Preview'),
         { viewColumn: column, preserveFocus },
         // Scripts are enabled but locked to a per-render nonce via CSP; the only script
         // is our own cursor-follow scroller (no remote/inline-eval scripts can run).
         { enableScripts: true, retainContextWhenHidden: true },
       );
-      this.panel.onDidDispose(() => {
-        this.teardown();
-      });
-      this.panelDisposables.push(
-        // Re-render when the user switches which file is active...
-        vscode.window.onDidChangeActiveTextEditor((next) => {
-          if (next !== undefined && this.isPreviewable(next.document)) {
-            // Fire-and-forget re-render: renderDocument() self-catches its sendRequest (shows a
-            // placeholder on failure) and is renderSeq-serialized, so a dropped result is safe.
-            void this.renderDocument(next.document);
-          }
-        }),
-        // ...on every edit to the file currently shown (live dirty buffer)...
-        vscode.workspace.onDidChangeTextDocument((e) => {
-          if (e.document.uri.toString() === this.currentDocUri) {
-            // Fire-and-forget re-render: renderDocument() self-catches its sendRequest (shows a
-            // placeholder on failure) and is renderSeq-serialized, so a dropped result is safe.
-            void this.renderDocument(e.document);
-          }
-        }),
-        // ...and follow the top-most cursor as it moves (a scroll message, no re-render).
-        vscode.window.onDidChangeTextEditorSelection((e) => {
-          if (e.textEditor.document.uri.toString() === this.currentDocUri) {
-            this.reveal(minCursorLine(e.selections));
-          }
-        }),
-      );
+      this.wire(panel);
     } else {
-      this.panel.reveal(column, preserveFocus);
+      panel.reveal(column, preserveFocus);
     }
 
     if (editor !== undefined && this.isPreviewable(editor.document)) {
@@ -105,10 +98,48 @@ export class Preview {
       // placeholder on failure) and is renderSeq-serialized, so a dropped result is safe.
       void this.renderDocument(editor.document);
     } else {
-      this.panel.webview.html = this.shell(
-        `<p>${escapeHtml(vscode.l10n.t('Open a .jpnov file to preview.'))}</p>`,
-        this.panel.webview,
-      );
+      panel.webview.html = this.emptyShell(panel.webview);
+    }
+  }
+
+  /**
+   * Serializer entry (see extension.ts): take ownership of a panel the workbench
+   * restored from a previous session and re-render it. Synchronous through the first
+   * paint and never throws, so revival hands VS Code an already-resolved promise.
+   *
+   * Content policy is active-editor-first: this preview mirrors the CURRENTLY active
+   * editor, and revival can happen long after reload (a restored tab deserializes when
+   * it first becomes visible), so the persisted state may be stale. `state.uri` is used
+   * only when no previewable editor is active; the persisted `line` scrolls the restored
+   * render only when the rendered document is `state.uri` itself.
+   */
+  adopt(panel: vscode.WebviewPanel, state: unknown): void {
+    if (this.panel !== undefined) {
+      // A live panel already exists (revival raced the preview command, or the tab is a
+      // zombie persisted by a pre-serializer build): the incoming panel is redundant.
+      panel.dispose();
+      return;
+    }
+    this.wire(panel);
+    // Re-assert: without scripts, the cursor-follow scroller and its setState
+    // persistence would die silently — and every later reload would degrade further.
+    panel.webview.options = { enableScripts: true };
+
+    const { uri, line } = parsePanelState(state);
+    const editor = vscode.window.activeTextEditor;
+    if (editor !== undefined && this.isPreviewable(editor.document)) {
+      // Paint before the async render: the server is cold right after a reload, so the
+      // first response can take seconds — and if it never comes up at all, a silent
+      // blank would present exactly like the missing-serializer bug this path fixes.
+      panel.webview.html = this.loadingShell(panel.webview);
+      const fallbackLine = editor.document.uri.toString() === uri ? line : undefined;
+      // Fire-and-forget render: self-catching + renderSeq-serialized, as in open().
+      void this.renderDocument(editor.document, fallbackLine);
+    } else if (uri !== undefined) {
+      panel.webview.html = this.loadingShell(panel.webview);
+      void this.renderRestored(panel, uri, line);
+    } else {
+      panel.webview.html = this.emptyShell(panel.webview);
     }
   }
 
@@ -134,7 +165,66 @@ export class Preview {
     void this.panel?.webview.postMessage({ type: 'reveal', line });
   }
 
-  private async renderDocument(doc: vscode.TextDocument): Promise<void> {
+  /**
+   * Take ownership of `panel` (freshly created by open() or revived by the serializer):
+   * track it, tear down on dispose, and wire the listeners that drive re-renders and
+   * cursor-follow. The dispose hook is attached before anything can await, so an early
+   * close cannot leak panelDisposables.
+   */
+  private wire(panel: vscode.WebviewPanel): void {
+    this.panel = panel;
+    panel.onDidDispose(() => {
+      this.teardown();
+    });
+    this.panelDisposables.push(
+      // Re-render when the user switches which file is active...
+      vscode.window.onDidChangeActiveTextEditor((next) => {
+        if (next !== undefined && this.isPreviewable(next.document)) {
+          // Fire-and-forget re-render: renderDocument() self-catches its sendRequest (shows a
+          // placeholder on failure) and is renderSeq-serialized, so a dropped result is safe.
+          void this.renderDocument(next.document);
+        }
+      }),
+      // ...on every edit to the file currently shown (live dirty buffer)...
+      vscode.workspace.onDidChangeTextDocument((e) => {
+        if (e.document.uri.toString() === this.currentDocUri) {
+          // Fire-and-forget re-render: renderDocument() self-catches its sendRequest (shows a
+          // placeholder on failure) and is renderSeq-serialized, so a dropped result is safe.
+          void this.renderDocument(e.document);
+        }
+      }),
+      // ...and follow the top-most cursor as it moves (a scroll message, no re-render).
+      vscode.window.onDidChangeTextEditorSelection((e) => {
+        if (e.textEditor.document.uri.toString() === this.currentDocUri) {
+          this.reveal(minCursorLine(e.selections));
+        }
+      }),
+    );
+  }
+
+  /** Revival tail for a persisted uri: load the document and render, or fall back to the neutral shell. */
+  private async renderRestored(
+    panel: vscode.WebviewPanel,
+    uri: string,
+    line: number | undefined,
+  ): Promise<void> {
+    let doc: vscode.TextDocument | undefined;
+    try {
+      doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(uri));
+    } catch {
+      doc = undefined; // deleted/renamed while the window was closed, or an unloadable scheme
+    }
+    if (this.panel !== panel) {
+      return; // closed or replaced while the document loaded
+    }
+    if (doc !== undefined && this.isPreviewable(doc)) {
+      await this.renderDocument(doc, line);
+      return;
+    }
+    panel.webview.html = this.emptyShell(panel.webview);
+  }
+
+  private async renderDocument(doc: vscode.TextDocument, fallbackLine?: number): Promise<void> {
     const panel = this.panel;
     if (panel === undefined) {
       return;
@@ -143,7 +233,9 @@ export class Preview {
     panel.title = vscode.l10n.t('{0} — Preview', this.basename(doc.uri));
 
     // The line to scroll to after (re)render — keeps an edit from snapping to the start.
-    const activeLine = this.topCursorLine(doc.uri.toString()) ?? 0;
+    // `fallbackLine` (a revived panel's persisted cursor line) applies only while the
+    // document's own editor is not visible yet, e.g. right after a window reload.
+    const activeLine = this.topCursorLine(doc.uri.toString()) ?? fallbackLine ?? 0;
     const seq = ++this.renderSeq;
     const params: RenderFileParams = { uri: doc.uri.toString(), text: doc.getText() };
 
@@ -168,7 +260,12 @@ export class Preview {
     if (seq !== this.renderSeq) {
       return;
     }
-    panel.webview.html = this.harden(result.html, panel.webview, activeLine);
+    panel.webview.html = this.harden(
+      result.html,
+      panel.webview,
+      activeLine,
+      doc.uri.toString(),
+    );
   }
 
   /** The top-most (earliest) cursor line among all selections in an editor for `docUri`. */
@@ -186,7 +283,12 @@ export class Preview {
    * cursor-follow `<script>` into the server's standalone document so it is safe to host
    * inside a webview. Only the nonced inline style + our own script may run.
    */
-  private harden(html: string, webview: vscode.Webview, activeLine: number): string {
+  private harden(
+    html: string,
+    webview: vscode.Webview,
+    activeLine: number,
+    docUri: string,
+  ): string {
     const nonce = makeNonce();
     const meta = this.cspMeta(nonce, webview);
 
@@ -204,7 +306,7 @@ export class Preview {
     out = out.replace(/<head(\s[^>]*)?>/i, (m) => `${m}${meta}`);
 
     // Inject the cursor-follow scroller at the end of <body> (DOM is ready by then).
-    const script = `<script nonce="${nonce}">${scrollScript(activeLine)}</script>`;
+    const script = `<script nonce="${nonce}">${scrollScript(activeLine, docUri)}</script>`;
     if (/<\/body>/i.test(out)) {
       return out.replace(/<\/body>/i, `${script}</body>`);
     }
@@ -212,15 +314,37 @@ export class Preview {
   }
 
   /** Minimal hardened standalone document for fallback / placeholder content. */
-  private shell(bodyHtml: string, webview: vscode.Webview): string {
+  private shell(bodyHtml: string, webview: vscode.Webview, extraCss = ''): string {
     const nonce = makeNonce();
     return [
       '<!DOCTYPE html>',
       '<html><head><meta charset="utf-8">',
       this.cspMeta(nonce, webview),
-      `<style nonce="${nonce}">body{font-family:sans-serif;padding:1rem;}</style>`,
+      `<style nonce="${nonce}">body{font-family:sans-serif;padding:1rem;}${extraCss}</style>`,
       `</head><body>${bodyHtml}</body></html>`,
     ].join('');
+  }
+
+  /** The neutral empty state: nothing previewable to render (also the failure fallback at revival). */
+  private emptyShell(webview: vscode.Webview): string {
+    return this.shell(
+      `<p>${escapeHtml(vscode.l10n.t('Open a .jpnov file to preview.'))}</p>`,
+      webview,
+    );
+  }
+
+  /**
+   * Hardened "Loading preview…" document with a CSS-only spinner: the strict CSP rules
+   * out loadable assets (no codicon font) and `style=` attributes, so the spinner lives
+   * in the nonce'd `<style>`, colored by the `--vscode-*` theme variables VS Code
+   * injects into every webview.
+   */
+  private loadingShell(webview: vscode.Webview): string {
+    return this.shell(
+      `<p class="loading"><span class="spinner"></span>${escapeHtml(vscode.l10n.t('Loading preview…'))}</p>`,
+      webview,
+      LOADING_CSS,
+    );
   }
 
   private cspMeta(nonce: string, webview: vscode.Webview): string {
@@ -235,6 +359,10 @@ export class Preview {
   }
 
   private teardown(): void {
+    // Invalidate any in-flight render: both html assignments in renderDocument() are
+    // seq-guarded, so the bump keeps a slow response from writing to this panel after
+    // it is disposed (or, via adopt()'s duplicate guard, replaced).
+    this.renderSeq++;
     for (const d of this.panelDisposables) {
       d.dispose();
     }
@@ -261,13 +389,23 @@ function minCursorLine(selections: readonly vscode.Selection[]): number {
 }
 
 /**
- * The webview-side scroller (runs in the panel). Scrolls the paragraph whose `data-line`
- * is the greatest value <= the target line into view, on initial load and on every
- * `reveal` message the client posts as the cursor moves.
+ * The webview-side script (runs in the panel). Persists `{uri, line}` through the
+ * webview state API — the payload the window-reload serializer later hands back to
+ * `adopt()` — and scrolls the paragraph whose `data-line` is the greatest value <= the
+ * target line into view, on initial load and on every `reveal` message the client posts
+ * as the cursor moves.
  */
-function scrollScript(activeLine: number): string {
+function scrollScript(activeLine: number, docUri: string): string {
+  // JSON.stringify yields a valid JS string literal; escaping `<` forecloses a
+  // `</script>` breakout via a hostile file name.
+  const uriLiteral = JSON.stringify(docUri).replace(/</g, '\\u003c');
   return [
     '(function(){',
+    'var api=acquireVsCodeApi();',
+    // Persist immediately and OUTSIDE rAF: rAF is suspended in hidden webviews, so a
+    // render finishing in a background panel would otherwise never reach setState.
+    `function persist(line){api.setState({uri:${uriLiteral},line:line});}`,
+    `persist(${String(activeLine)});`,
     'function reveal(line){',
     "var ns=document.querySelectorAll('[data-line]');var t=null;",
     'for(var i=0;i<ns.length;i++){',
@@ -278,11 +416,30 @@ function scrollScript(activeLine: number): string {
     "if(t){t.scrollIntoView({block:'center',inline:'center'});}",
     '}',
     "window.addEventListener('message',function(e){",
-    "var m=e.data;if(m&&m.type==='reveal'&&typeof m.line==='number'){reveal(m.line);}",
+    "var m=e.data;if(m&&m.type==='reveal'&&typeof m.line==='number'){reveal(m.line);persist(m.line);}",
     '});',
     `requestAnimationFrame(function(){reveal(${String(activeLine)});});`,
     '})();',
   ].join('');
+}
+
+/**
+ * Defensive read of the serializer's persisted webview state: whatever a previous
+ * session's injected script last `setState`-ed — or `undefined` for panels persisted
+ * by builds that predate the serializer — so nothing about its shape can be trusted.
+ */
+function parsePanelState(state: unknown): {
+  uri: string | undefined;
+  line: number | undefined;
+} {
+  if (typeof state !== 'object' || state === null) {
+    return { uri: undefined, line: undefined };
+  }
+  const { uri, line } = state as { uri?: unknown; line?: unknown };
+  return {
+    uri: typeof uri === 'string' ? uri : undefined,
+    line: typeof line === 'number' && Number.isFinite(line) ? line : undefined,
+  };
 }
 
 /** Cryptographically-random nonce for the CSP (base64url, no padding). */

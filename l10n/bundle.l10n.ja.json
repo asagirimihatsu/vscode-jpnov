@@ -41,6 +41,7 @@
   "Open a .jpnov file to preview.": "プレビューするには .jpnov ファイルを開いてください。",
   "{0} — Preview": "{0} — プレビュー",
   "Preview failed. {0}": "プレビューに失敗しました。{0}",
+  "Loading preview…": "プレビューを読み込んでいます",
 
   "executable config ({0}) requires a file:// workspace": "実行可能な設定（{0}）にはローカル（file://）ワークスペースが必要です",
   "executable config ({0}) is not loaded in an untrusted workspace": "実行可能な設定（{0}）は信頼されていないワークスペースでは読み込まれません",
