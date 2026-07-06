@@ -6,7 +6,8 @@ export type NovelConfigFormat = DataConfigFormat | ModuleConfigFormat;
 
 /**
  * The user-authored config shape (post-normalization). `charsPerLine` = characters per
- * line, `linesPerPage` = lines per page (both default to 40 x 34); `outDir` added.
+ * line (clamped to [{@link CHARS_MIN}..{@link CHARS_MAX}]),
+ * `linesPerPage` = lines per page (both default to 40 x 34); `outDir` added.
  */
 export interface RawNovelConfig {
   sourceDir: string;
@@ -36,6 +37,12 @@ export interface ResolvedConfig extends RawNovelConfig {
   readonly sourceDirUri: string;
   readonly outDirUri: string;
 }
+
+/**
+ * Inclusive bounds for `charsPerLine` / `linesPerPage`.
+ */
+export const CHARS_MIN = 16;
+export const CHARS_MAX = 64;
 
 export const DEFAULT: RawNovelConfig = {
   sourceDir: './src',

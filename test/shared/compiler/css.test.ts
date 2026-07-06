@@ -35,13 +35,21 @@ test('non-paginated (preview) stylesheet no longer caps width in CSS (JS hard-wr
   assert.doesNotMatch(css, /inline-size/);
 });
 
-test('non-paginated (preview) stylesheet pins text font-size to the root (pitch cannot desync)', () => {
-  // The line/column pitch is em-based (block-size:1.75em); the text must share a fixed root
-  // basis (1rem on html + .line) so a webview-injected body{font-size} can't desync the glyph
-  // advance from that pitch.
-  const css = stylesheet({ paginate: false });
-  assert.match(css, /html\{[^}]*font-size:1rem/);
+test('non-paginated (preview) stylesheet fits the root font-size to the viewport', () => {
+  // In vertical-rl a full-width char advances exactly 1em along the column, so root
+  // font-size = (100vh − 2·16px padding) / charsPerLine makes a full line fill the pane
+  // height. `.line` re-pins to that root (1rem) so a webview-injected body{font-size}
+  // can't desync the glyph advance from the em-based pitch.
+  const css = stylesheet({ paginate: false, charsPerLine: 25 });
+  assert.match(css, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ 25\)/);
   assert.match(css, /\.line\{[^}]*font-size:1rem/);
+});
+
+test('preview fit formula defaults to 40 chars per line and pads the columns', () => {
+  const css = stylesheet({ paginate: false });
+  assert.match(css, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ 40\)/);
+  // The padding the formula subtracts (top/bottom = inline axis in vertical-rl).
+  assert.match(css, /body\{[^}]*padding-inline:16px/);
 });
 
 test('stylesheet emits ONLY the requested emphasis class rules (on-demand)', () => {

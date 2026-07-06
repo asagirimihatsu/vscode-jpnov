@@ -15,7 +15,12 @@
  */
 import * as vscode from 'vscode';
 
-import { DEFAULT, type RawNovelConfig } from '#/shared/config/types.ts';
+import {
+  CHARS_MAX,
+  CHARS_MIN,
+  DEFAULT,
+  type RawNovelConfig,
+} from '#/shared/config/types.ts';
 
 import { BUILD_CONFIGS } from './buildDebug.ts';
 import { command } from './commands.ts';
@@ -37,10 +42,6 @@ const CONFIG_BASENAMES = [
   'novel.jp.mjs',
   'novel.jp.ts',
 ] as const;
-
-/** Layout numbers accept [1..1000] — matches the config parser's clamp range. */
-const MIN_NUMERIC = 1;
-const MAX_NUMERIC = 1000;
 
 /** The starter chapter: a tasteful welcome that also demos ruby / emphasis / page-break. */
 const CHAPTER_CONTENT = `　ようこそ、小説の執筆へ。
@@ -79,11 +80,18 @@ async function runInit(): Promise<void> {
   const charsPerLine = await askNumber(
     vscode.l10n.t('Characters per line'),
     DEFAULT.charsPerLine,
+    CHARS_MIN,
+    CHARS_MAX,
   );
   if (charsPerLine === undefined) {
     return;
   }
-  const linesPerPage = await askNumber(vscode.l10n.t('Lines per page'), DEFAULT.linesPerPage);
+  const linesPerPage = await askNumber(
+    vscode.l10n.t('Lines per page'),
+    DEFAULT.linesPerPage,
+    CHARS_MIN,
+    CHARS_MAX,
+  );
   if (linesPerPage === undefined) {
     return;
   }
@@ -191,8 +199,13 @@ async function askAvoidLineBreaks(): Promise<boolean | undefined> {
   return picked?.value;
 }
 
-/** Q2 — a single numeric field with the default pre-filled and live [1..1000] validation. */
-async function askNumber(prompt: string, value: number): Promise<number | undefined> {
+/** Q2 — a single numeric field with the default pre-filled and live [min..max] validation. */
+async function askNumber(
+  prompt: string,
+  value: number,
+  min: number,
+  max: number,
+): Promise<number | undefined> {
   const raw = await vscode.window.showInputBox({
     prompt,
     value: String(value),
@@ -200,8 +213,8 @@ async function askNumber(prompt: string, value: number): Promise<number | undefi
     validateInput: (input) => {
       const trimmed = input.trim();
       const n = Number(trimmed);
-      if (!/^\d+$/.test(trimmed) || !Number.isInteger(n) || n < MIN_NUMERIC || n > MAX_NUMERIC) {
-        return vscode.l10n.t('Enter a whole number from 1 to 1000.');
+      if (!/^\d+$/.test(trimmed) || !Number.isInteger(n) || n < min || n > max) {
+        return vscode.l10n.t('Enter a whole number from {0} to {1}.', min, max);
       }
       return undefined;
     },

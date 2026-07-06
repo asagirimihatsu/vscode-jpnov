@@ -183,21 +183,34 @@ test('Esc at Q1 aborts silently (no writes, no error)', async () => {
   assert.equal(state.quickPickCalls.length, 1);
 });
 
-test('numeric validateInput enforces [1..1000] integers', async () => {
+test('numeric validateInput enforces per-field integer ranges', async () => {
   singleFolder();
   answer({ disableAi: false, chars: '40', lines: '34', avoid: false });
 
   await handler()();
 
-  const opts = state.inputBoxCalls[0]?.options as {
+  // Q: charsPerLine — [16..80] (the preview's fit-to-viewport font bounds).
+  const chars = state.inputBoxCalls[0]?.options as {
     validateInput?: (v: string) => string | undefined;
   };
-  assert.ok(opts.validateInput);
-  assert.equal(opts.validateInput('40'), undefined);
-  assert.match(opts.validateInput('0') ?? '', /whole number/);
-  assert.match(opts.validateInput('1001') ?? '', /whole number/);
-  assert.match(opts.validateInput('1.5') ?? '', /whole number/);
-  assert.match(opts.validateInput('abc') ?? '', /whole number/);
+  assert.ok(chars.validateInput);
+  assert.equal(chars.validateInput('40'), undefined);
+  assert.equal(chars.validateInput('16'), undefined);
+  assert.equal(chars.validateInput('80'), undefined);
+  assert.match(chars.validateInput('15') ?? '', /whole number from 16 to 80/);
+  assert.match(chars.validateInput('81') ?? '', /whole number from 16 to 80/);
+  assert.match(chars.validateInput('1.5') ?? '', /whole number/);
+  assert.match(chars.validateInput('abc') ?? '', /whole number/);
+
+  // Q: linesPerPage — keeps the generic [1..1000].
+  const lines = state.inputBoxCalls[1]?.options as {
+    validateInput?: (v: string) => string | undefined;
+  };
+  assert.ok(lines.validateInput);
+  assert.equal(lines.validateInput('1'), undefined);
+  assert.equal(lines.validateInput('1000'), undefined);
+  assert.match(lines.validateInput('0') ?? '', /whole number from 1 to 1000/);
+  assert.match(lines.validateInput('1001') ?? '', /whole number from 1 to 1000/);
 });
 
 test('multi-root: scaffolds into the picked folder', async () => {
