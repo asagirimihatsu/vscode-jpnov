@@ -4,3 +4,4 @@ dist/
 .eslintcache
 .DS_Store
 .scratch/
+.claude/

@@ -76,11 +76,19 @@ test('parseDataConfig throws on malformed JSON', () => {
   assert.throws(() => parseDataConfig(invalidBytes));
 });
 
-test('initConfig clamps out-of-range numerics to [1..1000] per field', () => {
+test('initConfig clamps out-of-range numerics per field', () => {
+  // charsPerLine clamps to [16..80] (the preview's fit-to-viewport font keeps type
+  // legible only in that range); linesPerPage keeps the generic [1..1000].
   assert.deepEqual(initConfig({ charsPerLine: 0, linesPerPage: 99999 }), {
     sourceDir: DEFAULT.sourceDir,
-    charsPerLine: 1,
-    linesPerPage: 1000,
+    charsPerLine: 16,
+    linesPerPage: 64,
+    outDir: DEFAULT.outDir,
+  });
+  assert.deepEqual(initConfig({ charsPerLine: 99999, linesPerPage: 0 }), {
+    sourceDir: DEFAULT.sourceDir,
+    charsPerLine: 64,
+    linesPerPage: 16,
     outDir: DEFAULT.outDir,
   });
 });

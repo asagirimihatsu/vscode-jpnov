@@ -92,3 +92,10 @@ test('renderPreview pins line font-size to the root and emits no CSS width cap',
   assert.match(html, /\.line\{[^}]*font-size:1rem/);
   assert.doesNotMatch(html, /inline-size/);
 });
+
+test('renderPreview scales the root font so a full line fills the pane height', () => {
+  // The SAME charsPerLine drives both the JS hard wrap and the stylesheet's
+  // fit-to-viewport formula — a full 20-char column measures exactly 100vh − padding.
+  const html = renderPreview('本文', { charsPerLine: 20 });
+  assert.match(html, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ 20\)/);
+});
