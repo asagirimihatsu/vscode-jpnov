@@ -210,6 +210,8 @@ export interface MockState {
   fsEntries: Map<string, number>;
   /** File contents for readFile (uri string → utf8 text). */
   fsContent: Map<string, string>;
+  /** Settings store for `workspace.getConfiguration().get(key, dflt)` (full key → value). */
+  config: Record<string, unknown>;
   createdDirs: string[];
   openedDocs: string[];
   errorMessages: string[];
@@ -241,6 +243,7 @@ export function createMockState(): MockState {
     unopenableDocs: new Set<string>(),
     fsEntries: new Map<string, number>(),
     fsContent: new Map<string, string>(),
+    config: {},
     createdDirs: [],
     openedDocs: [],
     errorMessages: [],
@@ -276,6 +279,7 @@ export function resetMockState(s: MockState): void {
   s.unopenableDocs.clear();
   s.fsEntries.clear();
   s.fsContent.clear();
+  s.config = {};
   s.createdDirs.length = 0;
   s.openedDocs.length = 0;
   s.errorMessages.length = 0;
@@ -408,6 +412,15 @@ export function buildVscode(state: MockState): Record<string, unknown> {
     fs: fsApi,
     onDidGrantWorkspaceTrust: state.onDidGrantTrust.event,
     onDidChangeTextDocument: state.onDidChangeDoc.event,
+    // Default-scope settings read (renderConfig.ts): the client calls getConfiguration()
+    // with no section and full keys, so the mock takes no params at all.
+    getConfiguration() {
+      return {
+        get<T>(key: string, dflt: T): T {
+          return key in state.config ? (state.config[key] as T) : dflt;
+        },
+      };
+    },
     openTextDocument(uri: Uri): Promise<FakeTextDocument> {
       state.openedDocs.push(uri.toString());
       if (state.unopenableDocs.has(uri.toString())) {

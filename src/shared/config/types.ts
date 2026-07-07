@@ -5,14 +5,13 @@ export type ModuleConfigFormat = 'js' | 'cjs' | 'mjs' | 'ts';
 export type NovelConfigFormat = DataConfigFormat | ModuleConfigFormat;
 
 /**
- * The user-authored config shape (post-normalization). `charsPerLine` = characters per
- * line (clamped to [{@link CHARS_MIN}..{@link CHARS_MAX}]),
- * `linesPerPage` = lines per page (both default to 40 x 34); `outDir` added.
+ * The user-authored config shape (post-normalization); `outDir` added. Grid geometry
+ * (chars per line / lines per page) is NOT config-file territory — it lives in the
+ * `jpnov.layout.*` VS Code settings ({@link LAYOUT_DEFAULT}); a leftover key here is
+ * silently ignored like any other unknown key.
  */
 export interface RawNovelConfig {
   sourceDir: string;
-  charsPerLine: number;
-  linesPerPage: number;
   /**
    * 禁則処理 (line-break avoidance) toggle, applied by BOTH the live preview and the book
    * build (they share the layout engine): when on, a line never ends on an opening bracket
@@ -39,14 +38,19 @@ export interface ResolvedConfig extends RawNovelConfig {
 }
 
 /**
- * Inclusive bounds for `charsPerLine` / `linesPerPage`.
+ * Inclusive bounds for `jpnov.layout.charsPerLine` / `jpnov.layout.linesPerPage`.
  */
 export const CHARS_MIN = 16;
 export const CHARS_MAX = 64;
 
+/**
+ * Grid-geometry defaults (原稿用紙 40×34) — the single source for the `jpnov.layout.*`
+ * schema defaults and the settings resolver's fallbacks; the config-codegen test locks
+ * package.json to these values.
+ */
+export const LAYOUT_DEFAULT = { charsPerLine: 40, linesPerPage: 34 } as const;
+
 export const DEFAULT: RawNovelConfig = {
   sourceDir: './src',
-  charsPerLine: 40,
-  linesPerPage: 34,
   outDir: 'dist',
 };

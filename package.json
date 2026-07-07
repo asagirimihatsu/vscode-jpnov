@@ -233,6 +233,104 @@
             "markdownDescription": "%jpnov.lint.ruby.kana.description%"
           }
         }
+      },
+      {
+        "title": "%jpnov.layout.title%",
+        "properties": {
+          "jpnov.layout.charsPerLine": {
+            "type": "integer",
+            "default": 40,
+            "minimum": 16,
+            "maximum": 64,
+            "markdownDescription": "%jpnov.layout.charsPerLine.description%"
+          },
+          "jpnov.layout.linesPerPage": {
+            "type": "integer",
+            "default": 34,
+            "minimum": 16,
+            "maximum": 64,
+            "markdownDescription": "%jpnov.layout.linesPerPage.description%"
+          }
+        }
+      },
+      {
+        "title": "%jpnov.preview.title%",
+        "properties": {
+          "jpnov.preview.lineNumbers": {
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "%jpnov.preview.lineNumbers.description%"
+          },
+          "jpnov.preview.edgeLine": {
+            "type": "string",
+            "enum": [
+              "none",
+              "black",
+              "red"
+            ],
+            "default": "none",
+            "enumDescriptions": [
+              "%jpnov.preview.edgeLine.none%",
+              "%jpnov.preview.edgeLine.black%",
+              "%jpnov.preview.edgeLine.red%"
+            ],
+            "markdownDescription": "%jpnov.preview.edgeLine.description%"
+          }
+        }
+      },
+      {
+        "title": "%jpnov.html.title%",
+        "properties": {
+          "jpnov.html.lineNumbers": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "%jpnov.html.lineNumbers.description%"
+          },
+          "jpnov.html.edgeLine": {
+            "type": "string",
+            "enum": [
+              "none",
+              "black",
+              "red"
+            ],
+            "default": "none",
+            "enumDescriptions": [
+              "%jpnov.html.edgeLine.none%",
+              "%jpnov.html.edgeLine.black%",
+              "%jpnov.html.edgeLine.red%"
+            ],
+            "markdownDescription": "%jpnov.html.edgeLine.description%"
+          },
+          "jpnov.html.pageNumber.position": {
+            "type": "string",
+            "enum": [
+              "rightThenLeft",
+              "leftThenRight",
+              "alwaysRight",
+              "alwaysLeft",
+              "none"
+            ],
+            "default": "rightThenLeft",
+            "enumDescriptions": [
+              "%jpnov.html.pageNumber.position.rightThenLeft%",
+              "%jpnov.html.pageNumber.position.leftThenRight%",
+              "%jpnov.html.pageNumber.position.alwaysRight%",
+              "%jpnov.html.pageNumber.position.alwaysLeft%",
+              "%jpnov.html.pageNumber.position.none%"
+            ],
+            "markdownDescription": "%jpnov.html.pageNumber.position.description%"
+          },
+          "jpnov.html.pageNumber.template": {
+            "type": "string",
+            "default": "{page} / {totalPage}",
+            "markdownDescription": "%jpnov.html.pageNumber.template.description%"
+          },
+          "jpnov.html.header": {
+            "type": "string",
+            "default": "",
+            "markdownDescription": "%jpnov.html.header.description%"
+          }
+        }
       }
     ],
     "debuggers": [

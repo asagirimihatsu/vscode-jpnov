@@ -2,7 +2,7 @@
  * Build-time pagination engine: flows a book's token stream into an explicit
  * page → line DOM skeleton (`<div class="page"><div class="line">…`). Unlike the
  * continuous preview, the build output is paginated IN the compiler so printed pages are
- * WYSIWYG and future features (page numbers, line numbers, 原稿用紙 grid) have real
+ * WYSIWYG and the page furniture (page numbers, line numbers, 原稿用紙 grid) has real
  * elements to hang off. Pure + vscode-free.
  *
  * Line breaking is a simple hard wrap at `charsPerLine` cells (full-width char = 1 cell,
@@ -10,6 +10,7 @@
  * zero-width). 禁則処理 is gated by the `avoidLineBreaks` flag and folded into {@link wrapRow}
  * as a leftward nudge of each break point (追い出し only). ［＃改ページ］ forces a new page.
  */
+import type { BuildChrome, PageNumberPosition } from './chrome.ts';
 import { resolveStyle } from './emphasis.ts';
 import { escapeComment, escapeHtml } from './escape.ts';
 import type { Token } from './tokenizer.ts';
@@ -369,7 +370,7 @@ function unitKey(u: Unit): string {
   return k; // e.g. "emph-fs dec-solid-l b"
 }
 
-function emitLine(line: DisplayLine, used?: Set<string>, anchor = true): string {
+function emitLine(line: DisplayLine, used?: Set<string>, anchor = true, head = ''): string {
   let html = '';
   let open = ''; // '' sentinel (a real key is never '')
   for (const u of line.units) {
@@ -400,25 +401,67 @@ function emitLine(line: DisplayLine, used?: Set<string>, anchor = true): string 
   }
   // `anchor` lets the continuous preview suppress data-line on a source line's wrapped
   // continuation columns (first-display-line-only); the paginated build keeps the default
-  // (anchor=true → every line), so its output is unchanged.
+  // (anchor=true → every line), so its output is unchanged. `head` is out-of-flow line
+  // furniture (the preview's number span) emitted before the column content.
   const dataLine =
     anchor && line.srcLine >= 0 ? ` data-line="${String(line.srcLine)}"` : '';
-  return `<div class="line${indentClass}"${dataLine}>${html}</div>`;
+  return `<div class="line${indentClass}"${dataLine}>${head}${html}</div>`;
+}
+
+/** The folio's physical side on page `pi` (0-based), or null for no folio. */
+function folioSide(pos: PageNumberPosition, pi: number): 'r' | 'l' | null {
+  if (pos === 'none') {
+    return null;
+  }
+  const odd = pi % 2 === 0; // display page = pi + 1, so an even index is an odd page
+  switch (pos) {
+    case 'rightThenLeft':
+      return odd ? 'r' : 'l';
+    case 'leftThenRight':
+      return odd ? 'l' : 'r';
+    case 'alwaysRight':
+      return 'r';
+    case 'alwaysLeft':
+      return 'l';
+  }
+}
+
+/** One page's absolutely-positioned furniture (header + folio), emitted after its lines. */
+function pageFurniture(chrome: BuildChrome, pi: number, totalPage: number): string {
+  let out = '';
+  if (chrome.header !== '') {
+    out += `<div class="hd">${escapeHtml(chrome.header)}</div>`;
+  }
+  const side = folioSide(chrome.pageNumberPosition, pi);
+  if (side !== null) {
+    // Escape the author's template FIRST, then substitute the plain-integer counts —
+    // `{`/`}` survive escaping, so the placeholders live through it, while any markup in
+    // the template is neutralized. Unknown `{foo}` stays literal. A blank template never
+    // reaches here (renderBook normalizes it to pageNumberPosition 'none').
+    const text = escapeHtml(chrome.pageNumberTemplate)
+      .replaceAll('{page}', String(pi + 1))
+      .replaceAll('{totalPage}', String(totalPage));
+    out += `<div class="pn ${side}">${text}</div>`;
+  }
+  return out;
 }
 
 /**
- * Renders paginated pages into the `<div class="book">…</div>` body fragment. When a `used`
- * sink is passed, every emphasis class emitted is recorded into it so the caller can emit
- * only those rules (on-demand CSS).
+ * Renders paginated pages into the `<div class="book">…</div>` body fragment, each page
+ * carrying its chrome furniture AFTER the lines (so line-adjacency is preserved for
+ * anything matching consecutive `.line`s). When a `used` sink is passed, every emphasis
+ * class emitted is recorded into it so the caller can emit only those rules (on-demand CSS).
  */
 export function pagesToHtml(
   pages: readonly DisplayLine[][],
-  used?: Set<string>,
+  used: Set<string> | undefined,
+  chrome: BuildChrome,
 ): string {
+  const totalPage = pages.length;
   const body = pages
     .map((page, pi) => {
       const lines = page.map((line) => emitLine(line, used)).join('');
-      return `<div class="page" data-page="${String(pi)}">${lines}</div>`;
+      return `<div class="page" data-page="${String(pi)}">${lines}${pageFurniture(chrome, pi, totalPage)}</div>`;
     })
     .join('');
   return `<div class="book">${body}</div>`;
@@ -428,9 +471,15 @@ export function pagesToHtml(
  * Renders ONE file's rows as a CONTINUOUS line flow for the live preview (no pagination):
  * each line row is hard-wrapped via {@link wrapRow} into `<div class="line">` columns, sharing
  * the exact same line-break + 禁則 + ruby/emphasis/comment engine the book build uses — so the
- * preview agrees with the printed page. A ［＃改ページ］ becomes a visible `<hr class="pagebreak">`
- * shown BETWEEN content; a leading, trailing, or doubled break collapses to nothing (mirroring
- * the build's empty-page elision) so no stray rule appears. Only the FIRST display line of each
+ * preview agrees with the printed page. When `lineNumbers` is on, every display column opens
+ * with an out-of-flow `<span class="ln">N</span>` head-margin number that restarts at 1 after
+ * each materialized break marker — computed HERE, not with CSS counters, because a
+ * counter-reset on a sibling `.pagebreak` does not reset following siblings in Chromium
+ * (the build's per-page reset sits on an ANCESTOR `.page`, which is reliable, so only this
+ * continuous flow needs the JS fallback). A ［＃改ページ］ becomes a visible, labelled
+ * `<div class="pagebreak">` marker shown BETWEEN content; a leading, trailing, or doubled
+ * break collapses to nothing (mirroring the build's empty-page elision) so no stray rule
+ * appears. Only the FIRST display line of each
  * source line carries a `data-line` anchor (1:1 with source lines, so the cursor-follow scroller
  * lands on the line's head). When a `used` sink is passed, every emphasis class emitted is
  * recorded so the caller can emit only those rules (on-demand CSS). Pure + vscode-free.
@@ -440,15 +489,17 @@ export function flowToHtml(
   charsPerLine: number,
   avoidLineBreaks: boolean,
   used?: Set<string>,
+  lineNumbers = false,
 ): string {
   const parts: string[] = [];
   let prevSrcLine = -1;
   let pendingBreak = false;
   let anyLine = false;
+  let lineNo = 0;
   for (const row of rows) {
     if (row.kind === 'pagebreak') {
       // Defer page breaks: only materialized once a following line exists, so leading /
-      // trailing / consecutive ［＃改ページ］ never leave a dangling <hr>.
+      // trailing / consecutive ［＃改ページ］ never leave a dangling marker.
       if (anyLine) {
         pendingBreak = true;
       }
@@ -456,12 +507,17 @@ export function flowToHtml(
     }
     for (const line of wrapRow(row, charsPerLine, avoidLineBreaks)) {
       if (pendingBreak) {
-        parts.push('<hr class="pagebreak">');
+        parts.push('<div class="pagebreak"><span class="pb-label">改ページ</span></div>');
         pendingBreak = false;
+        lineNo = 0; // numbering restarts with the marker it belongs to
       }
+      lineNo += 1;
       const anchor = line.srcLine >= 0 && line.srcLine !== prevSrcLine;
       prevSrcLine = line.srcLine;
-      parts.push(emitLine(line, used, anchor));
+      // The number span is absolutely positioned (out of the text flow), so it neither
+      // consumes cells nor disturbs the pre-formatted column content it precedes.
+      const head = lineNumbers ? `<span class="ln">${String(lineNo)}</span>` : '';
+      parts.push(emitLine(line, used, anchor, head));
       anyLine = true;
     }
   }

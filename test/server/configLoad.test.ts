@@ -24,7 +24,7 @@ test('json config resolves to a valid state with contained URIs', async () => {
     writeUnder(
       ws.dir,
       'novel.jp.json',
-      JSON.stringify({ sourceDir: './manuscript', charsPerLine: 20, linesPerPage: 30, outDir: 'out' }),
+      JSON.stringify({ sourceDir: './manuscript', outDir: 'out' }),
     );
     const conn = makeFakeConnection();
     const ctx = makeContext(conn);
@@ -37,33 +37,9 @@ test('json config resolves to a valid state with contained URIs', async () => {
     assert.equal(latest.state, 'valid');
     // The resolved config is no longer carried on the wire; assert it on the server state.
     assert.ok(state.resolved, 'state.resolved should be set');
-    assert.equal(state.resolved.charsPerLine, 20);
-    assert.equal(state.resolved.linesPerPage, 30);
     assert.equal(state.resolved.sourceDirUri, `${ws.uri}/manuscript`);
     assert.equal(state.resolved.outDirUri, `${ws.uri}/out`);
     assert.ok(state.lastGood, 'state.lastGood should be set');
-  } finally {
-    ws.cleanup();
-  }
-});
-
-test('json config clamps out-of-range numbers per field, keeps last-known-good', async () => {
-  const ws = makeTmpWorkspace();
-  try {
-    writeUnder(
-      ws.dir,
-      'novel.jp.json',
-      JSON.stringify({ sourceDir: './src', charsPerLine: 99999, linesPerPage: 0 }),
-    );
-    const conn = makeFakeConnection();
-    const ctx = makeContext(conn);
-    const state = freshState(ws.uri);
-
-    await loadRootConfig(ctx, state);
-
-    assert.ok(state.resolved);
-    assert.equal(state.resolved.charsPerLine, 1000); // clamped to max
-    assert.equal(state.resolved.linesPerPage, 1); // clamped to min
   } finally {
     ws.cleanup();
   }

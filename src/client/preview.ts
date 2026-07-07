@@ -16,8 +16,9 @@
  * the webview state API, and extension.ts registers a WebviewPanelSerializer that hands
  * the workbench-restored panel back to `adopt()` to re-wire listeners and re-render.
  *
- * Scope (per spec): a SINGLE current file, no filelist assembly, no pagination; lines wrap at the
- * owning root's `charsPerLine`; ［＃改ページ］ appears as a visible `<hr>` marker.
+ * Scope (per spec): a SINGLE current file, no filelist assembly, no pagination; lines wrap at
+ * the `jpnov.layout.charsPerLine` setting; ［＃改ページ］ appears as a labelled
+ * `<div class="pagebreak">` marker.
  */
 import { randomBytes } from 'node:crypto';
 
@@ -31,6 +32,8 @@ import {
   type RenderFileParams,
   type RenderFileResult,
 } from '#/shared/protocol.ts';
+
+import { buildPreviewSettings } from './renderConfig.ts';
 
 /**
  * Trailing-edge debounce for edit-driven re-renders. Every keystroke otherwise ships the whole
@@ -153,6 +156,25 @@ export class Preview {
     }
   }
 
+  /**
+   * Re-render the current document with FRESH settings. The config-change hook in
+   * extension.ts calls this on jpnov.layout / jpnov.preview edits; a no-op when nothing
+   * is shown. renderDocument re-reads buildPreviewSettings(), so the new values ride the
+   * next request.
+   */
+  refresh(): void {
+    const uri = this.currentDocUri;
+    if (uri === undefined) {
+      return;
+    }
+    const doc = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri);
+    if (doc !== undefined && this.isPreviewable(doc)) {
+      // Fire-and-forget: renderDocument self-catches its sendRequest and is
+      // renderSeq-serialized, as everywhere else.
+      void this.renderDocument(doc);
+    }
+  }
+
   dispose(): void {
     // Capture before teardown(): teardown() nulls `this.panel`, so disposing it must
     // happen against the captured reference (its onDidDispose handler re-enters
@@ -256,7 +278,11 @@ export class Preview {
     // document's own editor is not visible yet, e.g. right after a window reload.
     const activeLine = this.topCursorLine(doc.uri.toString()) ?? fallbackLine ?? 0;
     const seq = ++this.renderSeq;
-    const params: RenderFileParams = { uri: doc.uri.toString(), text: doc.getText() };
+    const params: RenderFileParams = {
+      uri: doc.uri.toString(),
+      text: doc.getText(),
+      settings: buildPreviewSettings(),
+    };
 
     let result: RenderFileResult;
     try {

@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import type { BuildChrome } from '../../../src/shared/compiler/chrome.ts';
 import {
   buildRows,
   flowToHtml,
@@ -7,6 +8,15 @@ import {
   pagesToHtml,
 } from '../../../src/shared/compiler/layout.ts';
 import { tokenize } from '../../../src/shared/compiler/tokenizer.ts';
+
+/** All-off chrome: pagesToHtml emits the bare page/line skeleton with no furniture. */
+const OFF: BuildChrome = {
+  lineNumbers: false,
+  edgeLine: 'none',
+  pageNumberPosition: 'none',
+  pageNumberTemplate: '{page} / {totalPage}',
+  header: '',
+};
 
 // The continuous preview flow (no pagination); mirrors what renderPreview emits as <body>.
 const flow = (src: string, charsPerLine = 40, avoidLineBreaks = false): string =>
@@ -20,7 +30,7 @@ const klines = (src: string, charsPerLine: number): string[] =>
     .flat()
     .map((line) => line.units.map((u) => u.text).join(''));
 const html = (src: string, charsPerLine = 40, linesPerPage = 34) =>
-  pagesToHtml(pages(src, charsPerLine, linesPerPage));
+  pagesToHtml(pages(src, charsPerLine, linesPerPage), undefined, OFF);
 
 test('one display line per source line; trailing newline dropped, middle blank kept', () => {
   assert.equal(
@@ -184,15 +194,16 @@ test('flowToHtml: a blank source line becomes a blank column (kept, not collapse
   );
 });
 
-test('flowToHtml: ［＃改ページ］ becomes an <hr class="pagebreak"> between content', () => {
+test('flowToHtml: ［＃改ページ］ becomes a labelled .pagebreak marker between content', () => {
   assert.equal(
     flow('前\n［＃改ページ］\n後'),
     '<div class="book"><div class="line" data-line="0">前</div>' +
-      '<hr class="pagebreak"><div class="line" data-line="2">後</div></div>',
+      '<div class="pagebreak"><span class="pb-label">改ページ</span></div>' +
+      '<div class="line" data-line="2">後</div></div>',
   );
 });
 
-test('flowToHtml: leading / trailing / doubled page breaks collapse (no stray <hr>)', () => {
+test('flowToHtml: leading / trailing / doubled page breaks collapse (no stray marker)', () => {
   assert.equal(
     flow('［＃改ページ］\n後'),
     '<div class="book"><div class="line" data-line="1">後</div></div>',
@@ -204,7 +215,8 @@ test('flowToHtml: leading / trailing / doubled page breaks collapse (no stray <h
   assert.equal(
     flow('前\n［＃改ページ］\n［＃改ページ］\n後'),
     '<div class="book"><div class="line" data-line="0">前</div>' +
-      '<hr class="pagebreak"><div class="line" data-line="3">後</div></div>',
+      '<div class="pagebreak"><span class="pb-label">改ページ</span></div>' +
+      '<div class="line" data-line="3">後</div></div>',
   );
 });
 
@@ -213,6 +225,19 @@ test('flowToHtml: honors avoidLineBreaks (禁則) — the SAME engine as the bui
   assert.equal(
     flow('ああ」', 2, true),
     '<div class="book"><div class="line" data-line="0">あ</div><div class="line">あ」</div></div>',
+  );
+});
+
+test('flowToHtml: lineNumbers emits JS-numbered .ln heads that restart at a break marker', () => {
+  // Numbering is computed here (not CSS counters — a sibling counter-reset does not reset
+  // following siblings in Chromium); a wrapped continuation column counts as its own line,
+  // and a collapsed (doubled) break still restarts only once.
+  assert.equal(
+    flowToHtml(buildRows(tokenize('一二三\n［＃改ページ］\n［＃改ページ］\n四')), 2, false, undefined, true),
+    '<div class="book"><div class="line" data-line="0"><span class="ln">1</span>一二</div>' +
+      '<div class="line"><span class="ln">2</span>三</div>' +
+      '<div class="pagebreak"><span class="pb-label">改ページ</span></div>' +
+      '<div class="line" data-line="3"><span class="ln">1</span>四</div></div>',
   );
 });
 
