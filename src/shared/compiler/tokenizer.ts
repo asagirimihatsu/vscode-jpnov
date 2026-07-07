@@ -7,8 +7,15 @@
  * renderer and the book renderer build on, so it handles cross-line spans (傍点 span
  * start/end emit independent tokens in stream order; the renderer pairs them).
  *
- * Lenient recovery: an unmatched ［＃ (no closing ］) or an unmatched 《 (no closing 》)
- * is emitted literally as text rather than swallowing the rest of the document.
+ * Delimiter pairing is LINE-BOUNDED — ［＃…］ and 《…》 never pair across a line break, so
+ * broken markup only ever affects its own source line:
+ *   - An unclosed ［＃ (no ］ before the line break) becomes ONE `brokenAnnotation` token
+ *     swallowing ［＃ up to the line end — never the '\n', nor the '\r' of a '\r\n'. It is
+ *     a compile ERROR: {@link findBrokenAnnotations} hands the exact spans to the editor
+ *     diagnostics, while the layout renders the raw as visible literal text.
+ *   - An unmatched 《 (no 》 on its line) stays lenient: literal text, no error. A pending
+ *     ｜ base marker is cleared at a line break, so it never pairs with a later-line 《…》.
+ *   - A standalone ］ or 》 is ordinary text.
  */
 
 import { emphasisClass } from './emphasis.ts';
@@ -21,6 +28,7 @@ export type TokenKind =
   | 'emphasisSpanStart'
   | 'emphasisSpanEnd'
   | 'comment'
+  | 'brokenAnnotation'
   | 'pageBreak';
 
 interface TokenBase {
@@ -68,6 +76,15 @@ export interface CommentToken extends TokenBase {
   readonly inner: string;
 }
 
+/**
+ * An unclosed ［＃ (no ］ before its line break), swallowed to the line end. There is no inner —
+ * `raw` (＝ ［＃… up to but never including the line break) IS the payload: the layout renders it
+ * as visible literal text, and {@link findBrokenAnnotations} surfaces it as a compile error.
+ */
+export interface BrokenAnnotationToken extends TokenBase {
+  readonly kind: 'brokenAnnotation';
+}
+
 export interface PageBreakToken extends TokenBase {
   readonly kind: 'pageBreak';
 }
@@ -80,6 +97,7 @@ export type Token =
   | EmphasisSpanStartToken
   | EmphasisSpanEndToken
   | CommentToken
+  | BrokenAnnotationToken
   | PageBreakToken;
 
 // Full-width annotation/ruby markers (see codepoints in the locked spec).
@@ -139,6 +157,18 @@ function classifyAnnotation(inner: string, raw: string): Token {
   return { kind: 'comment', raw, inner };
 }
 
+/**
+ * Offset just past the last line-content char at/after `from`: the next '\n' (backing off over
+ * the '\r' of a '\r\n' terminator) or the end of input. Bounds every delimiter pairing to the
+ * current line. The annotation branch slices with it (`from` is past ［＃, so the back-off can
+ * never step before the marker); the ruby branch only compares against it.
+ */
+function endOfLine(src: string, from: number): number {
+  const nl = src.indexOf('\n', from);
+  const end = nl === -1 ? src.length : nl;
+  return src.charAt(end - 1) === '\r' ? end - 1 : end;
+}
+
 export function tokenize(src: string): Token[] {
   const tokens: Token[] = [];
   let textBuf = '';
@@ -161,12 +191,14 @@ export function tokenize(src: string): Token[] {
 
     // Annotation opener ［＃.
     if (ch === OPEN_BRACKET && src.charAt(i + 1) === HASH) {
+      const lineEnd = endOfLine(src, i + 2);
       const close = src.indexOf(CLOSE_BRACKET, i + 2);
-      if (close === -1) {
-        // Unmatched ［＃ — emit ［ literally and keep scanning (lenient recovery).
-        textBuf += ch;
-        baseMark = -1;
-        i += 1;
+      if (close === -1 || close >= lineEnd) {
+        // No ］ before the line break — the broken annotation swallows ［＃ up to (never past)
+        // the end of THIS line; findBrokenAnnotations() reports the span as a compile error.
+        flushText();
+        tokens.push({ kind: 'brokenAnnotation', raw: src.slice(i, lineEnd) });
+        i = lineEnd;
         continue;
       }
       const inner = src.slice(i + 2, close);
@@ -190,8 +222,8 @@ export function tokenize(src: string): Token[] {
     // Ruby reading 《 ... 》.
     if (ch === RUBY_OPEN) {
       const close = src.indexOf(RUBY_CLOSE, i + 1);
-      if (close === -1) {
-        // Unmatched 《 — literal.
+      if (close === -1 || close >= endOfLine(src, i + 1)) {
+        // No 》 on this line — literal (a reading never spans lines; lenient, no error).
         textBuf += ch;
         i += 1;
         continue;
@@ -248,12 +280,44 @@ export function tokenize(src: string): Token[] {
     }
 
     // Ordinary character (includes 「」 dialogue, newlines, spaces).
+    if (ch === '\n') {
+      // A pending ｜ explicit-base marker never survives a line break (ruby is line-local).
+      baseMark = -1;
+    }
     textBuf += ch;
     i += 1;
   }
 
   flushText();
   return tokens;
+}
+
+// ---------------------------------------------------------------------------
+// Broken-annotation spans (compile errors)
+// ---------------------------------------------------------------------------
+
+/** A broken (unclosed) ［＃ annotation as absolute source UTF-16 offsets `[start, end)`. */
+export interface BrokenAnnotation {
+  readonly start: number;
+  readonly end: number;
+}
+
+/**
+ * Source spans of every unclosed ［＃, in document order — the single "what is broken" answer the
+ * editor diagnostics consume, re-derived from {@link tokenize} itself so it can never disagree
+ * with what the renderer shows. Offsets are recovered by accumulating `raw.length` (the
+ * concatenation of all raws IS the source), the same convention every token consumer uses.
+ */
+export function findBrokenAnnotations(src: string): BrokenAnnotation[] {
+  const spans: BrokenAnnotation[] = [];
+  let offset = 0;
+  for (const token of tokenize(src)) {
+    if (token.kind === 'brokenAnnotation') {
+      spans.push({ start: offset, end: offset + token.raw.length });
+    }
+    offset += token.raw.length;
+  }
+  return spans;
 }
 
 // ---------------------------------------------------------------------------

@@ -44,6 +44,7 @@ const ARGS: Record<MsgCode, readonly (string | number)[]> = {
   'path.absolute': ['sourceDir'],
   'path.invalid': ['outDir'],
   'path.escapesRoot': ['sourceDir'],
+  'syntax.unclosedAnnotation': [],
   'lint.common.sentenceLength': [],
   'lint.common.maxTen': [],
   'lint.common.maxKanjiRun': [],

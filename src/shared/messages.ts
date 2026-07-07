@@ -65,6 +65,8 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return `${englishLabel(args[0] as LabelId)} is not a valid path`;
     case 'path.escapesRoot':
       return `${englishLabel(args[0] as LabelId)} must not escape the workspace root`;
+    case 'syntax.unclosedAnnotation':
+      return 'unterminated ［＃ annotation (missing ］)';
     // --- prose lint (one static, arg-less code per (scope, rule); see lint/catalog.ts).
     // `common` rules run on both 地の文 + 台詞 under one code; JA lives in bundle.l10n.ja.json.
     case 'lint.common.sentenceLength':

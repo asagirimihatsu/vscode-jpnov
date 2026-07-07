@@ -70,6 +70,19 @@ test('an unclosed opener still collapses in narration and captures its utterance
   assert.equal(s.dialogue.text, 'あ');
 });
 
+test('a broken ［＃ contributes no prose to any lint stream (malformed markup is not linted)', () => {
+  const s = extractStreams('地の文［＃こわれ\n次の行');
+  assert.equal(s.narration.text, '地の文\n次の行'); // the swallowed tail is absent
+  assert.equal(s.dialogue.text, '');
+  assert.equal(s.ruby.text, '');
+});
+
+test('a 「 swallowed by a broken ［＃ never enters the dialogue stack', () => {
+  const s = extractStreams('［＃「未\nあと');
+  assert.equal(s.dialogue.text, '');
+  assert.equal(s.narration.text, '\nあと');
+});
+
 test('consecutive dialogues are newline-joined (independent utterances)', () => {
   const src = '「A」「BC」';
   const s = extractStreams(src);

@@ -104,11 +104,17 @@ test('markup and dialogue are emitted without a recognizer (undefined)', () => {
   assert.ok(!toks.some((t) => t.type === CHARACTER || t.type === KEYWORD)); // nothing recognised
 });
 
-test('a multi-line ［＃…］ comment is split into one token per line', () => {
+test('an unclosed ［＃ (its ］ on a later line) is greyed on its own line ONLY', () => {
+  // Line-bounded pairing: ［＃ab is a brokenAnnotation (marker to line end); "cd］" is plain text.
   const toks = decode(buildSemanticTokens(doc('［＃ab\ncd］'), rec).data);
-  assert.equal(at(toks, 0, 0)?.type, MARKER);
-  assert.equal(at(toks, 1, 0)?.type, MARKER);
-  assert.ok(toks.every((t) => t.type === MARKER));
+  assert.deepEqual(at(toks, 0, 0), { line: 0, char: 0, len: 4, type: MARKER }); // ［＃ab
+  assert.ok(!toks.some((t) => t.line === 1), 'the later line has no token (lone ］ is text)');
+});
+
+test('a broken ［＃ is greyed to its line end; the next line is recognized normally', () => {
+  const toks = decode(buildSemanticTokens(doc('本［＃こわれ\n巳一は走った'), rec).data);
+  assert.deepEqual(at(toks, 0, 1), { line: 0, char: 1, len: 5, type: MARKER }); // ［＃こわれ
+  assert.deepEqual(at(toks, 1, 0), { line: 1, char: 0, len: 3, type: CHARACTER }); // 巳一は
 });
 
 test('offsets stay within bounds across an astral character (𠮷)', () => {

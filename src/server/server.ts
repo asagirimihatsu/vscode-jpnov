@@ -61,6 +61,7 @@ import type { ServerContext } from './roots.ts';
 import { createRecognizer } from './highlight/recognizer.ts';
 import type { Recognizer } from './highlight/recognizer.ts';
 import { buildSemanticTokens, SEMANTIC_LEGEND } from './semanticTokens.ts';
+import { annotationDiagnostics } from './syntax.ts';
 import { completeFilelist, diagnoseFilelist, documentLinksForFilelist } from './filelist.ts';
 
 const connection = createConnection(ProposedFeatures.all);
@@ -386,8 +387,16 @@ const findingsCache = new Map<string, { version: number; findings: LintFinding[]
 /** Cache the findings and publish their diagnostics (one place keeps cache and diagnostics aligned). */
 function publishFindings(uri: string, version: number, findings: LintFinding[]): void {
   findingsCache.set(uri, { version, findings });
+  // Syntax Errors (unclosed ［＃) ride the same single publish per URI. Re-derived from the live
+  // document (same version as `findings` — the callers' version guards run synchronously before
+  // this call) and kept OUT of findingsCache: they carry no fix, so code actions never see them.
+  const doc = documents.get(uri);
+  const syntax = doc === undefined ? [] : annotationDiagnostics(doc);
   // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
-  void connection.sendDiagnostics({ uri, diagnostics: findings.map((f) => f.diagnostic) });
+  void connection.sendDiagnostics({
+    uri,
+    diagnostics: [...syntax, ...findings.map((f) => f.diagnostic)],
+  });
 }
 
 function scheduleProseDiagnostics(doc: TextDocument): void {
