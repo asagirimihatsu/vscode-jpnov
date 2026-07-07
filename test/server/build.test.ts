@@ -20,7 +20,12 @@ import {
   type FakeConnection,
 } from './helpers.ts';
 import type { ServerContext } from '../../src/server/roots.ts';
-import type { BuildResult, ListBooksResult } from '../../src/shared/protocol.ts';
+import { BUILD_CHROME_DEFAULT } from '../../src/shared/config/settings.ts';
+import { LAYOUT_DEFAULT } from '../../src/shared/config/types.ts';
+import type { BuildResult, HtmlSettings, ListBooksResult } from '../../src/shared/protocol.ts';
+
+/** The product-default settings snapshot every build request carries (settings is required). */
+const SETTINGS: HtmlSettings = { ...LAYOUT_DEFAULT, ...BUILD_CHROME_DEFAULT };
 
 /** Boots a workspace with a json config and loads it so the root is "valid". */
 async function bootValidRoot(
@@ -28,7 +33,7 @@ async function bootValidRoot(
   uri: string,
   sourceDir = './src',
 ): Promise<{ ctx: ServerContext; conn: FakeConnection; state: RootState }> {
-  writeUnder(dir, 'novel.jp.json', JSON.stringify({ sourceDir, charsPerLine: 40, linesPerPage: 34 }));
+  writeUnder(dir, 'novel.jp.json', JSON.stringify({ sourceDir }));
   const conn = makeFakeConnection();
   const ctx = makeContext(conn);
   const state: RootState = { rootUri: uri };
@@ -47,7 +52,7 @@ test('build emits a .txt and an .html artifact per filelist containing both file
     writeUnder(ws.dir, 'src/vol1/a.jpnov', 'あいう');
     writeUnder(ws.dir, 'src/vol1/b.jpnov', 'かきく');
 
-    const result: BuildResult = await handleBuild(ctx, {});
+    const result: BuildResult = await handleBuild(ctx, { settings: SETTINGS });
 
     assert.equal(result.ok, true);
     assert.ok(result.artifacts);
@@ -81,7 +86,7 @@ test('build stays lenient on an unclosed ［＃: ok, artifacts emitted, tail vis
     writeUnder(ws.dir, 'src/vol1/index.filelist', 'a.jpnov');
     writeUnder(ws.dir, 'src/vol1/a.jpnov', '本文［＃閉じない注記\n次の行');
 
-    const result: BuildResult = await handleBuild(ctx, {});
+    const result: BuildResult = await handleBuild(ctx, { settings: SETTINGS });
 
     assert.equal(result.ok, true);
     assert.ok(result.artifacts);
@@ -107,7 +112,7 @@ test('nested filelist mirrors the source tree in the output path', async () => {
     writeUnder(ws.dir, 'src/part1/vol2/index.filelist', 'c.jpnov');
     writeUnder(ws.dir, 'src/part1/vol2/c.jpnov', 'テスト');
 
-    const result = await handleBuild(ctx, {});
+    const result = await handleBuild(ctx, { settings: SETTINGS });
 
     assert.equal(result.ok, true);
     assert.ok(result.artifacts);
@@ -130,7 +135,7 @@ test('deeply nested filelist writes a mirrored nested output path', async () => 
     writeUnder(ws.dir, 'src/a/b/c/index.filelist', 'd.jpnov');
     writeUnder(ws.dir, 'src/a/b/c/d.jpnov', 'ふかい');
 
-    const result = await handleBuild(ctx, {});
+    const result = await handleBuild(ctx, { settings: SETTINGS });
 
     assert.equal(result.ok, true);
     assert.ok(result.artifacts);
@@ -154,7 +159,7 @@ test('flat name.filelist resolves entries relative to its OWN dir (sourceDir), n
     writeUnder(ws.dir, 'src/volume01.filelist', 'volume01/ch1.jpnov');
     writeUnder(ws.dir, 'src/volume01/ch1.jpnov', 'ほん');
 
-    const result = await handleBuild(ctx, {});
+    const result = await handleBuild(ctx, { settings: SETTINGS });
 
     assert.equal(result.ok, true);
     assert.ok(result.artifacts);
@@ -180,7 +185,7 @@ test('a missing referenced .jpnov is a per-book error + diagnostic; other books 
     writeUnder(ws.dir, 'src/good/index.filelist', 'y.jpnov');
     writeUnder(ws.dir, 'src/good/y.jpnov', 'よい');
 
-    const result = await handleBuild(ctx, {});
+    const result = await handleBuild(ctx, { settings: SETTINGS });
 
     assert.equal(result.ok, false);
     assert.ok(result.errors);
@@ -212,7 +217,7 @@ test('two filelists colliding on the output path error BOTH and emit neither', a
     writeUnder(ws.dir, 'src/volume01/a.jpnov', 'A');
     writeUnder(ws.dir, 'src/volume01.filelist', 'volume01/a.jpnov');
 
-    const result = await handleBuild(ctx, {});
+    const result = await handleBuild(ctx, { settings: SETTINGS });
 
     assert.equal(result.ok, false);
     assert.ok(result.errors);
@@ -237,12 +242,14 @@ test('two filelists colliding on the output path error BOTH and emit neither', a
 test('build honors avoidLineBreaks from novel.jp.json (禁則)', async () => {
   const ws = makeTmpWorkspace();
   try {
-    // charsPerLine 3 + 禁則 on: a naive wrap (ああ「 | い」) would end a column on an opening
-    // 「; 追い出し pushes it down → ああ | 「い」. Proves config.avoidLineBreaks reaches the build.
+    // 禁則 stays per-root config; the grid width rides the request settings (min 16). At
+    // width 16 a naive wrap ends column 1 on the opening 「 (cell 16); 追い出し pushes it
+    // down → 15×あ | 「い」. Proves config.avoidLineBreaks reaches renderBook alongside
+    // the request's charsPerLine.
     writeUnder(
       ws.dir,
       'novel.jp.json',
-      JSON.stringify({ sourceDir: './src', charsPerLine: 3, linesPerPage: 34, avoidLineBreaks: true }),
+      JSON.stringify({ sourceDir: './src', avoidLineBreaks: true }),
     );
     const conn = makeFakeConnection();
     const ctx = makeContext(conn);
@@ -250,14 +257,20 @@ test('build honors avoidLineBreaks from novel.jp.json (禁則)', async () => {
     ctx.roots.set(ws.uri, state);
     await loadRootConfig(ctx, state);
     assert.equal(conn.latestConfigState(ws.uri)?.state, 'valid');
+    const head = 'あ'.repeat(15);
     writeUnder(ws.dir, 'src/vol1/index.filelist', 'a.jpnov');
-    writeUnder(ws.dir, 'src/vol1/a.jpnov', 'ああ「い」');
+    writeUnder(ws.dir, 'src/vol1/a.jpnov', `${head}「い」`);
 
-    const result = await handleBuild(ctx, {});
+    const result = await handleBuild(ctx, {
+      settings: { ...SETTINGS, charsPerLine: 16, pageNumberPosition: 'none' },
+    });
     const html = result.artifacts?.find((a) => a.path.endsWith('.html'))?.content ?? '';
-    assert.match(
-      html,
-      /<div class="line" data-line="0">ああ<\/div><div class="line" data-line="0">「い」<\/div>/,
+    assert.ok(
+      html.includes(
+        `<div class="line" data-line="0">${head}</div>` +
+          `<div class="line" data-line="0">「い」</div>`,
+      ),
+      '追い出し keeps the opening bracket with its content',
     );
   } finally {
     ws.cleanup();
@@ -267,7 +280,7 @@ test('build honors avoidLineBreaks from novel.jp.json (禁則)', async () => {
 test('build with no valid roots returns ok with no artifacts', async () => {
   const conn = makeFakeConnection();
   const ctx = makeContext(conn);
-  const result = await handleBuild(ctx, {});
+  const result = await handleBuild(ctx, { settings: SETTINGS });
   assert.deepEqual(result, { ok: true, artifacts: [], errors: [] });
 });
 
@@ -288,7 +301,7 @@ test('build targeting a specific root only builds that root', async () => {
     writeUnder(wsB.dir, 'src/vb/index.filelist', 'y.jpnov');
     writeUnder(wsB.dir, 'src/vb/y.jpnov', 'B');
 
-    const result = await handleBuild(ctx, { root: wsA.uri });
+    const result = await handleBuild(ctx, { root: wsA.uri, settings: SETTINGS });
 
     assert.ok(result.artifacts);
     assert.equal(result.artifacts.length, 2);
@@ -337,7 +350,7 @@ test('build format "html" emits only the .html artifact', async () => {
     writeUnder(ws.dir, 'src/vol1/index.filelist', 'a.jpnov');
     writeUnder(ws.dir, 'src/vol1/a.jpnov', 'あ');
 
-    const result = await handleBuild(ctx, { format: 'html' });
+    const result = await handleBuild(ctx, { format: 'html', settings: SETTINGS });
 
     assert.equal(result.ok, true);
     assert.ok(result.artifacts);
@@ -355,7 +368,7 @@ test('build format "txt" emits only the .txt artifact', async () => {
     writeUnder(ws.dir, 'src/vol1/index.filelist', 'a.jpnov');
     writeUnder(ws.dir, 'src/vol1/a.jpnov', 'あ');
 
-    const result = await handleBuild(ctx, { format: 'txt' });
+    const result = await handleBuild(ctx, { format: 'txt', settings: SETTINGS });
 
     assert.equal(result.ok, true);
     assert.ok(result.artifacts);
@@ -379,7 +392,7 @@ test('build restricts to the selected books (by filelist uri)', async () => {
     writeUnder(ws.dir, 'src/b/y.jpnov', 'B');
 
     const onlyA = `${ws.uri}/src/a/index.filelist`;
-    const result = await handleBuild(ctx, { books: [onlyA] });
+    const result = await handleBuild(ctx, { books: [onlyA], settings: SETTINGS });
 
     assert.ok(result.artifacts);
     assert.equal(result.artifacts.length, 2); // a.txt + a.html, and nothing from book b
@@ -396,7 +409,7 @@ test('build with an empty books selection builds nothing (distinct from omitting
     writeUnder(ws.dir, 'src/a/index.filelist', 'x.jpnov');
     writeUnder(ws.dir, 'src/a/x.jpnov', 'A');
 
-    const result = await handleBuild(ctx, { books: [] });
+    const result = await handleBuild(ctx, { books: [], settings: SETTINGS });
 
     assert.equal(result.ok, true);
     assert.deepEqual(result.artifacts, []);
@@ -416,7 +429,7 @@ test('a selected book still errors when it collides with an UNSELECTED one', asy
     writeUnder(ws.dir, 'src/volume01.filelist', 'volume01/a.jpnov');
 
     const selected = `${ws.uri}/src/volume01.filelist`;
-    const result = await handleBuild(ctx, { books: [selected] });
+    const result = await handleBuild(ctx, { books: [selected], settings: SETTINGS });
 
     assert.equal(result.ok, false);
     assert.ok(result.errors);
@@ -435,7 +448,7 @@ test('a txt-only build still reports a missing .jpnov as a per-book error + diag
     writeUnder(ws.dir, 'src/bad/index.filelist', 'present.jpnov\ngone.jpnov');
     writeUnder(ws.dir, 'src/bad/present.jpnov', 'ある');
 
-    const result = await handleBuild(ctx, { format: 'txt' });
+    const result = await handleBuild(ctx, { format: 'txt', settings: SETTINGS });
 
     assert.equal(result.ok, false);
     assert.ok(result.errors);

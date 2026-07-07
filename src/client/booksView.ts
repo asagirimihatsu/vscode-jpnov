@@ -33,6 +33,7 @@ import {
 import { buildForest, type TreeDir } from './bookTree.ts';
 import { renderMessage } from './messages.ts';
 import { lastPathSegment } from './paths.ts';
+import { buildHtmlSettings } from './renderConfig.ts';
 
 /**
  * A tree node: a per-root GROUP header (only when more than one valid root has books), a FOLDER in
@@ -344,7 +345,7 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
       async () => {
         let result: BuildResult;
         try {
-          const params: BuildParams = { books, format };
+          const params: BuildParams = { books, format, settings: buildHtmlSettings() };
           result = await c.sendRequest<BuildResult>(BuildRequest, params);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);

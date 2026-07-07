@@ -378,9 +378,9 @@ test('adoption wires the live-update listeners (edit re-render + cursor reveal)'
   await tick();
   assert.equal(renders, 1);
 
-  // An edit to the shown document re-renders...
+  // An edit to the shown document re-renders — after the 120ms typing debounce settles.
   state.onDidChangeDoc.fire({ document: d });
-  await tick();
+  await new Promise((r) => setTimeout(r, 150));
   assert.equal(renders, 2);
 
   // ...and a cursor move posts a reveal for the shown document.
@@ -424,4 +424,56 @@ test('a render resolving after the panel closed writes nothing and does not thro
   await tick();
 
   assert.equal(panel.webview.html, '', 'no write to a disposed panel');
+});
+
+test('renderDocument ships the settings snapshot on the renderFile request', async () => {
+  state.config['jpnov.layout.charsPerLine'] = 24;
+  state.config['jpnov.preview.edgeLine'] = 'red';
+  let captured: unknown;
+  const capturing = {
+    sendRequest: (_type: unknown, params: unknown) => {
+      captured = params;
+      return Promise.resolve({ html: SERVER_HTML });
+    },
+  };
+  const preview = new Preview(capturing as never);
+  const d = doc('file:///proj/src/a.jpnov', 'novel-jp', '一');
+  state.textDocuments.push(d);
+  state.activeEditor = { document: d, viewColumn: 1 };
+
+  preview.open(true);
+  await tick();
+
+  const params = captured as { settings?: unknown };
+  // Overrides read from the store; the untouched key falls back to the product default.
+  assert.deepEqual(params.settings, { charsPerLine: 24, lineNumbers: true, edgeLine: 'red' });
+});
+
+test('refresh() re-renders the shown document with fresh settings', async () => {
+  let renders = 0;
+  const counting = {
+    sendRequest: () => {
+      renders += 1;
+      return Promise.resolve({ html: SERVER_HTML });
+    },
+  };
+  const preview = new Preview(counting as never);
+  const d = doc('file:///proj/src/a.jpnov', 'novel-jp', '一');
+  state.textDocuments.push(d);
+  state.activeEditor = { document: d, viewColumn: 1 };
+
+  preview.open(true);
+  await tick();
+  assert.equal(renders, 1);
+
+  preview.refresh();
+  await tick();
+  assert.equal(renders, 2);
+});
+
+test('refresh() with nothing shown is a no-op', async () => {
+  const preview = new Preview(fakeClient(SERVER_HTML) as never);
+  preview.refresh(); // must not throw and must not create a panel
+  await tick();
+  assert.equal(state.panels.length, 0);
 });

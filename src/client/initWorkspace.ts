@@ -15,12 +15,7 @@
  */
 import * as vscode from 'vscode';
 
-import {
-  CHARS_MAX,
-  CHARS_MIN,
-  DEFAULT,
-  type RawNovelConfig,
-} from '#/shared/config/types.ts';
+import { DEFAULT, type RawNovelConfig } from '#/shared/config/types.ts';
 
 import { BUILD_CONFIGS } from './buildDebug.ts';
 import { command } from './commands.ts';
@@ -80,24 +75,6 @@ async function runInit(): Promise<void> {
   if (disableAi === undefined) {
     return;
   }
-  const charsPerLine = await askNumber(
-    vscode.l10n.t('Characters per line'),
-    DEFAULT.charsPerLine,
-    CHARS_MIN,
-    CHARS_MAX,
-  );
-  if (charsPerLine === undefined) {
-    return;
-  }
-  const linesPerPage = await askNumber(
-    vscode.l10n.t('Lines per page'),
-    DEFAULT.linesPerPage,
-    CHARS_MIN,
-    CHARS_MAX,
-  );
-  if (linesPerPage === undefined) {
-    return;
-  }
   const avoidLineBreaks = await askAvoidLineBreaks();
   if (avoidLineBreaks === undefined) {
     return;
@@ -111,12 +88,7 @@ async function runInit(): Promise<void> {
     return;
   }
 
-  const written = await writeScaffold(root, {
-    disableAi,
-    charsPerLine,
-    linesPerPage,
-    avoidLineBreaks,
-  });
+  const written = await writeScaffold(root, { disableAi, avoidLineBreaks });
   if (!written) {
     return;
   }
@@ -179,7 +151,7 @@ async function askDisableAi(): Promise<boolean | undefined> {
   return picked?.value;
 }
 
-/** Q3 — enable 禁則処理? Default (first) item is "no". */
+/** Q2 — enable 禁則処理? Default (first) item is "no". */
 async function askAvoidLineBreaks(): Promise<boolean | undefined> {
   const items: BoolPickItem[] = [
     {
@@ -200,29 +172,6 @@ async function askAvoidLineBreaks(): Promise<boolean | undefined> {
     ignoreFocusOut: true,
   });
   return picked?.value;
-}
-
-/** Q2 — a single numeric field with the default pre-filled and live [min..max] validation. */
-async function askNumber(
-  prompt: string,
-  value: number,
-  min: number,
-  max: number,
-): Promise<number | undefined> {
-  const raw = await vscode.window.showInputBox({
-    prompt,
-    value: String(value),
-    ignoreFocusOut: true,
-    validateInput: (input) => {
-      const trimmed = input.trim();
-      const n = Number(trimmed);
-      if (!/^\d+$/.test(trimmed) || !Number.isInteger(n) || n < min || n > max) {
-        return vscode.l10n.t('Enter a whole number from {0} to {1}.', min, max);
-      }
-      return undefined;
-    },
-  });
-  return raw === undefined ? undefined : Number(raw.trim());
 }
 
 type ProbeResult = 'absent' | 'file' | 'dir' | 'error';
@@ -292,8 +241,6 @@ async function checkTargets(root: vscode.Uri, includeSettings: boolean): Promise
 
 interface InitAnswers {
   readonly disableAi: boolean;
-  readonly charsPerLine: number;
-  readonly linesPerPage: number;
   readonly avoidLineBreaks: boolean;
 }
 
@@ -388,8 +335,6 @@ function settingsJson(): string {
 function configJson(answers: InitAnswers): string {
   const config: RawNovelConfig = {
     sourceDir: DEFAULT.sourceDir,
-    charsPerLine: answers.charsPerLine,
-    linesPerPage: answers.linesPerPage,
     ...(answers.avoidLineBreaks ? { avoidLineBreaks: true } : {}),
     ...(DEFAULT.outDir === undefined ? {} : { outDir: DEFAULT.outDir }),
   };

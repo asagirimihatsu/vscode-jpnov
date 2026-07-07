@@ -30,7 +30,7 @@ import type {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { renderPreview } from '#/shared/compiler/preview.ts';
-import { DEFAULT } from '#/shared/config/types.ts';
+import { resolvePreviewSettings } from '#/shared/config/settings.ts';
 import type { ResolvedConfig } from '#/shared/config/types.ts';
 import { selectRules } from '#/shared/lint/select.ts';
 import type { InitializationOptions } from '#/shared/protocol.ts';
@@ -269,11 +269,10 @@ connection.onNotification(
 connection.onRequest(
   'jpnov/build',
   (
-    // The wire may omit params entirely (build all roots), so accept the nullable form.
-    params: BuildParams | undefined,
+    params: BuildParams,
     _token: unknown,
     workDone?: WorkDoneProgressReporter,
-  ): Promise<BuildResult> => handleBuild(context, params ?? {}, workDone),
+  ): Promise<BuildResult> => handleBuild(context, params, workDone),
 );
 
 // List books: enumerate every `.filelist` of every valid root for the client's Books panel.
@@ -285,16 +284,22 @@ connection.onRequest(
 );
 
 // Preview: render one file's live buffer to a standalone HTML document. Strings only.
-// Lines wrap at the owning root's charsPerLine (折り返し) and honor its avoidLineBreaks (禁則) —
-// the SAME layout engine the build uses; both fall back to defaults when the file is not under
-// any tracked/valid root.
+// charsPerLine + display chrome ride the request's settings snapshot (re-resolved here —
+// the wire payload is untrusted); avoidLineBreaks (禁則) still comes from the owning
+// root's novel.jp.* config, defaulting to off outside any tracked/valid root.
 connection.onRequest(
   'jpnov/renderFile',
   (params: RenderFileParams): RenderFileResult => {
     const owner = rootForUri(context, params.uri);
-    const charsPerLine = owner?.resolved?.charsPerLine ?? DEFAULT.charsPerLine;
+    const settings = resolvePreviewSettings(params.settings);
     const avoidLineBreaks = owner?.resolved?.avoidLineBreaks ?? false;
-    return { html: renderPreview(params.text, { charsPerLine, avoidLineBreaks }) };
+    return {
+      html: renderPreview(params.text, {
+        charsPerLine: settings.charsPerLine,
+        avoidLineBreaks,
+        chrome: settings,
+      }),
+    };
   },
 );
 

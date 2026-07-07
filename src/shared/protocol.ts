@@ -9,6 +9,7 @@
  * Every custom payload below is defined with plain strings so it survives IPC
  * (structured-clone over the forked-process channel) without vscode value types.
  */
+import type { BuildChrome, PreviewChrome } from './compiler/chrome.ts';
 import type { LintCode } from './lint/catalog.ts';
 
 // ---------------------------------------------------------------------------
@@ -151,6 +152,29 @@ export interface LintConfigChangedParams {
 }
 
 // ---------------------------------------------------------------------------
+// Render settings (C->S, carried on jpnov/renderFile and jpnov/build)
+// ---------------------------------------------------------------------------
+
+/**
+ * The `jpnov.layout.*` / `jpnov.preview.*` snapshot the client ships on every
+ * `jpnov/renderFile` request. Read at default (resource-less) scope — one window-global
+ * set of values, like the lint snapshot. The server re-resolves it (clamp + enum
+ * coercion) before rendering; the wire payload is untrusted at runtime.
+ */
+export interface PreviewSettings extends PreviewChrome {
+  readonly charsPerLine: number;
+}
+
+/**
+ * The `jpnov.layout.*` / `jpnov.html.*` snapshot the client ships on every `jpnov/build`
+ * request. Only the `.html` artifact consumes it (`.txt` is the raw Aozora source).
+ */
+export interface HtmlSettings extends BuildChrome {
+  readonly charsPerLine: number;
+  readonly linesPerPage: number;
+}
+
+// ---------------------------------------------------------------------------
 // jpnov/build (C->S request)
 // ---------------------------------------------------------------------------
 
@@ -160,18 +184,20 @@ export const BuildRequest = 'jpnov/build';
 export type BuildFormat = 'html' | 'txt';
 
 /**
- * Build selectors — all optional, so a bare `{}` builds every book of every valid root as
- * BOTH formats:
- * - `root`   — restrict to a single root. The Books panel leaves it unset and selects
- *              with `books` instead.
- * - `books`  — restrict to these `.filelist` URIs. ABSENT = every discovered book;
- *              PRESENT-BUT-EMPTY (`[]`) = build NOTHING. The two are deliberately distinct.
- * - `format` — emit only this kind. ABSENT = BOTH `.txt` and `.html`.
+ * Build selectors:
+ * - `root`     — restrict to a single root. The Books panel leaves it unset and selects
+ *                with `books` instead.
+ * - `books`    — restrict to these `.filelist` URIs. ABSENT = every discovered book;
+ *                PRESENT-BUT-EMPTY (`[]`) = build NOTHING. The two are deliberately distinct.
+ * - `format`   — emit only this kind. ABSENT = BOTH `.txt` and `.html`.
+ * - `settings` — the client's render-settings snapshot (required; client and server ship
+ *                together, so there is no legacy sender to tolerate).
  */
 export interface BuildParams {
   readonly root?: string;
   readonly books?: readonly string[];
   readonly format?: BuildFormat;
+  readonly settings: HtmlSettings;
 }
 
 export interface BuildArtifact {
@@ -230,10 +256,11 @@ export interface ListBooksResult {
 
 export const RenderFileRequest = 'jpnov/renderFile';
 
-/** Strings only — `text` is the live dirty buffer of the previewed file. */
+/** `text` is the live dirty buffer of the previewed file; `settings` the client's snapshot. */
 export interface RenderFileParams {
   readonly uri: string;
   readonly text: string;
+  readonly settings: PreviewSettings;
 }
 
 export interface RenderFileResult {

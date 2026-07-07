@@ -3,7 +3,7 @@ import type {
   NovelConfigFormat,
   RawNovelConfig,
 } from './types.ts';
-import { CHARS_MAX, CHARS_MIN, DEFAULT } from './types.ts';
+import { DEFAULT } from './types.ts';
 
 /**
  * See also `activationEvents` in `package.json`, which must be kept in sync with
@@ -73,30 +73,6 @@ export function loadModuleConfig(mod: Record<string, unknown>): RawNovelConfig {
 }
 
 /**
- * Normalizes one numeric layout field: must be a safe integer; out-of-range values
- * are clamped to `[min..max]`; invalid values fall back to `fallback` (per-field — a
- * single bad number never rejects the whole config).
- */
-function normalizeNumeric(
-  value: unknown,
-  fallback: number,
-  min = CHARS_MIN,
-  max = CHARS_MAX,
-): number {
-  if (!Number.isSafeInteger(value)) {
-    return fallback;
-  }
-  const n = value as number;
-  if (n < min) {
-    return min;
-  }
-  if (n > max) {
-    return max;
-  }
-  return n;
-}
-
-/**
  * Validates an optional string list (characters / keywords): keeps non-empty strings, dedups
  * first-seen, and returns `undefined` when there is nothing usable — dropping bad items rather
  * than rejecting the whole config.
@@ -122,18 +98,11 @@ export function initConfig(raw: unknown): RawNovelConfig {
   if (raw === null || typeof raw !== 'object') {
     return { ...DEFAULT };
   }
-  const { sourceDir, charsPerLine, linesPerPage, outDir, characters, keywords, avoidLineBreaks } =
+  const { sourceDir, outDir, characters, keywords, avoidLineBreaks } =
     raw as Record<string, unknown>;
   const result: RawNovelConfig = {
     sourceDir:
       typeof sourceDir === 'string' && sourceDir ? sourceDir : DEFAULT.sourceDir,
-    charsPerLine: normalizeNumeric(
-      charsPerLine,
-      DEFAULT.charsPerLine,
-      CHARS_MIN,
-      CHARS_MAX,
-    ),
-    linesPerPage: normalizeNumeric(linesPerPage, DEFAULT.linesPerPage),
   };
   if (typeof outDir === 'string' && outDir) {
     result.outDir = outDir;

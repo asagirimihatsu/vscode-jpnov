@@ -43,10 +43,9 @@ function written(suffix: string): string | undefined {
   return state.writtenFiles.find((f) => f.uri.endsWith(suffix))?.content;
 }
 
-/** Queue answers for a full run: Q1 (disable AI), chars, lines, Q3 (avoidLineBreaks). */
-function answer(opts: { disableAi: boolean; chars: string; lines: string; avoid: boolean }): void {
+/** Queue answers for a full run: Q1 (disable AI), Q2 (avoidLineBreaks). */
+function answer(opts: { disableAi: boolean; avoid: boolean }): void {
   state.quickPickQueue.push({ value: opts.disableAi }, { value: opts.avoid });
-  state.inputBoxQueue.push(opts.chars, opts.lines);
 }
 
 test('registers the jpnov.initWorkspace command', () => {
@@ -66,7 +65,7 @@ test('no folder open: errors and writes nothing', async () => {
 
 test('happy path, disable AI = yes: writes all 6 files with correct content', async () => {
   singleFolder();
-  answer({ disableAi: true, chars: '40', lines: '34', avoid: false });
+  answer({ disableAi: true, avoid: false });
 
   await handler()();
 
@@ -87,13 +86,12 @@ test('happy path, disable AI = yes: writes all 6 files with correct content', as
   assert.equal(launchObj.version, '0.2.0');
   assert.equal(launchObj.configurations.length, 2);
 
-  // novel.jp.json — from DEFAULT + answers, avoidLineBreaks omitted when off.
+  // novel.jp.json — from DEFAULT + answers, avoidLineBreaks omitted when off. Grid
+  // geometry lives in the jpnov.layout.* settings now, so the scaffold has no numbers.
   const config = written('novel.jp.json');
   assert.ok(config);
   assert.deepEqual(JSON.parse(config), {
     sourceDir: './src',
-    charsPerLine: 40,
-    linesPerPage: 34,
     outDir: 'dist',
   });
 
@@ -113,7 +111,7 @@ test('happy path, disable AI = yes: writes all 6 files with correct content', as
 
 test('disable AI = no: omits settings.json (5 files)', async () => {
   singleFolder();
-  answer({ disableAi: false, chars: '40', lines: '34', avoid: false });
+  answer({ disableAi: false, avoid: false });
 
   await handler()();
 
@@ -124,7 +122,7 @@ test('disable AI = no: omits settings.json (5 files)', async () => {
 
 test('avoidLineBreaks = yes is written into novel.jp.json', async () => {
   singleFolder();
-  answer({ disableAi: false, chars: '20', lines: '40', avoid: true });
+  answer({ disableAi: false, avoid: true });
 
   await handler()();
 
@@ -132,8 +130,6 @@ test('avoidLineBreaks = yes is written into novel.jp.json', async () => {
   assert.ok(config);
   assert.deepEqual(JSON.parse(config), {
     sourceDir: './src',
-    charsPerLine: 20,
-    linesPerPage: 40,
     avoidLineBreaks: true,
     outDir: 'dist',
   });
@@ -142,7 +138,7 @@ test('avoidLineBreaks = yes is written into novel.jp.json', async () => {
 test('aborts (no prompts, no writes) when novel.jp.json already exists', async () => {
   singleFolder();
   seed(`${ROOT}/novel.jp.json`);
-  answer({ disableAi: true, chars: '40', lines: '34', avoid: false });
+  answer({ disableAi: true, avoid: false });
 
   await handler()();
 
@@ -183,43 +179,13 @@ test('Esc at Q1 aborts silently (no writes, no error)', async () => {
   assert.equal(state.quickPickCalls.length, 1);
 });
 
-test('numeric validateInput enforces per-field integer ranges', async () => {
-  singleFolder();
-  answer({ disableAi: false, chars: '40', lines: '34', avoid: false });
-
-  await handler()();
-
-  // Q: charsPerLine — [16..80] (the preview's fit-to-viewport font bounds).
-  const chars = state.inputBoxCalls[0]?.options as {
-    validateInput?: (v: string) => string | undefined;
-  };
-  assert.ok(chars.validateInput);
-  assert.equal(chars.validateInput('40'), undefined);
-  assert.equal(chars.validateInput('16'), undefined);
-  assert.equal(chars.validateInput('80'), undefined);
-  assert.match(chars.validateInput('15') ?? '', /whole number from 16 to 80/);
-  assert.match(chars.validateInput('81') ?? '', /whole number from 16 to 80/);
-  assert.match(chars.validateInput('1.5') ?? '', /whole number/);
-  assert.match(chars.validateInput('abc') ?? '', /whole number/);
-
-  // Q: linesPerPage — keeps the generic [1..1000].
-  const lines = state.inputBoxCalls[1]?.options as {
-    validateInput?: (v: string) => string | undefined;
-  };
-  assert.ok(lines.validateInput);
-  assert.equal(lines.validateInput('1'), undefined);
-  assert.equal(lines.validateInput('1000'), undefined);
-  assert.match(lines.validateInput('0') ?? '', /whole number from 1 to 1000/);
-  assert.match(lines.validateInput('1001') ?? '', /whole number from 1 to 1000/);
-});
-
 test('multi-root: scaffolds into the picked folder', async () => {
   state.workspaceFolders = [
     { uri: Uri.file('/multi-a'), name: 'a', index: 0 },
     { uri: Uri.file('/multi-b'), name: 'b', index: 1 },
   ];
   state.workspaceFolderPickResult = { uri: Uri.file('/multi-b') };
-  answer({ disableAi: false, chars: '40', lines: '34', avoid: false });
+  answer({ disableAi: false, avoid: false });
 
   await handler()();
 
@@ -248,7 +214,7 @@ test('.gitignore: appends dist/ to an existing file, preserving content', async 
   const gitignore = Uri.file(`${ROOT}/.gitignore`).toString();
   state.fsEntries.set(gitignore, FileType.File);
   state.fsContent.set(gitignore, 'node_modules/\n');
-  answer({ disableAi: false, chars: '40', lines: '34', avoid: false });
+  answer({ disableAi: false, avoid: false });
 
   await handler()();
 
@@ -260,7 +226,7 @@ test('.gitignore: no-op when dist/ is already ignored', async () => {
   const gitignore = Uri.file(`${ROOT}/.gitignore`).toString();
   state.fsEntries.set(gitignore, FileType.File);
   state.fsContent.set(gitignore, 'dist/\n');
-  answer({ disableAi: false, chars: '40', lines: '34', avoid: false });
+  answer({ disableAi: false, avoid: false });
 
   await handler()();
 

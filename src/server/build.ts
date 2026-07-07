@@ -28,6 +28,7 @@ import { filelistOutRel, parseFilelist } from '#/shared/book/filelist.ts';
 import { concatBookText, renderBook } from '#/shared/compiler/document.ts';
 import type { BookInput } from '#/shared/compiler/document.ts';
 import { LocalizedError } from '#/shared/messages.ts';
+import { resolveHtmlSettings } from '#/shared/config/settings.ts';
 import { resolveContained } from '#/shared/config/validate.ts';
 import type { ResolvedConfig } from '#/shared/config/types.ts';
 import type {
@@ -37,6 +38,7 @@ import type {
   BuildFormat,
   BuildParams,
   BuildResult,
+  HtmlSettings,
   ListBooksParams,
   ListBooksResult,
   LocalizableMessage,
@@ -70,6 +72,8 @@ interface BuildSelection {
   readonly books: ReadonlySet<string> | undefined;
   /** When set, emit only that kind; `undefined` = BOTH `.txt` and `.html`. */
   readonly format: BuildFormat | undefined;
+  /** The re-resolved render settings the `.html` artifacts use (grid geometry + chrome). */
+  readonly settings: HtmlSettings;
 }
 
 function joinRel(parent: string, name: string): string {
@@ -229,11 +233,15 @@ async function buildRoot(
       artifacts.push({ path: childUri(config.outDirUri, `${outRel}.txt`), content: concatBookText(input) });
     }
     if (selection.format !== 'txt') {
+      // Grid geometry + chrome come from the request's settings snapshot (HtmlSettings is a
+      // structural superset of BuildChrome, so it passes straight through); 禁則 stays a
+      // per-root novel.jp.* concern.
       const html = renderBook({
         books: [input],
-        charsPerLine: config.charsPerLine,
-        linesPerPage: config.linesPerPage,
+        charsPerLine: selection.settings.charsPerLine,
+        linesPerPage: selection.settings.linesPerPage,
         avoidLineBreaks: config.avoidLineBreaks ?? false,
+        chrome: selection.settings,
       });
       artifacts.push({ path: childUri(config.outDirUri, `${outRel}.html`), content: html });
     }
@@ -266,9 +274,12 @@ export async function handleBuild(
 
   // `books` ABSENT => build every discovered book; PRESENT (even empty `[]`, which is truthy)
   // => restrict to exactly that set, so an empty selection legitimately builds nothing.
+  // Settings are re-resolved once here (clamp + enum coercion of the untrusted payload)
+  // and shared by every root in this build.
   const selection: BuildSelection = {
     books: params.books ? new Set(params.books) : undefined,
     format: params.format,
+    settings: resolveHtmlSettings(params.settings),
   };
 
   // The server cannot localize a $/progress title (no vscode.l10n in the fork); the client shows

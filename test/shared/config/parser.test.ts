@@ -61,12 +61,10 @@ test('matchConfig skips entries that do not match the allow mask (e.g. directori
   assert.equal(matchConfig([['novel.jp.json', DIR]], FILE_TYPE_FILE), null);
 });
 
-test('parseDataConfig parses JSON with the renamed numeric fields', () => {
-  const bytes = new TextEncoder().encode('{"charsPerLine":43,"linesPerPage":40}');
+test('parseDataConfig parses JSON and fills the per-field defaults', () => {
+  const bytes = new TextEncoder().encode('{"sourceDir":"./manuscript"}');
   assert.deepEqual(parseDataConfig(bytes), {
-    sourceDir: DEFAULT.sourceDir,
-    charsPerLine: 43,
-    linesPerPage: 40,
+    sourceDir: './manuscript',
     outDir: DEFAULT.outDir,
   });
 });
@@ -76,28 +74,11 @@ test('parseDataConfig throws on malformed JSON', () => {
   assert.throws(() => parseDataConfig(invalidBytes));
 });
 
-test('initConfig clamps out-of-range numerics per field', () => {
-  // charsPerLine clamps to [16..80] (the preview's fit-to-viewport font keeps type
-  // legible only in that range); linesPerPage keeps the generic [1..1000].
-  assert.deepEqual(initConfig({ charsPerLine: 0, linesPerPage: 99999 }), {
+test('initConfig silently ignores unknown keys, including the migrated grid fields', () => {
+  // charsPerLine / linesPerPage moved to the jpnov.layout.* settings; a leftover key in
+  // an old novel.jp.* is dropped like any other unknown key — no error, no passthrough.
+  assert.deepEqual(initConfig({ charsPerLine: 43, linesPerPage: 40, sourceDir: '' }), {
     sourceDir: DEFAULT.sourceDir,
-    charsPerLine: 16,
-    linesPerPage: 64,
-    outDir: DEFAULT.outDir,
-  });
-  assert.deepEqual(initConfig({ charsPerLine: 99999, linesPerPage: 0 }), {
-    sourceDir: DEFAULT.sourceDir,
-    charsPerLine: 64,
-    linesPerPage: 16,
-    outDir: DEFAULT.outDir,
-  });
-});
-
-test('initConfig falls back per field on invalid numerics, keeping good ones', () => {
-  assert.deepEqual(initConfig({ charsPerLine: 'nope', linesPerPage: 12.5, sourceDir: '' }), {
-    sourceDir: DEFAULT.sourceDir,
-    charsPerLine: DEFAULT.charsPerLine,
-    linesPerPage: DEFAULT.linesPerPage,
     outDir: DEFAULT.outDir,
   });
 });
@@ -105,8 +86,6 @@ test('initConfig falls back per field on invalid numerics, keeping good ones', (
 test('initConfig accepts a custom sourceDir and outDir', () => {
   assert.deepEqual(initConfig({ sourceDir: './manuscript', outDir: 'build' }), {
     sourceDir: './manuscript',
-    charsPerLine: DEFAULT.charsPerLine,
-    linesPerPage: DEFAULT.linesPerPage,
     outDir: 'build',
   });
 });
@@ -148,16 +127,15 @@ test('initConfig: a non-array or all-invalid characters/keywords becomes undefin
 });
 
 test('loadModuleConfig prefers the default export, else the namespace', () => {
-  assert.deepEqual(loadModuleConfig({ default: { charsPerLine: 41, linesPerPage: 18 }, charsPerLine: 42 }), {
-    sourceDir: DEFAULT.sourceDir,
-    charsPerLine: 41,
-    linesPerPage: 18,
-    outDir: DEFAULT.outDir,
-  });
-  assert.deepEqual(loadModuleConfig({ charsPerLine: 42, linesPerPage: 38 }), {
-    sourceDir: DEFAULT.sourceDir,
-    charsPerLine: 42,
-    linesPerPage: 38,
+  assert.deepEqual(
+    loadModuleConfig({ default: { sourceDir: './from-default' }, sourceDir: './from-ns' }),
+    {
+      sourceDir: './from-default',
+      outDir: DEFAULT.outDir,
+    },
+  );
+  assert.deepEqual(loadModuleConfig({ sourceDir: './from-ns' }), {
+    sourceDir: './from-ns',
     outDir: DEFAULT.outDir,
   });
 });
@@ -166,10 +144,9 @@ test('loadModuleConfig imports mjs / cjs / js / ts configs via dynamic import', 
   for (const name of ['ok.mjs', 'ok.cjs', 'ok.js', 'ok.ts'] as const) {
     const url = fixture(name);
     const mod = (await import(url)) as Record<string, unknown>;
+    // The fixtures still carry the migrated grid keys — dropped silently, like any unknown key.
     assert.deepEqual(loadModuleConfig(mod), {
       sourceDir: './src',
-      charsPerLine: 40,
-      linesPerPage: 34,
       outDir: DEFAULT.outDir,
     });
   }

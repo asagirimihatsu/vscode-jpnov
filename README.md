@@ -23,8 +23,8 @@ The extension activates when you open a `.jpnov` or `.filelist` file, or when a
 **`.filelist` editing** (completion, diagnostics, links) work with no config.
 
 To scaffold a fresh project, run **Japanese Novel: Init Workspace** from the Command
-Palette. It asks a few questions (disable AI in the workspace? characters-per-line and
-lines-per-page? enable 禁則処理?), then writes `novel.jp.json`, a sample
+Palette. It asks a few questions (disable AI in the workspace? enable 禁則処理?), then
+writes `novel.jp.json`, a sample
 `src/first-chapter.jpnov` + `src/volume1.filelist`, a `.vscode/launch.json` carrying the
 build entries, a `.gitignore` that keeps the generated `dist/` out of version control,
 and — if you opt in — a `.vscode/settings.json` that turns Copilot and inline suggestions
@@ -33,8 +33,8 @@ off for the workspace. It aborts rather than overwrite any file it would create 
 already holds unrelated content.
 
 **Build** lives in the **Books** panel of the **Run and Debug** view, which appears
-once a `novel.jp.*` config is present (the config supplies the output directory and
-the page layout). Each discovered `*.filelist` is one book with a checkbox; tick the
+once a `novel.jp.*` config is present (the config supplies the output directory). Each
+discovered `*.filelist` is one book with a checkbox; tick the
 ones you want, then build them either from the panel's title-bar actions or — once a
 `.vscode/launch.json` exists (run **Init Workspace** to get one) — from the **Run and
 Debug** launch dropdown (the green ▶): **Build selected as HTML** renders the

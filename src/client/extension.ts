@@ -227,13 +227,22 @@ function ensureStarted(): void {
     }),
   );
 
-  // Push jpnov.lint.* changes so the server re-lints open files live. Gated on Running: a change
-  // during start/stop is dropped (the next start re-seeds the selection via initializationOptions).
+  // Push jpnov.lint.* changes so the server re-lints open files live; re-render the preview
+  // when its layout/preview settings change. Gated on Running: a change during start/stop is
+  // dropped (the next start re-seeds lint via initializationOptions; the preview re-reads its
+  // snapshot on the next render anyway). jpnov.html.* changes need no push — they only feed
+  // on-demand builds.
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('jpnov.lint') && client?.state === State.Running) {
+      if (client?.state !== State.Running) {
+        return;
+      }
+      if (e.affectsConfiguration('jpnov.lint')) {
         const params: LintConfigChangedParams = { lintConfig: buildLintSnapshot() };
         void client.sendNotification(LintConfigChangedNotification, params);
+      }
+      if (e.affectsConfiguration('jpnov.layout') || e.affectsConfiguration('jpnov.preview')) {
+        preview?.refresh();
       }
     }),
   );
