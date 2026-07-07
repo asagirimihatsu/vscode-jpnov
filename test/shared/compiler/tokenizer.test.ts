@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   findBrokenAnnotations,
+  findUnpairedBlocks,
   tokenize,
   type Token,
 } from '../../../src/shared/compiler/tokenizer.ts';
@@ -90,13 +91,15 @@ test('tokenize classifies a postfix emphasis annotation', () => {
   ]);
 });
 
-test('tokenize classifies の左に postfix and keeps the 左に in the variant', () => {
+test('tokenize classifies の左に postfix and keeps the whole の左に in the variant', () => {
+  // の is NOT a connector (only に/は are stripped): the の左に direction prefix travels
+  // whole inside the variant and resolveStyle handles it.
   const toks = tokenize('対象［＃「対象」の左に傍点］');
   assert.deepEqual(toks[1], {
     kind: 'emphasisPostfix',
     raw: '［＃「対象」の左に傍点］',
     target: '対象',
-    variant: '左に傍点',
+    variant: 'の左に傍点',
   });
 });
 
@@ -119,10 +122,16 @@ test('tokenize maps ［＃改ページ］ to a pageBreak token', () => {
   assert.equal(toks[1]?.raw, '［＃改ページ］');
 });
 
-test('tokenize routes the 傍線 family and any unknown bracket to a comment', () => {
+test('tokenize recognises 傍線 postfix; a half-width block 字下げ stays a comment', () => {
   const toks = tokenize('文［＃「文」に傍線］［＃ここから2字下げ］');
-  assert.deepEqual(kinds(toks), ['text', 'comment', 'comment']);
-  assert.equal((toks[1] as { inner: string }).inner, '「文」に傍線');
+  assert.deepEqual(kinds(toks), ['text', 'emphasisPostfix', 'comment']);
+  assert.deepEqual(toks[1], {
+    kind: 'emphasisPostfix',
+    raw: '［＃「文」に傍線］',
+    target: '文',
+    variant: '傍線',
+  });
+  // Full-width digits only (locked spec): the half-width 2 degrades to a comment.
   assert.equal((toks[2] as { inner: string }).inner, 'ここから2字下げ');
 });
 
@@ -220,4 +229,172 @@ test('same-line ruby after a broken-annotation line still parses', () => {
   const toks = tokenize('［＃こわれ\n漢字《かんじ》');
   assert.deepEqual(kinds(toks), ['brokenAnnotation', 'text', 'rubyImplicit']);
   assert.deepEqual(toks[2], { kind: 'rubyImplicit', raw: '漢字《かんじ》', base: '漢字', reading: 'かんじ' });
+});
+
+// --------------------------------------------------------------- 字下げ (indent)
+
+test('a line-head ［＃○字下げ］ is an indent token (full-width digits, multi-digit ok)', () => {
+  assert.deepEqual(tokenize('［＃３字下げ］本文')[0], {
+    kind: 'indent',
+    raw: '［＃３字下げ］',
+    amount: 3,
+  });
+  // Line-head after a newline counts too.
+  const toks = tokenize('　まくら\n［＃２字下げ］次');
+  assert.deepEqual(toks[1], { kind: 'indent', raw: '［＃２字下げ］', amount: 2 });
+  // Any number of digits parses; the layout clamps (no lexer-side bound).
+  assert.deepEqual(tokenize('［＃１００字下げ］x')[0], {
+    kind: 'indent',
+    raw: '［＃１００字下げ］',
+    amount: 100,
+  });
+  // Leading zeros parse numerically; 0 is a valid (layout no-op) amount.
+  assert.equal((tokenize('［＃００３字下げ］x')[0] as { amount: number }).amount, 3);
+  assert.deepEqual(tokenize('［＃０字下げ］x')[0], {
+    kind: 'indent',
+    raw: '［＃０字下げ］',
+    amount: 0,
+  });
+});
+
+test('a mid-line ［＃○字下げ］ degrades to a comment (line-head only, strict column 0)', () => {
+  const toks = tokenize('本文［＃３字下げ］');
+  assert.deepEqual(kinds(toks), ['text', 'comment']);
+  assert.equal((toks[1] as { inner: string }).inner, '３字下げ');
+  // A leading full-width space also disqualifies it — the ［ must open the line.
+  assert.deepEqual(kinds(tokenize('　［＃３字下げ］')), ['text', 'comment']);
+  // A lone \r is a line separator in the editor's model, so the ［ after it IS line-head.
+  assert.deepEqual(kinds(tokenize('A\r［＃３字下げ］')), ['text', 'indent']);
+});
+
+test('half-width and kanji numerals degrade to comments (full-width only)', () => {
+  assert.deepEqual(kinds(tokenize('［＃3字下げ］')), ['comment']);
+  assert.deepEqual(kinds(tokenize('［＃三字下げ］')), ['comment']);
+});
+
+test('block 字下げ start/end tokens pair around lines', () => {
+  const toks = tokenize('［＃ここから２字下げ］\nA\n［＃ここで字下げ終わり］');
+  assert.deepEqual(toks[0], {
+    kind: 'indentBlockStart',
+    raw: '［＃ここから２字下げ］',
+    amount: 2,
+  });
+  assert.deepEqual(toks[2], { kind: 'indentBlockEnd', raw: '［＃ここで字下げ終わり］' });
+});
+
+test('the hanging-indent 折り返して form degrades to a comment (out of scope)', () => {
+  const toks = tokenize('［＃ここから２字下げ、折り返して３字下げ］');
+  assert.deepEqual(kinds(toks), ['comment']);
+});
+
+// --------------------------------------------------------------- 太字 / 斜体 / 傍線
+
+test('block 太字/斜体 reuse the span tokens with block:true', () => {
+  const toks = tokenize('［＃ここから太字］\nA\n［＃ここで太字終わり］');
+  assert.deepEqual(toks[0], {
+    kind: 'emphasisSpanStart',
+    raw: '［＃ここから太字］',
+    variant: '太字',
+    block: true,
+  });
+  assert.deepEqual(toks[2], {
+    kind: 'emphasisSpanEnd',
+    raw: '［＃ここで太字終わり］',
+    variant: '太字',
+    block: true,
+  });
+  assert.equal((tokenize('［＃ここから斜体］')[0] as { variant: string }).variant, '斜体');
+});
+
+test('inline 太字/斜体 spans carry no block flag', () => {
+  const toks = tokenize('あ［＃太字］い［＃太字終わり］');
+  assert.deepEqual(toks[1], { kind: 'emphasisSpanStart', raw: '［＃太字］', variant: '太字' });
+  assert.deepEqual(toks[3], {
+    kind: 'emphasisSpanEnd',
+    raw: '［＃太字終わり］',
+    variant: '太字',
+  });
+});
+
+test('傍点/傍線 have no block form: ここから傍点 / ここで傍点終わり are comments', () => {
+  assert.deepEqual(kinds(tokenize('［＃ここから傍点］')), ['comment']);
+  assert.deepEqual(kinds(tokenize('［＃ここで傍点終わり］')), ['comment']);
+});
+
+test('傍線 span and left variants tokenize like 傍点', () => {
+  const toks = tokenize('［＃二重傍線］x［＃二重傍線終わり］');
+  assert.deepEqual(kinds(toks), ['emphasisSpanStart', 'text', 'emphasisSpanEnd']);
+  assert.equal((toks[0] as { variant: string }).variant, '二重傍線');
+  assert.equal((tokenize('［＃左に波線］')[0] as { variant: string }).variant, '左に波線');
+  assert.deepEqual(tokenize('語［＃「語」の左に傍線］')[1], {
+    kind: 'emphasisPostfix',
+    raw: '［＃「語」の左に傍線］',
+    target: '語',
+    variant: 'の左に傍線',
+  });
+});
+
+test('太字 postfix requires the は connector', () => {
+  assert.deepEqual(tokenize('重要［＃「重要」は太字］')[1], {
+    kind: 'emphasisPostfix',
+    raw: '［＃「重要」は太字］',
+    target: '重要',
+    variant: '太字',
+  });
+  // Bare (no connector) 太字 postfix is NOT accepted — mirrors the grammar's mandatory (は).
+  assert.deepEqual(kinds(tokenize('x［＃「x」太字］')), ['text', 'comment']);
+});
+
+test('connector×channel mismatches degrade to comments', () => {
+  assert.deepEqual(kinds(tokenize('x［＃「x」は傍点］')), ['text', 'comment']); // は+dot
+  assert.deepEqual(kinds(tokenize('x［＃「x」に太字］')), ['text', 'comment']); // に+weight
+  assert.deepEqual(kinds(tokenize('x［＃「x」のばつ傍点］')), ['text', 'comment']); // lone の
+  assert.deepEqual(kinds(tokenize('x［＃「x」の左に太字］')), ['text', 'comment']); // 太字 has no side
+  // The lenient existing behaviour stays: bare 傍点 postfix (no に) is accepted.
+  assert.deepEqual(kinds(tokenize('x［＃「x」傍点］')), ['text', 'emphasisPostfix']);
+});
+
+// --------------------------------------------------------------- findUnpairedBlocks
+
+test('findUnpairedBlocks flags an unterminated ここから over the start annotation', () => {
+  assert.deepEqual(findUnpairedBlocks('［＃ここから２字下げ］\nA'), [
+    { start: 0, end: 11, kind: 'unterminated' },
+  ]);
+});
+
+test('findUnpairedBlocks flags a dangling ここで…終わり over the end annotation', () => {
+  assert.deepEqual(findUnpairedBlocks('A\n［＃ここで字下げ終わり］'), [
+    { start: 2, end: 14, kind: 'dangling' },
+  ]);
+});
+
+test('findUnpairedBlocks: balanced pairs and cross-channel overlap are clean', () => {
+  assert.deepEqual(findUnpairedBlocks('［＃ここから太字］\nA\n［＃ここで太字終わり］'), []);
+  assert.deepEqual(
+    findUnpairedBlocks(
+      '［＃ここから２字下げ］\n［＃ここから太字］\nA\n［＃ここで太字終わり］\n［＃ここで字下げ終わり］',
+    ),
+    [],
+  );
+});
+
+test('findUnpairedBlocks: a same-channel re-open replaces the slot (last-wins, no warning)', () => {
+  assert.deepEqual(
+    findUnpairedBlocks('［＃ここから２字下げ］\n［＃ここから４字下げ］\nA\n［＃ここで字下げ終わり］'),
+    [],
+  );
+});
+
+test('findUnpairedBlocks: only a SECOND end of the same channel dangles', () => {
+  assert.deepEqual(
+    findUnpairedBlocks('［＃ここから太字］\nA\n［＃ここで太字終わり］\n［＃ここで太字終わり］'),
+    [{ start: 24, end: 35, kind: 'dangling' }],
+  );
+});
+
+test('findUnpairedBlocks: inline spans never participate in block pairing', () => {
+  assert.deepEqual(findUnpairedBlocks('［＃太字］A'), []);
+  assert.deepEqual(findUnpairedBlocks('［＃太字］A［＃ここで太字終わり］'), [
+    { start: 6, end: 17, kind: 'dangling' },
+  ]);
 });

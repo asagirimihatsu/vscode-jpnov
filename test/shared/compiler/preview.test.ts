@@ -107,3 +107,21 @@ test('renderPreview scales the root font so a full line fills the pane height', 
   const html = renderPreview('本文', { charsPerLine: 20 });
   assert.match(html, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ 20\)/);
 });
+
+test('renderPreview: 傍線 postfix emits a dec-solid span + its on-demand rule (right side)', () => {
+  const out = renderPreview('語［＃「語」に傍線］');
+  assert.match(out, /<span class="dec-solid">語<\/span>/);
+  assert.match(
+    out,
+    /\.dec-solid\{text-decoration-line:underline;text-decoration-style:solid;text-underline-position:right\}/,
+  );
+});
+
+test('renderPreview: block 字下げ continuations keep indent-N; only the first column anchors', () => {
+  const out = renderPreview('［＃ここから１字下げ］\n一二\n［＃ここで字下げ終わり］', {
+    charsPerLine: 2,
+  });
+  assert.match(out, /<div class="line indent-1" data-line="1">一<\/div>/);
+  assert.match(out, /<div class="line indent-1">二<\/div>/);
+  assert.match(out, /\.indent-1\{padding-inline-start:1em\}/);
+});

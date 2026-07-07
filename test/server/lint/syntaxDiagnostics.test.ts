@@ -56,3 +56,59 @@ test('an unclosed ［＃ at end of input (no trailing newline) spans to the docu
     end: { line: 0, character: 8 },
   });
 });
+
+// --------------------------------------------------------------- block pairing Warnings
+
+test('an unterminated ここから block yields one Warning over the ここから body', () => {
+  const diags = annotationDiagnostics(doc('［＃ここから２字下げ］\n本文だけで終わる'));
+  assert.equal(diags.length, 1);
+  const d = diags[0];
+  assert.ok(d);
+  assert.equal(d.severity, DiagnosticSeverity.Warning);
+  assert.deepEqual(d.data, { code: 'syntax.unterminatedBlock' });
+  assert.equal(d.message, 'unterminated block annotation (missing ［＃ここで…終わり］)');
+  assert.deepEqual(d.range, {
+    start: { line: 0, character: 0 },
+    end: { line: 0, character: 11 }, // ［＃ここから２字下げ］
+  });
+});
+
+test('a dangling ここで…終わり yields one Warning over the 終わり body', () => {
+  const diags = annotationDiagnostics(doc('本文\n［＃ここで字下げ終わり］'));
+  assert.equal(diags.length, 1);
+  const d = diags[0];
+  assert.ok(d);
+  assert.equal(d.severity, DiagnosticSeverity.Warning);
+  assert.deepEqual(d.data, { code: 'syntax.danglingBlockEnd' });
+  assert.equal(d.message, 'block-end annotation without a matching start');
+  assert.deepEqual(d.range, {
+    start: { line: 1, character: 0 },
+    end: { line: 1, character: 12 }, // ［＃ここで字下げ終わり］
+  });
+});
+
+test('a balanced block pair yields no diagnostics', () => {
+  assert.deepEqual(
+    annotationDiagnostics(doc('［＃ここから２字下げ］\n本文\n［＃ここで字下げ終わり］')),
+    [],
+  );
+});
+
+test('a same-channel re-open replaces the slot (last-wins) — balanced, no Warning', () => {
+  // ２字下げ → ４字下げ is a legal amount change (render is last-wins); one ここで clears it.
+  // A stack model would wrongly flag the first ここから as unterminated (diagnostic ≠ render).
+  assert.deepEqual(
+    annotationDiagnostics(
+      doc('［＃ここから２字下げ］\n本文\n［＃ここから４字下げ］\n本文\n［＃ここで字下げ終わり］'),
+    ),
+    [],
+  );
+});
+
+test('lexical Errors come first, then block Warnings', () => {
+  const diags = annotationDiagnostics(doc('［＃ここから太字］\n壊れ［＃こわれ'));
+  assert.deepEqual(
+    diags.map((d) => d.severity),
+    [DiagnosticSeverity.Error, DiagnosticSeverity.Warning],
+  );
+});

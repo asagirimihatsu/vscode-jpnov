@@ -82,6 +82,22 @@ test('parity on a generated large corpus (many chunks, violations near seams)', 
   assert.deepEqual(tiny, whole);
 });
 
+test('parity with block annotations straddling many chunk seams', async () => {
+  // Block 字下げ + block 太字 contribute zero prose (they vanish at stream extraction), so a
+  // seam can never bisect a ここから/ここで pair — assert it stays true across ~50 forced seams.
+  const para =
+    '［＃ここから２字下げ］\n' +
+    '　これは長い段落でありまして、読点、が、続いて、句点で終わる。\n' +
+    '［＃ここから太字］この一節は太字。［＃ここで太字終わり］\n' +
+    '「開いた括弧の台詞」\n' +
+    '［＃ここで字下げ終わり］\n\n';
+  const src = para.repeat(50);
+  const tiny = normalized(await lintWith(src, TINY));
+  const whole = normalized(await lintWith(src, UNCHUNKED));
+  assert.ok(tiny.length > 0, 'corpus produced no findings — rules not exercised');
+  assert.deepEqual(tiny, whole);
+});
+
 test('default chunking (no opts) also matches the unchunked baseline on a >target corpus', async () => {
   const para = '　この段落は既定の目標長を確実に超えるためだけに存在する、読点、多め、の、文章。\n'.repeat(80);
   assert.deepEqual(

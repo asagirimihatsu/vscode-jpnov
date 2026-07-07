@@ -49,7 +49,7 @@ import type { Recognizer } from './highlight/recognizer.ts';
  */
 const HIGHLIGHTS = [
   { kind: 'marker', lsp: 'comment' }, // ｜ 《 》 ［＃ ］ scaffolding + 「」『』 dialogue delimiters (greyed)
-  { kind: 'directive', lsp: 'keyword' }, // 傍点 variant names / 改ページ / 終わり
+  { kind: 'directive', lsp: 'keyword' }, // style variant names / 改ページ / 字下げ / ここから・ここで / 終わり
   { kind: 'direction', lsp: 'comment' }, // の?左に
   { kind: 'character', lsp: 'variable' }, // a cast member recognised as a narration subject (prominent)
   { kind: 'keyword', lsp: 'operator' }, // a coined keyword — bold, default colour
@@ -182,6 +182,16 @@ export function buildSemanticTokens(
   for (const token of tokenize(src)) {
     const raw = token.raw.length;
     const last = offset + raw - ONE; // position of the closing ］ / 》
+
+    // Whole inner = one directive: 改ページ, single-line & block 字下げ, and the block form of
+    // 太字/斜体 (no direction prefix, no target — nothing inside to sub-colour).
+    const markDirective = (): void => {
+      flushRun();
+      mark(offset, ANNOT_OPEN, 'marker'); // ［＃
+      mark(offset + ANNOT_OPEN, raw - ANNOT_OPEN - ONE, 'directive'); // inner, whole
+      mark(last, ONE, 'marker'); // ］
+    };
+
     switch (token.kind) {
       case 'text': {
         appendBody(token.text, offset);
@@ -201,13 +211,26 @@ export function buildSemanticTokens(
         break;
       }
       case 'pageBreak': {
-        flushRun();
-        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
-        mark(offset + ANNOT_OPEN, raw - ANNOT_OPEN - ONE, 'directive'); // 改ページ
-        mark(last, ONE, 'marker'); // ］
+        markDirective(); // 改ページ
+        break;
+      }
+      case 'indent': {
+        markDirective(); // ［＃○字下げ］ (the tokenizer emits this kind only at a line head)
+        break;
+      }
+      case 'indentBlockStart': {
+        markDirective(); // ［＃ここから○字下げ］
+        break;
+      }
+      case 'indentBlockEnd': {
+        markDirective(); // ［＃ここで字下げ終わり］
         break;
       }
       case 'emphasisSpanStart': {
+        if (token.block === true) {
+          markDirective(); // ［＃ここから太字/斜体］
+          break;
+        }
         flushRun();
         mark(offset, ANNOT_OPEN, 'marker'); // ［＃
         const ds = offset + ANNOT_OPEN;
@@ -218,6 +241,10 @@ export function buildSemanticTokens(
         break;
       }
       case 'emphasisSpanEnd': {
+        if (token.block === true) {
+          markDirective(); // ［＃ここで太字/斜体終わり］
+          break;
+        }
         flushRun();
         mark(offset, ANNOT_OPEN, 'marker'); // ［＃
         const ds = offset + ANNOT_OPEN;
@@ -236,7 +263,7 @@ export function buildSemanticTokens(
         const closeCorner = openCorner + ONE + token.target.length; // ( 対象 kept default )
         mark(closeCorner, ONE, 'marker'); // 」
         const afterCorner = closeCorner + ONE;
-        const conn = raw - (afterCorner - offset) - token.variant.length - ONE; // に / の (0 or 1)
+        const conn = raw - (afterCorner - offset) - token.variant.length - ONE; // に / は (0 or 1)
         mark(afterCorner, conn, 'marker');
         const vs = afterCorner + conn;
         const dir = directionLen(token.variant);

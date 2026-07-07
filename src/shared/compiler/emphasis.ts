@@ -1,104 +1,181 @@
 /**
- * Maps a 傍点 (emphasis-dot) variant name DIRECTLY to its CSS class name, and supplies the
- * class's CSS rule for the stylesheet. The compiler emits `<span class="emph-…">`, never an
- * inline `style=` attribute: class rules live inside the webview's nonce-able `<style>`,
- * which inline style attributes cannot (the CSP strips them — that was the preview 傍点 bug).
- * There is no intermediate CSS-value representation — a variant is translated to a class in
- * one step. Pure + vscode-free.
+ * Maps an Aozora style-annotation variant name DIRECTLY to its CSS class name + presentation
+ * channel, and supplies each class's CSS rule for the stylesheet. The compiler emits
+ * `<span class="…">`, never an inline `style=` attribute: class rules live inside the webview's
+ * nonce-able `<style>`, which inline style attributes cannot (the CSP strips them — that was the
+ * original preview 傍点 bug). There is no intermediate CSS-value representation — a variant is
+ * translated to a class in one step. Pure + vscode-free.
  *
- * The nine dot kinds (locked spec):
- *   傍点             emph-fs  filled sesame
- *   白ゴマ傍点        emph-os  open sesame
- *   丸傍点           emph-fc  filled circle
- *   白丸傍点          emph-oc  open circle
- *   二重丸傍点        emph-fd  filled double-circle
- *   蛇の目傍点        emph-od  open double-circle
- *   黒三角傍点        emph-ft  filled triangle
- *   白三角傍点        emph-ot  open triangle
- *   ばつ傍点 / ×傍点   emph-x   the literal full-width "×"
+ * FOUR ORTHOGONAL presentation channels — one CSS property family each, so all four can sit on
+ * one `<span>` together:
+ *   emph    傍点 (nine dot kinds)     text-emphasis-style     emph-<slug> / emph-<slug>-l
+ *   line    傍線 (five line styles)   text-decoration-*       dec-<slug>  / dec-<slug>-l
+ *   weight  太字                      font-weight:bold        b
+ *   style   斜体                      font-style:italic       i
  *
- * A leading 左に or の左に adds an `-l` suffix (`text-emphasis-position:left`), valid on all
- * nine. The line family (傍線/二重傍線/鎖線/破線/波線) is intentionally absent, so it falls
- * through to `null` and the caller degrades it to an HTML comment.
+ * The nine dot kinds (locked spec): 傍点 fs, 白ゴマ傍点 os, 丸傍点 fc, 白丸傍点 oc, 二重丸傍点 fd,
+ * 蛇の目傍点 od, 黒三角傍点 ft, 白三角傍点 ot, ばつ傍点/×傍点 x. The five line styles: 傍線 solid,
+ * 二重傍線 double, 鎖線 dotted, 破線 dashed, 波線 wavy.
  *
- * The `text-emphasis-style` CSS values live in ONE place — the rule table built from {@link
- * DOTS}. Slugs are a PRIVATE compiler detail (free to rename), not a public theming contract.
+ * A leading 左に / の左に yields the `-l` (left-side) class, valid ONLY on emph/line — 太字/斜体
+ * have no side, so 左に太字 → null. In vertical-rl the default side is the RIGHT of the column;
+ * `-l` moves the mark to the left:
+ *   - emph `-l` uses `text-emphasis-position:under left`. A bare `left` is INVALID CSS (the
+ *     grammar is `[ over | under ] && [ right | left ]?`), so the whole declaration was dropped
+ *     and the dots fell back to the right — that was the 左に傍点 bug. `under` is the horizontal
+ *     fallback (below the text), matching JP convention.
+ *   - line rules pin `text-underline-position:right` explicitly (Chromium draws vertical-rl
+ *     underlines on the LEFT by default — verified in headless Chromium); `-l` uses `left`.
+ *   - `i` relies on the browser synthesising an oblique for JP fonts; never set
+ *     `font-synthesis:none`, which silences it entirely (verified).
+ *
+ * The CSS values live in ONE place — the {@link RULES} table built from {@link STYLES} (b/i
+ * included: css.ts's classRule generates only indent-* itself and forwards everything else
+ * here). Slugs are a PRIVATE compiler detail (free to rename), not a public theming contract.
  * NOTE: the slug `x` is an HTML abbreviation; its emitted CSS value is the real full-width ×
- * glyph, never the ASCII letter.
+ * glyph, never the ASCII letter. {@link styleVariantsByChannel} feeds the grammar-sync drift
+ * test, which keeps the tmLanguage alternations literally equal to this table — regenerate them
+ * from that test's failure output, never by hand.
  */
 
-interface Dot {
-  /** Variant name(s) selecting this dot kind (ばつ傍点 / ×傍点 share one). */
+export type Channel = 'emph' | 'line' | 'weight' | 'style';
+
+/** A resolved variant: which presentation channel it drives and the CSS class to emit. */
+export interface Style {
+  readonly channel: Channel;
+  /** CSS class to place on the span, e.g. `emph-fs` / `emph-fs-l` / `dec-wavy` / `b`. */
+  readonly className: string;
+}
+
+interface StyleEntry {
+  /** Variant name(s) selecting this style (ばつ傍点 / ×傍点 share one). */
   readonly variants: readonly string[];
-  /** Short class slug, used as `emph-<slug>`. */
-  readonly slug: string;
-  /** The `text-emphasis-style` CSS value. */
+  readonly channel: Channel;
+  /** Base class; emph/line append `-l` for the left-side variant. */
+  readonly className: string;
+  /** text-emphasis-style (emph) / text-decoration-style (line); '' for weight/style. */
   readonly css: string;
 }
 
-const DOTS: readonly Dot[] = [
-  { variants: ['傍点'], slug: 'fs', css: 'filled sesame' },
-  { variants: ['白ゴマ傍点'], slug: 'os', css: 'open sesame' },
-  { variants: ['丸傍点'], slug: 'fc', css: 'filled circle' },
-  { variants: ['白丸傍点'], slug: 'oc', css: 'open circle' },
-  { variants: ['二重丸傍点'], slug: 'fd', css: 'filled double-circle' },
-  { variants: ['蛇の目傍点'], slug: 'od', css: 'open double-circle' },
-  { variants: ['黒三角傍点'], slug: 'ft', css: 'filled triangle' },
-  { variants: ['白三角傍点'], slug: 'ot', css: 'open triangle' },
+const STYLES: readonly StyleEntry[] = [
+  { variants: ['傍点'], channel: 'emph', className: 'emph-fs', css: 'filled sesame' },
+  { variants: ['白ゴマ傍点'], channel: 'emph', className: 'emph-os', css: 'open sesame' },
+  { variants: ['丸傍点'], channel: 'emph', className: 'emph-fc', css: 'filled circle' },
+  { variants: ['白丸傍点'], channel: 'emph', className: 'emph-oc', css: 'open circle' },
+  { variants: ['二重丸傍点'], channel: 'emph', className: 'emph-fd', css: 'filled double-circle' },
+  { variants: ['蛇の目傍点'], channel: 'emph', className: 'emph-od', css: 'open double-circle' },
+  { variants: ['黒三角傍点'], channel: 'emph', className: 'emph-ft', css: 'filled triangle' },
+  { variants: ['白三角傍点'], channel: 'emph', className: 'emph-ot', css: 'open triangle' },
   // The CSS <string> is single-quoted so the value stays well-formed wherever it is emitted.
-  { variants: ['ばつ傍点', '×傍点'], slug: 'x', css: "'×'" },
+  { variants: ['ばつ傍点', '×傍点'], channel: 'emph', className: 'emph-x', css: "'×'" },
+  { variants: ['傍線'], channel: 'line', className: 'dec-solid', css: 'solid' },
+  { variants: ['二重傍線'], channel: 'line', className: 'dec-double', css: 'double' },
+  { variants: ['鎖線'], channel: 'line', className: 'dec-dotted', css: 'dotted' },
+  { variants: ['破線'], channel: 'line', className: 'dec-dashed', css: 'dashed' },
+  { variants: ['波線'], channel: 'line', className: 'dec-wavy', css: 'wavy' },
+  { variants: ['太字'], channel: 'weight', className: 'b', css: '' },
+  { variants: ['斜体'], channel: 'style', className: 'i', css: '' },
 ];
 
-/** Variant name → class slug. Built once from {@link DOTS}. */
-const VARIANT_TO_SLUG: ReadonlyMap<string, string> = (() => {
-  const m = new Map<string, string>();
-  for (const dot of DOTS) {
-    for (const variant of dot.variants) {
-      m.set(variant, dot.slug);
+const LEFT_LONG = 'の左に';
+const LEFT_SHORT = '左に';
+
+/** Variant name → its table entry. Built once from {@link STYLES}. */
+const VARIANTS: ReadonlyMap<string, StyleEntry> = (() => {
+  const m = new Map<string, StyleEntry>();
+  for (const s of STYLES) {
+    for (const v of s.variants) {
+      m.set(v, s);
     }
   }
   return m;
 })();
 
-/** Class name → full CSS rule. The ONLY place the `text-emphasis-style` values live. */
+/** Class name → full CSS rule. The ONLY place the style CSS values live. */
 const RULES: ReadonlyMap<string, string> = (() => {
   const m = new Map<string, string>();
-  for (const dot of DOTS) {
-    m.set(`emph-${dot.slug}`, `.emph-${dot.slug}{text-emphasis-style:${dot.css}}`);
-    m.set(
-      `emph-${dot.slug}-l`,
-      `.emph-${dot.slug}-l{text-emphasis-style:${dot.css};text-emphasis-position:left}`,
-    );
+  for (const s of STYLES) {
+    const cn = s.className;
+    switch (s.channel) {
+      case 'emph':
+        m.set(cn, `.${cn}{text-emphasis-style:${s.css}}`);
+        m.set(
+          `${cn}-l`,
+          `.${cn}-l{text-emphasis-style:${s.css};text-emphasis-position:under left}`,
+        );
+        break;
+      case 'line':
+        m.set(
+          cn,
+          `.${cn}{text-decoration-line:underline;text-decoration-style:${s.css};text-underline-position:right}`,
+        );
+        m.set(
+          `${cn}-l`,
+          `.${cn}-l{text-decoration-line:underline;text-decoration-style:${s.css};text-underline-position:left}`,
+        );
+        break;
+      case 'weight':
+        m.set(cn, `.${cn}{font-weight:bold}`); // no -l variant (太字 has no side)
+        break;
+      case 'style':
+        m.set(cn, `.${cn}{font-style:italic}`); // no -l variant (斜体 has no side)
+        break;
+    }
   }
   return m;
 })();
 
 /**
- * The CSS class name for an emphasis variant, or `null` for any non-dot / unknown variant
- * (the 傍線 line family etc., which the caller degrades to a comment). A leading 左に / の左に
- * yields the `-l` (left-position) class.
+ * The CSS class + channel for a style variant, or `null` for an unknown one. `variant` carries NO
+ * connector (the tokenizer stripped に/は); a leading の左に / 左に yields the `-l` class and is
+ * honoured ONLY for 傍点/傍線 (emph/line) — 太字/斜体 have no side, so 左に太字 → null (the caller
+ * degrades it to a comment).
  */
-export function emphasisClass(variant: string): string | null {
+export function resolveStyle(variant: string): Style | null {
   let name = variant;
   let left = false;
 
-  // 左に / の左に prefix => emphasis on the left side. Strip the longer alias first.
-  if (name.startsWith('の左に')) {
-    name = name.slice('の左に'.length);
+  // 左に / の左に prefix => the mark sits on the left side. Strip the longer alias first.
+  if (name.startsWith(LEFT_LONG)) {
+    name = name.slice(LEFT_LONG.length);
     left = true;
-  } else if (name.startsWith('左に')) {
-    name = name.slice('左に'.length);
+  } else if (name.startsWith(LEFT_SHORT)) {
+    name = name.slice(LEFT_SHORT.length);
     left = true;
   }
 
-  const slug = VARIANT_TO_SLUG.get(name);
-  if (slug === undefined) {
+  const entry = VARIANTS.get(name);
+  if (entry === undefined) {
     return null;
   }
-  return left ? `emph-${slug}-l` : `emph-${slug}`;
+  if (left) {
+    if (entry.channel !== 'emph' && entry.channel !== 'line') {
+      return null;
+    }
+    return { channel: entry.channel, className: `${entry.className}-l` };
+  }
+  return { channel: entry.channel, className: entry.className };
 }
 
-/** The CSS rule string for an emphasis class name, or '' for an unknown class. */
-export function emphasisClassRule(className: string): string {
+/**
+ * The full CSS rule for a style class name (emph-* / dec-* incl. `-l`, plus b / i), or '' for an
+ * unknown one. The SINGLE home of all text-emphasis / text-decoration / font-* values: css.ts's
+ * classRule generates only indent-* itself and forwards every other used class here.
+ */
+export function styleRule(className: string): string {
   return RULES.get(className) ?? '';
+}
+
+/**
+ * Recognised variant names per channel — the single source the grammar-sync test derives the
+ * tmLanguage alternations from (canonical order: length desc, code-unit asc).
+ */
+export function styleVariantsByChannel(): Record<Channel, readonly string[]> {
+  const out: Record<Channel, string[]> = { emph: [], line: [], weight: [], style: [] };
+  for (const s of STYLES) {
+    for (const v of s.variants) {
+      out[s.channel].push(v);
+    }
+  }
+  return out;
 }

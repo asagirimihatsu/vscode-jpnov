@@ -10,7 +10,7 @@
  * zero-width). 禁則処理 is gated by the `avoidLineBreaks` flag and folded into {@link wrapRow}
  * as a leftward nudge of each break point (追い出し only). ［＃改ページ］ forces a new page.
  */
-import { emphasisClass } from './emphasis.ts';
+import { resolveStyle } from './emphasis.ts';
 import { escapeComment, escapeHtml } from './escape.ts';
 import type { Token } from './tokenizer.ts';
 
@@ -20,29 +20,40 @@ interface Unit {
   html: string;
   /** Plain text for postfix-emphasis matching; '' for zero-width units (comments). */
   text: string;
-  /** The emphasis CSS class on this unit (e.g. `emph-fs`), or undefined for none. */
-  emph: string | undefined;
+  // Four INDEPENDENT presentation channels. Field name == emphasis.ts Channel, so a resolved
+  // style is applied by `unit[style.channel] = style.className`. undefined = that channel off
+  // (explicit `| undefined` so snapshots may write the off state under exactOptionalPropertyTypes).
+  /** 傍点: `emph-<slug>` / `-l`. */
+  emph?: string | undefined;
+  /** 傍線: `dec-<slug>` / `-l`. */
+  line?: string | undefined;
+  /** 太字: `b`. */
+  weight?: string | undefined;
+  /** 斜体: `i`. */
+  style?: string | undefined;
 }
 
-/** A source row: a line of units, or a forced page break. */
+/** A source row: a line of units (+ optional 字下げ), or a forced page break. */
 export type Row =
   | {
       readonly kind: 'line';
       readonly srcLine: number;
       readonly units: Unit[];
+      readonly indent?: number;
     }
   | { readonly kind: 'pagebreak' };
 
-/** A laid-out display line — one column on the page. */
+/** A laid-out display line — one column on the page. `indent` = 字下げ cells (already clamped). */
 export interface DisplayLine {
   readonly srcLine: number;
   readonly units: readonly Unit[];
+  readonly indent?: number;
 }
 
-/** Marks the units overlapping the LAST occurrence of `target` with `variant`'s class. */
+/** Marks the units overlapping the LAST occurrence of `target` with `variant`'s style class. */
 function applyPostfix(units: Unit[], target: string, variant: string, raw: string): void {
-  const emph = emphasisClass(variant);
-  if (emph !== null && target !== '') {
+  const style = resolveStyle(variant);
+  if (style !== null && target !== '') {
     let text = '';
     const ranges: { start: number; end: number; unit: Unit }[] = [];
     for (const u of units) {
@@ -58,19 +69,15 @@ function applyPostfix(units: Unit[], target: string, variant: string, raw: strin
       const matchEnd = pos + target.length;
       for (const r of ranges) {
         if (r.start < matchEnd && r.end > pos) {
-          r.unit.emph = emph;
+          // Same-channel OVERWRITE (an atomic remove+add); other channels stack alongside.
+          r.unit[style.channel] = style.className;
         }
       }
       return;
     }
   }
-  // Target not found (or not a dot variant) => degrade to a comment (verbatim inner).
-  units.push({
-    cells: 0,
-    html: `<!--${escapeComment(raw.slice(2, -1))}-->`,
-    text: '',
-    emph: undefined,
-  });
+  // Target not found (or unknown variant) => degrade to a comment (verbatim inner).
+  units.push({ cells: 0, html: `<!--${escapeComment(raw.slice(2, -1))}-->`, text: '' });
 }
 
 /** Builds the rows (lines + page breaks) for ONE file's token stream. */
@@ -79,21 +86,47 @@ export function buildRows(tokens: readonly Token[]): Row[] {
   let cur: Unit[] = [];
   let srcLine = 0;
   let isPageBreak = false;
-  let activeEmph: string | undefined;
+  // Four independent decoration channels. Keys == emphasis.ts Channel.
+  const active: {
+    emph?: string | undefined;
+    line?: string | undefined;
+    weight?: string | undefined;
+    style?: string | undefined;
+  } = {};
+  let activeIndent = 0; // block 字下げ in effect, carried ACROSS lines
+  let curIndent = 0; // indent for the line under construction (line start = activeIndent)
+  let lineSuppressed = false; // a block directive token appeared on THIS line
+
+  // Snapshot the four active channels onto a new unit — one stable hidden class for all real units.
+  const mk = (cells: number, html: string, text: string): Unit => ({
+    cells,
+    html,
+    text,
+    emph: active.emph,
+    line: active.line,
+    weight: active.weight,
+    style: active.style,
+  });
 
   const endLine = (isFlush: boolean): void => {
+    const hasReal = cur.some((u) => u.cells > 0);
     if (isPageBreak) {
       if (cur.length > 0) {
-        rows.push({ kind: 'line', srcLine, units: cur });
+        rows.push({ kind: 'line', srcLine, units: cur, indent: curIndent });
       }
       rows.push({ kind: 'pagebreak' });
+    } else if (lineSuppressed && !hasReal) {
+      // A block-directive-only line (no real text) paints NO column. A plain comment-only line
+      // never sets lineSuppressed, so it still falls through and keeps its blank column.
     } else if (cur.length > 0 || !isFlush) {
       // On a real '\n' an empty line is a genuine blank column (kept); at end-of-input
       // a trailing empty line is just the final newline artifact (dropped).
-      rows.push({ kind: 'line', srcLine, units: cur });
+      rows.push({ kind: 'line', srcLine, units: cur, indent: curIndent });
     }
     cur = [];
     isPageBreak = false;
+    lineSuppressed = false;
+    curIndent = activeIndent; // next line inherits the block indent (0 if none)
   };
 
   for (const token of tokens) {
@@ -106,43 +139,66 @@ export function buildRows(tokens: readonly Token[]): Row[] {
             srcLine += 1;
           }
           for (const ch of parts[idx] ?? '') {
-            cur.push({ cells: 1, html: escapeHtml(ch), text: ch, emph: activeEmph });
+            cur.push(mk(1, escapeHtml(ch), ch));
           }
         }
         break;
       }
       case 'rubyExplicit':
       case 'rubyImplicit':
-        cur.push({
-          cells: Array.from(token.base).length,
-          html: `<ruby>${escapeHtml(token.base)}<rt>${escapeHtml(token.reading)}</rt></ruby>`,
-          text: token.base,
-          emph: activeEmph,
-        });
+        cur.push(
+          mk(
+            Array.from(token.base).length,
+            `<ruby>${escapeHtml(token.base)}<rt>${escapeHtml(token.reading)}</rt></ruby>`,
+            token.base,
+          ),
+        );
         break;
       case 'emphasisPostfix':
         applyPostfix(cur, token.target, token.variant, token.raw);
         break;
-      case 'emphasisSpanStart':
-        activeEmph = emphasisClass(token.variant) ?? activeEmph;
+      case 'emphasisSpanStart': {
+        const d = resolveStyle(token.variant);
+        if (d !== null) {
+          active[d.channel] = d.className; // same-channel overwrite; other channels untouched
+        }
+        if (token.block === true) {
+          lineSuppressed = true; // ［＃ここから太字/斜体］ own-line directive
+        }
         break;
-      case 'emphasisSpanEnd':
-        activeEmph = undefined;
+      }
+      case 'emphasisSpanEnd': {
+        const d = resolveStyle(token.variant);
+        if (d !== null) {
+          active[d.channel] = undefined; // clear ONLY this channel (lenient within a channel)
+        }
+        if (token.block === true) {
+          lineSuppressed = true;
+        }
+        break;
+      }
+      case 'indent':
+        // Tokenizer guarantees line-head; applies to THIS logical line only.
+        curIndent = token.amount;
+        break;
+      case 'indentBlockStart':
+        // Affects SUBSEQUENT lines; a same-line text keeps the pre-block indent.
+        activeIndent = token.amount;
+        lineSuppressed = true;
+        break;
+      case 'indentBlockEnd':
+        activeIndent = 0; // dangling end (no open block) is a no-op: already 0
+        lineSuppressed = true;
         break;
       case 'comment':
-        cur.push({
-          cells: 0,
-          html: `<!--${escapeComment(token.inner)}-->`,
-          text: '',
-          emph: undefined,
-        });
+        cur.push({ cells: 0, html: `<!--${escapeComment(token.inner)}-->`, text: '' });
         break;
       case 'brokenAnnotation': {
         // Unclosed ［＃… (swallowed to its line end): visible literal text, so the preview/build
         // never silently drop prose — the editor diagnostic is the error surface. raw never
         // contains a line break, so no endLine handling is needed here.
         for (const ch of token.raw) {
-          cur.push({ cells: 1, html: escapeHtml(ch), text: ch, emph: activeEmph });
+          cur.push(mk(1, escapeHtml(ch), ch));
         }
         break;
       }
@@ -194,11 +250,16 @@ function lastReal(units: readonly Unit[], start: number, before: number): number
 
 /**
  * Hard-wraps one line row's units into display lines of at most `charsPerLine` cells. A unit
- * is atomic (never split) and an over-wide unit gets its own line. When `avoidLineBreaks` is
- * on, 禁則処理 nudges each break point LEFTWARD so a line never ENDS on an opening bracket
- * (「『【（) nor STARTS with a closing/punctuation char (」』】）、。！？) — 追い出し only.
- * The leftward walk re-tests the new boundary, so cascades and the resulting reflow fall out
- * naturally; the `> start` guard never empties a line, which also leaves a lone-char row as-is.
+ * is atomic (never split) and an over-wide unit gets its own line. A 字下げ row narrows the
+ * budget to `charsPerLine − N_eff` (N_eff = indent clamped to keep ≥1 content cell) and stamps
+ * the SAME N_eff onto every display line — the first AND each wrapped continuation are indented
+ * alike, and class / CSS padding / wrap budget all derive from this one value so the column can
+ * never overflow. When `avoidLineBreaks` is on, 禁則処理 nudges each break point LEFTWARD so a
+ * line never ENDS on an opening bracket (「『【（) nor STARTS with a closing/punctuation char
+ * (」』】）、。！？) — 追い出し only. The leftward walk re-tests the new boundary, so cascades
+ * and the resulting reflow fall out naturally; the `> start` guard never empties a line, which
+ * also leaves a lone-char row as-is. (禁則 walks unit text only — the indent is CSS padding,
+ * not a unit, so the two never interact.)
  */
 function wrapRow(
   row: Extract<Row, { kind: 'line' }>,
@@ -206,8 +267,10 @@ function wrapRow(
   avoidLineBreaks: boolean,
 ): DisplayLine[] {
   const { srcLine, units } = row;
+  const indent = Math.min(row.indent ?? 0, charsPerLine - 1); // N_eff: keep >=1 content cell
+  const budget = charsPerLine - indent;
   if (units.length === 0) {
-    return [{ srcLine, units: [] }];
+    return [{ srcLine, units: [], indent }];
   }
   const lines: DisplayLine[] = [];
   let start = 0; // first unit index of the line being built
@@ -217,7 +280,7 @@ function wrapRow(
     if (u === undefined) {
       continue;
     }
-    if (u.cells > 0 && i > start && cells + u.cells > charsPerLine) {
+    if (u.cells > 0 && i > start && cells + u.cells > budget) {
       let brk = i; // break BEFORE units[brk]
       if (avoidLineBreaks) {
         // Find the last acceptable break point
@@ -229,7 +292,7 @@ function wrapRow(
           brk -= 1;
         }
       }
-      lines.push({ srcLine, units: units.slice(start, brk) });
+      lines.push({ srcLine, units: units.slice(start, brk), indent });
       start = brk;
       cells = 0;
       for (let j = brk; j < i; j += 1) {
@@ -238,7 +301,7 @@ function wrapRow(
     }
     cells += u.cells;
   }
-  lines.push({ srcLine, units: units.slice(start) });
+  lines.push({ srcLine, units: units.slice(start), indent });
   return lines;
 }
 
@@ -277,33 +340,70 @@ export function paginate(
   return pages;
 }
 
+/**
+ * The four channels in a FIXED order → a deterministic class attribute that doubles as the
+ * adjacent-merge key. '' = no decoration (the common case — no allocation, no `<span>`).
+ */
+function unitKey(u: Unit): string {
+  if (
+    u.emph === undefined &&
+    u.line === undefined &&
+    u.weight === undefined &&
+    u.style === undefined
+  ) {
+    return '';
+  }
+  let k = '';
+  if (u.emph !== undefined) {
+    k = u.emph;
+  }
+  if (u.line !== undefined) {
+    k = k === '' ? u.line : `${k} ${u.line}`;
+  }
+  if (u.weight !== undefined) {
+    k = k === '' ? u.weight : `${k} ${u.weight}`;
+  }
+  if (u.style !== undefined) {
+    k = k === '' ? u.style : `${k} ${u.style}`;
+  }
+  return k; // e.g. "emph-fs dec-solid-l b"
+}
+
 function emitLine(line: DisplayLine, used?: Set<string>, anchor = true): string {
   let html = '';
-  let open: string | undefined;
+  let open = ''; // '' sentinel (a real key is never '')
   for (const u of line.units) {
-    if (u.emph !== open) {
-      if (open !== undefined) {
+    const key = unitKey(u);
+    if (key !== open) {
+      if (open !== '') {
         html += '</span>';
       }
-      open = u.emph;
-      if (open !== undefined) {
+      open = key;
+      if (open !== '') {
         if (used) {
-          used.add(open);
+          for (const c of open.split(' ')) {
+            used.add(c);
+          }
         }
         html += `<span class="${open}">`;
       }
     }
     html += u.html;
   }
-  if (open !== undefined) {
+  if (open !== '') {
     html += '</span>';
+  }
+  const ind = line.indent ?? 0;
+  const indentClass = ind > 0 ? ` indent-${String(ind)}` : '';
+  if (used && ind > 0) {
+    used.add(`indent-${String(ind)}`);
   }
   // `anchor` lets the continuous preview suppress data-line on a source line's wrapped
   // continuation columns (first-display-line-only); the paginated build keeps the default
   // (anchor=true → every line), so its output is unchanged.
   const dataLine =
     anchor && line.srcLine >= 0 ? ` data-line="${String(line.srcLine)}"` : '';
-  return `<div class="line"${dataLine}>${html}</div>`;
+  return `<div class="line${indentClass}"${dataLine}>${html}</div>`;
 }
 
 /**

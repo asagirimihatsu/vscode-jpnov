@@ -113,3 +113,15 @@ test('concatBookText strips one trailing newline per file and joins with a singl
   // empty book -> ""
   assert.equal(concatBookText(book({ files: [] })), '');
 });
+
+test('renderBook: a 太字 span emits <span class="b"> and the .b rule on demand', () => {
+  const out = render('［＃太字］強［＃太字終わり］');
+  assert.match(out, /<span class="b">強<\/span>/);
+  assert.match(out, /\.b\{font-weight:bold\}/);
+});
+
+test('renderBook: a 字下げ column carries the indent class + its .indent-N rule', () => {
+  const out = render('［＃２字下げ］頭');
+  assert.match(out, /<div class="line indent-2" data-line="0">頭<\/div>/);
+  assert.match(out, /\.indent-2\{padding-inline-start:2em\}/);
+});

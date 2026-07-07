@@ -52,6 +52,29 @@ Supported config forms, in precedence order:
 | `novel.jp.js` / `.mjs` / `.cjs` | `await import()`<br />(default export) | local + trusted workspace only |
 | `novel.jp.ts` | `await import()` via<br />Node native type-stripping | extra dependency may not work.<br />local + trusted workspace only |
 
+## Annotations
+
+Novel sources use [Aozora Bunko annotations](https://www.aozora.gr.jp/annotation/index.html).
+Recognised forms are highlighted and rendered; anything else passes through as an HTML
+comment (never an error), so unusual markup degrades quietly.
+
+| Effect | Inline / postfix | Block (each on its own line) |
+| --- | --- | --- |
+| Ruby | `漢字《かんじ》`, `｜親文字《ルビ》` | — |
+| Emphasis dots 傍点 | `［＃「対象」に傍点］`, `［＃傍点］…［＃傍点終わり］` | — |
+| Side line 傍線 (5 styles) | `［＃「対象」に傍線］` (傍線/二重傍線/鎖線/破線/波線) | — |
+| Bold 太字 | `［＃「対象」は太字］`, `［＃太字］…［＃太字終わり］` | `［＃ここから太字］…［＃ここで太字終わり］` |
+| Italic 斜体 | `［＃「対象」は斜体］`, `［＃斜体］…［＃斜体終わり］` | `［＃ここから斜体］…［＃ここで斜体終わり］` |
+| Indent 字下げ | `［＃○字下げ］` (line head) | `［＃ここから○字下げ］…［＃ここで字下げ終わり］` |
+| Page break | — | `［＃改ページ］` |
+
+Notes: 傍点/傍線 take a left-side variant with `の左に` / `左に` (e.g. `［＃「対象」の左に傍点］`);
+bold/italic use the connector **は**, not に. Indent counts (`○`) are **full-width digits**
+(２, １０); the block indent also indents wrapped continuation lines. The hanging-indent form
+(`折り返して`) is not supported and degrades to a comment. An unclosed block (`ここから` with no
+`ここで…終わり`) still renders to the end of the file but raises an editor **Warning**; italic
+relies on the browser synthesising an oblique for Japanese fonts.
+
 ## Character & keyword highlighting
 
 A `novel.jp.*` config may declare your **cast** and a few **coined keywords**, so they stand out

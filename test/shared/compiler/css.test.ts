@@ -52,14 +52,14 @@ test('preview fit formula defaults to 40 chars per line and pads the columns', (
   assert.match(css, /body\{[^}]*padding-inline:16px/);
 });
 
-test('stylesheet emits ONLY the requested emphasis class rules (on-demand)', () => {
+test('stylesheet emits ONLY the requested class rules (on-demand)', () => {
   for (const paginate of [false, true]) {
     const label = `paginate=${String(paginate)}`;
-    const css = stylesheet({ paginate, emphasisClasses: ['emph-fs', 'emph-x-l'] });
+    const css = stylesheet({ paginate, usedClasses: ['emph-fs', 'emph-x-l'] });
     assert.match(css, /\.emph-fs\{text-emphasis-style:filled sesame\}/, label);
     assert.match(
       css,
-      /\.emph-x-l\{text-emphasis-style:'×';text-emphasis-position:left\}/,
+      /\.emph-x-l\{text-emphasis-style:'×';text-emphasis-position:under left\}/,
       label,
     );
     // A variant that was not requested gets no rule.
@@ -67,14 +67,59 @@ test('stylesheet emits ONLY the requested emphasis class rules (on-demand)', () 
   }
 });
 
-test('stylesheet emits NO .emph- rule when no emphasis classes are requested', () => {
+test('stylesheet emits NO .emph- rule when no classes are requested', () => {
   assert.doesNotMatch(stylesheet({ paginate: false }), /\.emph-/);
   assert.doesNotMatch(stylesheet({ paginate: true }), /\.emph-/);
 });
 
-test('stylesheet preserves the caller-provided (lexicographic) emphasis rule order', () => {
+test('stylesheet preserves the caller-provided (lexicographic) rule order', () => {
   // The renderers pass classes pre-sorted by class name (not spec order); stylesheet emits
   // them in that order verbatim.
-  const css = stylesheet({ paginate: false, emphasisClasses: ['emph-fs', 'emph-ot'] });
+  const css = stylesheet({ paginate: false, usedClasses: ['emph-fs', 'emph-ot'] });
   assert.ok(css.indexOf('.emph-fs{') < css.indexOf('.emph-ot{'));
+});
+
+test('字下げ padding is inline-start, never block-start (axis lock)', () => {
+  // vertical-rl: the inline axis runs down the column, so the indent pushes the first glyph
+  // DOWN via padding-inline-start. padding-block-start would shove the whole column sideways.
+  const css = stylesheet({ paginate: false, usedClasses: ['indent-3'] });
+  assert.match(css, /\.indent-3\{padding-inline-start:3em\}/);
+  assert.doesNotMatch(css, /padding-block-start/);
+});
+
+test('base fill rules stay untouched by decoration/indent classes', () => {
+  const p = stylesheet({ paginate: true, usedClasses: ['dec-wavy', 'b', 'i', 'indent-5'] });
+  assert.match(p, /\.line\{block-size:1\.75em;margin:0;white-space:pre;\}/);
+  assert.match(p, /@page\{size:59\.5em 40em;margin:0;\}/); // 34 lines × 1.75em, 40 chars
+  const v = stylesheet({ paginate: false, usedClasses: ['indent-5'] });
+  assert.match(v, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ 40\)/);
+  assert.match(v, /\.line\{[^}]*block-size:1\.75em[^}]*font-size:1rem/);
+});
+
+test('傍線 rules carry an explicit text-underline-position (right default / left variant)', () => {
+  const css = stylesheet({ paginate: false, usedClasses: ['dec-solid', 'dec-wavy-l'] });
+  assert.match(
+    css,
+    /\.dec-solid\{text-decoration-line:underline;text-decoration-style:solid;text-underline-position:right\}/,
+  );
+  assert.match(
+    css,
+    /\.dec-wavy-l\{text-decoration-line:underline;text-decoration-style:wavy;text-underline-position:left\}/,
+  );
+});
+
+test('太字/斜体 rules come through classRule → styleRule forwarding', () => {
+  const css = stylesheet({ paginate: false, usedClasses: ['b', 'i'] });
+  assert.match(css, /\.b\{font-weight:bold\}/);
+  assert.match(css, /\.i\{font-style:italic\}/);
+});
+
+test('.indent-N rules generate on demand; malformed suffixes are ignored', () => {
+  const css = stylesheet({ paginate: false, usedClasses: ['indent-2', 'indent-10'] });
+  assert.match(css, /\.indent-2\{padding-inline-start:2em\}/);
+  assert.match(css, /\.indent-10\{padding-inline-start:10em\}/);
+  assert.doesNotMatch(
+    stylesheet({ paginate: false, usedClasses: ['indent-', 'indent-0', 'indent-x'] }),
+    /padding-inline-start/,
+  );
 });

@@ -254,3 +254,110 @@ test('emit: leading 全角 spaces are preserved verbatim (no auto-indent)', () =
 test('emit: empty input yields an empty book', () => {
   assert.equal(html(''), '<div class="book"></div>');
 });
+
+// --------------------------------------------------------------- multi-channel decorations
+
+test('multi-channel: 太字 span over 傍点 span → one span with fixed-order classes', () => {
+  assert.match(
+    html('［＃太字］［＃傍点］字［＃傍点終わり］［＃太字終わり］'),
+    /<span class="emph-fs b">字<\/span>/,
+  );
+});
+
+test('same-channel: a 傍点 postfix overwrites the active 傍点 span class', () => {
+  const out = html('［＃傍点］語［＃傍点終わり］［＃「語」に丸傍点］');
+  assert.match(out, /<span class="emph-fc">語<\/span>/);
+  assert.doesNotMatch(out, /emph-fs/);
+});
+
+test('終わり clears only its own channel: 傍点終わり leaves 太字 active', () => {
+  assert.match(
+    html('［＃太字］［＃傍点］字［＃傍点終わり］体［＃太字終わり］'),
+    /<span class="emph-fs b">字<\/span><span class="b">体<\/span>/,
+  );
+});
+
+test('傍線 postfix marks the last occurrence with the line channel', () => {
+  assert.match(html('語と語［＃「語」に傍線］'), /語と<span class="dec-solid">語<\/span>/);
+});
+
+// --------------------------------------------------------------- 字下げ (indent)
+
+test('block 字下げ: every wrapped continuation column keeps indent-N', () => {
+  assert.equal(
+    html('［＃ここから１字下げ］\n一二三\n［＃ここで字下げ終わり］', 2),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line indent-1" data-line="1">一</div>' +
+      '<div class="line indent-1" data-line="1">二</div>' +
+      '<div class="line indent-1" data-line="1">三</div></div></div>',
+  );
+});
+
+test('N_eff clamp: an indent ≥ charsPerLine clamps to cpl−1 for BOTH class and budget', () => {
+  assert.equal(
+    html('［＃９字下げ］一二', 3),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line indent-2" data-line="0">一</div>' +
+      '<div class="line indent-2" data-line="0">二</div></div></div>',
+  );
+});
+
+test('０字下げ / a dangling ［＃ここで字下げ終わり］ are render no-ops', () => {
+  assert.equal(
+    html('［＃０字下げ］頭'),
+    '<div class="book"><div class="page" data-page="0"><div class="line" data-line="0">頭</div></div></div>',
+  );
+  assert.equal(
+    html('あ［＃ここで字下げ終わり］\nい'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line" data-line="0">あ</div><div class="line" data-line="1">い</div></div></div>',
+  );
+});
+
+test('unclosed block 字下げ leniently continues to EOF', () => {
+  assert.equal(
+    html('［＃ここから２字下げ］\n一\n二'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line indent-2" data-line="1">一</div>' +
+      '<div class="line indent-2" data-line="2">二</div></div></div>',
+  );
+});
+
+// --------------------------------------------------------------- empty-column suppression
+
+test('a block-directive-only line paints no column; the next line is indented', () => {
+  const out = html('あ\n［＃ここから２字下げ］\nい');
+  assert.equal(
+    out,
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line" data-line="0">あ</div>' +
+      '<div class="line indent-2" data-line="2">い</div></div></div>',
+  );
+  // data-line numbering gaps over the suppressed directive line but stays true after it.
+  assert.doesNotMatch(out, /data-line="1"/);
+});
+
+test('a plain comment-only line KEEPS its blank column (unchanged behaviour)', () => {
+  assert.match(
+    html('あ\n［＃謎の注記］\nい'),
+    /<div class="line" data-line="1"><!--謎の注記--><\/div>/,
+  );
+});
+
+test('ここから on a text line: that line keeps the pre-block indent, block starts next line', () => {
+  assert.equal(
+    html('［＃ここから２字下げ］あ\nい'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line" data-line="0">あ</div>' +
+      '<div class="line indent-2" data-line="1">い</div></div></div>',
+  );
+});
+
+test('block 太字: the directive lines vanish and the body lines carry the b class', () => {
+  assert.equal(
+    html('［＃ここから太字］\n強い\n［＃ここで太字終わり］\n後'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line" data-line="1"><span class="b">強い</span></div>' +
+      '<div class="line" data-line="3">後</div></div></div>',
+  );
+});

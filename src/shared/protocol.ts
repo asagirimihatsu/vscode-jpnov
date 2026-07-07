@@ -69,6 +69,8 @@ export type MsgCode =
   | 'path.invalid' // args: [LabelId]
   | 'path.escapesRoot' // args: [LabelId]
   | 'syntax.unclosedAnnotation' // args: [] — unterminated ［＃ (no ］ before the line end); the diagnostic range IS the span
+  | 'syntax.unterminatedBlock' // args: [] — ［＃ここから…］ with no matching ［＃ここで…終わり］ before EOF; range = the ここから annotation
+  | 'syntax.danglingBlockEnd' // args: [] — ［＃ここで…終わり］ with no open block; range = the 終わり annotation
   | LintCode // args: [] — one static prose-lint code per (stream, rule); see lint/catalog.ts
   | 'server.unexpected'; // args: [detail]  (detail = raw unexpected server error, untranslatable)
 

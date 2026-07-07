@@ -1,7 +1,7 @@
 {
   "name": "Japanese Novel",
   "scopeName": "text.novel-jp",
-  "comment": "Instant (pre-activation) colorization for .jpnov. Scope families are chosen so VS Code's DEFAULT semantic-type→scope fallback lands on the SAME colors the LSP semantic layer later emits (comment→comment, keyword→keyword — see src/server/semanticTokens.ts HIGHLIGHTS): when the server's tokens arrive they refine invisibly instead of repainting. Every pattern is a single-line `match` (never begin/end), and the tokenizer bounds delimiter pairing to the line too, so both layers agree: an unclosed ［＃ is DELIBERATELY greyed to its line end (the semantic layer marks the same span as `marker` and the server flags it as an Error), while a lone 《 or a stray ］/》 stays default text. The 傍点 variant alternation must stay in sync with src/shared/compiler/emphasis.ts DOTS.",
+  "comment": "Instant (pre-activation) colorization for .jpnov. Scope families are chosen so VS Code's DEFAULT semantic-type→scope fallback lands on the SAME colors the LSP semantic layer later emits (comment→comment, keyword→keyword — see src/server/semanticTokens.ts HIGHLIGHTS): when the server's tokens arrive they refine invisibly instead of repainting. Every pattern is a single-line `match` (never begin/end), and the tokenizer bounds delimiter pairing to the line too, so both layers agree: an unclosed ［＃ is DELIBERATELY greyed to its line end (the semantic layer marks the same span as `marker` and the server flags it as an Error), while a lone 《 or a stray ］/》 stays default text. The 傍点/傍線/太字/斜体 variant alternations and the single-line ［＃○字下げ］ line-head (^) anchor are checked against src/shared/compiler/emphasis.ts by test/shared/compiler/grammar-sync.test.ts (canonical length-desc order) — regenerate an alternation from that test's failure output, never by hand. ［＃○字下げ］ takes full-width digits only ([０-９]+, per the locked spec); a mid-line one is inert and deliberately falls through to the generic comment rule (the server tokenizer degrades it to a comment too, so both layers grey it).",
   "patterns": [
     { "include": "#annotation" },
     { "include": "#ruby" },
@@ -20,8 +20,35 @@
           }
         },
         {
-          "comment": "Emphasis span END ［＃(の左に|左に)?<dot>終わり］ — must be tried BEFORE span start (終わり suffix).",
-          "match": "(［＃)(の左に|左に)?(白ゴマ傍点|二重丸傍点|蛇の目傍点|黒三角傍点|白三角傍点|白丸傍点|丸傍点|ばつ傍点|×傍点|傍点)(終わり)(］)",
+          "comment": "Block END ［＃ここで(字下げ|太字|斜体)終わり］ — whole inner is one directive (mirrors the semantic layer's markDirective). BEFORE block START (終わり suffix) and BEFORE the span rules. ここで傍点終わり etc. is NOT here (傍点/傍線 have no block form) and falls through to the generic comment rule, exactly like the tokenizer.",
+          "match": "(［＃)(ここで(?:字下げ|太字|斜体)終わり)(］)",
+          "captures": {
+            "1": { "name": "comment.block.annotation.novel-jp" },
+            "2": { "name": "keyword.other.directive.novel-jp" },
+            "3": { "name": "comment.block.annotation.novel-jp" }
+          }
+        },
+        {
+          "comment": "Block START ［＃ここから(○字下げ|太字|斜体)］ (○ = full-width digits ONLY). The hanging-indent 折り返して form has extra text before ］ so it falls through to the generic comment rule, exactly like the tokenizer.",
+          "match": "(［＃)(ここから(?:[０-９]+字下げ|太字|斜体))(］)",
+          "captures": {
+            "1": { "name": "comment.block.annotation.novel-jp" },
+            "2": { "name": "keyword.other.directive.novel-jp" },
+            "3": { "name": "comment.block.annotation.novel-jp" }
+          }
+        },
+        {
+          "comment": "Single-line ［＃○字下げ］ — LINE-HEAD ONLY (^). A mid-line one is inert (the server tokenizer degrades it to a comment) → it must fall through to the generic comment rule and stay grey in BOTH layers. Full-width digits only.",
+          "match": "^(［＃)([０-９]+字下げ)(］)",
+          "captures": {
+            "1": { "name": "comment.block.annotation.novel-jp" },
+            "2": { "name": "keyword.other.directive.novel-jp" },
+            "3": { "name": "comment.block.annotation.novel-jp" }
+          }
+        },
+        {
+          "comment": "傍点/傍線 span END ［＃(の左に|左に)?<dot|line>終わり］ — must be tried BEFORE span start (終わり suffix).",
+          "match": "(［＃)(の左に|左に)?(二重丸傍点|白ゴマ傍点|白三角傍点|蛇の目傍点|黒三角傍点|ばつ傍点|二重傍線|白丸傍点|×傍点|丸傍点|傍点|傍線|波線|破線|鎖線)(終わり)(］)",
           "captures": {
             "1": { "name": "comment.block.annotation.novel-jp" },
             "2": { "name": "comment.other.annotation.novel-jp" },
@@ -31,8 +58,8 @@
           }
         },
         {
-          "comment": "Emphasis span START ［＃(の左に|左に)?<dot>］.",
-          "match": "(［＃)(の左に|左に)?(白ゴマ傍点|二重丸傍点|蛇の目傍点|黒三角傍点|白三角傍点|白丸傍点|丸傍点|ばつ傍点|×傍点|傍点)(］)",
+          "comment": "傍点/傍線 span START ［＃(の左に|左に)?<dot|line>］.",
+          "match": "(［＃)(の左に|左に)?(二重丸傍点|白ゴマ傍点|白三角傍点|蛇の目傍点|黒三角傍点|ばつ傍点|二重傍線|白丸傍点|×傍点|丸傍点|傍点|傍線|波線|破線|鎖線)(］)",
           "captures": {
             "1": { "name": "comment.block.annotation.novel-jp" },
             "2": { "name": "comment.other.annotation.novel-jp" },
@@ -41,8 +68,27 @@
           }
         },
         {
-          "comment": "Postfix emphasis ［＃「対象」(に|の)?(の左に|左に)?<dot>］ — the target (group 3) is deliberately UNSCOPED so it keeps the default foreground, exactly like the semantic layer. The target must be NON-empty ([^」]+): the tokenizer rejects an empty target (comment fallback), so an empty one must fall through to the generic annotation rule below.",
-          "match": "(［＃)(「)([^」]+)(」)(に|の)?(の左に|左に)?(白ゴマ傍点|二重丸傍点|蛇の目傍点|黒三角傍点|白三角傍点|白丸傍点|丸傍点|ばつ傍点|×傍点|傍点)(］)",
+          "comment": "太字/斜体 inline span END ［＃(太字|斜体)終わり］ — before its span START (終わり suffix).",
+          "match": "(［＃)(太字|斜体)(終わり)(］)",
+          "captures": {
+            "1": { "name": "comment.block.annotation.novel-jp" },
+            "2": { "name": "keyword.other.directive.novel-jp" },
+            "3": { "name": "keyword.other.directive.novel-jp" },
+            "4": { "name": "comment.block.annotation.novel-jp" }
+          }
+        },
+        {
+          "comment": "太字/斜体 inline span START ［＃(太字|斜体)］.",
+          "match": "(［＃)(太字|斜体)(］)",
+          "captures": {
+            "1": { "name": "comment.block.annotation.novel-jp" },
+            "2": { "name": "keyword.other.directive.novel-jp" },
+            "3": { "name": "comment.block.annotation.novel-jp" }
+          }
+        },
+        {
+          "comment": "傍点/傍線 postfix ［＃「対象」(に)?(の左に|左に)?<dot|line>］ — connector is に ONLY (の is NOT a connector; の左に is the direction prefix, so a lone の+variant falls through to the generic comment rule, exactly like the tokenizer). The target (group 3) is deliberately UNSCOPED so it keeps the default foreground, exactly like the semantic layer. The target must be NON-empty ([^」]+): the tokenizer rejects an empty target (comment fallback), so an empty one must fall through to the generic annotation rule below.",
+          "match": "(［＃)(「)([^」]+)(」)(に)?(の左に|左に)?(二重丸傍点|白ゴマ傍点|白三角傍点|蛇の目傍点|黒三角傍点|ばつ傍点|二重傍線|白丸傍点|×傍点|丸傍点|傍点|傍線|波線|破線|鎖線)(］)",
           "captures": {
             "1": { "name": "comment.block.annotation.novel-jp" },
             "2": { "name": "comment.other.dialogue.novel-jp" },
@@ -54,7 +100,19 @@
           }
         },
         {
-          "comment": "Any other ［＃…］ (block layout, 見出し, the 傍線 line family, unknown) — whole annotation greyed, matching the server's `comment` classification. Single-line, so an unclosed ［＃ never runs away.",
+          "comment": "太字/斜体 postfix ［＃「対象」は(太字|斜体)］ — connector は is REQUIRED (not に), no direction. A mis-paired connector (は+傍点, に+太字) matches neither postfix rule and falls through to the generic comment rule, exactly like the tokenizer's connector matrix.",
+          "match": "(［＃)(「)([^」]+)(」)(は)(太字|斜体)(］)",
+          "captures": {
+            "1": { "name": "comment.block.annotation.novel-jp" },
+            "2": { "name": "comment.other.dialogue.novel-jp" },
+            "4": { "name": "comment.other.dialogue.novel-jp" },
+            "5": { "name": "comment.other.annotation.novel-jp" },
+            "6": { "name": "keyword.other.directive.novel-jp" },
+            "7": { "name": "comment.block.annotation.novel-jp" }
+          }
+        },
+        {
+          "comment": "Any other ［＃…］ (block layout, 見出し, the 折り返して indent form, a mid-line 字下げ, a half-width digit, a mis-paired connector, unknown) — whole annotation greyed, matching the server's `comment` classification. Single-line, so an unclosed ［＃ never runs away.",
           "match": "(［＃)([^］]*)(］)",
           "name": "comment.block.annotation.novel-jp"
         },

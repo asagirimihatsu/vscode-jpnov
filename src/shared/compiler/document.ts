@@ -40,7 +40,7 @@ export function renderBook(opts: {
     opts.avoidLineBreaks ?? false,
   );
 
-  // Emit the body first so the CSS carries ONLY the emphasis classes used (on-demand).
+  // Emit the body first so the CSS carries ONLY the classes used (on-demand).
   // [...used].sort() is lexicographic by class name (deterministic), not spec order.
   const used = new Set<string>();
   const body = pagesToHtml(pages, used);
@@ -48,7 +48,7 @@ export function renderBook(opts: {
     charsPerLine: opts.charsPerLine,
     linesPerPage: opts.linesPerPage,
     paginate: true,
-    emphasisClasses: [...used].sort(),
+    usedClasses: [...used].sort(),
   };
   const css = stylesheet(cssOpts);
 

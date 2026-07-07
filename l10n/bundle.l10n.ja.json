@@ -63,6 +63,8 @@
   "{0} is not a valid path": "{0} が有効なパスではありません",
   "{0} must not escape the workspace root": "{0} はワークスペース内に収めてください",
   "unterminated ［＃ annotation (missing ］)": "注記が閉じられていません（「］」が必要です）",
+  "unterminated block annotation (missing ［＃ここで…終わり］)": "ブロック注記が閉じられていません（「ここで…終わり」が必要です）",
+  "block-end annotation without a matching start": "対応する開始のないブロック終了注記です",
   "this sentence is too long": "一文が長すぎます",
   "too many commas (、) in one sentence": "一文に読点（、）が多すぎます",
   "too many consecutive kanji": "漢字が連続しすぎています",
