@@ -68,6 +68,7 @@ export type MsgCode =
   | 'path.absolute' // args: [LabelId]
   | 'path.invalid' // args: [LabelId]
   | 'path.escapesRoot' // args: [LabelId]
+  | 'syntax.unclosedAnnotation' // args: [] — unterminated ［＃ (no ］ before the line end); the diagnostic range IS the span
   | LintCode // args: [] — one static prose-lint code per (stream, rule); see lint/catalog.ts
   | 'server.unexpected'; // args: [detail]  (detail = raw unexpected server error, untranslatable)
 

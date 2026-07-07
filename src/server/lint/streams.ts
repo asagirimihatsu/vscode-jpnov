@@ -153,7 +153,8 @@ export function extractStreams(src: string): Streams {
         appendProse(token.base, offset);
         ruby.joinFrom(readingBuf(token.reading, offset + token.base.length + 1));
         break;
-      // pageBreak / emphasis* / comment contribute no prose; they only advance `offset`.
+      // pageBreak / emphasis* / comment / brokenAnnotation contribute no prose; they only
+      // advance `offset` (malformed markup is deliberately not linted).
     }
     offset += token.raw.length;
   }

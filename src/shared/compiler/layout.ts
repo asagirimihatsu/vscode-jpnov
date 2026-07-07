@@ -137,9 +137,22 @@ export function buildRows(tokens: readonly Token[]): Row[] {
           emph: undefined,
         });
         break;
+      case 'brokenAnnotation': {
+        // Unclosed ［＃… (swallowed to its line end): visible literal text, so the preview/build
+        // never silently drop prose — the editor diagnostic is the error surface. raw never
+        // contains a line break, so no endLine handling is needed here.
+        for (const ch of token.raw) {
+          cur.push({ cells: 1, html: escapeHtml(ch), text: ch, emph: activeEmph });
+        }
+        break;
+      }
       case 'pageBreak':
         isPageBreak = true;
         break;
+      default: {
+        const exhaustive: never = token;
+        throw new Error(`buildRows: unhandled token ${JSON.stringify(exhaustive)}`);
+      }
     }
   }
   endLine(true);

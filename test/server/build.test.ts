@@ -72,6 +72,34 @@ test('build emits a .txt and an .html artifact per filelist containing both file
   }
 });
 
+test('build stays lenient on an unclosed ［＃: ok, artifacts emitted, tail visible as literal text', async () => {
+  // Preview/build cohesion: a syntax error is an EDITOR diagnostic, never a build gate. The
+  // swallowed tail must appear verbatim in the HTML (same shared buildRows arm the preview uses).
+  const ws = makeTmpWorkspace();
+  try {
+    const { ctx } = await bootValidRoot(ws.dir, ws.uri);
+    writeUnder(ws.dir, 'src/vol1/index.filelist', 'a.jpnov');
+    writeUnder(ws.dir, 'src/vol1/a.jpnov', '本文［＃閉じない注記\n次の行');
+
+    const result: BuildResult = await handleBuild(ctx, {});
+
+    assert.equal(result.ok, true);
+    assert.ok(result.artifacts);
+    assert.ok(result.errors);
+    assert.equal(result.errors.length, 0);
+    assert.equal(result.artifacts.length, 2);
+    const html = result.artifacts.find((a) => a.path.endsWith('.html'));
+    assert.ok(html);
+    assert.ok(html.content.includes('本文［＃閉じない注記'), 'swallowed tail visible in HTML');
+    assert.ok(html.content.includes('次の行'), 'the next line is untouched');
+    const txt = result.artifacts.find((a) => a.path.endsWith('.txt'));
+    assert.ok(txt);
+    assert.equal(txt.content, '本文［＃閉じない注記\n次の行'); // .txt is byte-faithful anyway
+  } finally {
+    ws.cleanup();
+  }
+});
+
 test('nested filelist mirrors the source tree in the output path', async () => {
   const ws = makeTmpWorkspace();
   try {

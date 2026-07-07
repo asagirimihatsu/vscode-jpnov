@@ -78,6 +78,8 @@ export function renderMessage(msg: LocalizableMessage): string {
       return vscode.l10n.t('{0} is not a valid path', labelText(a[0] as LabelId));
     case 'path.escapesRoot':
       return vscode.l10n.t('{0} must not escape the workspace root', labelText(a[0] as LabelId));
+    case 'syntax.unclosedAnnotation':
+      return vscode.l10n.t('unterminated ［＃ annotation (missing ］)');
     // --- prose lint (kept byte-identical to renderEnglish). ---
     case 'lint.common.sentenceLength':
       return vscode.l10n.t('this sentence is too long');

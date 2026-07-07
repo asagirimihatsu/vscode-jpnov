@@ -1,7 +1,7 @@
 {
   "name": "Japanese Novel",
   "scopeName": "text.novel-jp",
-  "comment": "Instant (pre-activation) colorization for .jpnov. Scope families are chosen so VS Code's DEFAULT semantic-type→scope fallback lands on the SAME colors the LSP semantic layer later emits (comment→comment, keyword→keyword — see src/server/semanticTokens.ts HIGHLIGHTS): when the server's tokens arrive they refine invisibly instead of repainting. Every pattern is a single-line `match` (never begin/end) so an unclosed ［＃ or a runaway 《 can only ever mis-color its own line. The 傍点 variant alternation must stay in sync with src/shared/compiler/emphasis.ts DOTS.",
+  "comment": "Instant (pre-activation) colorization for .jpnov. Scope families are chosen so VS Code's DEFAULT semantic-type→scope fallback lands on the SAME colors the LSP semantic layer later emits (comment→comment, keyword→keyword — see src/server/semanticTokens.ts HIGHLIGHTS): when the server's tokens arrive they refine invisibly instead of repainting. Every pattern is a single-line `match` (never begin/end), and the tokenizer bounds delimiter pairing to the line too, so both layers agree: an unclosed ［＃ is DELIBERATELY greyed to its line end (the semantic layer marks the same span as `marker` and the server flags it as an Error), while a lone 《 or a stray ］/》 stays default text. The 傍点 variant alternation must stay in sync with src/shared/compiler/emphasis.ts DOTS.",
   "patterns": [
     { "include": "#annotation" },
     { "include": "#ruby" },
@@ -56,6 +56,11 @@
         {
           "comment": "Any other ［＃…］ (block layout, 見出し, the 傍線 line family, unknown) — whole annotation greyed, matching the server's `comment` classification. Single-line, so an unclosed ［＃ never runs away.",
           "match": "(［＃)([^］]*)(］)",
+          "name": "comment.block.annotation.novel-jp"
+        },
+        {
+          "comment": "Unterminated ［＃… with no ］ before the line end — greyed exactly like a closed annotation (the tokenizer swallows the same span as a `brokenAnnotation` and the semantic layer marks it `marker`; the server adds the Error squiggle). $ bounds it to the line; LAST so every closed rule above wins first ([^］]*$ never matches once a closing ］ follows the opener on the line).",
+          "match": "(［＃)([^］]*)$",
           "name": "comment.block.annotation.novel-jp"
         }
       ]

@@ -51,3 +51,11 @@ test('an unclosed corner bracket does not throw; the opener is still a marker', 
   const toks = decode(buildSemanticTokens(doc('「未完の台詞'), rec).data);
   assert.equal(at(toks, 0, 0)?.type, MARKER);
 });
+
+test('a 「 swallowed by an unclosed ［＃ never opens dialogue', () => {
+  // ［＃「未 is one brokenAnnotation; the 「 inside it must not push the stack, so 巳一は on the
+  // next line is narration and highlights as a subject.
+  const toks = decode(buildSemanticTokens(doc('［＃「未\n巳一は'), rec).data);
+  assert.equal(at(toks, 1, 0)?.type, CHARACTER);
+  assert.equal(at(toks, 1, 0)?.len, 3);
+});

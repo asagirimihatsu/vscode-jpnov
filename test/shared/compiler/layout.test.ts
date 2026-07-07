@@ -98,6 +98,25 @@ test('a comment is zero-width: it does not consume a cell or force a wrap', () =
   );
 });
 
+test('a broken ［＃ renders as visible literal text, bounded to its own line', () => {
+  assert.equal(
+    html('本［＃こわれ\n次'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line" data-line="0">本［＃こわれ</div>' +
+      '<div class="line" data-line="1">次</div></div></div>',
+  );
+});
+
+test('broken-annotation text consumes cells and wraps like ordinary prose', () => {
+  // cpl 3: 本＋［＃こ… — the swallowed chars are real 1-cell units, so the line hard-wraps.
+  assert.equal(
+    html('本［＃こわれ', 3),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line" data-line="0">本［＃</div>' +
+      '<div class="line" data-line="0">こわれ</div></div></div>',
+  );
+});
+
 test('禁則 rule 1: a line must not END with an opening bracket — push it down', () => {
   // cpl 3: naive ああ「 | い」 traps 「 at end of line 1. 追い出し pushes 「 down to join
   // its content: ああ | 「い」. (Contrast: kinsoku off would keep ああ「 | い」.)

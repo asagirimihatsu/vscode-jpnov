@@ -80,6 +80,14 @@ test('renderPreview honors avoidLineBreaks (禁則) — the same engine as the b
   );
 });
 
+test('renderPreview renders an unclosed ［＃ as visible literal text on its own line only', () => {
+  // Lenient line-bounded recovery: the swallowed tail stays visible (typing feedback), and the
+  // NEXT source line is untouched — the old cross-line swallow must not come back.
+  const html = renderPreview('本文［＃こわれ\n次の行');
+  assert.match(html, /<div class="line" data-line="0">本文［＃こわれ<\/div>/);
+  assert.match(html, /<div class="line" data-line="1">次の行<\/div>/);
+});
+
 test('renderPreview keeps a blank source line as a blank column', () => {
   assert.match(
     renderPreview('一\n\n二'),

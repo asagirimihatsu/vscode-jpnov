@@ -49,6 +49,13 @@ test('renderBook concatenates files[] in order', () => {
   );
 });
 
+test('renderBook keeps a broken ［＃ as visible literal text (build stays lenient)', () => {
+  assert.equal(
+    bodyOf(render('本文［＃こわれ')),
+    '<div class="book"><div class="page" data-page="0"><div class="line" data-line="0">本文［＃こわれ</div></div></div>',
+  );
+});
+
 test('renderBook: ［＃改ページ］ starts a new page', () => {
   assert.equal(
     bodyOf(render('前\n［＃改ページ］\n後')),

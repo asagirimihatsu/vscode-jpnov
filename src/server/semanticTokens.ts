@@ -250,6 +250,18 @@ export function buildSemanticTokens(
         mark(offset, raw, 'marker'); // whole ［＃ … ］ greyed
         break;
       }
+      case 'brokenAnnotation': {
+        flushRun();
+        // Unclosed ［＃… greyed to its line end — the same span the Error diagnostic covers. The
+        // raw never enters appendBody, so a swallowed 「 cannot corrupt the dialogue stack; it
+        // never contains a line break, so this emits as a single-line token.
+        mark(offset, raw, 'marker');
+        break;
+      }
+      default: {
+        const exhaustive: never = token;
+        throw new Error(`buildSemanticTokens: unhandled token ${JSON.stringify(exhaustive)}`);
+      }
     }
     offset += raw;
   }
