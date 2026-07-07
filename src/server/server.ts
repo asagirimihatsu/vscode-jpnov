@@ -18,6 +18,7 @@ import {
   TextDocumentSyncKind,
 } from 'vscode-languageserver/node';
 import type {
+  CancellationToken,
   CodeAction,
   CodeActionParams,
   DidChangeWatchedFilesParams,
@@ -46,11 +47,12 @@ import type {
 
 import { handleBuild, handleListBooks } from './build.ts';
 import { buildCodeActions } from './lint/codeActions.ts';
-import { computeLintFindings } from './lint/kernel.ts';
+import { computeLintFindings, LintCancelled } from './lint/kernel.ts';
 import type { LintFinding } from './lint/kernel.ts';
 import { reportError } from './report.ts';
 import {
   addRoot,
+  normalizeRootUri,
   reparseAllRoots,
   removeRoot,
   rootForUri,
@@ -189,6 +191,10 @@ connection.onInitialized(() => {
         void (async () => {
           try {
             await Promise.all(event.removed.map((f) => removeRoot(context, f.uri)));
+            for (const f of event.removed) {
+              // removeRoot drops the RootState; drop its cached recognizer too (same key form).
+              rootRecognizers.delete(normalizeRootUri(f.uri));
+            }
             await Promise.all(event.added.map((f) => addRoot(context, f.uri)));
           } catch (err) {
             reportError(context, err);
@@ -396,7 +402,11 @@ function scheduleProseDiagnostics(doc: TextDocument): void {
       if (current?.languageId !== 'novel-jp' || current.version !== scheduledVersion) {
         return;
       }
-      const result = computeLintFindings(current.getText(), context.lintSelection, current);
+      // Superseded runs abort between chunks instead of running to completion: the version
+      // check is the same one the post-resolve guard below applies, just polled mid-run.
+      const result = computeLintFindings(current.getText(), context.lintSelection, current, {
+        shouldCancel: () => documents.get(uri)?.version !== scheduledVersion,
+      });
       if (Array.isArray(result)) {
         // No rule enabled (or only sync pre-scans): nothing async to race.
         publishFindings(uri, scheduledVersion, result);
@@ -410,6 +420,9 @@ function scheduleProseDiagnostics(doc: TextDocument): void {
           }
         })
         .catch((err: unknown) => {
+          if (err instanceof LintCancelled) {
+            return; // superseded — the newer edit's own schedule publishes instead
+          }
           reportError(context, err);
         });
     }, PROSE_DEBOUNCE_MS),
@@ -418,7 +431,10 @@ function scheduleProseDiagnostics(doc: TextDocument): void {
 
 // Quick-fix + fix-all code actions for an open .jpnov. Reuse the cached findings when they match the
 // document version; otherwise recompute (e.g. an action requested before the debounced lint landed).
-connection.onCodeAction((params: CodeActionParams): CodeAction[] | Promise<CodeAction[]> => {
+connection.onCodeAction((
+  params: CodeActionParams,
+  token: CancellationToken,
+): CodeAction[] | Promise<CodeAction[]> => {
   const doc = documents.get(params.textDocument.uri);
   if (doc?.languageId !== 'novel-jp') {
     return [];
@@ -429,17 +445,28 @@ connection.onCodeAction((params: CodeActionParams): CodeAction[] | Promise<CodeA
   if (cached?.version === version) {
     return buildCodeActions(uri, cached.findings, params.range, params.context.only);
   }
-  const result = computeLintFindings(doc.getText(), context.lintSelection, doc);
+  // A cache-miss recompute honors the LSP cancellation (the client cancels a code-action
+  // request as the cursor moves on) and aborts when an edit lands mid-run.
+  const result = computeLintFindings(doc.getText(), context.lintSelection, doc, {
+    shouldCancel: () => token.isCancellationRequested || documents.get(uri)?.version !== version,
+  });
   if (Array.isArray(result)) {
     findingsCache.set(uri, { version, findings: result });
     return buildCodeActions(uri, result, params.range, params.context.only);
   }
-  return result.then((findings) => {
-    if (documents.get(uri)?.version === version) {
-      findingsCache.set(uri, { version, findings });
-    }
-    return buildCodeActions(uri, findings, params.range, params.context.only);
-  });
+  return result
+    .then((findings) => {
+      if (documents.get(uri)?.version === version) {
+        findingsCache.set(uri, { version, findings });
+      }
+      return buildCodeActions(uri, findings, params.range, params.context.only);
+    })
+    .catch((err: unknown): CodeAction[] => {
+      if (err instanceof LintCancelled) {
+        return []; // cancelled request / superseded text — no actions to offer
+      }
+      throw err;
+    });
 });
 
 /** Re-lint every open .jpnov — used when the lint selection changes (no text edit drives it). */

@@ -29,12 +29,10 @@
     "Other"
   ],
   "activationEvents": [
-    "workspaceContains:novel.jp.json",
-    "workspaceContains:novel.jp.js",
-    "workspaceContains:novel.jp.cjs",
-    "workspaceContains:novel.jp.mjs",
-    "workspaceContains:novel.jp.ts",
-    "onWebviewPanel:jpnov.preview"
+    "onLanguage:novel-jp",
+    "onLanguage:novel-jp-filelist",
+    "onWebviewPanel:jpnov.preview",
+    "onStartupFinished"
   ],
   "contributes": {
     "languages": [
@@ -57,6 +55,18 @@
           ".filelist"
         ],
         "configuration": "./filelist.language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "novel-jp",
+        "scopeName": "text.novel-jp",
+        "path": "./syntaxes/novel-jp.tmLanguage.json"
+      },
+      {
+        "language": "novel-jp-filelist",
+        "scopeName": "text.novel-jp-filelist",
+        "path": "./syntaxes/filelist.tmLanguage.json"
       }
     ],
     "configurationDefaults": {

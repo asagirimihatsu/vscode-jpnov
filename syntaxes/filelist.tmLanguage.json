@@ -1,0 +1,14 @@
+{
+  "name": "Japanese Novel File List",
+  "scopeName": "text.novel-jp-filelist",
+  "comment": "One relative .jpnov source path per line. Deliberately error-agnostic: backslashes, non-.jpnov paths, and missing files are the language server's diagnostics to report — the grammar must not second-guess them. There is no semantic-token layer for filelists, so nothing can repaint over this.",
+  "patterns": [
+    {
+      "match": "^\\s*(\\S.*?)(\\.jpnov)\\s*$",
+      "captures": {
+        "1": { "name": "string.unquoted.path.novel-jp-filelist" },
+        "2": { "name": "keyword.other.extension.novel-jp-filelist" }
+      }
+    }
+  ]
+}
