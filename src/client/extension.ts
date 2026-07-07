@@ -8,6 +8,18 @@
  * The pure compiler + all config/book parsing live server-side; the client is a thin
  * orchestrator that translates `jpnov/*` protocol messages into VS Code UI effects
  * and translates VS Code events (workspace trust, build actions) back to the server.
+ *
+ * Activation is two-phase so the window-open path stays cheap (`onStartupFinished`
+ * activates this extension in EVERY window, novel or not):
+ *   Phase 1 `activate()`  — synchronous registrations only (commands, serializer,
+ *     debugger, lazy-start listeners). No LanguageClient, no fork, no fs beyond one
+ *     root readDirectory per workspace folder. Instant `.jpnov` colorization does not
+ *     depend on any of this — the TextMate grammar is applied by VS Code core.
+ *   Phase 2 `ensureStarted()` — single-flight; constructs the client + UI singletons
+ *     and forks the server on the FIRST real demand: a novel-jp/filelist document, a
+ *     jpnov command, a restored preview panel, or a `novel.jp.*` config found at a
+ *     workspace root (so a novel workspace still self-populates its status bar and
+ *     Books view shortly after startup, just off the window-open critical path).
  */
 import * as vscode from 'vscode';
 
@@ -46,8 +58,60 @@ let client: LanguageClient | undefined;
 let statusBar: StatusBar | undefined;
 let preview: Preview | undefined;
 let booksView: BooksView | undefined;
+let extCtx: vscode.ExtensionContext | undefined;
+/** Phase-2 latch: `ensureStarted()` is single-flight and never un-runs until deactivate. */
+let started = false;
 
-export function activate(context: vscode.ExtensionContext): void {
+/** The config filenames that mark a workspace folder root as a novel project (see configLoad.ts). */
+const CONFIG_NAMES = new Set(
+  ['json', 'js', 'cjs', 'mjs', 'ts'].map((ext) => `novel.jp.${ext}`),
+);
+
+/** Documents that justify starting the language server. */
+function isNovelDoc(doc: vscode.TextDocument): boolean {
+  return doc.languageId === 'novel-jp' || doc.languageId === 'novel-jp-filelist';
+}
+
+/**
+ * Starts the server iff some folder ROOT contains a `novel.jp.*` config. One
+ * `readDirectory` per folder (not five stats): a single round-trip matters on
+ * remote/virtual filesystems, and it mirrors the server's own `findConfig`.
+ * Name-only membership — the server's config loader is the robust arbiter.
+ */
+async function startIfConfigPresent(
+  folders: readonly vscode.WorkspaceFolder[],
+): Promise<void> {
+  for (const folder of folders) {
+    if (started) {
+      return; // another trigger won while we awaited
+    }
+    let entries: [string, vscode.FileType][];
+    try {
+      entries = await vscode.workspace.fs.readDirectory(folder.uri);
+    } catch {
+      continue; // unreadable root (gone, permission, exotic scheme) -> not a novel root
+    }
+    if (entries.some(([name]) => CONFIG_NAMES.has(name))) {
+      ensureStarted();
+      return;
+    }
+  }
+}
+
+/**
+ * Phase 2: construct the LanguageClient + UI singletons and start the server.
+ * Idempotent and synchronous through construction, so `preview`/`booksView` exist the
+ * instant any caller returns; `client.start()` is fire-and-forget — vscode-languageclient
+ * queues requests issued after `start()` until the initialize handshake completes, so
+ * callers never await this.
+ */
+function ensureStarted(): void {
+  if (started || extCtx === undefined) {
+    return;
+  }
+  started = true;
+  const context = extCtx;
+
   // Run the bundled server as a forked Node process over IPC. We deliberately do NOT set
   // `runtime`: letting vscode-languageclient `fork` the module runs it in the host's Node
   // (Electron with ELECTRON_RUN_AS_NODE handled internally). Setting `runtime:
@@ -120,29 +184,8 @@ export function activate(context: vscode.ExtensionContext): void {
   preview = new Preview(client);
   booksView = new BooksView(client);
 
-  // Dispose UI singletons on deactivate (order: stop the client separately below).
+  // Dispose UI singletons on deactivate (order: stop the client separately in deactivate()).
   context.subscriptions.push(statusBar, preview, booksView);
-
-  // Surface "Build selected as HTML/Text" in the Run and Debug launch dropdown (▶), driven by the
-  // Books panel's checkbox selection. See buildDebug.ts for why this is modeled as a debugger.
-  context.subscriptions.push(registerBuildDebugger(booksView));
-
-  // Revive the preview panel the workbench restored from the previous session (window
-  // reload); without a registered serializer the restored tab would stay blank forever.
-  // Registered in this same synchronous activate() body as client.start() below: by the
-  // time any deserialize can dispatch, the client is at least Starting, so adopt()'s
-  // first render simply queues behind server startup inside sendRequest.
-  context.subscriptions.push(
-    vscode.window.registerWebviewPanelSerializer(Preview.viewType, {
-      deserializeWebviewPanel: (panel: vscode.WebviewPanel, state: unknown) => {
-        preview?.adopt(panel, state);
-        // adopt() is synchronous through its first paint and never throws; returning
-        // already-resolved keeps VS Code's revival pipeline unblocked (a rejection
-        // would surface an "error restoring view" page instead).
-        return Promise.resolve();
-      },
-    }),
-  );
 
   // The server emits one configState per root whenever a root's config changes; the
   // client only needs it to refresh the aggregated status-bar item.
@@ -173,6 +216,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Trust can be granted AFTER activation; tell the server so it can (re)load any
   // executable configs (novel.jp.{js,ts,mjs,cjs}) that were previously skipped.
+  // Wired here (not in activate()): trust granted before the server exists is simply
+  // captured by the isTrusted snapshot above when the start finally happens.
   context.subscriptions.push(
     vscode.workspace.onDidGrantWorkspaceTrust(() => {
       const params: WorkspaceTrustChangedParams = { isTrusted: true };
@@ -201,23 +246,8 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  // Commands. The build actions live on the Books panel (Run and Debug) and operate on its
-  // checkbox selection; there is no command-palette build entry — a build needs a resolved
-  // config plus at least one selected book, so the palette is the wrong home for it.
-  context.subscriptions.push(
-    // Scaffold a fresh novel project (.vscode/, novel.jp.json, a sample chapter). Palette-only;
-    // available in an empty workspace via the implicit onCommand activation (vscode >= 1.74).
-    registerInitWorkspace(),
-    command('jpnov.books.buildHtml', () => booksView?.buildHtml()),
-    command('jpnov.books.buildTxt', () => booksView?.buildTxt()),
-    command('jpnov.books.selectAll', () => booksView?.selectAll()),
-    command('jpnov.books.deselectAll', () => booksView?.deselectAll()),
-    command('jpnov.books.refresh', () => booksView?.refresh()),
-    command('jpnov.preview', () => preview?.open(false)),
-    command('jpnov.previewToSide', () => preview?.open(true)),
-  );
-
-  // Start the client (and the server process). Surface a hard startup failure.
+  // Start the client (and the server process). start() is called exactly once (single-flight
+  // latch above), so a hard startup failure surfaces exactly one popup.
   client.start().catch((err: unknown) => {
     const message = err instanceof Error ? err.message : String(err);
     // Terminal popup inside a .catch(); showErrorMessage never rejects so void is safe here.
@@ -225,6 +255,87 @@ export function activate(context: vscode.ExtensionContext): void {
       vscode.l10n.t("Japanese Novel: couldn't start the language server. {0}", message),
     );
   });
+}
+
+export function activate(context: vscode.ExtensionContext): void {
+  extCtx = context;
+
+  // Revive the preview panel the workbench restored from the previous session (window
+  // reload); without a registered serializer the restored tab would stay blank forever.
+  // Registered eagerly: `onWebviewPanel` activation can precede every other trigger.
+  // ensureStarted() runs synchronously first, so `preview` exists and its adopt() paints
+  // the loading shell immediately — the first render then queues behind client.start().
+  context.subscriptions.push(
+    vscode.window.registerWebviewPanelSerializer(Preview.viewType, {
+      deserializeWebviewPanel: (panel: vscode.WebviewPanel, state: unknown) => {
+        ensureStarted();
+        preview?.adopt(panel, state);
+        // adopt() is synchronous through its first paint and never throws; returning
+        // already-resolved keeps VS Code's revival pipeline unblocked (a rejection
+        // would surface an "error restoring view" page instead).
+        return Promise.resolve();
+      },
+    }),
+  );
+
+  // Surface "Build selected as HTML/Text" in the Run and Debug launch dropdown (▶), driven by the
+  // Books panel's checkbox selection. See buildDebug.ts for why this is modeled as a debugger.
+  // The lazy runner defers BooksView construction to first use so registration stays Phase-1 cheap.
+  context.subscriptions.push(
+    registerBuildDebugger({
+      buildSelected: (format) => {
+        ensureStarted();
+        return booksView?.buildSelected(format) ?? Promise.resolve();
+      },
+    }),
+  );
+
+  // Commands. All server-dependent bodies go through ensureStarted() so any command is a
+  // start trigger. The build actions live on the Books panel (Run and Debug) and operate on
+  // its checkbox selection; there is no command-palette build entry — a build needs a resolved
+  // config plus at least one selected book, so the palette is the wrong home for it.
+  context.subscriptions.push(
+    // Scaffold a fresh novel project (.vscode/, novel.jp.json, a sample chapter). Palette-only;
+    // available in an empty workspace via the implicit onCommand activation (vscode >= 1.74).
+    // Needs no server itself: opening the scaffolded sample chapter fires the
+    // onDidOpenTextDocument trigger below, which starts the server.
+    registerInitWorkspace(),
+    command('jpnov.books.buildHtml', () => { ensureStarted(); return booksView?.buildHtml(); }),
+    command('jpnov.books.buildTxt', () => { ensureStarted(); return booksView?.buildTxt(); }),
+    command('jpnov.books.selectAll', () => { ensureStarted(); return booksView?.selectAll(); }),
+    command('jpnov.books.deselectAll', () => { ensureStarted(); return booksView?.deselectAll(); }),
+    command('jpnov.books.refresh', () => { ensureStarted(); return booksView?.refresh(); }),
+    command('jpnov.preview', () => { ensureStarted(); return preview?.open(false); }),
+    command('jpnov.previewToSide', () => { ensureStarted(); return preview?.open(true); }),
+  );
+
+  // Lazy-start triggers. The listener covers documents opened AFTER activation; the
+  // synchronous scan below covers the one that caused an onLanguage activation (it was
+  // open before this listener existed, so the listener alone would miss it). A language-
+  // mode change is covered too: VS Code reopens the document (close + open events).
+  context.subscriptions.push(
+    vscode.workspace.onDidOpenTextDocument((doc) => {
+      if (!started && isNovelDoc(doc)) {
+        ensureStarted();
+      }
+    }),
+    vscode.workspace.onDidChangeWorkspaceFolders((e) => {
+      // Once started, vscode-languageclient forwards folder changes to the server itself.
+      if (!started) {
+        void startIfConfigPresent(e.added);
+      }
+    }),
+  );
+
+  if (vscode.workspace.textDocuments.some(isNovelDoc)) {
+    ensureStarted();
+  } else {
+    // Novel workspace with no novel editor open (the onStartupFinished case): probe the
+    // folder roots and self-populate status bar + Books view shortly after startup.
+    // Not awaited — activate() must return immediately; the probe is internally
+    // started-guarded, so racing another trigger is harmless.
+    void startIfConfigPresent(vscode.workspace.workspaceFolders ?? []);
+  }
 }
 
 export function deactivate(): Thenable<void> | undefined {
@@ -236,5 +347,7 @@ export function deactivate(): Thenable<void> | undefined {
   statusBar = undefined;
   preview = undefined;
   booksView = undefined;
+  extCtx = undefined;
+  started = false;
   return stopping;
 }

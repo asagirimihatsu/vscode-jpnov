@@ -32,6 +32,14 @@ import {
   type RenderFileResult,
 } from '#/shared/protocol.ts';
 
+/**
+ * Trailing-edge debounce for edit-driven re-renders. Every keystroke otherwise ships the whole
+ * buffer to the server and swaps the full webview DOM; 120ms coalesces a typing burst into one
+ * render while staying under the ~200ms "feels live" bar. Only the edit path is debounced —
+ * open/adopt/editor-switch renders stay immediate.
+ */
+const RENDER_DEBOUNCE_MS = 120;
+
 /** Spinner styles for {@link Preview.loadingShell} (nonce'd `<style>`, theme-driven). */
 const LOADING_CSS =
   '.loading{display:flex;align-items:center;gap:.6em;color:var(--vscode-descriptionForeground,#888);}' +
@@ -56,6 +64,8 @@ export class Preview {
    * replaced panel (every panel transition funnels through teardown()).
    */
   private renderSeq = 0;
+  /** Pending edit-driven re-render (see {@link RENDER_DEBOUNCE_MS}); cleared by teardown(). */
+  private renderDebounce: ReturnType<typeof setTimeout> | undefined;
 
   private readonly client: LanguageClient;
 
@@ -185,12 +195,21 @@ export class Preview {
           void this.renderDocument(next.document);
         }
       }),
-      // ...on every edit to the file currently shown (live dirty buffer)...
+      // ...on every edit to the file currently shown (live dirty buffer), debounced so a typing
+      // burst costs one render. The trailing call reads the document's CURRENT text (TextDocument
+      // is live), and re-checks the panel still shows that document (it may have switched or
+      // closed during the delay).
       vscode.workspace.onDidChangeTextDocument((e) => {
         if (e.document.uri.toString() === this.currentDocUri) {
-          // Fire-and-forget re-render: renderDocument() self-catches its sendRequest (shows a
-          // placeholder on failure) and is renderSeq-serialized, so a dropped result is safe.
-          void this.renderDocument(e.document);
+          clearTimeout(this.renderDebounce);
+          this.renderDebounce = setTimeout(() => {
+            this.renderDebounce = undefined;
+            if (e.document.uri.toString() === this.currentDocUri) {
+              // Fire-and-forget re-render: renderDocument() self-catches its sendRequest (shows a
+              // placeholder on failure) and is renderSeq-serialized, so a dropped result is safe.
+              void this.renderDocument(e.document);
+            }
+          }, RENDER_DEBOUNCE_MS);
         }
       }),
       // ...and follow the top-most cursor as it moves (a scroll message, no re-render).
@@ -363,6 +382,8 @@ export class Preview {
     // seq-guarded, so the bump keeps a slow response from writing to this panel after
     // it is disposed (or, via adopt()'s duplicate guard, replaced).
     this.renderSeq++;
+    clearTimeout(this.renderDebounce);
+    this.renderDebounce = undefined;
     for (const d of this.panelDisposables) {
       d.dispose();
     }

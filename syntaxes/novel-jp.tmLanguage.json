@@ -1,0 +1,87 @@
+{
+  "name": "Japanese Novel",
+  "scopeName": "text.novel-jp",
+  "comment": "Instant (pre-activation) colorization for .jpnov. Scope families are chosen so VS Code's DEFAULT semantic-type→scope fallback lands on the SAME colors the LSP semantic layer later emits (comment→comment, keyword→keyword — see src/server/semanticTokens.ts HIGHLIGHTS): when the server's tokens arrive they refine invisibly instead of repainting. Every pattern is a single-line `match` (never begin/end) so an unclosed ［＃ or a runaway 《 can only ever mis-color its own line. The 傍点 variant alternation must stay in sync with src/shared/compiler/emphasis.ts DOTS.",
+  "patterns": [
+    { "include": "#annotation" },
+    { "include": "#ruby" },
+    { "include": "#dialogue" }
+  ],
+  "repository": {
+    "annotation": {
+      "patterns": [
+        {
+          "comment": "Page break ［＃改ページ］ — frame greyed, directive keyword-colored (semantic: marker/directive).",
+          "match": "(［＃)(改ページ)(］)",
+          "captures": {
+            "1": { "name": "comment.block.annotation.novel-jp" },
+            "2": { "name": "keyword.other.directive.novel-jp" },
+            "3": { "name": "comment.block.annotation.novel-jp" }
+          }
+        },
+        {
+          "comment": "Emphasis span END ［＃(の左に|左に)?<dot>終わり］ — must be tried BEFORE span start (終わり suffix).",
+          "match": "(［＃)(の左に|左に)?(白ゴマ傍点|二重丸傍点|蛇の目傍点|黒三角傍点|白三角傍点|白丸傍点|丸傍点|ばつ傍点|×傍点|傍点)(終わり)(］)",
+          "captures": {
+            "1": { "name": "comment.block.annotation.novel-jp" },
+            "2": { "name": "comment.other.annotation.novel-jp" },
+            "3": { "name": "keyword.other.directive.novel-jp" },
+            "4": { "name": "keyword.other.directive.novel-jp" },
+            "5": { "name": "comment.block.annotation.novel-jp" }
+          }
+        },
+        {
+          "comment": "Emphasis span START ［＃(の左に|左に)?<dot>］.",
+          "match": "(［＃)(の左に|左に)?(白ゴマ傍点|二重丸傍点|蛇の目傍点|黒三角傍点|白三角傍点|白丸傍点|丸傍点|ばつ傍点|×傍点|傍点)(］)",
+          "captures": {
+            "1": { "name": "comment.block.annotation.novel-jp" },
+            "2": { "name": "comment.other.annotation.novel-jp" },
+            "3": { "name": "keyword.other.directive.novel-jp" },
+            "4": { "name": "comment.block.annotation.novel-jp" }
+          }
+        },
+        {
+          "comment": "Postfix emphasis ［＃「対象」(に|の)?(の左に|左に)?<dot>］ — the target (group 3) is deliberately UNSCOPED so it keeps the default foreground, exactly like the semantic layer. The target must be NON-empty ([^」]+): the tokenizer rejects an empty target (comment fallback), so an empty one must fall through to the generic annotation rule below.",
+          "match": "(［＃)(「)([^」]+)(」)(に|の)?(の左に|左に)?(白ゴマ傍点|二重丸傍点|蛇の目傍点|黒三角傍点|白三角傍点|白丸傍点|丸傍点|ばつ傍点|×傍点|傍点)(］)",
+          "captures": {
+            "1": { "name": "comment.block.annotation.novel-jp" },
+            "2": { "name": "comment.other.dialogue.novel-jp" },
+            "4": { "name": "comment.other.dialogue.novel-jp" },
+            "5": { "name": "comment.other.annotation.novel-jp" },
+            "6": { "name": "comment.other.annotation.novel-jp" },
+            "7": { "name": "keyword.other.directive.novel-jp" },
+            "8": { "name": "comment.block.annotation.novel-jp" }
+          }
+        },
+        {
+          "comment": "Any other ［＃…］ (block layout, 見出し, the 傍線 line family, unknown) — whole annotation greyed, matching the server's `comment` classification. Single-line, so an unclosed ［＃ never runs away.",
+          "match": "(［＃)([^］]*)(］)",
+          "name": "comment.block.annotation.novel-jp"
+        }
+      ]
+    },
+    "ruby": {
+      "patterns": [
+        {
+          "comment": "Ruby reading 《…》 incl. both brackets — greyed like the semantic marker; the base (親文字) before it keeps the default foreground. Empty 《》 / a lone 《 are left default (the tokenizer treats them literally).",
+          "match": "《[^》]+》",
+          "name": "comment.other.ruby.novel-jp"
+        },
+        {
+          "comment": "Explicit ruby base marker ｜ — the 親文字 after it stays default.",
+          "match": "｜",
+          "name": "comment.other.ruby.novel-jp"
+        }
+      ]
+    },
+    "dialogue": {
+      "patterns": [
+        {
+          "comment": "Dialogue corner-bracket delimiters — greyed; the utterance content keeps the default foreground (the semantic layer masks it too). Matching per CHARACTER keeps multi-line 「…」 stateless and safe.",
+          "match": "[「」『』]",
+          "name": "comment.other.dialogue.novel-jp"
+        }
+      ]
+    }
+  }
+}
