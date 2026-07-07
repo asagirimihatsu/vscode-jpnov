@@ -43,12 +43,15 @@ const CONFIG_BASENAMES = [
   'novel.jp.ts',
 ] as const;
 
-/** The starter chapter: a tasteful welcome that also demos ruby / emphasis / page-break. */
+/** The starter chapter: a tasteful welcome that also demos ruby / emphasis / indent / page-break. */
 const CHAPTER_CONTENT = `　ようこそ、小説の執筆へ。
 　このファイルは、書き味をひと目で確かめるためのサンプルです。
 　主に賞や文学出版物への投稿を想定し、縦書き原稿を作成するための機能を備えています。
 　漢字にはルビを振れます。たとえば物語《ものがたり》や、｜青空《あおぞら》のように。
-　ここぞという言葉には傍点［＃「傍点」に傍点］を打てます。
+　ここぞという言葉には傍点［＃「傍点」に傍点］を打てますし、傍線［＃「傍線」に傍線］や太字［＃「太字」は太字］も使えます。
+［＃ここから２字下げ］
+　引用や補足は、このように一段下げてまとめられます。
+［＃ここで字下げ終わり］
 　ファイルの拡張子は「.jpnov」です。ファイルネームは自由ですが、「.filelist」にもチェックし、章のファイルを列挙してください。
 ［＃改ページ］
 　あなたの物語を書き始めましょう。

@@ -14,7 +14,7 @@
  * Pure + vscode-free.
  */
 
-import { emphasisClassRule } from './emphasis.ts';
+import { styleRule } from './emphasis.ts';
 
 const DEFAULT_LINES_PER_PAGE = 34;
 /** Default 折り返し width; shared with the preview renderer's wrap fallback. */
@@ -34,21 +34,36 @@ const LINE_HEIGHT = 1.75;
  */
 const PREVIEW_PAD_PX = 16;
 
+/**
+ * The CSS rule for one used class name, or '' for an unknown one (keeps the "no stray rules"
+ * invariant). `indent-N` (字下げ) is generated here — it is layout geometry, not a style-table
+ * entry; the suffix check is defence in depth (emitLine only ever emits positive N_eff). Every
+ * other class (emph-* / dec-* / b / i) is forwarded to emphasis.ts's {@link styleRule}, the
+ * single home of the style CSS values.
+ */
+function classRule(name: string): string {
+  if (name.startsWith('indent-')) {
+    const n = name.slice('indent-'.length);
+    return /^[1-9][0-9]*$/.test(n) ? `.indent-${n}{padding-inline-start:${n}em}` : '';
+  }
+  return styleRule(name);
+}
+
 export function stylesheet(opts: {
   charsPerLine?: number;
   linesPerPage?: number;
   paginate: boolean;
   /**
-   * The emphasis class names the document actually uses (on-demand): only their rules are
-   * emitted, so an unused 傍点 variant costs nothing. Callers pass these pre-sorted
+   * The class names the document actually uses (on-demand): only their rules are emitted, so an
+   * unused 傍点/傍線/太字/斜体/字下げ variant costs nothing. Callers pass these pre-sorted
    * (lexicographic by class name — not spec order) for deterministic CSS output.
    */
-  emphasisClasses?: readonly string[];
+  usedClasses?: readonly string[];
 }): string {
   const charsPerLine = opts.charsPerLine ?? DEFAULT_CHARS_PER_LINE;
   const linesPerPage = opts.linesPerPage ?? DEFAULT_LINES_PER_PAGE;
   const pageBlock = linesPerPage * LINE_HEIGHT;
-  const emphasisRules = (opts.emphasisClasses ?? []).map(emphasisClassRule);
+  const rules = (opts.usedClasses ?? []).map(classRule);
 
   if (opts.paginate) {
     return [
@@ -65,7 +80,7 @@ export function stylesheet(opts: {
       `ruby>rt{font-size:0.5em;}`,
       // Print sheet = one grid page.
       `@page{size:${String(pageBlock)}em ${String(charsPerLine)}em;margin:0;}`,
-      ...emphasisRules,
+      ...rules,
     ].join('');
   }
 
@@ -86,6 +101,6 @@ export function stylesheet(opts: {
     `.line{block-size:${String(LINE_HEIGHT)}em;margin:0;white-space:pre;font-size:1rem;font-family:serif;}`,
     `ruby>rt{font-size:0.5em;}`,
     `.pagebreak{border:0;border-block-start:2px dashed currentColor;margin-block:1em;}`,
-    ...emphasisRules,
+    ...rules,
   ].join('');
 }

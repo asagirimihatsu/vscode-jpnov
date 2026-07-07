@@ -153,8 +153,9 @@ export function extractStreams(src: string): Streams {
         appendProse(token.base, offset);
         ruby.joinFrom(readingBuf(token.reading, offset + token.base.length + 1));
         break;
-      // pageBreak / emphasis* / comment / brokenAnnotation contribute no prose; they only
-      // advance `offset` (malformed markup is deliberately not linted).
+      // pageBreak / emphasis* / indent* / comment / brokenAnnotation contribute no prose; they
+      // only advance `offset` (malformed markup is deliberately not linted). Block directives
+      // vanishing here is also why a chunk seam can never bisect a ここから/ここで pair.
     }
     offset += token.raw.length;
   }

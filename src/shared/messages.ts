@@ -67,6 +67,10 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return `${englishLabel(args[0] as LabelId)} must not escape the workspace root`;
     case 'syntax.unclosedAnnotation':
       return 'unterminated ［＃ annotation (missing ］)';
+    case 'syntax.unterminatedBlock':
+      return 'unterminated block annotation (missing ［＃ここで…終わり］)';
+    case 'syntax.danglingBlockEnd':
+      return 'block-end annotation without a matching start';
     // --- prose lint (one static, arg-less code per (scope, rule); see lint/catalog.ts).
     // `common` rules run on both 地の文 + 台詞 under one code; JA lives in bundle.l10n.ja.json.
     case 'lint.common.sentenceLength':

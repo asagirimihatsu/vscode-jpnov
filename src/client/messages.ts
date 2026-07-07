@@ -80,6 +80,10 @@ export function renderMessage(msg: LocalizableMessage): string {
       return vscode.l10n.t('{0} must not escape the workspace root', labelText(a[0] as LabelId));
     case 'syntax.unclosedAnnotation':
       return vscode.l10n.t('unterminated ［＃ annotation (missing ］)');
+    case 'syntax.unterminatedBlock':
+      return vscode.l10n.t('unterminated block annotation (missing ［＃ここで…終わり］)');
+    case 'syntax.danglingBlockEnd':
+      return vscode.l10n.t('block-end annotation without a matching start');
     // --- prose lint (kept byte-identical to renderEnglish). ---
     case 'lint.common.sentenceLength':
       return vscode.l10n.t('this sentence is too long');

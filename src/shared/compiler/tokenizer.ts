@@ -4,8 +4,9 @@
  * The only annotation delimiter is the full-width ［＃ ... ］; corner brackets 「」 are
  * dialogue and are never comments. Ruby uses its own delimiters 《 》 with an optional
  * explicit base marker ｜. This is the single entry point that both the per-file
- * renderer and the book renderer build on, so it handles cross-line spans (傍点 span
- * start/end emit independent tokens in stream order; the renderer pairs them).
+ * renderer and the book renderer build on, so it handles cross-line spans (style span
+ * start/end and 字下げ block start/end emit independent tokens in stream order; the
+ * renderer pairs them).
  *
  * Delimiter pairing is LINE-BOUNDED — ［＃…］ and 《…》 never pair across a line break, so
  * broken markup only ever affects its own source line:
@@ -18,7 +19,7 @@
  *   - A standalone ］ or 》 is ordinary text.
  */
 
-import { emphasisClass } from './emphasis.ts';
+import { resolveStyle, type Channel } from './emphasis.ts';
 
 export type TokenKind =
   | 'text'
@@ -29,7 +30,10 @@ export type TokenKind =
   | 'emphasisSpanEnd'
   | 'comment'
   | 'brokenAnnotation'
-  | 'pageBreak';
+  | 'pageBreak'
+  | 'indent'
+  | 'indentBlockStart'
+  | 'indentBlockEnd';
 
 interface TokenBase {
   readonly kind: TokenKind;
@@ -63,11 +67,19 @@ export interface EmphasisPostfixToken extends TokenBase {
 export interface EmphasisSpanStartToken extends TokenBase {
   readonly kind: 'emphasisSpanStart';
   readonly variant: string;
+  /**
+   * True iff this came from the BLOCK form ［＃ここから太字/斜体］ (own-line, 太字/斜体 only). The
+   * inline form ［＃太字］ leaves it undefined. Drives empty-column suppression, directive
+   * colouring of ここから, and block pairing ({@link findUnpairedBlocks}).
+   */
+  readonly block?: true;
 }
 
 export interface EmphasisSpanEndToken extends TokenBase {
   readonly kind: 'emphasisSpanEnd';
   readonly variant: string;
+  /** True iff from ［＃ここで太字/斜体終わり］ (block form). See {@link EmphasisSpanStartToken.block}. */
+  readonly block?: true;
 }
 
 export interface CommentToken extends TokenBase {
@@ -89,6 +101,35 @@ export interface PageBreakToken extends TokenBase {
   readonly kind: 'pageBreak';
 }
 
+/**
+ * A single-line indent ［＃○字下げ］ — indents its own logical line by `amount` full-width cells.
+ * LINE-HEAD only: the tokenizer emits this only when the ［ opens the line (see `atLineStart` in
+ * {@link tokenize}); mid-line it degrades to a {@link CommentToken}, matching the tmLanguage `^`
+ * anchor. `amount` is a non-negative int parsed from full-width digits ０-９ (see
+ * {@link indentAmount}); the layout clamps it to the line width and treats 0 as no indent.
+ */
+export interface IndentToken extends TokenBase {
+  readonly kind: 'indent';
+  readonly amount: number;
+}
+
+/**
+ * Block indent opener ［＃ここから○字下げ］ — indents every following logical line by `amount`
+ * (incl. wrapped continuations) until the matching {@link IndentBlockEndToken}. Not line-head-gated.
+ */
+export interface IndentBlockStartToken extends TokenBase {
+  readonly kind: 'indentBlockStart';
+  readonly amount: number;
+}
+
+/**
+ * Block indent closer ［＃ここで字下げ終わり］. A dangling one (no open block) is a layout no-op;
+ * {@link findUnpairedBlocks} surfaces it as a Warning.
+ */
+export interface IndentBlockEndToken extends TokenBase {
+  readonly kind: 'indentBlockEnd';
+}
+
 export type Token =
   | TextToken
   | RubyExplicitToken
@@ -98,7 +139,10 @@ export type Token =
   | EmphasisSpanEndToken
   | CommentToken
   | BrokenAnnotationToken
-  | PageBreakToken;
+  | PageBreakToken
+  | IndentToken
+  | IndentBlockStartToken
+  | IndentBlockEndToken;
 
 // Full-width annotation/ruby markers (see codepoints in the locked spec).
 const OPEN_BRACKET = '［'; // ［
@@ -111,49 +155,150 @@ const CORNER_OPEN = '「'; // 「
 const CORNER_CLOSE = '」'; // 」
 const PAGE_BREAK = '改ページ';
 const SPAN_END_SUFFIX = '終わり';
+const CONNECTOR_NI = 'に';
+const CONNECTOR_HA = 'は';
+const BLOCK_FROM = 'ここから';
+const BLOCK_TO = 'ここで';
+const INDENT_SUFFIX = '字下げ';
+const BOLD = '太字';
+const ITALIC = '斜体';
 
 /**
- * Classifies the inner text of a ［＃ ... ］ annotation (already extracted, never
- * re-scanned) into the appropriate annotation token. The `raw` is the full bracketed
- * source slice including ［＃ and ］.
+ * The indent count in `s` = 「<digits>字下げ」, or null. Aozora writes it as FULL-WIDTH digits
+ * ０-９ ONLY (locked spec). The count is UNBOUNDED here: the layout clamps N to the line width
+ * (N_eff = min(N, charsPerLine−1)), so there is NO N-too-big degrade branch and hence no span
+ * the grammar (`[０-９]+`) and this lexer could ever disagree on. A half-width digit, 漢数字, or
+ * a missing 字下げ suffix yields null → the caller degrades to a comment. Leading zeros parse
+ * numerically (００→0, ００３→3); 0 is a valid amount the layout renders as no indent.
  */
-function classifyAnnotation(inner: string, raw: string): Token {
+function indentAmount(s: string): number | null {
+  if (!s.endsWith(INDENT_SUFFIX)) {
+    return null;
+  }
+  const digits = s.slice(0, s.length - INDENT_SUFFIX.length);
+  if (digits.length === 0) {
+    return null;
+  }
+  let n = 0;
+  for (let k = 0; k < digits.length; k += 1) {
+    const cp = digits.charCodeAt(k);
+    if (cp < 0xff10 || cp > 0xff19) {
+      return null; // not a full-width digit (半角/漢数字 degrade to comment)
+    }
+    n = n * 10 + (cp - 0xff10);
+  }
+  return n;
+}
+
+/**
+ * Connector matrix, kept literally consistent with tmLanguage rules 9/10 so both layers grey the
+ * same inputs (zero-fight):
+ *   - 傍点/傍線 (emph/line): connector に is OPTIONAL (grammar `(に)?`); a bare 「対象」傍点 or a
+ *     の左に/左に-prefixed one (family=null) is accepted — preserves the current 傍点 behaviour.
+ *   - 太字/斜体 (weight/style): connector は is REQUIRED (grammar `(は)`, NOT optional); a bare
+ *     「対象」太字 (family=null) or a に-paired one → false → comment, matching the grammar.
+ *   - Any cross-family pairing (は+傍点, に+太字) → false → comment.
+ */
+function connectorMatches(family: 'ni' | 'ha' | null, channel: Channel): boolean {
+  if (channel === 'weight' || channel === 'style') {
+    return family === 'ha'; // 太字/斜体 REQUIRE は
+  }
+  return family === 'ni' || family === null; // 傍点/傍線: に optional; の左に / bare (family=null) ok
+}
+
+/**
+ * Classifies the inner text of a ［＃ ... ］ annotation (already extracted, never re-scanned)
+ * into the appropriate annotation token. The `raw` is the full bracketed source slice including
+ * ［＃ and ］; `atLineStart` is true iff the ［ opened its line (only the single-line 字下げ
+ * branch reads it). Recognition is PURELY LITERAL and kept literally identical to the tmLanguage
+ * patterns, so the grammar and this lexer never colour a span differently: whether a recognised
+ * block actually pairs / an indent actually applies is decided later (layout /
+ * {@link findUnpairedBlocks}), never by degrading a well-formed directive to a grey comment here.
+ */
+function classifyAnnotation(inner: string, raw: string, atLineStart: boolean): Token {
   if (inner === PAGE_BREAK) {
     return { kind: 'pageBreak', raw };
   }
 
-  // Postfix emphasis: ［＃「対象」に傍点］ / ［＃「対象」の左に傍点］.
+  // Corner-target postfix ［＃「対象」に傍点／の左に傍線／は太字…］.
   if (inner.startsWith(CORNER_OPEN)) {
-    const close = inner.indexOf(CORNER_CLOSE, CORNER_OPEN.length);
-    if (close !== -1) {
-      const target = inner.slice(CORNER_OPEN.length, close);
-      let variant = inner.slice(close + CORNER_CLOSE.length);
-      // Strip a single connector (に for the plain form, の for の左に…).
-      if (variant.startsWith('に') || variant.startsWith('の')) {
-        variant = variant.slice(1);
-      }
-      if (target !== '' && emphasisClass(variant) !== null) {
-        return { kind: 'emphasisPostfix', raw, target, variant };
-      }
+    return classifyPostfix(inner, raw);
+  }
+
+  // Block END ［＃ここで X終わり］ — BEFORE block-start and the short span-end (its 終わり overlaps).
+  if (inner.startsWith(BLOCK_TO) && inner.endsWith(SPAN_END_SUFFIX)) {
+    const mid = inner.slice(BLOCK_TO.length, inner.length - SPAN_END_SUFFIX.length);
+    if (mid === INDENT_SUFFIX) {
+      return { kind: 'indentBlockEnd', raw };
     }
-    // Unknown target/variant => fall through to a comment.
+    if (mid === BOLD || mid === ITALIC) {
+      return { kind: 'emphasisSpanEnd', raw, variant: mid, block: true };
+    }
+    return { kind: 'comment', raw, inner }; // ここで傍点終わり etc. (傍点/傍線 have no block form)
+  }
+
+  // Block START ［＃ここから X］.
+  if (inner.startsWith(BLOCK_FROM)) {
+    const body = inner.slice(BLOCK_FROM.length);
+    const amount = indentAmount(body);
+    if (amount !== null) {
+      return { kind: 'indentBlockStart', raw, amount };
+    }
+    if (body === BOLD || body === ITALIC) {
+      return { kind: 'emphasisSpanStart', raw, variant: body, block: true };
+    }
+    return { kind: 'comment', raw, inner }; // ここから傍点 / ここから…折り返して… → grey
+  }
+
+  // Short (inline) span END ［＃傍点終わり／左に傍線終わり／太字終わり］.
+  if (inner.endsWith(SPAN_END_SUFFIX)) {
+    const variant = inner.slice(0, inner.length - SPAN_END_SUFFIX.length);
+    if (resolveStyle(variant) !== null) {
+      return { kind: 'emphasisSpanEnd', raw, variant };
+    }
     return { kind: 'comment', raw, inner };
   }
 
-  // Span end: ［＃傍点終わり］ (must check before span-start so the suffix is seen).
-  if (inner.endsWith(SPAN_END_SUFFIX)) {
-    const variant = inner.slice(0, inner.length - SPAN_END_SUFFIX.length);
-    if (emphasisClass(variant) !== null) {
-      return { kind: 'emphasisSpanEnd', raw, variant };
-    }
+  // Single-line indent ［＃○字下げ］ — LINE-HEAD only.
+  const amount = indentAmount(inner);
+  if (amount !== null) {
+    return atLineStart
+      ? { kind: 'indent', raw, amount }
+      : { kind: 'comment', raw, inner };
   }
 
-  // Span start: ［＃傍点］.
-  if (emphasisClass(inner) !== null) {
+  // Short (inline) span START ［＃傍点／左に傍線／太字］.
+  if (resolveStyle(inner) !== null) {
     return { kind: 'emphasisSpanStart', raw, variant: inner };
   }
 
-  // Everything else (incl. the 傍線 line family) becomes a comment.
+  return { kind: 'comment', raw, inner };
+}
+
+/**
+ * Corner-target postfix. Connector rules: strip a single に / は; の is NOT a connector (の左に is
+ * a direction prefix handled whole by resolveStyle). に→emph/line, は→weight/style; a channel
+ * mismatch (「対象」は傍点 etc.) or unknown variant degrades to a comment.
+ */
+function classifyPostfix(inner: string, raw: string): Token {
+  const close = inner.indexOf(CORNER_CLOSE, CORNER_OPEN.length);
+  if (close === -1) {
+    return { kind: 'comment', raw, inner };
+  }
+  const target = inner.slice(CORNER_OPEN.length, close);
+  let rest = inner.slice(close + CORNER_CLOSE.length);
+  let family: 'ni' | 'ha' | null = null;
+  if (rest.startsWith(CONNECTOR_HA)) {
+    family = 'ha';
+    rest = rest.slice(CONNECTOR_HA.length);
+  } else if (rest.startsWith(CONNECTOR_NI)) {
+    family = 'ni';
+    rest = rest.slice(CONNECTOR_NI.length);
+  }
+  const style = resolveStyle(rest);
+  if (target !== '' && style !== null && connectorMatches(family, style.channel)) {
+    return { kind: 'emphasisPostfix', raw, target, variant: rest };
+  }
   return { kind: 'comment', raw, inner };
 }
 
@@ -201,10 +346,17 @@ export function tokenize(src: string): Token[] {
         i = lineEnd;
         continue;
       }
+      // Line-head test for the ［＃○字下げ］ directive: the ［ opens the line at BOF or just past
+      // a line break. A lone '\r' counts too — VS Code and LSP both treat it as a line separator,
+      // so the tmLanguage `^` matches after it; this must agree or the two layers would colour a
+      // ［＃○字下げ］ after a bare '\r' differently. Only classifyAnnotation's single-line indent
+      // branch reads it.
+      const atLineStart =
+        i === 0 || src.charAt(i - 1) === '\n' || src.charAt(i - 1) === '\r';
       const inner = src.slice(i + 2, close);
       const raw = src.slice(i, close + 1);
       flushText();
-      tokens.push(classifyAnnotation(inner, raw));
+      tokens.push(classifyAnnotation(inner, raw, atLineStart));
       i = close + 1;
       continue;
     }
@@ -318,6 +470,79 @@ export function findBrokenAnnotations(src: string): BrokenAnnotation[] {
     offset += token.raw.length;
   }
   return spans;
+}
+
+// ---------------------------------------------------------------------------
+// Unpaired block directives (Warning diagnostics)
+// ---------------------------------------------------------------------------
+
+/** An unpaired block directive as absolute source offsets. `kind` picks the message code. */
+export interface UnpairedBlock {
+  readonly start: number;
+  readonly end: number;
+  readonly kind: 'unterminated' | 'dangling';
+}
+
+type BlockChannel = 'indent' | 'weight' | 'style';
+
+/** The block channel a token opens/closes, or null if it is not a block directive. */
+function blockChannelOf(token: Token): BlockChannel | null {
+  if (token.kind === 'indentBlockStart' || token.kind === 'indentBlockEnd') {
+    return 'indent';
+  }
+  if (
+    (token.kind === 'emphasisSpanStart' || token.kind === 'emphasisSpanEnd') &&
+    token.block === true
+  ) {
+    const c = resolveStyle(token.variant)?.channel;
+    return c === 'weight' || c === 'style' ? c : null;
+  }
+  return null;
+}
+
+/**
+ * Source spans of every block directive left unpaired — unterminated ［＃ここから…］ (open at EOF)
+ * and dangling ［＃ここで…終わり］ (no open block) — in document order, re-derived from
+ * {@link tokenize} so the Warning diagnostics can never disagree with the render. Rendering itself
+ * is always lenient (EOF auto-close, dangling no-op); this is the ONLY error surface for blocks, a
+ * Warning (vs the unclosed-［＃ Error of {@link findBrokenAnnotations}).
+ *
+ * Pairing is one INDEPENDENT SINGLE SLOT per channel (indent / weight / style), NOT a stack:
+ * blocks may overlap across channels (a 太字 block inside a 字下げ block is fine), and a
+ * still-open same-channel start is simply superseded (the render is last-wins — e.g. ２字下げ
+ * re-opened as ４字下げ is a legal amount change, not an unterminated block). Inline spans
+ * (no `block` flag) never participate.
+ */
+export function findUnpairedBlocks(src: string): UnpairedBlock[] {
+  const spans: UnpairedBlock[] = [];
+  const open: Record<BlockChannel, { start: number; end: number } | undefined> = {
+    indent: undefined,
+    weight: undefined,
+    style: undefined,
+  };
+  let offset = 0;
+  for (const token of tokenize(src)) {
+    const ch = blockChannelOf(token);
+    if (ch !== null) {
+      const span = { start: offset, end: offset + token.raw.length };
+      const isStart = token.kind === 'indentBlockStart' || token.kind === 'emphasisSpanStart';
+      if (isStart) {
+        open[ch] = span; // replace: a still-open same-channel start is superseded (render is last-wins)
+      } else if (open[ch] !== undefined) {
+        open[ch] = undefined; // paired
+      } else {
+        spans.push({ ...span, kind: 'dangling' });
+      }
+    }
+    offset += token.raw.length;
+  }
+  for (const ch of ['indent', 'weight', 'style'] as const) {
+    const s = open[ch];
+    if (s !== undefined) {
+      spans.push({ start: s.start, end: s.end, kind: 'unterminated' });
+    }
+  }
+  return spans.sort((a, b) => a.start - b.start);
 }
 
 // ---------------------------------------------------------------------------

@@ -18,7 +18,7 @@ export function renderPreview(
   src: string,
   opts: { charsPerLine?: number; avoidLineBreaks?: boolean } = {},
 ): string {
-  // Render the body first so the CSS includes ONLY the emphasis classes it used. The sort is
+  // Render the body first so the CSS includes ONLY the classes it used. The sort is
   // lexicographic by class name (deterministic output), not spec order.
   const charsPerLine = opts.charsPerLine ?? DEFAULT_CHARS_PER_LINE;
   const used = new Set<string>();
@@ -30,6 +30,6 @@ export function renderPreview(
   );
   // charsPerLine also drives the stylesheet's fit-to-viewport font-size (a full line
   // fills the pane height), so it MUST match the wrap width used above.
-  const css = stylesheet({ paginate: false, charsPerLine, emphasisClasses: [...used].sort() });
+  const css = stylesheet({ paginate: false, charsPerLine, usedClasses: [...used].sort() });
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${css}</style></head><body>${body}</body></html>`;
 }
