@@ -48,8 +48,8 @@ import type { Recognizer } from './highlight/recognizer.ts';
  * remapping; removing either row would make that assignment fail to type-check.
  */
 const HIGHLIGHTS = [
-  { kind: 'marker', lsp: 'comment' }, // ｜ 《 》 ［＃ ］ scaffolding + 「」『』 dialogue delimiters (greyed)
-  { kind: 'directive', lsp: 'keyword' }, // style variant names / 改ページ / 字下げ / ここから・ここで / 終わり
+  { kind: 'marker', lsp: 'comment' }, // ｜ 《 》 ［＃ ］ + ここから・ここで・終わり scaffolding + 「」『』 dialogue delimiters (greyed)
+  { kind: 'directive', lsp: 'keyword' }, // style variant names / 改ページ / ○字下げ (command word only; ここから・ここで・終わり demote to marker)
   { kind: 'direction', lsp: 'comment' }, // の?左に
   { kind: 'character', lsp: 'variable' }, // a cast member recognised as a narration subject (prominent)
   { kind: 'keyword', lsp: 'operator' }, // a coined keyword — bold, default colour
@@ -183,8 +183,8 @@ export function buildSemanticTokens(
     const raw = token.raw.length;
     const last = offset + raw - ONE; // position of the closing ］ / 》
 
-    // Whole inner = one directive: 改ページ, single-line & block 字下げ, and the block form of
-    // 太字/斜体 (no direction prefix, no target — nothing inside to sub-colour).
+    // Whole inner = one directive: 改ページ and the line-head single-line ［＃○字下げ］ — a lone
+    // command word with no ここから/ここで/終わり scaffolding to demote.
     const markDirective = (): void => {
       flushRun();
       mark(offset, ANNOT_OPEN, 'marker'); // ［＃
@@ -219,21 +219,37 @@ export function buildSemanticTokens(
         break;
       }
       case 'indentBlockStart': {
-        markDirective(); // ［＃ここから○字下げ］
-        break;
-      }
-      case 'indentBlockEnd': {
-        markDirective(); // ［＃ここで字下げ終わり］
-        break;
-      }
-      case 'emphasisSpanStart': {
-        if (token.block === true) {
-          markDirective(); // ［＃ここから太字/斜体］
-          break;
-        }
         flushRun();
         mark(offset, ANNOT_OPEN, 'marker'); // ［＃
         const ds = offset + ANNOT_OPEN;
+        const from = 'ここから'.length;
+        mark(ds, from, 'marker'); // ここから (demoted to comment-level, like the postfix connector)
+        mark(ds + from, raw - ANNOT_OPEN - from - ONE, 'directive'); // ○字下げ (digits + 字下げ; length from raw, never amount)
+        mark(last, ONE, 'marker'); // ］
+        break;
+      }
+      case 'indentBlockEnd': {
+        flushRun();
+        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
+        const ds = offset + ANNOT_OPEN;
+        const to = 'ここで'.length;
+        mark(ds, to, 'marker'); // ここで (demoted)
+        mark(ds + to, '字下げ'.length, 'directive'); // 字下げ
+        mark(ds + to + '字下げ'.length, '終わり'.length, 'marker'); // 終わり (demoted)
+        mark(last, ONE, 'marker'); // ］
+        break;
+      }
+      case 'emphasisSpanStart': {
+        flushRun();
+        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
+        const ds = offset + ANNOT_OPEN;
+        if (token.block === true) {
+          const from = 'ここから'.length;
+          mark(ds, from, 'marker'); // ここから (demoted to comment-level)
+          mark(ds + from, token.variant.length, 'directive'); // 太字/斜体
+          mark(last, ONE, 'marker'); // ］
+          break;
+        }
         const dir = directionLen(token.variant);
         mark(ds, dir, 'direction'); // の?左に
         mark(ds + dir, token.variant.length - dir, 'directive'); // variant name
@@ -241,17 +257,21 @@ export function buildSemanticTokens(
         break;
       }
       case 'emphasisSpanEnd': {
-        if (token.block === true) {
-          markDirective(); // ［＃ここで太字/斜体終わり］
-          break;
-        }
         flushRun();
         mark(offset, ANNOT_OPEN, 'marker'); // ［＃
         const ds = offset + ANNOT_OPEN;
+        if (token.block === true) {
+          const to = 'ここで'.length;
+          mark(ds, to, 'marker'); // ここで (demoted)
+          mark(ds + to, token.variant.length, 'directive'); // 太字/斜体
+          mark(ds + to + token.variant.length, '終わり'.length, 'marker'); // 終わり (demoted)
+          mark(last, ONE, 'marker'); // ］
+          break;
+        }
         const dir = directionLen(token.variant);
         mark(ds, dir, 'direction'); // の?左に
         mark(ds + dir, token.variant.length - dir, 'directive'); // variant name
-        mark(ds + token.variant.length, raw - ANNOT_OPEN - token.variant.length - ONE, 'directive'); // 終わり
+        mark(ds + token.variant.length, raw - ANNOT_OPEN - token.variant.length - ONE, 'marker'); // 終わり (demoted)
         mark(last, ONE, 'marker'); // ］
         break;
       }

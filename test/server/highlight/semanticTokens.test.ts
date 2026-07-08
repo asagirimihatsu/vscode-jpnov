@@ -146,38 +146,52 @@ test('a mid-line ［＃３字下げ］ greys whole (comment in both layers, no d
   assert.ok(!toks.some((t) => t.type === tokenTypeIndex('directive')));
 });
 
-test('block 字下げ start/end: ここから２字下げ / ここで字下げ終わり are whole directives', () => {
+test('block 字下げ start/end: ここから/ここで/終わり are markers, only ○字下げ is a directive', () => {
+  // ［＃(0,1) ここから(2..5) ２字下げ(6..9) ］(10)
   const start = decode(buildSemanticTokens(doc('［＃ここから２字下げ］'), rec).data);
-  assert.deepEqual(at(start, 0, 2), {
-    line: 0,
-    char: 2,
-    len: 8,
-    type: tokenTypeIndex('directive'),
-  }); // ここから２字下げ
+  assert.deepEqual(at(start, 0, 0), { line: 0, char: 0, len: 2, type: MARKER }); // ［＃
+  assert.deepEqual(at(start, 0, 2), { line: 0, char: 2, len: 4, type: MARKER }); // ここから
+  assert.deepEqual(at(start, 0, 6), { line: 0, char: 6, len: 4, type: tokenTypeIndex('directive') }); // ２字下げ (digit stays with keyword)
+  assert.deepEqual(at(start, 0, 10), { line: 0, char: 10, len: 1, type: MARKER }); // ］
+  // ［＃(0,1) ここで(2..4) 字下げ(5..7) 終わり(8..10) ］(11)
   const end = decode(buildSemanticTokens(doc('［＃ここで字下げ終わり］'), rec).data);
-  assert.deepEqual(at(end, 0, 2), {
-    line: 0,
-    char: 2,
-    len: 9,
-    type: tokenTypeIndex('directive'),
-  }); // ここで字下げ終わり
+  assert.deepEqual(at(end, 0, 2), { line: 0, char: 2, len: 3, type: MARKER }); // ここで
+  assert.deepEqual(at(end, 0, 5), { line: 0, char: 5, len: 3, type: tokenTypeIndex('directive') }); // 字下げ
+  assert.deepEqual(at(end, 0, 8), { line: 0, char: 8, len: 3, type: MARKER }); // 終わり
+  assert.deepEqual(at(end, 0, 11), { line: 0, char: 11, len: 1, type: MARKER }); // ］
 });
 
-test('block 太字/斜体 (block:true spans) colour the whole inner as one directive', () => {
+test('block 太字/斜体 (block:true spans): ここから/ここで/終わり are markers, only 太字/斜体 is a directive', () => {
+  // ［＃(0,1) ここから(2..5) 太字(6,7) ］(8)
   const start = decode(buildSemanticTokens(doc('［＃ここから太字］'), rec).data);
-  assert.deepEqual(at(start, 0, 2), {
-    line: 0,
-    char: 2,
-    len: 6,
-    type: tokenTypeIndex('directive'),
-  }); // ここから太字 — no separate direction/variant split
+  assert.deepEqual(at(start, 0, 0), { line: 0, char: 0, len: 2, type: MARKER }); // ［＃
+  assert.deepEqual(at(start, 0, 2), { line: 0, char: 2, len: 4, type: MARKER }); // ここから
+  assert.deepEqual(at(start, 0, 6), { line: 0, char: 6, len: 2, type: tokenTypeIndex('directive') }); // 太字
+  assert.deepEqual(at(start, 0, 8), { line: 0, char: 8, len: 1, type: MARKER }); // ］
+  // ［＃(0,1) ここで(2..4) 斜体(5,6) 終わり(7..9) ］(10)
   const end = decode(buildSemanticTokens(doc('［＃ここで斜体終わり］'), rec).data);
-  assert.deepEqual(at(end, 0, 2), {
-    line: 0,
-    char: 2,
-    len: 8,
-    type: tokenTypeIndex('directive'),
-  }); // ここで斜体終わり
+  assert.deepEqual(at(end, 0, 2), { line: 0, char: 2, len: 3, type: MARKER }); // ここで
+  assert.deepEqual(at(end, 0, 5), { line: 0, char: 5, len: 2, type: tokenTypeIndex('directive') }); // 斜体
+  assert.deepEqual(at(end, 0, 7), { line: 0, char: 7, len: 3, type: MARKER }); // 終わり
+  assert.deepEqual(at(end, 0, 10), { line: 0, char: 10, len: 1, type: MARKER }); // ］
+});
+
+test('inline 太字 span END: 太字 is a directive, 終わり is demoted to a marker', () => {
+  // ［＃(0,1) 太字(2,3) 終わり(4..6) ］(7)
+  const toks = decode(buildSemanticTokens(doc('［＃太字終わり］'), rec).data);
+  assert.deepEqual(at(toks, 0, 0), { line: 0, char: 0, len: 2, type: MARKER }); // ［＃
+  assert.deepEqual(at(toks, 0, 2), { line: 0, char: 2, len: 2, type: tokenTypeIndex('directive') }); // 太字
+  assert.deepEqual(at(toks, 0, 4), { line: 0, char: 4, len: 3, type: MARKER }); // 終わり
+  assert.deepEqual(at(toks, 0, 7), { line: 0, char: 7, len: 1, type: MARKER }); // ］
+});
+
+test('inline 傍点 span END: 傍点 is a directive, 終わり is demoted to a marker', () => {
+  // ［＃(0,1) 傍点(2,3) 終わり(4..6) ］(7)
+  const toks = decode(buildSemanticTokens(doc('［＃傍点終わり］'), rec).data);
+  assert.deepEqual(at(toks, 0, 0), { line: 0, char: 0, len: 2, type: MARKER }); // ［＃
+  assert.deepEqual(at(toks, 0, 2), { line: 0, char: 2, len: 2, type: tokenTypeIndex('directive') }); // 傍点
+  assert.deepEqual(at(toks, 0, 4), { line: 0, char: 4, len: 3, type: MARKER }); // 終わり
+  assert.deepEqual(at(toks, 0, 7), { line: 0, char: 7, len: 1, type: MARKER }); // ］
 });
 
 test('太字 postfix: は is a marker, 太字 a directive, the target uncovered', () => {
@@ -209,7 +223,10 @@ test('a multi-line block keeps its body lines free of markup colouring', () => {
   const toks = decode(
     buildSemanticTokens(doc('［＃ここから太字］\n本文\n［＃ここで太字終わり］'), rec).data,
   );
-  assert.deepEqual(at(toks, 0, 2), { line: 0, char: 2, len: 6, type: tokenTypeIndex('directive') });
-  assert.deepEqual(at(toks, 2, 2), { line: 2, char: 2, len: 8, type: tokenTypeIndex('directive') });
+  assert.deepEqual(at(toks, 0, 2), { line: 0, char: 2, len: 4, type: MARKER }); // ここから
+  assert.deepEqual(at(toks, 0, 6), { line: 0, char: 6, len: 2, type: tokenTypeIndex('directive') }); // 太字
+  assert.deepEqual(at(toks, 2, 2), { line: 2, char: 2, len: 3, type: MARKER }); // ここで
+  assert.deepEqual(at(toks, 2, 5), { line: 2, char: 5, len: 2, type: tokenTypeIndex('directive') }); // 太字
+  assert.deepEqual(at(toks, 2, 7), { line: 2, char: 7, len: 3, type: MARKER }); // 終わり
   assert.ok(!toks.some((t) => t.line === 1)); // 本文 stays default body colour
 });

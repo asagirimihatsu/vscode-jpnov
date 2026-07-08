@@ -69,8 +69,9 @@ export interface EmphasisSpanStartToken extends TokenBase {
   readonly variant: string;
   /**
    * True iff this came from the BLOCK form ［＃ここから太字/斜体］ (own-line, 太字/斜体 only). The
-   * inline form ［＃太字］ leaves it undefined. Drives empty-column suppression, directive
-   * colouring of ここから, and block pairing ({@link findUnpairedBlocks}).
+   * inline form ［＃太字］ leaves it undefined. Drives empty-column suppression, the block-form
+   * split colouring (ここから・ここで・終わり demoted to marker, keyword kept on 太字/斜体), and block
+   * pairing ({@link findUnpairedBlocks}).
    */
   readonly block?: true;
 }
