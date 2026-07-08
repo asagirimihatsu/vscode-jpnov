@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 import type { PreviewChrome } from '../../../src/shared/compiler/chrome.ts';
 import { renderPreview } from '../../../src/shared/compiler/preview.ts';
 
+/** The edgeAlpha() recipe from css.ts — the single point the colour assertions key on. */
+const mix = (base: string): string => `color-mix(in srgb,${base} 80%,transparent)`;
+/** A match pattern: raw regex source with the escaped recipe for `base` appended. */
+const mixRe = (raw: string, base: string): RegExp =>
+  new RegExp(raw + mix(base).replace(/[()]/g, '\\$&'));
+
 /** renderPreview with explicit resolved options (the compiler has no defaults); chrome all-off. */
 function preview(
   src: string,
@@ -23,7 +29,7 @@ test('renderPreview wraps the body in a standalone HTML document', () => {
   assert.match(html, /<style>[^<]*writing-mode:vertical-rl/);
   assert.match(
     html,
-    /<body><div class="book"><div class="line" data-line="0">本文です。<\/div><\/div><\/body><\/html>$/,
+    /<body><div class="book"><div class="segment"><div class="line" data-line="0">本文です。<\/div><\/div><\/div><\/body><\/html>$/,
   );
 });
 
@@ -36,9 +42,10 @@ test('renderPreview is continuous: no pagination (no .page / @page)', () => {
 
 test('renderPreview shows ［＃改ページ］ as a labelled marker, not a real page break', () => {
   const html = preview('前\n［＃改ページ］\n後');
+  // The marker sits BETWEEN the two segments (a direct .book child), never inside one.
   assert.match(
     html,
-    /<div class="line" data-line="0">前<\/div><div class="pagebreak"><span class="pb-label">改ページ<\/span><\/div><div class="line" data-line="2">後<\/div>/,
+    /<div class="line" data-line="0">前<\/div><\/div><div class="pagebreak"><span class="pb-label">改ページ<\/span><\/div><div class="segment"><div class="line" data-line="2">後<\/div>/,
   );
   assert.doesNotMatch(html, /<hr/);
 });
@@ -149,7 +156,7 @@ test('renderPreview line numbers: .ln head spans count display lines, restarting
   });
   assert.match(
     on,
-    /<div class="line" data-line="0"><span class="ln">1<\/span>一<\/div><div class="line" data-line="1"><span class="ln">2<\/span>二<\/div><div class="pagebreak"><span class="pb-label">改ページ<\/span><\/div><div class="line" data-line="3"><span class="ln">1<\/span>三<\/div>/,
+    /<div class="line" data-line="0"><span class="ln">1<\/span>一<\/div><div class="line" data-line="1"><span class="ln">2<\/span>二<\/div><\/div><div class="pagebreak"><span class="pb-label">改ページ<\/span><\/div><div class="segment"><div class="line" data-line="3"><span class="ln">1<\/span>三<\/div>/,
   );
   assert.match(on, /\.ln\{position:absolute/);
   assert.match(on, /\.ln\{[^}]*font-size:10px/); // fixed px — fill invariant
@@ -163,11 +170,14 @@ test('renderPreview line numbers count wrapped continuation columns as their own
   );
 });
 
-test('renderPreview edge lines ride the stylesheet only: red literal, black theme-relative', () => {
+test('renderPreview edge lines ride the stylesheet only: red and text, both at 80% alpha', () => {
   const red = preview('一', { chrome: { lineNumbers: false, edgeLine: 'red' } });
-  assert.match(red, /\.line::after\{[^}]*border-left:1px solid #cc0000/);
-  const black = preview('一', { chrome: { lineNumbers: false, edgeLine: 'black' } });
-  assert.match(black, /\.line::after\{[^}]*border-left:1px solid currentColor/);
+  assert.match(red, mixRe(String.raw`\.line:not\(:last-child\)::after\{[^}]*border-left:1px solid `, '#cc0000'));
+  const text = preview('一', { chrome: { lineNumbers: false, edgeLine: 'text' } });
+  assert.match(
+    text,
+    mixRe(String.raw`\.line:not\(:last-child\)::after\{[^}]*border-left:1px solid `, 'currentColor'),
+  );
 });
 
 test('renderPreview all-off chrome emits neither number spans nor edge rules', () => {

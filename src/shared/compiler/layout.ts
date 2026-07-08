@@ -476,10 +476,13 @@ export function pagesToHtml(
  * each materialized break marker — computed HERE, not with CSS counters, because a
  * counter-reset on a sibling `.pagebreak` does not reset following siblings in Chromium
  * (the build's per-page reset sits on an ANCESTOR `.page`, which is reliable, so only this
- * continuous flow needs the JS fallback). A ［＃改ページ］ becomes a visible, labelled
- * `<div class="pagebreak">` marker shown BETWEEN content; a leading, trailing, or doubled
- * break collapses to nothing (mirroring the build's empty-page elision) so no stray rule
- * appears. Only the FIRST display line of each
+ * continuous flow needs the JS fallback). The columns are grouped into `<div class="segment">`
+ * blocks — one per run of lines between breaks, the build page's preview analogue, giving the
+ * edge-rule frame a per-segment anchor so the 枠 closes independently on each side of a break.
+ * A ［＃改ページ］ becomes a visible, labelled `<div class="pagebreak">` marker emitted
+ * BETWEEN segments as a direct `.book` child (outside every frame); segments open lazily on
+ * their first line, so a leading, trailing, or doubled break collapses to nothing (mirroring
+ * the build's empty-page elision) — no stray marker, no empty segment. Only the FIRST display line of each
  * source line carries a `data-line` anchor (1:1 with source lines, so the cursor-follow scroller
  * lands on the line's head). When a `used` sink is passed, every emphasis class emitted is
  * recorded so the caller can emit only those rules (on-demand CSS). Pure + vscode-free.
@@ -494,22 +497,35 @@ export function flowToHtml(
   const parts: string[] = [];
   let prevSrcLine = -1;
   let pendingBreak = false;
-  let anyLine = false;
+  let segmentOpen = false;
   let lineNo = 0;
   for (const row of rows) {
     if (row.kind === 'pagebreak') {
       // Defer page breaks: only materialized once a following line exists, so leading /
       // trailing / consecutive ［＃改ページ］ never leave a dangling marker.
-      if (anyLine) {
+      if (segmentOpen) {
         pendingBreak = true;
       }
       continue;
     }
     for (const line of wrapRow(row, charsPerLine, avoidLineBreaks)) {
       if (pendingBreak) {
-        parts.push('<div class="pagebreak"><span class="pb-label">改ページ</span></div>');
+        // The seam: close the segment and drop the marker BETWEEN segments — the shared
+        // opener below reopens for this very line, so the marker never sits inside a
+        // frame and the numbering restarts with the segment it opens.
+        parts.push(
+          '</div>',
+          '<div class="pagebreak"><span class="pb-label">改ページ</span></div>',
+        );
+        segmentOpen = false;
         pendingBreak = false;
-        lineNo = 0; // numbering restarts with the marker it belongs to
+        lineNo = 0;
+      }
+      if (!segmentOpen) {
+        // Segments open lazily on their first line (never on a break), so an empty
+        // segment is structurally impossible.
+        parts.push('<div class="segment">');
+        segmentOpen = true;
       }
       lineNo += 1;
       const anchor = line.srcLine >= 0 && line.srcLine !== prevSrcLine;
@@ -518,8 +534,10 @@ export function flowToHtml(
       // consumes cells nor disturbs the pre-formatted column content it precedes.
       const head = lineNumbers ? `<span class="ln">${String(lineNo)}</span>` : '';
       parts.push(emitLine(line, used, anchor, head));
-      anyLine = true;
     }
+  }
+  if (segmentOpen) {
+    parts.push('</div>');
   }
   return `<div class="book">${parts.join('')}</div>`;
 }

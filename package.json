@@ -263,13 +263,13 @@
             "type": "string",
             "enum": [
               "none",
-              "black",
+              "text",
               "red"
             ],
             "default": "none",
             "enumDescriptions": [
               "%jpnov.preview.edgeLine.none%",
-              "%jpnov.preview.edgeLine.black%",
+              "%jpnov.preview.edgeLine.text%",
               "%jpnov.preview.edgeLine.red%"
             ],
             "markdownDescription": "%jpnov.preview.edgeLine.description%"
@@ -288,13 +288,13 @@
             "type": "string",
             "enum": [
               "none",
-              "black",
+              "text",
               "red"
             ],
             "default": "none",
             "enumDescriptions": [
               "%jpnov.html.edgeLine.none%",
-              "%jpnov.html.edgeLine.black%",
+              "%jpnov.html.edgeLine.text%",
               "%jpnov.html.edgeLine.red%"
             ],
             "markdownDescription": "%jpnov.html.edgeLine.description%"

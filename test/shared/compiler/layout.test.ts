@@ -171,52 +171,73 @@ test('禁則 exception: a lone forbidden char as the whole row is left as-is', (
 
 // --- flowToHtml: the continuous preview flow over the shared engine -------------------
 
-test('flowToHtml: continuous .line columns, first-only data-line, no .page wrapper', () => {
+test('flowToHtml: continuous .line columns in one .segment, first-only data-line, no .page', () => {
   assert.equal(
     flow('一二三', 2),
-    '<div class="book"><div class="line" data-line="0">一二</div><div class="line">三</div></div>',
+    '<div class="book"><div class="segment">' +
+      '<div class="line" data-line="0">一二</div><div class="line">三</div></div></div>',
   );
 });
 
 test('flowToHtml: each distinct source line keeps its own data-line anchor', () => {
   assert.equal(
     flow('一\n二\n三'),
-    '<div class="book"><div class="line" data-line="0">一</div>' +
-      '<div class="line" data-line="1">二</div><div class="line" data-line="2">三</div></div>',
+    '<div class="book"><div class="segment"><div class="line" data-line="0">一</div>' +
+      '<div class="line" data-line="1">二</div><div class="line" data-line="2">三</div></div></div>',
   );
 });
 
 test('flowToHtml: a blank source line becomes a blank column (kept, not collapsed)', () => {
   assert.equal(
     flow('一\n\n二'),
-    '<div class="book"><div class="line" data-line="0">一</div>' +
-      '<div class="line" data-line="1"></div><div class="line" data-line="2">二</div></div>',
+    '<div class="book"><div class="segment"><div class="line" data-line="0">一</div>' +
+      '<div class="line" data-line="1"></div><div class="line" data-line="2">二</div></div></div>',
   );
 });
 
-test('flowToHtml: ［＃改ページ］ becomes a labelled .pagebreak marker between content', () => {
+test('flowToHtml: ［＃改ページ］ becomes a labelled .pagebreak marker BETWEEN segments', () => {
+  // The marker is a direct .book child, outside both segments — the frames on either side
+  // close independently and neither encloses the break.
   assert.equal(
     flow('前\n［＃改ページ］\n後'),
-    '<div class="book"><div class="line" data-line="0">前</div>' +
+    '<div class="book"><div class="segment"><div class="line" data-line="0">前</div></div>' +
       '<div class="pagebreak"><span class="pb-label">改ページ</span></div>' +
-      '<div class="line" data-line="2">後</div></div>',
+      '<div class="segment"><div class="line" data-line="2">後</div></div></div>',
   );
 });
 
 test('flowToHtml: leading / trailing / doubled page breaks collapse (no stray marker)', () => {
   assert.equal(
     flow('［＃改ページ］\n後'),
-    '<div class="book"><div class="line" data-line="1">後</div></div>',
+    '<div class="book"><div class="segment"><div class="line" data-line="1">後</div></div></div>',
   );
   assert.equal(
     flow('前\n［＃改ページ］'),
-    '<div class="book"><div class="line" data-line="0">前</div></div>',
+    '<div class="book"><div class="segment"><div class="line" data-line="0">前</div></div></div>',
   );
   assert.equal(
     flow('前\n［＃改ページ］\n［＃改ページ］\n後'),
-    '<div class="book"><div class="line" data-line="0">前</div>' +
+    '<div class="book"><div class="segment"><div class="line" data-line="0">前</div></div>' +
       '<div class="pagebreak"><span class="pb-label">改ページ</span></div>' +
-      '<div class="line" data-line="3">後</div></div>',
+      '<div class="segment"><div class="line" data-line="3">後</div></div></div>',
+  );
+});
+
+test('flowToHtml: an empty book and a break-only book emit no segment', () => {
+  // Segments open lazily on their first line, so a book with no lines has none.
+  assert.equal(flow(''), '<div class="book"></div>');
+  assert.equal(flow('［＃改ページ］'), '<div class="book"></div>');
+  assert.equal(flow('［＃改ページ］\n［＃改ページ］'), '<div class="book"></div>');
+});
+
+test('flowToHtml: a break followed by a blank line opens the next segment on the blank column', () => {
+  // The blank line is a real row, so it materializes the break and leads the new segment.
+  assert.equal(
+    flow('前\n［＃改ページ］\n\n後'),
+    '<div class="book"><div class="segment"><div class="line" data-line="0">前</div></div>' +
+      '<div class="pagebreak"><span class="pb-label">改ページ</span></div>' +
+      '<div class="segment"><div class="line" data-line="2"></div>' +
+      '<div class="line" data-line="3">後</div></div></div>',
   );
 });
 
@@ -224,20 +245,22 @@ test('flowToHtml: honors avoidLineBreaks (禁則) — the SAME engine as the bui
   // cpl 2: naive ああ | 」 leaves 」 at line start; 追い出し pulls あ down → あ | あ」.
   assert.equal(
     flow('ああ」', 2, true),
-    '<div class="book"><div class="line" data-line="0">あ</div><div class="line">あ」</div></div>',
+    '<div class="book"><div class="segment">' +
+      '<div class="line" data-line="0">あ</div><div class="line">あ」</div></div></div>',
   );
 });
 
 test('flowToHtml: lineNumbers emits JS-numbered .ln heads that restart at a break marker', () => {
   // Numbering is computed here (not CSS counters — a sibling counter-reset does not reset
   // following siblings in Chromium); a wrapped continuation column counts as its own line,
-  // and a collapsed (doubled) break still restarts only once.
+  // and a collapsed (doubled) break still restarts only once — with the segment it opens.
   assert.equal(
     flowToHtml(buildRows(tokenize('一二三\n［＃改ページ］\n［＃改ページ］\n四')), 2, false, undefined, true),
-    '<div class="book"><div class="line" data-line="0"><span class="ln">1</span>一二</div>' +
-      '<div class="line"><span class="ln">2</span>三</div>' +
+    '<div class="book"><div class="segment">' +
+      '<div class="line" data-line="0"><span class="ln">1</span>一二</div>' +
+      '<div class="line"><span class="ln">2</span>三</div></div>' +
       '<div class="pagebreak"><span class="pb-label">改ページ</span></div>' +
-      '<div class="line" data-line="3"><span class="ln">1</span>四</div></div>',
+      '<div class="segment"><div class="line" data-line="3"><span class="ln">1</span>四</div></div></div>',
   );
 });
 

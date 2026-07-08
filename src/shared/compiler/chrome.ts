@@ -13,7 +13,7 @@
  * `edgeLine: 'none'`, `pageNumberPosition: 'none'`, `header: ''`).
  */
 
-export const EDGE_LINE_STYLES = ['none', 'black', 'red'] as const;
+export const EDGE_LINE_STYLES = ['none', 'text', 'red'] as const;
 export type EdgeLineStyle = (typeof EDGE_LINE_STYLES)[number];
 
 export const PAGE_NUMBER_POSITIONS = [
@@ -29,7 +29,7 @@ export type PageNumberPosition = (typeof PAGE_NUMBER_POSITIONS)[number];
 export interface PreviewChrome {
   /** Line-head numbers, restarting at 1 after every ［＃改ページ］ marker. */
   readonly lineNumbers: boolean;
-  /** Inter-column rules; `black` renders as currentColor in the theme-aware preview. */
+  /** Inter-column rules; `text` draws in the text colour (currentColor), all rules at 80% alpha. */
   readonly edgeLine: EdgeLineStyle;
 }
 
@@ -37,7 +37,7 @@ export interface PreviewChrome {
 export interface BuildChrome {
   /** Line-head numbers, restarting at 1 on every page. */
   readonly lineNumbers: boolean;
-  /** Inter-column rules + a matching page frame; `black` renders as ink #000. */
+  /** Inter-column rules + a matching page frame; `text` draws in the text colour (currentColor), all rules at 80% alpha. */
   readonly edgeLine: EdgeLineStyle;
   readonly pageNumberPosition: PageNumberPosition;
   /**
