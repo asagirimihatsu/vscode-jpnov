@@ -20,21 +20,24 @@
           }
         },
         {
-          "comment": "Block END ［＃ここで(字下げ|太字|斜体)終わり］ — whole inner is one directive (mirrors the semantic layer's markDirective). BEFORE block START (終わり suffix) and BEFORE the span rules. ここで傍点終わり etc. is NOT here (傍点/傍線 have no block form) and falls through to the generic comment rule, exactly like the tokenizer.",
-          "match": "(［＃)(ここで(?:字下げ|太字|斜体)終わり)(］)",
+          "comment": "Block END ［＃ここで(字下げ|太字|斜体)終わり］ — only the style keyword (字下げ/太字/斜体) is a directive; the structural ここで and 終わり are demoted to comment (mirrors the semantic layer, which emits `marker` over each — like the connector に). BEFORE block START (終わり suffix) and BEFORE the span rules. ここで傍点終わり etc. is NOT here (傍点/傍線 have no block form) and falls through to the generic comment rule, exactly like the tokenizer.",
+          "match": "(［＃)(ここで)(字下げ|太字|斜体)(終わり)(］)",
           "captures": {
             "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "keyword.other.directive.novel-jp" },
-            "3": { "name": "comment.block.annotation.novel-jp" }
+            "2": { "name": "comment.other.annotation.novel-jp" },
+            "3": { "name": "keyword.other.directive.novel-jp" },
+            "4": { "name": "comment.other.annotation.novel-jp" },
+            "5": { "name": "comment.block.annotation.novel-jp" }
           }
         },
         {
-          "comment": "Block START ［＃ここから(○字下げ|太字|斜体)］ (○ = full-width digits ONLY). The hanging-indent 折り返して form has extra text before ］ so it falls through to the generic comment rule, exactly like the tokenizer.",
-          "match": "(［＃)(ここから(?:[０-９]+字下げ|太字|斜体))(］)",
+          "comment": "Block START ［＃ここから(○字下げ|太字|斜体)］ (○ = full-width digits ONLY, kept INSIDE the keyword). Only the style keyword (○字下げ/太字/斜体) is a directive; the structural ここから is demoted to comment (mirrors the semantic layer, which emits `marker` over it — like the connector に). The hanging-indent 折り返して form has extra text before ］ so it falls through to the generic comment rule, exactly like the tokenizer.",
+          "match": "(［＃)(ここから)([０-９]+字下げ|太字|斜体)(］)",
           "captures": {
             "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "keyword.other.directive.novel-jp" },
-            "3": { "name": "comment.block.annotation.novel-jp" }
+            "2": { "name": "comment.other.annotation.novel-jp" },
+            "3": { "name": "keyword.other.directive.novel-jp" },
+            "4": { "name": "comment.block.annotation.novel-jp" }
           }
         },
         {
@@ -47,13 +50,13 @@
           }
         },
         {
-          "comment": "傍点/傍線 span END ［＃(の左に|左に)?<dot|line>終わり］ — must be tried BEFORE span start (終わり suffix).",
+          "comment": "傍点/傍線 span END ［＃(の左に|左に)?<dot|line>終わり］ — only the variant is a directive; the structural 終わり is demoted to comment (mirrors the semantic layer emitting `marker` over it). Must be tried BEFORE span start (終わり suffix).",
           "match": "(［＃)(の左に|左に)?(二重丸傍点|白ゴマ傍点|白三角傍点|蛇の目傍点|黒三角傍点|ばつ傍点|二重傍線|白丸傍点|×傍点|丸傍点|傍点|傍線|波線|破線|鎖線)(終わり)(］)",
           "captures": {
             "1": { "name": "comment.block.annotation.novel-jp" },
             "2": { "name": "comment.other.annotation.novel-jp" },
             "3": { "name": "keyword.other.directive.novel-jp" },
-            "4": { "name": "keyword.other.directive.novel-jp" },
+            "4": { "name": "comment.other.annotation.novel-jp" },
             "5": { "name": "comment.block.annotation.novel-jp" }
           }
         },
@@ -68,12 +71,12 @@
           }
         },
         {
-          "comment": "太字/斜体 inline span END ［＃(太字|斜体)終わり］ — before its span START (終わり suffix).",
+          "comment": "太字/斜体 inline span END ［＃(太字|斜体)終わり］ — only the variant is a directive; the structural 終わり is demoted to comment (mirrors the semantic layer emitting `marker` over it). Before its span START (終わり suffix).",
           "match": "(［＃)(太字|斜体)(終わり)(］)",
           "captures": {
             "1": { "name": "comment.block.annotation.novel-jp" },
             "2": { "name": "keyword.other.directive.novel-jp" },
-            "3": { "name": "keyword.other.directive.novel-jp" },
+            "3": { "name": "comment.other.annotation.novel-jp" },
             "4": { "name": "comment.block.annotation.novel-jp" }
           }
         },

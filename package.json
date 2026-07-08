@@ -29,8 +29,6 @@
     "Other"
   ],
   "activationEvents": [
-    "onLanguage:novel-jp",
-    "onLanguage:novel-jp-filelist",
     "onWebviewPanel:jpnov.preview",
     "onStartupFinished"
   ],
