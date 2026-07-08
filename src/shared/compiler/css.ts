@@ -9,10 +9,12 @@
  *   bands are always reserved, the line-number band is on demand — while the text grid
  *   itself never changes size, so the printed body stays WYSIWYG.
  * - paginate=false (PREVIEW): a single continuous flow of the SAME `.line` columns the
- *   build emits (already hard-wrapped by the layout engine — no CSS width cap), with
- *   ［＃改ページ］ shown as a labelled `<div class="pagebreak">` marker. The root
- *   font-size is fit-to-viewport — (100vh − 2·pad) / charsPerLine — so a full line
- *   always fills the pane top to bottom.
+ *   build emits (already hard-wrapped by the layout engine — no CSS width cap), grouped
+ *   into per-break `.segment` blocks — the build page's preview analogue, each carrying
+ *   its own edge-rule frame — with ［＃改ページ］ shown as a labelled
+ *   `<div class="pagebreak">` marker BETWEEN segments. The root font-size is
+ *   fit-to-viewport — (100vh − 2·pad) / charsPerLine — so a full line always fills the
+ *   pane top to bottom.
  *
  * Chrome sub-elements (`.pn` / `.hd` / the `.line::before` numbers) are horizontal-tb
  * INSIDE a vertical-rl container, so they are positioned with PHYSICAL properties only
@@ -44,9 +46,20 @@ const EDGE_LINE_HEIGHT = 2.25;
  * into: OUT of the text flow (absolutely positioned) at a FIXED px font — in-flow or
  * em-sized content would break the exact-fill invariant (charsPerLine × 1em =
  * 100vh − 2·pad). If the band ever gets too small, split this into start/end constants
- * and subtract both in the calc.
+ * and subtract both in PREVIEW_BAND.
  */
 const PREVIEW_PAD_PX = 16;
+/** The writing band's CSS length: the viewport minus both PREVIEW_PAD_PX pads. */
+const PREVIEW_BAND = `100vh - ${String(2 * PREVIEW_PAD_PX)}px`;
+/**
+ * How far the ［＃改ページ］ dashed rule overshoots the writing band into EACH of the
+ * PREVIEW_PAD_PX bands, in px (negative margin-inline on the auto-sized marker box).
+ * Half the pad: clearly past the 1px segment frames — the break outranks the 枠 and the
+ * text alike — while the tips stay off the viewport edge and clear of most of the ~10px
+ * scrollbar strip the bottom pad reserves. Must stay ≤ PREVIEW_PAD_PX so the marker
+ * never leaves the body padding box (no overflow, no stray scrollbar).
+ */
+const PAGEBREAK_PROTRUDE_PX = PREVIEW_PAD_PX / 2;
 
 // Build-only chrome bands, in em (the same unit system as the charsPerLine-em grid).
 // The header and folio bands are ALWAYS allocated — the sheet keeps stable top/bottom
@@ -68,23 +81,25 @@ const PRINT_MARGIN = 2.5;
 
 /** Edge-rule stroke width (px); shared by the preview rules and the build rules + frame. */
 const EDGE_RULE_PX = 1;
-/** The 赤 edge-rule colour, identical in preview and build. */
+/** The 赤 edge-rule base colour. */
 const EDGE_RED = '#cc0000';
+/** Knocks an edge-rule base colour back to 80% alpha — rules sit under the text's weight. */
+const edgeAlpha = (base: string): string => `color-mix(in srgb,${base} 80%,transparent)`;
 
 /**
- * Maps an edge-line style to its CSS colour, or null for 'none' (no rule). 黒 is
- * theme-relative in the preview (currentColor — literal black would vanish on a dark
- * theme) but ink-black in the build (#000 on the white sheet); 赤 is the same in both.
- * Single home of the edge-rule colour policy.
+ * Maps an edge-line style to its CSS colour, or null for 'none' (no rule). One recipe,
+ * identical in preview and build: the base colour at 80% alpha. `text` bases on
+ * currentColor — the rules always match the surrounding text (theme foreground in the
+ * preview, ink on the build's white sheet). Single home of the edge-rule colour policy.
  */
-export function edgeRuleColor(edge: EdgeLineStyle, paginate: boolean): string | null {
+export function edgeRuleColor(edge: EdgeLineStyle): string | null {
   switch (edge) {
     case 'none':
       return null;
     case 'red':
-      return EDGE_RED;
-    case 'black':
-      return paginate ? '#000' : 'currentColor';
+      return edgeAlpha(EDGE_RED);
+    case 'text':
+      return edgeAlpha('currentColor');
   }
 }
 
@@ -129,7 +144,7 @@ export function stylesheet(opts: StylesheetOptions): string {
 
   if (opts.paginate) {
     const { charsPerLine, linesPerPage, chrome } = opts;
-    const ruleColor = edgeRuleColor(chrome.edgeLine, true); // null ⟺ no edge rules
+    const ruleColor = edgeRuleColor(chrome.edgeLine); // null ⟺ no edge rules
     const pitch = ruleColor === null ? LINE_HEIGHT : EDGE_LINE_HEIGHT;
     const pageBlock = linesPerPage * pitch;
     const borderColor = ruleColor ?? '#444';
@@ -207,14 +222,18 @@ export function stylesheet(opts: StylesheetOptions): string {
   }
 
   // PREVIEW: a continuous flow of the SAME `.line` columns the build emits (the layout
-  // engine has already hard-wrapped each line), with ［＃改ページ］ shown as a labelled
-  // marker. No inline-size cap — wrapping is done in JS, so a CSS cap would only
-  // double-constrain.
+  // engine has already hard-wrapped each line), grouped into per-break `.segment` blocks,
+  // with ［＃改ページ］ shown as a labelled marker between them. No inline-size cap —
+  // wrapping is done in JS, so a CSS cap would only double-constrain.
   const { charsPerLine, chrome } = opts;
-  const edgeColor = edgeRuleColor(chrome.edgeLine, false); // null ⟺ no edge rules
+  const edgeColor = edgeRuleColor(chrome.edgeLine); // null ⟺ no edge rules
   const pitch = edgeColor === null ? LINE_HEIGHT : EDGE_LINE_HEIGHT; // rules must clear ruby
 
   const feature: string[] = [];
+  if (chrome.lineNumbers || edgeColor !== null) {
+    // The anchor box for the out-of-flow per-line chrome (.ln heads, edge rules).
+    feature.push(`.line{position:relative;}`);
+  }
   if (chrome.lineNumbers) {
     // The numbers themselves are `<span class="ln">` heads emitted by flowToHtml (JS-computed,
     // restarting after each break marker — a sibling counter-reset does not reset following
@@ -222,28 +241,32 @@ export function stylesheet(opts: StylesheetOptions): string {
     // Fixed px font, absolutely lifted into the PREVIEW_PAD_PX band — never in-flow, never
     // em-sized (the fit-to-viewport invariant, see PREVIEW_PAD_PX).
     feature.push(
-      `.line{position:relative;}`,
       `.ln{position:absolute;top:0;left:0;right:0;` +
         `transform:translateY(-100%);writing-mode:horizontal-tb;text-align:center;` +
         `font-size:10px;line-height:1;color:var(--vscode-editorLineNumber-foreground,#888);` +
         `pointer-events:none;user-select:none;}`,
     );
-  } else if (edgeColor !== null) {
-    feature.push(`.line{position:relative;}`);
   }
   if (edgeColor !== null) {
-    // Same recipe as the build: every column draws ONE left rule (a right+left pair per
-    // boundary would stack into a fat 2px line), and a real frame on `.book` closes the
-    // outer edges and the top/bottom of the writing band — no first/last special cases.
-    // The rule box is out-of-flow and fixed-height (the full band), so blank and short
-    // columns rule at full height and the column pitch never moves; the outermost
-    // column's rule lands on the same pixel strip as the frame's inward border.
+    // Same recipe as the build: each column draws ONE left rule (a right+left pair per
+    // boundary would stack into a fat 2px line), and a real frame per `.segment` closes
+    // the outer edges — the build's per-`.page` 枠 transplanted, so the frames on either
+    // side of a ［＃改ページ］ close independently and the marker rides BETWEEN them,
+    // never inside one. The LAST (leftmost) column draws no rule: it would land on the
+    // same pixel strip as the frame's left border, and the 80%-alpha strokes would
+    // composite into a visibly darker line — the frame alone closes the run, as the
+    // build's overflow clip does. Frame and rule boxes are out-of-flow at the same fixed
+    // height (the full band): blank and short columns rule at full height, a short
+    // segment's frame still spans the band, and the column pitch never moves.
+    // Rule and frame share one band box; only the border side differs.
+    const bandBox = `content:"";position:absolute;top:0;left:0;right:0;height:calc(${PREVIEW_BAND});`;
     feature.push(
-      `.line::after{content:"";position:absolute;top:0;left:0;right:0;` +
-        `height:calc(100vh - ${String(2 * PREVIEW_PAD_PX)}px);box-sizing:border-box;` +
+      `.line:not(:last-child)::after{${bandBox}` +
         `border-left:${String(EDGE_RULE_PX)}px solid ${edgeColor};pointer-events:none;}`,
-      `.book{position:relative;}`,
-      `.book::before{content:"";position:absolute;inset:0;` +
+      `.segment{position:relative;}`,
+      // border-box keeps the frame's own borders inside the band height (the rule has no
+      // block-axis borders, so it needs no box-sizing).
+      `.segment::before{${bandBox}box-sizing:border-box;` +
         `border:${String(EDGE_RULE_PX)}px solid ${edgeColor};pointer-events:none;}`,
     );
   }
@@ -253,7 +276,7 @@ export function stylesheet(opts: StylesheetOptions): string {
     // the column, so (100vh − 2·pad) / charsPerLine makes a full charsPerLine-char line fill
     // the pane top to bottom; vh re-evaluates on panel resize, so no script is involved.
     `html{writing-mode:vertical-rl;font-family:serif;line-height:${String(pitch)};` +
-      `font-size:calc((100vh - ${String(2 * PREVIEW_PAD_PX)}px) / ${String(charsPerLine)});}`,
+      `font-size:calc((${PREVIEW_BAND}) / ${String(charsPerLine)});}`,
     // The inline axis is vertical here: padding-inline is the top/bottom breathing room the
     // font-size formula subtracts.
     `body{margin:0;padding-inline:${String(PREVIEW_PAD_PX)}px;}`,
@@ -262,8 +285,13 @@ export function stylesheet(opts: StylesheetOptions): string {
     `.line{block-size:${String(pitch)}em;margin:0;white-space:pre;font-size:1rem;font-family:serif;}`,
     `ruby>rt{font-size:0.5em;}`,
     // The forced-page-break marker: a dashed rule with a small vertical 「改ページ」 label
-    // pinned to its middle, so it reads as a page break and not as an edge rule.
-    `.pagebreak{position:relative;border:0;border-block-start:2px dashed currentColor;margin-block:1em;}`,
+    // pinned to its middle, so it reads as a page break and not as an edge rule. The
+    // negative inline margins stretch the auto-sized box past the writing band into each
+    // pad, so the rule's tips overshoot the segment frames and the text alike (the break
+    // outranks both) — deliberately independent of edgeLine, the marker's reach is not a
+    // frame property. The symmetric stretch leaves the centred label untouched.
+    `.pagebreak{position:relative;border-block-start:2px dashed currentColor;` +
+      `margin-block:1em;margin-inline:-${String(PAGEBREAK_PROTRUDE_PX)}px;}`,
     `.pb-label{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);` +
       `writing-mode:vertical-rl;font-size:10px;line-height:1;color:currentColor;` +
       `background:var(--vscode-editor-background,#fff);padding-block:2px;` +

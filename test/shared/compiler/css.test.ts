@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 import type { BuildChrome, PreviewChrome } from '../../../src/shared/compiler/chrome.ts';
 import { edgeRuleColor, stylesheet } from '../../../src/shared/compiler/css.ts';
 
+/** The edgeAlpha() recipe from css.ts — the single point the colour assertions key on. */
+const mix = (base: string): string => `color-mix(in srgb,${base} 80%,transparent)`;
+/** A match pattern: raw regex source with the escaped recipe for `base` appended. */
+const mixRe = (raw: string, base: string): RegExp =>
+  new RegExp(raw + mix(base).replace(/[()]/g, '\\$&'));
+
 const PREVIEW_OFF: PreviewChrome = { lineNumbers: false, edgeLine: 'none' };
 const BUILD_OFF: BuildChrome = {
   lineNumbers: false,
@@ -169,13 +175,10 @@ test('.indent-N rules generate on demand; malformed suffixes are ignored', () =>
 
 // --- edge-rule colour policy -------------------------------------------------
 
-test('edgeRuleColor: 黒 is theme-relative in preview, ink in build; 赤 shared; none is null', () => {
-  assert.equal(edgeRuleColor('black', false), 'currentColor');
-  assert.equal(edgeRuleColor('black', true), '#000');
-  assert.equal(edgeRuleColor('red', false), '#cc0000');
-  assert.equal(edgeRuleColor('red', true), '#cc0000');
-  assert.equal(edgeRuleColor('none', false), null);
-  assert.equal(edgeRuleColor('none', true), null);
+test('edgeRuleColor: one recipe both ends — base colour at 80% alpha, text = currentColor; none is null', () => {
+  assert.equal(edgeRuleColor('text'), mix('currentColor'));
+  assert.equal(edgeRuleColor('red'), mix('#cc0000'));
+  assert.equal(edgeRuleColor('none'), null);
 });
 
 // --- preview chrome ----------------------------------------------------------
@@ -188,25 +191,36 @@ test('preview line numbers: fixed-px out-of-flow .ln rule (numbers are JS-emitte
   assert.match(css, /\.ln\{[^}]*translateY\(-100%\)/); // lifted into the pad band
   // No CSS counters: a sibling counter-reset does not reset following siblings in Chromium.
   assert.doesNotMatch(css, /counter/);
-  assert.doesNotMatch(css, /\.line::after/);
+  assert.doesNotMatch(css, /::after/); // no edge rules leak into the lineNumbers-only sheet
 });
 
 test('preview edge lines: full-height single-sided rules on the ruby-safe wider pitch', () => {
   const red = preview({ chrome: { lineNumbers: false, edgeLine: 'red' } });
   assert.match(red, /\.line\{position:relative;\}/);
-  // One 1px rule per boundary: every column draws its LEFT rule only (left+right pairs
-  // would sit side-by-side and read as 2px); the .book frame closes the outer edges.
-  assert.match(red, /\.line::after\{[^}]*border-left:1px solid #cc0000/);
+  // One 1px rule per boundary: each column draws its LEFT rule only (left+right pairs
+  // would sit side-by-side and read as 2px); a per-segment frame closes the outer edges,
+  // so the frames on either side of a ［＃改ページ］ close independently.
+  assert.match(red, mixRe(String.raw`\.line:not\(:last-child\)::after\{[^}]*border-left:1px solid `, '#cc0000'));
   assert.doesNotMatch(red, /border-right/); // no per-column right rules at all
-  assert.match(red, /\.book\{position:relative;\}/);
-  assert.match(red, /\.book::before\{[^}]*inset:0/);
-  assert.match(red, /\.book::before\{[^}]*border:1px solid #cc0000/);
-  assert.match(red, /\.line::after\{[^}]*height:calc\(100vh - 32px\)/);
+  // The LAST (leftmost) column draws no rule: at 80% alpha it would stack with the
+  // frame's left border into a darker strip — the frame alone closes the run.
+  assert.doesNotMatch(red, /\.line::after/);
+  assert.match(red, /\.segment\{position:relative;\}/);
+  // The frame is full-band-high (the same fixed height as the rules), never
+  // content-hugging: a short segment still gets the complete 原稿用紙 枠.
+  assert.match(red, /\.segment::before\{[^}]*height:calc\(100vh - 32px\)/);
+  assert.match(red, mixRe(String.raw`\.segment::before\{[^}]*border:1px solid `, '#cc0000'));
+  assert.doesNotMatch(red, /\.book/); // the one-frame-around-everything recipe is gone
+  assert.match(red, /\.line:not\(:last-child\)::after\{[^}]*height:calc\(100vh - 32px\)/);
   // Rules on ⇒ pitch widens to 2.25em so the boundary lines clear ruby annotations.
   assert.match(red, /html\{[^}]*line-height:2\.25/);
   assert.match(red, /\.line\{[^}]*block-size:2\.25em/);
-  const black = preview({ chrome: { lineNumbers: false, edgeLine: 'black' } });
-  assert.match(black, /\.line::after\{[^}]*border-left:1px solid currentColor/);
+  const text = preview({ chrome: { lineNumbers: false, edgeLine: 'text' } });
+  assert.match(
+    text,
+    mixRe(String.raw`\.line:not\(:last-child\)::after\{[^}]*border-left:1px solid `, 'currentColor'),
+  );
+  assert.match(text, mixRe(String.raw`\.segment::before\{[^}]*border:1px solid `, 'currentColor'));
   // Rules off ⇒ the default pitch stays.
   assert.match(preview(), /html\{[^}]*line-height:1\.75/);
 });
@@ -215,16 +229,25 @@ test('preview all-off chrome emits no .ln rule, no edge rules, no frame', () => 
   const css = preview();
   assert.doesNotMatch(css, /\.ln\{/);
   assert.doesNotMatch(css, /::after/);
-  assert.doesNotMatch(css, /\.book::before/);
+  assert.doesNotMatch(css, /\.segment/); // no frame — the wrapper is a bare, style-free block
   assert.doesNotMatch(css, /counter/);
   assert.match(css, /\.pb-label\{/); // the page-break label is unconditional
+});
+
+test('preview: the 改ページ dashed rule overshoots the writing band into the pads', () => {
+  // Negative inline margins stretch the auto-sized marker 8px (half the pad) past the
+  // band on each side, independent of edgeLine — the break outranks frame and text alike.
+  const css = preview();
+  assert.match(css, /\.pagebreak\{[^}]*border-block-start:2px dashed currentColor/);
+  assert.match(css, /\.pagebreak\{[^}]*margin-block:1em/);
+  assert.match(css, /\.pagebreak\{[^}]*margin-inline:-8px/);
 });
 
 // --- build chrome ------------------------------------------------------------
 
 const BUILD_ON: BuildChrome = {
   lineNumbers: true,
-  edgeLine: 'black',
+  edgeLine: 'text',
   pageNumberPosition: 'rightThenLeft',
   pageNumberTemplate: '{page} / {totalPage}',
   header: '章',
@@ -239,13 +262,13 @@ test('build all-on chrome: bands, grid-hugging frame, counters, rules, furniture
   assert.match(css, /\.page\{[^}]*counter-reset:ln/); // per-page numbering
   // The frame is inset past the bands (chrome renders OUTSIDE it) and matches the rule colour.
   assert.match(css, /\.page::before\{[^}]*top:3\.5em;right:0;bottom:2\.5em;left:0/);
-  assert.match(css, /\.page::before\{[^}]*border:1px solid #000/);
+  assert.match(css, mixRe(String.raw`\.page::before\{[^}]*border:1px solid `, 'currentColor'));
   assert.doesNotMatch(css, /\.page\{[^}]*border:/); // the sheet box itself has no border
   // Edge rules on ⇒ the pitch widens (1.75 → 2.25em) so the rules clear ruby annotations.
   assert.match(css, /\.page\{[^}]*line-height:2\.25/);
   assert.match(css, /\.page\{[^}]*block-size:76\.5em/); // 34 lines × 2.25em
   assert.match(css, /\.line\{[^}]*block-size:2\.25em/);
-  assert.match(css, /\.line\{[^}]*box-shadow:-1px 0 0 0 #000/);
+  assert.match(css, mixRe(String.raw`\.line\{[^}]*box-shadow:-1px 0 0 0 `, 'currentColor'));
   assert.match(css, /\.line\{[^}]*counter-increment:ln;position:relative/);
   assert.match(css, /\.line::before\{content:counter\(ln\)/);
   assert.match(css, /\.hd\{position:absolute;top:0;left:0;right:0/);
@@ -276,8 +299,8 @@ test('build all-off chrome keeps a plain sheet with the reserved bands, no chrom
 
 test('build red edge lines colour both the frame and the inter-column rules', () => {
   const css = build({ chrome: { ...BUILD_OFF, edgeLine: 'red' } });
-  assert.match(css, /\.page::before\{[^}]*border:1px solid #cc0000/);
-  assert.match(css, /\.line\{[^}]*box-shadow:-1px 0 0 0 #cc0000/);
+  assert.match(css, mixRe(String.raw`\.page::before\{[^}]*border:1px solid `, '#cc0000'));
+  assert.match(css, mixRe(String.raw`\.line\{[^}]*box-shadow:-1px 0 0 0 `, '#cc0000'));
   assert.match(css, /\.line\{[^}]*block-size:2\.25em/); // ruby-safe pitch rides with the rules
 });
 

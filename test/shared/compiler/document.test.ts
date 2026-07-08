@@ -217,7 +217,7 @@ test('header: centered furniture div, escaped, absent (with its band) when empty
 test('line numbers and edge lines never change the body DOM (pure CSS features)', () => {
   const plain = bodyOf(render(THREE_PAGES, { linesPerPage: 2 }));
   const decorated = bodyOf(
-    render(THREE_PAGES, { linesPerPage: 2, chrome: { lineNumbers: true, edgeLine: 'black' } }),
+    render(THREE_PAGES, { linesPerPage: 2, chrome: { lineNumbers: true, edgeLine: 'text' } }),
   );
   assert.equal(decorated, plain);
 });
