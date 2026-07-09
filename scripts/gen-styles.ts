@@ -12,7 +12,7 @@
  * build; watch mode re-runs it when a fragment changes), and styles-codegen.test.ts (fails
  * with a pointer to `npm run gen:styles` when the committed module is stale).
  */
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -41,41 +41,46 @@ function normalize(css: string): string {
 }
 
 /** The absolute paths of the fragment sources (esbuild watch re-triggers on these). */
-export function styleSourcePaths(): string[] {
-  return readdirSync(STYLES_DIR)
-    .filter((f) => f.endsWith('.css'))
+export async function styleSourcePaths(): Promise<string[]> {
+  const files = await readdir(STYLES_DIR);
+  return files.filter((f) => f.endsWith('.css'))
     .sort()
     .map((f) => join(STYLES_DIR, f));
 }
 
 /** Renders the full generated-module text (pure; the drift test compares against this). */
-export function generateStylesModule(): string {
-  const exports = styleSourcePaths().map((path) => {
+export async function generateStylesModule(): Promise<string> {
+  const paths = await styleSourcePaths();
+  const styles = await Promise.all(paths.map(async (path) => [path, normalize(await readFile(path, 'utf8'))] as const));
+  const exports = styles.map(([path, css]) => {
     const file = path.slice(path.lastIndexOf('/') + 1);
-    const css = normalize(readFileSync(path, 'utf8'));
     return `export const ${exportName(file)} = ${JSON.stringify(css)};\n`;
   });
   return HEADER + exports.join('');
 }
 
 /** Write the module iff its content changed; returns whether a write happened. */
-export function writeStylesModule(): boolean {
-  const next = generateStylesModule();
+export async function writeStylesModule(): Promise<boolean> {
+  const next = await generateStylesModule();
   let prev: string | undefined;
   try {
-    prev = readFileSync(GENERATED, 'utf8');
+    prev = await readFile(GENERATED, 'utf8');
   } catch {
     prev = undefined; // first generation
   }
   if (prev === next) {
     return false;
   }
-  writeFileSync(GENERATED, next);
+  await writeFile(GENERATED, next);
   return true;
 }
 
 // CLI: `node scripts/gen-styles.ts` (or via `npm run gen:styles`).
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const changed = writeStylesModule();
-  console.log(changed ? `regenerated ${GENERATED}` : `up to date: ${GENERATED}`);
+  writeStylesModule().then((changed) => {
+    console.log(changed ? `regenerated ${GENERATED}` : `up to date: ${GENERATED}`);
+  }).catch((err: unknown) => {
+    console.error(`error generating ${GENERATED}:`, err);
+    process.exit(1);
+  });
 }
