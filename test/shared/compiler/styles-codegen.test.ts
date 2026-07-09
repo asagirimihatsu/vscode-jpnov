@@ -58,10 +58,10 @@ function cssValue(css: string, selector: string, prop: string, within?: string):
   return Number.parseFloat(value);
 }
 
-test('styles.generated.ts is in sync with the *.css fragments', () => {
+test('styles.generated.ts is in sync with the *.css fragments', async () => {
   assert.equal(
     read('styles.generated.ts'),
-    generateStylesModule(),
+    await generateStylesModule(),
     'styles.generated.ts is stale — run `npm run gen:styles`',
   );
 });

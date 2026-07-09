@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 
 import * as esbuild from 'esbuild';
 
@@ -9,7 +9,7 @@ const watch = process.argv.includes('--watch');
 
 // Regenerate the styles module up front so every build (dev, prod, and watch's first pass)
 // bundles fresh fragments; the styles-codegen plugin keeps --watch rebuilds fresh thereafter.
-writeStylesModule();
+await writeStylesModule();
 
 /** @type {import('esbuild').BuildOptions} */
 const base = {
@@ -65,12 +65,12 @@ const kuromojiTripwire = {
 const stylesCodegen = {
   name: 'styles-codegen',
   setup(build) {
-    build.onLoad({ filter: /styles[/\\]styles\.generated\.ts$/ }, (args) => {
-      writeStylesModule();
+    build.onLoad({ filter: /styles[/\\]styles\.generated\.ts$/ }, async (args) => {
+      await writeStylesModule();
       return {
-        contents: readFileSync(args.path, 'utf8'),
+        contents: await readFile(args.path, 'utf8'),
         loader: 'ts',
-        watchFiles: styleSourcePaths(),
+        watchFiles: await styleSourcePaths(),
       };
     });
   },
