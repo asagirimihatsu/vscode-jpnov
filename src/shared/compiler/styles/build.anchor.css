@@ -1,0 +1,4 @@
+/* Positioning context for the out-of-flow per-line chrome (counter numbers, edge rules) —
+   included when lineNumbers OR edgeLine is on. Separate rule (never folded into the .line
+   base) so an all-off .line stays position:static — exact parity with a chrome-less sheet. */
+.line{position:relative;}

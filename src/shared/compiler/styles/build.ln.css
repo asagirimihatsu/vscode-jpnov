@@ -1,0 +1,15 @@
+/* Line numbers — included when lineNumbers is on. ATOMIC: the counter chain (reset on the
+   page, increment per line, painted by ::before) must ship together or the CSS counter breaks.
+   Unlike the preview's JS-emitted .ln spans, the build restarts numbering per PAGE, which a
+   .page-scoped counter-reset expresses natively — do not unify the two mechanisms. */
+.page{counter-reset:ln;}
+.line{counter-increment:ln;}
+
+/* The number sits ABOVE its column: lifted by its own height into the line-number band (inside
+   the padding box, so overflow:hidden keeps it), plus 0.25 EDGE_INSET so it stays OUTSIDE the
+   outset frame. That extra lift is REM, not em: font-size:0.5em halves the local em, while
+   rem = the page em (the build never sets a root font-size) — the same base the frame's inset
+   is measured in. This is the ONE rem in the build stylesheet; everything else is em.
+   line-height:1 keeps the lifted box its glyph height, inside the band. PHYSICAL top/left/right:
+   horizontal-tb inside a vertical-rl container. Ink #888 literal (print, not themed). */
+.line::before{content:counter(ln);position:absolute;top:0;left:0;right:0;transform:translateY(calc(-100% - 0.25rem));writing-mode:horizontal-tb;text-align:center;font-size:0.5em;line-height:1;color:#888;}

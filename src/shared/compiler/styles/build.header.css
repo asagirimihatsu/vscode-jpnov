@@ -1,0 +1,5 @@
+/* Page header — included when header ≠ ''. Centered in the always-reserved top band.
+   line-height:1 (here as on .pn and .line::before) keeps the furniture box its glyph height —
+   an inherited 2.25 line box would reach grazing distance of the outset frame. PHYSICAL
+   top/left/right (horizontal-tb inside vertical-rl); ink #000 literal (print, not themed). */
+.hd{position:absolute;top:0;left:0;right:0;writing-mode:horizontal-tb;text-align:center;font-size:0.9em;line-height:1;color:#000;}

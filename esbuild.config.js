@@ -1,7 +1,15 @@
+import { readFileSync } from 'node:fs';
+
 import * as esbuild from 'esbuild';
+
+import { styleSourcePaths, writeStylesModule } from './scripts/gen-styles.ts';
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
+
+// Regenerate the styles module up front so every build (dev, prod, and watch's first pass)
+// bundles fresh fragments; the styles-codegen plugin keeps --watch rebuilds fresh thereafter.
+writeStylesModule();
 
 /** @type {import('esbuild').BuildOptions} */
 const base = {
@@ -47,6 +55,27 @@ const kuromojiTripwire = {
   },
 };
 
+/**
+ * Re-runs the styles codegen when a fragment changes: loading the generated module registers
+ * the authored `styles/*.css` files as watch dependencies, so in --watch a raw `.css` edit
+ * regenerates `styles.generated.ts` and re-triggers the (server-only — the client bundle never
+ * imports it) rebuild. Non-watch builds are covered by the up-front writeStylesModule() call.
+ * @type {import('esbuild').Plugin}
+ */
+const stylesCodegen = {
+  name: 'styles-codegen',
+  setup(build) {
+    build.onLoad({ filter: /styles[/\\]styles\.generated\.ts$/ }, (args) => {
+      writeStylesModule();
+      return {
+        contents: readFileSync(args.path, 'utf8'),
+        loader: 'ts',
+        watchFiles: styleSourcePaths(),
+      };
+    });
+  },
+};
+
 /** @type {import('esbuild').BuildOptions[]} */
 const builds = [
   {
@@ -58,7 +87,7 @@ const builds = [
     ...base,
     entryPoints: ['src/server/server.ts'],
     outfile: 'dist/server/server.js',
-    plugins: [kuromojiTripwire],
+    plugins: [kuromojiTripwire, stylesCodegen],
   },
 ];
 

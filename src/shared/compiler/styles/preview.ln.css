@@ -1,0 +1,11 @@
+/* Line-head numbers — included when lineNumbers is on. The numbers themselves are
+   <span class="ln"> heads emitted by flowToHtml (JS-computed, restarting after each break
+   marker — a sibling counter-reset does not reset following siblings in Chromium, so CSS
+   counters can't express the page-local numbering here; keep this fragment's inclusion in
+   lockstep with that flag). Fixed px font, absolutely lifted into the 16px pad band — never
+   in-flow, never em-sized (the exact-fill invariant). The lift walks back the .segment text
+   inset with the SAME length in rem (rem = the fit em, so the em term cancels and the number
+   lands at the same pad-band spot at ANY fit size), then 2px clear of the 枠 stroke.
+   PHYSICAL top/left/right on purpose: the element is horizontal-tb INSIDE a vertical-rl
+   container — logical insets would resolve against its own writing mode and land wrong. */
+.ln{position:absolute;top:0;left:0;right:0;transform:translateY(calc(-100% - 0.25rem - 2px));writing-mode:horizontal-tb;text-align:center;font-size:10px;line-height:1;color:var(--vscode-editorLineNumber-foreground,#888);pointer-events:none;user-select:none;}

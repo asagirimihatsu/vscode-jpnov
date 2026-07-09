@@ -497,6 +497,7 @@
   "scripts": {
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
+    "gen:styles": "node scripts/gen-styles.ts",
     "build": "node esbuild.config.js --production",
     "build:dev": "node esbuild.config.js",
     "watch:esbuild": "node esbuild.config.js --watch",
