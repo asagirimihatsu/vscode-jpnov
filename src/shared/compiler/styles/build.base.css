@@ -1,0 +1,28 @@
+/* BUILD base — always included. Styles the explicit .book > .page > .line skeleton the layout
+   engine emits; each .page is one printed sheet. Ink colours are LITERAL on purpose (standalone
+   print document — no --vscode-* variables exist outside the webview). */
+html{font-family:serif;}
+body{margin:0;}
+.book{display:block;}
+
+/* One sheet: linesPerPage columns (block axis, LINE_PITCH 2.25em each) × charsPerLine chars
+   (inline axis, 1em each). The bands are padding OUTSIDE the content box, so the grid keeps its
+   exact size and the sheet grows instead; overflow's clip box is the padding box, so band
+   content stays visible while anything past it is cut. --htop = header band 2.5 + on-demand
+   line-number band 1 (em); the 2.5em end pad = FOLIO_BAND (see geometry.ts — @page consumes
+   the same numbers, guarded by styles-codegen.test.ts). The sheet's own band padding stays
+   LOGICAL: .page is vertical-rl itself, so padding-inline-start/end = physical top/bottom. */
+.page{writing-mode:vertical-rl;line-height:2.25;inline-size:calc(var(--cpl)*1em);block-size:calc(var(--lpp)*2.25em);padding-inline-start:calc(var(--htop)*1em);padding-inline-end:2.5em;position:relative;margin:0 auto 1em;background:#fff;box-sizing:content-box;overflow:hidden;break-after:page;page-break-after:always;}
+
+/* Each line is one fixed-thickness column (2.25em = LINE_PITCH, ruby-safe). */
+.line{block-size:2.25em;margin:0;white-space:pre;}
+ruby>rt{font-size:0.5em;}
+
+/* Print fixes, verified against headless Chromium:
+   - root goes vertical-rl so the sheets are ordinary in-flow blocks — as ORTHOGONAL flows
+     (vertical sheets in a horizontal root) Chromium splits every near-page-size sheet onto two
+     papers regardless of fit;
+   - the sheet's own margin (2.5em = PRINT_MARGIN) replaces both the screen 1em gap and the
+     paper inset. The @page rule itself (0 margin — keeps the browser's own header/footer off
+     the paper) is injected by css.ts: @page cannot read var() portably. */
+@media print{html{writing-mode:vertical-rl;}.page{margin:2.5em;}}

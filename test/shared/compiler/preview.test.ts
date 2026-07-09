@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import type { PreviewChrome } from '../../../src/shared/compiler/chrome.ts';
 import { renderPreview } from '../../../src/shared/compiler/preview.ts';
 
-/** The edgeAlpha() recipe from css.ts — the single point the colour assertions key on. */
-const mix = (base: string): string => `color-mix(in srgb,${base} 80%,transparent)`;
+/**
+ * The single 80%-alpha edge recipe (base-INDEPENDENT — the base colour rides the `--edge`
+ * variable, asserted separately on the `:root` block).
+ */
+const EDGE_MIX = 'color-mix(in srgb,var(--edge) 80%,transparent)';
 /** A match pattern: raw regex source with the escaped recipe for `base` appended. */
-const mixRe = (raw: string, base: string): RegExp =>
-  new RegExp(raw + mix(base).replace(/[()]/g, '\\$&'));
+const edgeMixRe = (raw: string): RegExp => new RegExp(raw + EDGE_MIX.replace(/[()]/g, '\\$&'));
 
 /** renderPreview with explicit resolved options (the compiler has no defaults); chrome all-off. */
 function preview(
@@ -127,7 +129,8 @@ test('renderPreview scales the root font so a full line fills the pane height', 
   // fit-to-viewport formula — a full 20-char column plus the two reserved 0.25em frame
   // gaps measures exactly 100vh − padding.
   const html = preview('本文', { charsPerLine: 20 });
-  assert.match(html, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ 20\.5\)/);
+  assert.match(html, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ \(var\(--cpl\) \+ 0\.5\)\)/);
+  assert.match(html, /:root\{--cpl:20\}/);
 });
 
 test('renderPreview: 傍線 postfix emits a dec-solid span + its on-demand rule (right side)', () => {
@@ -173,12 +176,14 @@ test('renderPreview line numbers count wrapped continuation columns as their own
 
 test('renderPreview edge lines ride the stylesheet only: red and text, both at 80% alpha', () => {
   const red = preview('一', { chrome: { lineNumbers: false, edgeLine: 'red' } });
-  assert.match(red, mixRe(String.raw`\.line:not\(:last-child\)::after\{[^}]*border-left:1px solid `, '#cc0000'));
+  assert.match(red, edgeMixRe(String.raw`\.line:not\(:last-child\)::after\{[^}]*border-left:1px solid `));
+  assert.match(red, /:root\{[^}]*--edge:#cc0000\}/);
   const text = preview('一', { chrome: { lineNumbers: false, edgeLine: 'text' } });
   assert.match(
     text,
-    mixRe(String.raw`\.line:not\(:last-child\)::after\{[^}]*border-left:1px solid `, 'currentColor'),
+    edgeMixRe(String.raw`\.line:not\(:last-child\)::after\{[^}]*border-left:1px solid `),
   );
+  assert.match(text, /:root\{[^}]*--edge:currentColor\}/);
 });
 
 test('renderPreview all-off chrome emits neither number spans nor edge rules', () => {

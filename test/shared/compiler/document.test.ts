@@ -205,13 +205,14 @@ test('folio blank-template suppression: a blank template drops the folio, keeps 
 test('header: centered furniture div, escaped, absent (with its band) when empty', () => {
   const on = render('本文', { chrome: { header: '第一章' } });
   assert.match(on, /<div class="hd">第一章<\/div>/);
-  assert.match(on, /\.page\{[^}]*padding-inline-start:2\.5em/);
+  assert.match(on, /:root\{[^}]*--htop:2\.5/);
   const escaped = render('本文', { chrome: { header: 'a<b' } });
   assert.match(escaped, /<div class="hd">a&lt;b<\/div>/);
   const off = render('本文');
   assert.doesNotMatch(off, /class="hd"/);
   // No element, but the band stays reserved — sheet geometry is header-independent.
-  assert.match(off, /\.page\{[^}]*padding-inline-start:2\.5em/);
+  assert.match(off, /:root\{[^}]*--htop:2\.5/);
+  assert.match(off, /\.page\{[^}]*padding-inline-start:calc\(var\(--htop\)\*1em\)/);
 });
 
 test('line numbers and edge lines never change the body DOM (pure CSS features)', () => {
