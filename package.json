@@ -1,7 +1,7 @@
 {
   "name": "jpnov",
   "displayName": "Japanese Novel",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A plugin for Visual Studio Code for formatting, previewing, and generating ebooks of Japanese novels annotated by Aozora Bunko",
   "keywords": [
     "plugin",
