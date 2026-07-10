@@ -14,6 +14,7 @@ import type { HtmlSettings, PreviewSettings } from '../../../src/shared/protocol
 const HTML_BASE: HtmlSettings = { ...LAYOUT_DEFAULT, ...BUILD_CHROME_DEFAULT };
 const PREVIEW_BASE: PreviewSettings = {
   charsPerLine: LAYOUT_DEFAULT.charsPerLine,
+  avoidLineBreaks: LAYOUT_DEFAULT.avoidLineBreaks,
   ...PREVIEW_CHROME_DEFAULT,
 };
 
@@ -48,6 +49,21 @@ test('grid geometry clamps to [16..64] and falls back on non-integers', () => {
     LAYOUT_DEFAULT.linesPerPage,
   );
   assert.equal(resolvePreviewSettings({ ...PREVIEW_BASE, charsPerLine: 64 }).charsPerLine, 64);
+});
+
+test('avoidLineBreaks rides both snapshots: kept when boolean, defaulted otherwise', () => {
+  assert.equal(
+    resolveHtmlSettings({ ...HTML_BASE, avoidLineBreaks: true }).avoidLineBreaks,
+    true,
+  );
+  assert.equal(
+    resolvePreviewSettings({ ...PREVIEW_BASE, avoidLineBreaks: true }).avoidLineBreaks,
+    true,
+  );
+  assert.equal(
+    resolveHtmlSettings(badHtml({ avoidLineBreaks: 'on' })).avoidLineBreaks,
+    LAYOUT_DEFAULT.avoidLineBreaks,
+  );
 });
 
 test('bogus enum and boolean values coerce to their defaults', () => {

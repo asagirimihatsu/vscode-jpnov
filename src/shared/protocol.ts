@@ -76,10 +76,11 @@ export type MsgCode =
   | 'server.unexpected'; // args: [detail]  (detail = raw unexpected server error, untranslatable)
 
 /**
- * Config-field labels carried by the `path.*` codes. `sourceDir`/`outDir` name a literal JSON
- * key the user typed and render VERBATIM; `filelistEntry` is prose and is localized client-side.
+ * Config-field labels carried by the `path.*` codes. Only `filelistEntry` remains (the
+ * migrated `jpnov.project.*` paths fail silently to their defaults instead of diagnosing);
+ * it is prose and is localized client-side.
  */
-export type LabelId = 'sourceDir' | 'outDir' | 'filelistEntry';
+export type LabelId = 'filelistEntry';
 
 /** A server-produced message: a code plus the positional args its template substitutes. */
 export interface LocalizableMessage {
@@ -163,6 +164,8 @@ export interface LintConfigChangedParams {
  */
 export interface PreviewSettings extends PreviewChrome {
   readonly charsPerLine: number;
+  /** 禁則処理 toggle; rides BOTH snapshots so preview and build stay same-source. */
+  readonly avoidLineBreaks: boolean;
 }
 
 /**
@@ -172,6 +175,8 @@ export interface PreviewSettings extends PreviewChrome {
 export interface HtmlSettings extends BuildChrome {
   readonly charsPerLine: number;
   readonly linesPerPage: number;
+  /** 禁則処理 toggle; rides BOTH snapshots so preview and build stay same-source. */
+  readonly avoidLineBreaks: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -184,20 +189,40 @@ export const BuildRequest = 'jpnov/build';
 export type BuildFormat = 'html' | 'txt';
 
 /**
+ * The `jpnov.project.*` snapshot for ONE workspace folder: RAW relative strings exactly as
+ * configured (`scope: resource`, read per folder — unlike the window-global render snapshot).
+ * The client never resolves them; the server resolves each against its root and silently
+ * falls back to the default on any invalid value (empty / absolute / escaping / `.`).
+ */
+export interface ProjectDirs {
+  readonly sourceDir: string;
+  readonly outDir: string;
+}
+
+/**
+ * The per-root `jpnov.project.*` snapshot carried on `jpnov/listBooks` and `jpnov/build`:
+ * one entry per workspace folder, keyed by folder URI. The map DEFINES which roots the
+ * request targets — a root absent from it contributes no books and builds nothing.
+ */
+export type ProjectDirsMap = Readonly<Record<string, ProjectDirs>>;
+
+/**
  * Build selectors:
- * - `root`     — restrict to a single root. The Books panel leaves it unset and selects
- *                with `books` instead.
- * - `books`    — restrict to these `.filelist` URIs. ABSENT = every discovered book;
- *                PRESENT-BUT-EMPTY (`[]`) = build NOTHING. The two are deliberately distinct.
- * - `format`   — emit only this kind. ABSENT = BOTH `.txt` and `.html`.
- * - `settings` — the client's render-settings snapshot (required; client and server ship
- *                together, so there is no legacy sender to tolerate).
+ * - `root`        — restrict to a single root. The Books panel leaves it unset and selects
+ *                   with `books` instead.
+ * - `books`       — restrict to these `.filelist` URIs. ABSENT = every discovered book;
+ *                   PRESENT-BUT-EMPTY (`[]`) = build NOTHING. The two are deliberately distinct.
+ * - `format`      — emit only this kind. ABSENT = BOTH `.txt` and `.html`.
+ * - `settings`    — the client's render-settings snapshot (required; client and server ship
+ *                   together, so there is no legacy sender to tolerate).
+ * - `projectDirs` — the per-root source/output dirs (see {@link ProjectDirsMap}).
  */
 export interface BuildParams {
   readonly root?: string;
   readonly books?: readonly string[];
   readonly format?: BuildFormat;
   readonly settings: HtmlSettings;
+  readonly projectDirs: ProjectDirsMap;
 }
 
 export interface BuildArtifact {
@@ -224,13 +249,14 @@ export interface BuildResult {
 
 export const ListBooksRequest = 'jpnov/listBooks';
 
-/** Omit `root` to enumerate the books of EVERY currently-valid root. */
+/** Omit `root` to enumerate the books of EVERY root in `projectDirs`. */
 export interface ListBooksParams {
   readonly root?: string;
+  readonly projectDirs: ProjectDirsMap;
 }
 
 /**
- * One buildable book = one `*.filelist` discovered under a valid root's sourceDir. Its
+ * One buildable book = one `*.filelist` discovered under a root's sourceDir. Its
  * `uri` is the STABLE identity the Books panel keys checkbox state on and echoes back in
  * {@link BuildParams.books}; `outRel` rides along so the panel can show the real output
  * path without re-deriving it (the derivation stays single-sourced in the server).

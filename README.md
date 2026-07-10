@@ -19,32 +19,31 @@ to the **Japanese Novel** language for highlighting and live preview); a `.filel
 manifest lists, in reading order, the `.jpnov` chapters that make up one book.
 
 The extension activates when you open a `.jpnov` or `.filelist` file, or when a
-`novel.jp.*` config exists at the workspace root. **Preview** of a `.jpnov` and
-**`.filelist` editing** (completion, diagnostics, links) work with no config.
+workspace folder root holds a `novel.jp.*` config or a `*.filelist`. **Preview** of a
+`.jpnov` and **`.filelist` editing** (completion, diagnostics, links) work with no
+configuration at all. A **Get started with Japanese Novel** walkthrough (Help →
+Get Started) covers the same steps as the quick start below.
 
-To scaffold a fresh project, run **Japanese Novel: Init Workspace** from the Command
-Palette. It asks a few questions (disable AI in the workspace? enable 禁則処理?), then
-writes `novel.jp.json`, a sample
-`src/first-chapter.jpnov` + `src/volume1.filelist`, a `.vscode/launch.json` carrying the
-build entries, a `.gitignore` that keeps the generated `dist/` out of version control,
-and — if you opt in — a `.vscode/settings.json` that turns Copilot and inline suggestions
-off for the workspace. It aborts rather than overwrite any file it would create (the
-`.gitignore` is appended to, never overwritten), so it is safe to run in a folder that
-already holds unrelated content.
+## Quick start
 
-**Build** lives in the **Books** panel of the **Run and Debug** view, which appears
-once a `novel.jp.*` config is present (the config supplies the output directory). Each
-discovered `*.filelist` is one book with a checkbox; tick the
-ones you want, then build them either from the panel's title-bar actions or — once a
-`.vscode/launch.json` exists (run **Init Workspace** to get one) — from the **Run and
-Debug** launch dropdown (the green ▶): **Build selected as HTML** renders the
-checked books to paginated `.html`, **Build selected as Text** writes the concatenated
-Aozora-format `.txt` — each into the output directory. Use **Select All** /
-**Deselect All** to bulk-toggle the selection. (The ▶ entries run as a brief, empty
-debug session — that dropdown only hosts debug configurations — purely to trigger the
-build.)
+1. **Write a chapter.** Create a file ending in `.jpnov` (e.g. `src/chapter1.jpnov`) and start
+   writing. [Aozora Bunko annotations](https://www.aozora.gr.jp/annotation/index.html) are
+   highlighted as you type; click the preview icon in the editor title bar (or run **Japanese
+   Novel: Open Preview to the Side**) to see it in vertical, right-to-left 原稿用紙 layout.
+2. **Make a book.** Create a `.filelist` (e.g. `src/volume1.filelist`) and list your chapter
+   files, one per line, in reading order. One `.filelist` is one book.
+3. **Build it.** Open the **Japanese Novel** view in the Activity Bar (the book icon appears
+   once a `.filelist` exists), tick the books you want, and use **Build to HTML** (paginated
+   vertical `.html`) or **Build to Text** (concatenated Aozora-format `.txt`) from the panel's
+   title bar. Use **Select All** / **Deselect All** to bulk-toggle the selection.
 
-Supported config forms, in precedence order:
+Chapters and filelists live under `jpnov.project.sourceDir` (default `./src`); build output
+lands in `jpnov.project.outDir` (default `dist`). Both are plain VS Code settings
+(**Japanese Novel — Project**) and can be overridden per workspace folder. Layout, preview,
+HTML-output, and lint behavior are settings too, under the other **Japanese Novel** sections.
+
+A `novel.jp.*` config file is only used for cast/keyword highlighting (see
+[below](#character--keyword-highlighting)). Supported forms, in precedence order:
 
 | Form | Loaded by | Notes |
 | --- | --- | --- |
@@ -82,7 +81,6 @@ while you write — handy where Japanese drops the subject:
 
 ```json
 {
-  "sourceDir": "./src",
   "characters": ["朝霧　巳一", "Arill Stains"],
   "keywords": ["黒剣", "境無"]
 }

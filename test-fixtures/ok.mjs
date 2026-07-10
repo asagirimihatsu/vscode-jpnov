@@ -1,1 +1,1 @@
-export default { sourceDir: './src', charsPerLine: 40, linesPerPage: 34 };
+export default { characters: ['朝霧　巳一'], sourceDir: './src', charsPerLine: 40 };

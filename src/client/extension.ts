@@ -1,9 +1,10 @@
 /**
  * Extension entry (client / host side). This is the ONLY tree permitted to
  * value-import `vscode`. It launches the forked Node language server over IPC and owns
- * the host-side concerns: the aggregated status bar, the Books build panel + its Run-and-Debug
- * launch entries, and the live preview. The novel-jp language id is bound declaratively to
- * `.jpnov` (package.json), so there is no runtime language-id management here.
+ * the host-side concerns: the aggregated status bar, the Books build panel (in the
+ * extension's own Activity Bar container), and the live preview. The novel-jp language
+ * id is bound declaratively to `.jpnov` (package.json), so there is no runtime
+ * language-id management here.
  *
  * The pure compiler + all config/book parsing live server-side; the client is a thin
  * orchestrator that translates `jpnov/*` protocol messages into VS Code UI effects
@@ -12,14 +13,15 @@
  * Activation is two-phase so the window-open path stays cheap (`onStartupFinished`
  * activates this extension in EVERY window, novel or not):
  *   Phase 1 `activate()`  — synchronous registrations only (commands, serializer,
- *     debugger, lazy-start listeners). No LanguageClient, no fork, no fs beyond one
+ *     lazy-start listeners). No LanguageClient, no fork, no fs beyond one
  *     root readDirectory per workspace folder. Instant `.jpnov` colorization does not
  *     depend on any of this — the TextMate grammar is applied by VS Code core.
  *   Phase 2 `ensureStarted()` — single-flight; constructs the client + UI singletons
  *     and forks the server on the FIRST real demand: a novel-jp/filelist document, a
- *     jpnov command, a restored preview panel, or a `novel.jp.*` config found at a
- *     workspace root (so a novel workspace still self-populates its status bar and
- *     Books view shortly after startup, just off the window-open critical path).
+ *     jpnov command, a restored preview panel, or a `novel.jp.*` config / root-level
+ *     `*.filelist` found at a workspace folder (so a novel workspace still
+ *     self-populates its status bar and Books view shortly after startup, just off
+ *     the window-open critical path).
  */
 import * as vscode from 'vscode';
 
@@ -46,9 +48,7 @@ import {
 } from '#/shared/protocol.ts';
 
 import { BooksView } from './booksView.ts';
-import { registerBuildDebugger } from './buildDebug.ts';
 import { command } from './commands.ts';
-import { registerInitWorkspace } from './initWorkspace.ts';
 import { buildLintSnapshot } from './lintConfig.ts';
 import { isLocalizableMessage, renderMessage } from './messages.ts';
 import { Preview } from './preview.ts';
@@ -73,12 +73,14 @@ function isNovelDoc(doc: vscode.TextDocument): boolean {
 }
 
 /**
- * Starts the server iff some folder ROOT contains a `novel.jp.*` config. One
- * `readDirectory` per folder (not five stats): a single round-trip matters on
- * remote/virtual filesystems, and it mirrors the server's own `findConfig`.
- * Name-only membership — the server's config loader is the robust arbiter.
+ * Starts the server iff some folder ROOT contains a `novel.jp.*` config or a root-level
+ * `*.filelist` (books gate the panel now, so a filelist project self-starts without any
+ * config file). One `readDirectory` per folder (not per-name stats): a single round-trip
+ * matters on remote/virtual filesystems. Deliberately shallow — a filelist nested deeper
+ * still starts the server the moment a novel document opens. Name-only membership —
+ * the server is the robust arbiter.
  */
-async function startIfConfigPresent(
+async function startIfProjectPresent(
   folders: readonly vscode.WorkspaceFolder[],
 ): Promise<void> {
   for (const folder of folders) {
@@ -91,7 +93,11 @@ async function startIfConfigPresent(
     } catch {
       continue; // unreadable root (gone, permission, exotic scheme) -> not a novel root
     }
-    if (entries.some(([name]) => CONFIG_NAMES.has(name))) {
+    if (
+      entries.some(
+        ([name]) => CONFIG_NAMES.has(name) || name.toLowerCase().endsWith('.filelist'),
+      )
+    ) {
       ensureStarted();
       return;
     }
@@ -192,7 +198,7 @@ function ensureStarted(): void {
   context.subscriptions.push(
     client.onNotification(ConfigStateNotification, (params: ConfigStateParams) => {
       statusBar?.update(params.root, params.state, params.error);
-      booksView?.onConfigState(params);
+      booksView?.onConfigState();
     }),
   );
 
@@ -228,10 +234,10 @@ function ensureStarted(): void {
   );
 
   // Push jpnov.lint.* changes so the server re-lints open files live; re-render the preview
-  // when its layout/preview settings change. Gated on Running: a change during start/stop is
-  // dropped (the next start re-seeds lint via initializationOptions; the preview re-reads its
-  // snapshot on the next render anyway). jpnov.html.* changes need no push — they only feed
-  // on-demand builds.
+  // when its layout/preview settings change; re-enumerate books when a project dir moves.
+  // Gated on Running: a change during start/stop is dropped (the next start re-seeds lint via
+  // initializationOptions; the preview/books re-read their snapshots on the next request
+  // anyway). jpnov.html.* changes need no push — they only feed on-demand builds.
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (client?.state !== State.Running) {
@@ -243,6 +249,11 @@ function ensureStarted(): void {
       }
       if (e.affectsConfiguration('jpnov.layout') || e.affectsConfiguration('jpnov.preview')) {
         preview?.refresh();
+      }
+      if (e.affectsConfiguration('jpnov.project')) {
+        // A moved sourceDir/outDir changes which books exist and where they land: re-list
+        // (refresh() self-catches and is refreshSeq-serialized, so the dropped promise is safe).
+        void booksView?.refresh();
       }
     }),
   );
@@ -287,28 +298,12 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  // Surface "Build selected as HTML/Text" in the Run and Debug launch dropdown (▶), driven by the
-  // Books panel's checkbox selection. See buildDebug.ts for why this is modeled as a debugger.
-  // The lazy runner defers BooksView construction to first use so registration stays Phase-1 cheap.
-  context.subscriptions.push(
-    registerBuildDebugger({
-      buildSelected: (format) => {
-        ensureStarted();
-        return booksView?.buildSelected(format) ?? Promise.resolve();
-      },
-    }),
-  );
-
   // Commands. All server-dependent bodies go through ensureStarted() so any command is a
-  // start trigger. The build actions live on the Books panel (Run and Debug) and operate on
-  // its checkbox selection; there is no command-palette build entry — a build needs a resolved
-  // config plus at least one selected book, so the palette is the wrong home for it.
+  // start trigger. The build actions live on the Books panel (the extension's Activity Bar
+  // container) and operate on its checkbox selection; there is no command-palette build
+  // entry — a build needs at least one discovered, selected book, so the palette is the
+  // wrong home for it.
   context.subscriptions.push(
-    // Scaffold a fresh novel project (.vscode/, novel.jp.json, a sample chapter). Palette-only;
-    // available in an empty workspace via the implicit onCommand activation (vscode >= 1.74).
-    // Needs no server itself: opening the scaffolded sample chapter fires the
-    // onDidOpenTextDocument trigger below, which starts the server.
-    registerInitWorkspace(),
     command('jpnov.books.buildHtml', () => { ensureStarted(); return booksView?.buildHtml(); }),
     command('jpnov.books.buildTxt', () => { ensureStarted(); return booksView?.buildTxt(); }),
     command('jpnov.books.selectAll', () => { ensureStarted(); return booksView?.selectAll(); }),
@@ -331,7 +326,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidChangeWorkspaceFolders((e) => {
       // Once started, vscode-languageclient forwards folder changes to the server itself.
       if (!started) {
-        void startIfConfigPresent(e.added);
+        void startIfProjectPresent(e.added);
       }
     }),
   );
@@ -343,7 +338,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // folder roots and self-populate status bar + Books view shortly after startup.
     // Not awaited — activate() must return immediately; the probe is internally
     // started-guarded, so racing another trigger is harmless.
-    void startIfConfigPresent(vscode.workspace.workspaceFolders ?? []);
+    void startIfProjectPresent(vscode.workspace.workspaceFolders ?? []);
   }
 }
 

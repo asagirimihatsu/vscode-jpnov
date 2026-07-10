@@ -50,7 +50,7 @@ test('any error root wins: red-cross text, error color, and opens that config', 
   sb.update('file:///workspace/alpha', 'valid');
   sb.update('file:///workspace/beta', 'error', {
     code: 'path.escapesRoot',
-    args: ['sourceDir'],
+    args: ['filelistEntry'],
     configUri: 'file:///workspace/beta/novel.jp.json',
   });
 

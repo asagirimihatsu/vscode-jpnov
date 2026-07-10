@@ -3,7 +3,6 @@ import type {
   NovelConfigFormat,
   RawNovelConfig,
 } from './types.ts';
-import { DEFAULT } from './types.ts';
 
 /**
  * See also `activationEvents` in `package.json`, which must be kept in sync with
@@ -91,24 +90,17 @@ function normalizeStringList(value: unknown): string[] | undefined {
 }
 
 /**
- * Coerces an arbitrary parsed value into a {@link RawNovelConfig}, applying per-field
- * defaults. Never throws; never rejects the whole object for one bad field.
+ * Coerces an arbitrary parsed value into a {@link RawNovelConfig}. Only the highlighting
+ * vocabulary survives; unknown keys — including the migrated `sourceDir`/`outDir`/
+ * `avoidLineBreaks` — are silently dropped. Never throws; never rejects the whole object
+ * for one bad field.
  */
 export function initConfig(raw: unknown): RawNovelConfig {
   if (raw === null || typeof raw !== 'object') {
-    return { ...DEFAULT };
+    return {};
   }
-  const { sourceDir, outDir, characters, keywords, avoidLineBreaks } =
-    raw as Record<string, unknown>;
-  const result: RawNovelConfig = {
-    sourceDir:
-      typeof sourceDir === 'string' && sourceDir ? sourceDir : DEFAULT.sourceDir,
-  };
-  if (typeof outDir === 'string' && outDir) {
-    result.outDir = outDir;
-  } else if (DEFAULT.outDir !== undefined) {
-    result.outDir = DEFAULT.outDir;
-  }
+  const { characters, keywords } = raw as Record<string, unknown>;
+  const result: RawNovelConfig = {};
   const castNames = normalizeStringList(characters);
   if (castNames) {
     result.characters = castNames;
@@ -116,9 +108,6 @@ export function initConfig(raw: unknown): RawNovelConfig {
   const keyTerms = normalizeStringList(keywords);
   if (keyTerms) {
     result.keywords = keyTerms;
-  }
-  if (typeof avoidLineBreaks === 'boolean') {
-    result.avoidLineBreaks = avoidLineBreaks;
   }
   return result;
 }

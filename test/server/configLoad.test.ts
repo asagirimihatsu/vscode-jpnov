@@ -18,13 +18,13 @@ function freshState(rootUri: string): RootState {
   return { rootUri };
 }
 
-test('json config resolves to a valid state with contained URIs', async () => {
+test('json config parses to a valid state carrying the highlighting vocabulary', async () => {
   const ws = makeTmpWorkspace();
   try {
     writeUnder(
       ws.dir,
       'novel.jp.json',
-      JSON.stringify({ sourceDir: './manuscript', outDir: 'out' }),
+      JSON.stringify({ characters: ['朝霧　巳一'], keywords: ['黒剣'] }),
     );
     const conn = makeFakeConnection();
     const ctx = makeContext(conn);
@@ -35,10 +35,8 @@ test('json config resolves to a valid state with contained URIs', async () => {
     const latest = conn.latestConfigState(ws.uri);
     assert.ok(latest);
     assert.equal(latest.state, 'valid');
-    // The resolved config is no longer carried on the wire; assert it on the server state.
-    assert.ok(state.resolved, 'state.resolved should be set');
-    assert.equal(state.resolved.sourceDirUri, `${ws.uri}/manuscript`);
-    assert.equal(state.resolved.outDirUri, `${ws.uri}/out`);
+    // The parsed config is not carried on the wire; assert it on the server state.
+    assert.deepEqual(state.resolved, { characters: ['朝霧　巳一'], keywords: ['黒剣'] });
     assert.ok(state.lastGood, 'state.lastGood should be set');
   } finally {
     ws.cleanup();
@@ -61,33 +59,28 @@ test('missing config yields an absent state', async () => {
   }
 });
 
-test('escaping sourceDir produces an error state + diagnostic, retains lastGood', async () => {
+test('migrated path keys in an old config are silently ignored (no error, no diagnostic)', async () => {
   const ws = makeTmpWorkspace();
   try {
-    // First: a good config to establish lastGood.
-    const cfgPath = writeUnder(ws.dir, 'novel.jp.json', JSON.stringify({ sourceDir: './src' }));
+    // An old novel.jp.json still carrying the migrated keys — even hostile values like an
+    // escaping sourceDir are just unknown keys now; the config stays valid.
+    writeUnder(
+      ws.dir,
+      'novel.jp.json',
+      JSON.stringify({ sourceDir: '../escape', outDir: '/abs', avoidLineBreaks: true }),
+    );
     const conn = makeFakeConnection();
     const ctx = makeContext(conn);
     const state = freshState(ws.uri);
+
     await loadRootConfig(ctx, state);
+
     assert.equal(conn.latestConfigState(ws.uri)?.state, 'valid');
-
-    // Then: rewrite with an escaping sourceDir.
-    writeUnder(ws.dir, 'novel.jp.json', JSON.stringify({ sourceDir: '../escape' }));
-    void cfgPath;
-    await loadRootConfig(ctx, state);
-
-    const latest = conn.latestConfigState(ws.uri);
-    assert.ok(latest);
-    assert.equal(latest.state, 'error');
-    const error = latest.error as { code: string; args: unknown[]; configUri: string };
-    assert.equal(error.code, 'path.escapesRoot');
-    assert.deepEqual(error.args, ['sourceDir']);
-    assert.ok(error.configUri.endsWith('novel.jp.json'));
-    assert.ok(state.lastGood, 'error state should retain lastGood');
-    // A diagnostic with at least one entry should have been published on the config uri.
-    const withErr = conn.diagnostics.filter((d) => d.uri === error.configUri && d.count > 0);
-    assert.ok(withErr.length > 0, 'expected an error diagnostic on the config uri');
+    assert.deepEqual(state.resolved, {});
+    assert.ok(
+      !conn.diagnostics.some((d) => d.count > 0),
+      'no diagnostic for migrated keys',
+    );
   } finally {
     ws.cleanup();
   }
@@ -96,8 +89,8 @@ test('escaping sourceDir produces an error state + diagnostic, retains lastGood'
 test('json precedence wins over a sibling executable config', async () => {
   const ws = makeTmpWorkspace();
   try {
-    writeUnder(ws.dir, 'novel.jp.json', JSON.stringify({ sourceDir: './from-json' }));
-    writeUnder(ws.dir, 'novel.jp.js', 'export default { sourceDir: "./from-js" };');
+    writeUnder(ws.dir, 'novel.jp.json', JSON.stringify({ keywords: ['from-json'] }));
+    writeUnder(ws.dir, 'novel.jp.js', 'export default { keywords: ["from-js"] };');
     const conn = makeFakeConnection();
     const ctx = makeContext(conn);
     const state = freshState(ws.uri);
@@ -106,8 +99,7 @@ test('json precedence wins over a sibling executable config', async () => {
 
     const latest = conn.latestConfigState(ws.uri);
     assert.ok(latest);
-    assert.ok(state.resolved);
-    assert.equal(state.resolved.sourceDirUri, `${ws.uri}/from-json`);
+    assert.deepEqual(state.resolved, { keywords: ['from-json'] });
   } finally {
     ws.cleanup();
   }
@@ -116,7 +108,7 @@ test('json precedence wins over a sibling executable config', async () => {
 test('executable config is gated out (error) when the workspace is untrusted', async () => {
   const ws = makeTmpWorkspace();
   try {
-    writeUnder(ws.dir, 'novel.jp.mjs', 'export default { sourceDir: "./src" };');
+    writeUnder(ws.dir, 'novel.jp.mjs', 'export default { keywords: ["黒剣"] };');
     const conn = makeFakeConnection();
     const ctx = makeContext(conn, { isTrusted: false });
     const state = freshState(ws.uri);
@@ -136,24 +128,20 @@ test('executable config is gated out (error) when the workspace is untrusted', a
 test('executable config loads when trusted and reparses after an edit (cache-bust)', async () => {
   const ws = makeTmpWorkspace();
   try {
-    writeUnder(ws.dir, 'novel.jp.mjs', 'export default { sourceDir: "./first" };');
+    writeUnder(ws.dir, 'novel.jp.mjs', 'export default { keywords: ["first"] };');
     const conn = makeFakeConnection();
     const ctx = makeContext(conn, { isTrusted: true });
     const state = freshState(ws.uri);
 
     await loadRootConfig(ctx, state);
-    const first = state.resolved;
-    assert.ok(first);
-    assert.equal(first.sourceDirUri, `${ws.uri}/first`);
+    assert.deepEqual(state.resolved, { keywords: ['first'] });
 
     // Edit the module; the ?v=<mtime> cache-bust must pick up the new value.
     // Bump mtime explicitly so the URL differs even on coarse filesystem clocks.
     await new Promise((r) => setTimeout(r, 10));
-    writeUnder(ws.dir, 'novel.jp.mjs', 'export default { sourceDir: "./second" };');
+    writeUnder(ws.dir, 'novel.jp.mjs', 'export default { keywords: ["second"] };');
     await loadRootConfig(ctx, state);
-    const second = state.resolved;
-    assert.ok(second);
-    assert.equal(second.sourceDirUri, `${ws.uri}/second`);
+    assert.deepEqual(state.resolved, { keywords: ['second'] });
   } finally {
     ws.cleanup();
   }

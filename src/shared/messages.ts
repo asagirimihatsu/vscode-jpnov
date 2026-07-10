@@ -11,16 +11,11 @@
  */
 import type { LabelId, LocalizableMessage, MsgCode } from './protocol.ts';
 
-/** English text for a label id. All three are verbatim in English (only JA localizes the prose one). */
+/** English text per label id (`filelistEntry`, the only remaining label, is prose). */
+const LABEL_EN: Record<LabelId, string> = { filelistEntry: 'filelist entry' };
+
 function englishLabel(label: LabelId): string {
-  switch (label) {
-    case 'sourceDir':
-      return 'sourceDir';
-    case 'outDir':
-      return 'outDir';
-    case 'filelistEntry':
-      return 'filelist entry';
-  }
+  return LABEL_EN[label];
 }
 
 /** Render a code + positional args to its English string (byte-identical to the pre-l10n source). */
