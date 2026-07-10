@@ -275,28 +275,25 @@ connection.onRequest(
   ): Promise<BuildResult> => handleBuild(context, params, workDone),
 );
 
-// List books: enumerate every `.filelist` of every valid root for the client's Books panel.
+// List books: enumerate every `.filelist` of every root in the request's projectDirs map.
 // PURE enumeration (no reads/diagnostics); the wire may omit params, so accept the nullable form.
 connection.onRequest(
   'jpnov/listBooks',
   (params: ListBooksParams | undefined): Promise<ListBooksResult> =>
-    handleListBooks(context, params ?? {}),
+    handleListBooks(params ?? { projectDirs: {} }),
 );
 
 // Preview: render one file's live buffer to a standalone HTML document. Strings only.
-// charsPerLine + display chrome ride the request's settings snapshot (re-resolved here —
-// the wire payload is untrusted); avoidLineBreaks (禁則) still comes from the owning
-// root's novel.jp.* config, defaulting to off outside any tracked/valid root.
+// charsPerLine, 禁則, and display chrome all ride the request's settings snapshot
+// (re-resolved here — the wire payload is untrusted).
 connection.onRequest(
   'jpnov/renderFile',
   (params: RenderFileParams): RenderFileResult => {
-    const owner = rootForUri(context, params.uri);
     const settings = resolvePreviewSettings(params.settings);
-    const avoidLineBreaks = owner?.resolved?.avoidLineBreaks ?? false;
     return {
       html: renderPreview(params.text, {
         charsPerLine: settings.charsPerLine,
-        avoidLineBreaks,
+        avoidLineBreaks: settings.avoidLineBreaks,
         chrome: settings,
       }),
     };

@@ -118,122 +118,8 @@
     },
     "configuration": [
       {
-        "title": "%jpnov.lint.common.title%",
-        "properties": {
-          "jpnov.lint.common.sentenceLength": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "default": null,
-            "minimum": 1,
-            "maximum": 1000,
-            "markdownDescription": "%jpnov.lint.common.sentenceLength.description%"
-          },
-          "jpnov.lint.common.maxTen": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "default": null,
-            "minimum": 1,
-            "maximum": 20,
-            "markdownDescription": "%jpnov.lint.common.maxTen.description%"
-          },
-          "jpnov.lint.common.maxKanjiRun": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "default": null,
-            "minimum": 1,
-            "maximum": 20,
-            "markdownDescription": "%jpnov.lint.common.maxKanjiRun.description%"
-          },
-          "jpnov.lint.common.noEmDash": {
-            "type": "boolean",
-            "default": false,
-            "markdownDescription": "%jpnov.lint.common.noEmDash.description%"
-          },
-          "jpnov.lint.common.noUnmatchedPair": {
-            "type": "boolean",
-            "default": false,
-            "markdownDescription": "%jpnov.lint.common.noUnmatchedPair.description%"
-          },
-          "jpnov.lint.common.noHankakuKana": {
-            "type": "boolean",
-            "default": false,
-            "markdownDescription": "%jpnov.lint.common.noHankakuKana.description%"
-          },
-          "jpnov.lint.common.noNfd": {
-            "type": "boolean",
-            "default": false,
-            "markdownDescription": "%jpnov.lint.common.noNfd.description%"
-          },
-          "jpnov.lint.common.noZeroWidth": {
-            "type": "boolean",
-            "default": false,
-            "markdownDescription": "%jpnov.lint.common.noZeroWidth.description%"
-          },
-          "jpnov.lint.common.noControlChar": {
-            "type": "boolean",
-            "default": false,
-            "markdownDescription": "%jpnov.lint.common.noControlChar.description%"
-          },
-          "jpnov.lint.common.jaNoSpaceBetweenFullWidth": {
-            "type": "boolean",
-            "default": false,
-            "markdownDescription": "%jpnov.lint.common.jaNoSpaceBetweenFullWidth.description%"
-          },
-          "jpnov.lint.common.jaUnnaturalAlphabet": {
-            "type": "boolean",
-            "default": false,
-            "markdownDescription": "%jpnov.lint.common.jaUnnaturalAlphabet.description%"
-          },
-          "jpnov.lint.common.minusPosition": {
-            "type": "boolean",
-            "default": false,
-            "markdownDescription": "%jpnov.lint.common.minusPosition.description%"
-          }
-        }
-      },
-      {
-        "title": "%jpnov.lint.narration.title%",
-        "properties": {
-          "jpnov.lint.narration.generalNovelStyle": {
-            "type": "boolean",
-            "default": false,
-            "markdownDescription": "%jpnov.lint.narration.generalNovelStyle.description%"
-          },
-          "jpnov.lint.narration.jaNoMixedPeriod": {
-            "type": "boolean",
-            "default": false,
-            "markdownDescription": "%jpnov.lint.narration.jaNoMixedPeriod.description%"
-          }
-        }
-      },
-      {
-        "title": "%jpnov.lint.ruby.title%",
-        "properties": {
-          "jpnov.lint.ruby.kana": {
-            "type": "string",
-            "enum": [
-              "off",
-              "hiragana",
-              "katakana"
-            ],
-            "default": "off",
-            "enumDescriptions": [
-              "%jpnov.lint.ruby.kana.off%",
-              "%jpnov.lint.ruby.kana.hiragana%",
-              "%jpnov.lint.ruby.kana.katakana%"
-            ],
-            "markdownDescription": "%jpnov.lint.ruby.kana.description%"
-          }
-        }
-      },
-      {
         "title": "%jpnov.layout.title%",
+        "order": 1,
         "properties": {
           "jpnov.layout.charsPerLine": {
             "type": "integer",
@@ -248,36 +134,17 @@
             "minimum": 16,
             "maximum": 64,
             "markdownDescription": "%jpnov.layout.linesPerPage.description%"
-          }
-        }
-      },
-      {
-        "title": "%jpnov.preview.title%",
-        "properties": {
-          "jpnov.preview.lineNumbers": {
-            "type": "boolean",
-            "default": true,
-            "markdownDescription": "%jpnov.preview.lineNumbers.description%"
           },
-          "jpnov.preview.edgeLine": {
-            "type": "string",
-            "enum": [
-              "none",
-              "text",
-              "red"
-            ],
-            "default": "none",
-            "enumDescriptions": [
-              "%jpnov.preview.edgeLine.none%",
-              "%jpnov.preview.edgeLine.text%",
-              "%jpnov.preview.edgeLine.red%"
-            ],
-            "markdownDescription": "%jpnov.preview.edgeLine.description%"
+          "jpnov.layout.avoidLineBreaks": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "%jpnov.layout.avoidLineBreaks.description%"
           }
         }
       },
       {
         "title": "%jpnov.html.title%",
+        "order": 2,
         "properties": {
           "jpnov.html.lineNumbers": {
             "type": "boolean",
@@ -329,25 +196,169 @@
             "markdownDescription": "%jpnov.html.header.description%"
           }
         }
-      }
-    ],
-    "debuggers": [
+      },
       {
-        "type": "jpnov-build",
-        "label": "%debugger.build.label%",
-        "configurationAttributes": {
-          "launch": {
-            "properties": {
-              "format": {
-                "type": "string",
-                "enum": [
-                  "html",
-                  "txt"
-                ],
-                "default": "html",
-                "description": "%debugger.build.format.description%"
-              }
-            }
+        "title": "%jpnov.preview.title%",
+        "order": 3,
+        "properties": {
+          "jpnov.preview.lineNumbers": {
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "%jpnov.preview.lineNumbers.description%"
+          },
+          "jpnov.preview.edgeLine": {
+            "type": "string",
+            "enum": [
+              "none",
+              "text",
+              "red"
+            ],
+            "default": "none",
+            "enumDescriptions": [
+              "%jpnov.preview.edgeLine.none%",
+              "%jpnov.preview.edgeLine.text%",
+              "%jpnov.preview.edgeLine.red%"
+            ],
+            "markdownDescription": "%jpnov.preview.edgeLine.description%"
+          }
+        }
+      },
+      {
+        "title": "%jpnov.lint.title%",
+        "order": 4,
+        "properties": {
+          "jpnov.lint.common.sentenceLength": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null,
+            "minimum": 1,
+            "maximum": 1000,
+            "order": 1,
+            "markdownDescription": "%jpnov.lint.common.sentenceLength.description%"
+          },
+          "jpnov.lint.common.maxTen": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null,
+            "minimum": 1,
+            "maximum": 20,
+            "order": 2,
+            "markdownDescription": "%jpnov.lint.common.maxTen.description%"
+          },
+          "jpnov.lint.common.maxKanjiRun": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null,
+            "minimum": 1,
+            "maximum": 20,
+            "order": 3,
+            "markdownDescription": "%jpnov.lint.common.maxKanjiRun.description%"
+          },
+          "jpnov.lint.common.noEmDash": {
+            "type": "boolean",
+            "default": false,
+            "order": 4,
+            "markdownDescription": "%jpnov.lint.common.noEmDash.description%"
+          },
+          "jpnov.lint.common.noUnmatchedPair": {
+            "type": "boolean",
+            "default": false,
+            "order": 5,
+            "markdownDescription": "%jpnov.lint.common.noUnmatchedPair.description%"
+          },
+          "jpnov.lint.common.noHankakuKana": {
+            "type": "boolean",
+            "default": false,
+            "order": 6,
+            "markdownDescription": "%jpnov.lint.common.noHankakuKana.description%"
+          },
+          "jpnov.lint.common.noNfd": {
+            "type": "boolean",
+            "default": false,
+            "order": 7,
+            "markdownDescription": "%jpnov.lint.common.noNfd.description%"
+          },
+          "jpnov.lint.common.noZeroWidth": {
+            "type": "boolean",
+            "default": false,
+            "order": 8,
+            "markdownDescription": "%jpnov.lint.common.noZeroWidth.description%"
+          },
+          "jpnov.lint.common.noControlChar": {
+            "type": "boolean",
+            "default": false,
+            "order": 9,
+            "markdownDescription": "%jpnov.lint.common.noControlChar.description%"
+          },
+          "jpnov.lint.common.jaNoSpaceBetweenFullWidth": {
+            "type": "boolean",
+            "default": false,
+            "order": 10,
+            "markdownDescription": "%jpnov.lint.common.jaNoSpaceBetweenFullWidth.description%"
+          },
+          "jpnov.lint.common.jaUnnaturalAlphabet": {
+            "type": "boolean",
+            "default": false,
+            "order": 11,
+            "markdownDescription": "%jpnov.lint.common.jaUnnaturalAlphabet.description%"
+          },
+          "jpnov.lint.common.minusPosition": {
+            "type": "boolean",
+            "default": false,
+            "order": 12,
+            "markdownDescription": "%jpnov.lint.common.minusPosition.description%"
+          },
+          "jpnov.lint.narration.generalNovelStyle": {
+            "type": "boolean",
+            "default": false,
+            "order": 13,
+            "markdownDescription": "%jpnov.lint.narration.generalNovelStyle.description%"
+          },
+          "jpnov.lint.narration.jaNoMixedPeriod": {
+            "type": "boolean",
+            "default": false,
+            "order": 14,
+            "markdownDescription": "%jpnov.lint.narration.jaNoMixedPeriod.description%"
+          },
+          "jpnov.lint.ruby.kana": {
+            "type": "string",
+            "enum": [
+              "off",
+              "hiragana",
+              "katakana"
+            ],
+            "default": "off",
+            "enumDescriptions": [
+              "%jpnov.lint.ruby.kana.off%",
+              "%jpnov.lint.ruby.kana.hiragana%",
+              "%jpnov.lint.ruby.kana.katakana%"
+            ],
+            "order": 15,
+            "markdownDescription": "%jpnov.lint.ruby.kana.description%"
+          }
+        }
+      },
+      {
+        "title": "%jpnov.project.title%",
+        "order": 5,
+        "properties": {
+          "jpnov.project.sourceDir": {
+            "type": "string",
+            "default": "./src",
+            "scope": "resource",
+            "markdownDescription": "%jpnov.project.sourceDir.description%"
+          },
+          "jpnov.project.outDir": {
+            "type": "string",
+            "default": "dist",
+            "scope": "resource",
+            "markdownDescription": "%jpnov.project.outDir.description%"
           }
         }
       }
@@ -393,31 +404,19 @@
         "category": "%command.category%",
         "title": "%command.previewToSide.title%",
         "icon": "$(open-preview)"
-      },
-      {
-        "command": "jpnov.initWorkspace",
-        "category": "%command.category%",
-        "title": "%command.initWorkspace.title%"
       }
     ],
     "views": {
-      "debug": [
+      "jpnov": [
         {
           "id": "jpnov.books",
           "name": "%view.books.name%",
           "icon": "$(book)",
-          "when": "jpnov.hasConfig",
+          "when": "jpnov.hasBooks",
           "contextualTitle": "%view.books.contextualTitle%"
         }
       ]
     },
-    "viewsWelcome": [
-      {
-        "view": "jpnov.books",
-        "contents": "%view.books.welcome%",
-        "when": "jpnov.hasConfig"
-      }
-    ],
     "menus": {
       "view/title": [
         {
@@ -483,7 +482,73 @@
           "when": "false"
         }
       ]
-    }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "jpnov",
+          "title": "%view.container.title%",
+          "icon": "resources/book.svg"
+        }
+      ]
+    },
+    "walkthroughs": [
+      {
+        "id": "jpnov.gettingStarted",
+        "title": "%walkthrough.title%",
+        "description": "%walkthrough.description%",
+        "featuredFor": [
+          "**/*.jpnov",
+          "**/*.filelist"
+        ],
+        "steps": [
+          {
+            "id": "chapter",
+            "title": "%walkthrough.chapter.title%",
+            "description": "%walkthrough.chapter.description%",
+            "media": {
+              "markdown": "media/walkthrough/chapter.md"
+            },
+            "completionEvents": [
+              "onCommand:workbench.action.files.newUntitledFile"
+            ]
+          },
+          {
+            "id": "preview",
+            "title": "%walkthrough.preview.title%",
+            "description": "%walkthrough.preview.description%",
+            "media": {
+              "markdown": "media/walkthrough/preview.md"
+            },
+            "completionEvents": [
+              "onCommand:jpnov.previewToSide"
+            ]
+          },
+          {
+            "id": "filelist",
+            "title": "%walkthrough.filelist.title%",
+            "description": "%walkthrough.filelist.description%",
+            "media": {
+              "markdown": "media/walkthrough/filelist.md"
+            },
+            "completionEvents": [
+              "onContext:jpnov.hasBooks"
+            ]
+          },
+          {
+            "id": "build",
+            "title": "%walkthrough.build.title%",
+            "description": "%walkthrough.build.description%",
+            "media": {
+              "markdown": "media/walkthrough/build.md"
+            },
+            "completionEvents": [
+              "onView:jpnov.books"
+            ]
+          }
+        ]
+      }
+    ]
   },
   "capabilities": {
     "untrustedWorkspaces": {

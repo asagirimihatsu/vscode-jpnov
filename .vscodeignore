@@ -12,5 +12,7 @@
 !filelist.language-configuration.json
 !jpnov.language-configuration.json
 !syntaxes/**
+!resources/**
+!media/**
 !LICENSE
 !README.md

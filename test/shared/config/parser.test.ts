@@ -8,7 +8,6 @@ import {
   parseDataConfig,
   FILE_TYPE_FILE,
 } from '../../../src/shared/config/parser.ts';
-import { DEFAULT } from '../../../src/shared/config/types.ts';
 
 const fixture = (name: string): string =>
   new URL(`../../../test-fixtures/${name}`, import.meta.url).href;
@@ -61,12 +60,9 @@ test('matchConfig skips entries that do not match the allow mask (e.g. directori
   assert.equal(matchConfig([['novel.jp.json', DIR]], FILE_TYPE_FILE), null);
 });
 
-test('parseDataConfig parses JSON and fills the per-field defaults', () => {
-  const bytes = new TextEncoder().encode('{"sourceDir":"./manuscript"}');
-  assert.deepEqual(parseDataConfig(bytes), {
-    sourceDir: './manuscript',
-    outDir: DEFAULT.outDir,
-  });
+test('parseDataConfig parses JSON down to the highlighting vocabulary', () => {
+  const bytes = new TextEncoder().encode('{"characters":["朝霧　巳一"]}');
+  assert.deepEqual(parseDataConfig(bytes), { characters: ['朝霧　巳一'] });
 });
 
 test('parseDataConfig throws on malformed JSON', () => {
@@ -74,34 +70,25 @@ test('parseDataConfig throws on malformed JSON', () => {
   assert.throws(() => parseDataConfig(invalidBytes));
 });
 
-test('initConfig silently ignores unknown keys, including the migrated grid fields', () => {
-  // charsPerLine / linesPerPage moved to the jpnov.layout.* settings; a leftover key in
-  // an old novel.jp.* is dropped like any other unknown key — no error, no passthrough.
-  assert.deepEqual(initConfig({ charsPerLine: 43, linesPerPage: 40, sourceDir: '' }), {
-    sourceDir: DEFAULT.sourceDir,
-    outDir: DEFAULT.outDir,
-  });
+test('initConfig silently ignores unknown keys, including every migrated field', () => {
+  // sourceDir/outDir moved to jpnov.project.*, avoidLineBreaks and the grid to jpnov.layout.*;
+  // a leftover key in an old novel.jp.* is dropped like any other unknown key — no error,
+  // no passthrough, no deprecation notice (fully silent by design).
+  assert.deepEqual(
+    initConfig({
+      sourceDir: './manuscript',
+      outDir: 'build',
+      avoidLineBreaks: true,
+      charsPerLine: 43,
+      linesPerPage: 40,
+    }),
+    {},
+  );
 });
 
-test('initConfig accepts a custom sourceDir and outDir', () => {
-  assert.deepEqual(initConfig({ sourceDir: './manuscript', outDir: 'build' }), {
-    sourceDir: './manuscript',
-    outDir: 'build',
-  });
-});
-
-test('initConfig returns a fresh DEFAULT for null / non-object input', () => {
-  assert.deepEqual(initConfig(null), { ...DEFAULT });
-  assert.deepEqual(initConfig(42), { ...DEFAULT });
-});
-
-test('initConfig reads a boolean avoidLineBreaks and ignores non-boolean', () => {
-  assert.deepEqual(initConfig({ avoidLineBreaks: true }), {
-    ...DEFAULT,
-    avoidLineBreaks: true,
-  });
-  // Non-boolean is dropped (off) — and stays absent so it never bloats the wire payload.
-  assert.deepEqual(initConfig({ avoidLineBreaks: 'yes' }), { ...DEFAULT });
+test('initConfig returns an empty config for null / non-object input', () => {
+  assert.deepEqual(initConfig(null), {});
+  assert.deepEqual(initConfig(42), {});
 });
 
 test('initConfig keeps characters and keywords, deduping each first-seen', () => {
@@ -128,26 +115,20 @@ test('initConfig: a non-array or all-invalid characters/keywords becomes undefin
 
 test('loadModuleConfig prefers the default export, else the namespace', () => {
   assert.deepEqual(
-    loadModuleConfig({ default: { sourceDir: './from-default' }, sourceDir: './from-ns' }),
-    {
-      sourceDir: './from-default',
-      outDir: DEFAULT.outDir,
-    },
+    loadModuleConfig({
+      default: { keywords: ['from-default'] },
+      keywords: ['from-ns'],
+    }),
+    { keywords: ['from-default'] },
   );
-  assert.deepEqual(loadModuleConfig({ sourceDir: './from-ns' }), {
-    sourceDir: './from-ns',
-    outDir: DEFAULT.outDir,
-  });
+  assert.deepEqual(loadModuleConfig({ keywords: ['from-ns'] }), { keywords: ['from-ns'] });
 });
 
 test('loadModuleConfig imports mjs / cjs / js / ts configs via dynamic import', async () => {
   for (const name of ['ok.mjs', 'ok.cjs', 'ok.js', 'ok.ts'] as const) {
     const url = fixture(name);
     const mod = (await import(url)) as Record<string, unknown>;
-    // The fixtures still carry the migrated grid keys — dropped silently, like any unknown key.
-    assert.deepEqual(loadModuleConfig(mod), {
-      sourceDir: './src',
-      outDir: DEFAULT.outDir,
-    });
+    // Some fixtures still carry migrated keys (sourceDir/charsPerLine) — dropped silently.
+    assert.deepEqual(loadModuleConfig(mod), { characters: ['朝霧　巳一'] });
   }
 });

@@ -1,18 +1,19 @@
 /**
- * The "Books" panel: a client-owned tree view contributed INTO VS Code's built-in Run and Debug
- * container (`contributes.views.debug`, see package.json). It lists every buildable book — one
- * `*.filelist` discovered under a valid root's sourceDir — with a checkbox each, and drives the two
- * build actions from the view title bar: "Build to HTML" and "Build to Text" each render ONLY the
- * checked books, in ONLY that one format.
+ * The "Books" panel: a client-owned tree view in the extension's own Activity Bar container
+ * (`contributes.viewsContainers.activitybar` + `views.jpnov`, see package.json). It lists every
+ * buildable book — one `*.filelist` discovered under a root's sourceDir (`jpnov.project.*`) — with
+ * a checkbox each, and drives the two build actions from the view title bar: "Build to HTML" and
+ * "Build to Text" each render ONLY the checked books, in ONLY that one format.
  *
  * Data flow mirrors the rest of the client: the SERVER enumerates books (`jpnov/listBooks`) and
  * renders them (`jpnov/build` with a `books`/`format` selection); this view only owns the VS Code
  * UI — the tree, the checkbox set, and the artifact writes (the server never touches `vscode.fs`).
  *
- * The view is gated by the `jpnov.hasConfig` context key, which this class sets from the aggregated
- * `jpnov/configState` notifications (true while ANY root carries a config, valid or in error). The
- * checkbox set defaults every newly-discovered book to CHECKED, so a fresh panel builds everything
- * until the user narrows it; un-checking is the way to scope a build down.
+ * The view is gated by the `jpnov.hasBooks` context key, recomputed after every refresh():
+ * true while the enumeration finds at least one book ("a bookshelf appears once there are
+ * books" — no `novel.jp.*` involved). The checkbox set defaults every newly-discovered book
+ * to CHECKED, so a fresh panel builds everything until the user narrows it; un-checking is
+ * the way to scope a build down.
  */
 import * as vscode from 'vscode';
 
@@ -25,7 +26,6 @@ import {
   type BuildFormat,
   type BuildParams,
   type BuildResult,
-  type ConfigStateParams,
   type ListBooksParams,
   type ListBooksResult,
 } from '#/shared/protocol.ts';
@@ -33,6 +33,7 @@ import {
 import { buildForest, type TreeDir } from './bookTree.ts';
 import { renderMessage } from './messages.ts';
 import { lastPathSegment } from './paths.ts';
+import { buildProjectDirs } from './projectConfig.ts';
 import { buildHtmlSettings } from './renderConfig.ts';
 
 /**
@@ -94,9 +95,8 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
   private forest = new Map<string, TreeDir>();
   /** The build selection: book URIs whose checkbox is ticked. */
   private readonly checked = new Set<string>();
-  /** Roots currently carrying a config (valid OR error); size > 0 drives `jpnov.hasConfig`. */
-  private readonly presentRoots = new Set<string>();
-  private hasConfig = false;
+  /** Last pushed `jpnov.hasBooks` context value (books.length > 0 after a refresh). */
+  private hasBooks = false;
   /** Serializes `refresh()` so a slow `listBooks` can't clobber a newer enumeration. */
   private refreshSeq = 0;
 
@@ -127,9 +127,9 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
       watcher.onDidDelete(() => void this.refresh()),
     );
 
-    // Start hidden until the first configState proves a config exists. setContext rejects only on a
+    // Start hidden until the first enumeration finds a book. setContext rejects only on a
     // dead connection (extension shutting down); the gate then no longer matters, so void it.
-    void vscode.commands.executeCommand('setContext', 'jpnov.hasConfig', false);
+    void vscode.commands.executeCommand('setContext', 'jpnov.hasBooks', false);
   }
 
   // --- TreeDataProvider ----------------------------------------------------
@@ -239,7 +239,7 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
    */
   async refresh(): Promise<void> {
     const seq = ++this.refreshSeq;
-    const params: ListBooksParams = {};
+    const params: ListBooksParams = { projectDirs: buildProjectDirs() };
     let result: ListBooksResult;
     try {
       result = await this.client.sendRequest<ListBooksResult>(ListBooksRequest, params);
@@ -264,26 +264,21 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
     }
     this.books = result.books;
     this.forest = buildForest(this.books);
+    const hasBooks = this.books.length > 0;
+    if (hasBooks !== this.hasBooks) {
+      this.hasBooks = hasBooks;
+      // setContext rejects only on a dead connection (shutdown); the gate is then irrelevant.
+      void vscode.commands.executeCommand('setContext', 'jpnov.hasBooks', hasBooks);
+    }
     this._onDidChangeTreeData.fire(undefined);
   }
 
   /**
-   * Fold one `jpnov/configState` into the aggregate: track which roots carry a config so the
-   * view's `jpnov.hasConfig` gate reflects "any config present", and re-list (a root becoming
-   * valid/removed changes which books exist).
+   * A root's `novel.jp.*` state changed or a folder came/went: the book set may have changed
+   * with it, so re-list. Gating no longer reads configState — `jpnov.hasBooks` is recomputed
+   * from the enumeration itself in {@link refresh}.
    */
-  onConfigState(params: ConfigStateParams): void {
-    if (params.state === 'valid' || params.state === 'error') {
-      this.presentRoots.add(params.root);
-    } else {
-      this.presentRoots.delete(params.root);
-    }
-    const hasConfig = this.presentRoots.size > 0;
-    if (hasConfig !== this.hasConfig) {
-      this.hasConfig = hasConfig;
-      // setContext rejects only on a dead connection (shutdown); the gate is then irrelevant.
-      void vscode.commands.executeCommand('setContext', 'jpnov.hasConfig', hasConfig);
-    }
+  onConfigState(): void {
     // Fire-and-forget re-list driven by a server notification: refresh() self-catches and is
     // refreshSeq-serialized, so a dropped/superseded result is harmless.
     void this.refresh();
@@ -313,10 +308,9 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
   }
 
   /**
-   * The shared build driver behind BOTH the panel's title actions and the Run-and-Debug launch
-   * entries (see {@link BuildRunner} in buildDebug.ts): render the CHECKED books to `format`, write
-   * the returned artifacts (the client owns all filesystem writes), and report results. An empty
-   * selection is a no-op with a nudge rather than a silent "built 0".
+   * The build driver behind the panel's title actions: render the CHECKED books to `format`,
+   * write the returned artifacts (the client owns all filesystem writes), and report results.
+   * An empty selection is a no-op with a nudge rather than a silent "built 0".
    */
   async buildSelected(format: BuildFormat): Promise<void> {
     const books = [...this.checked];
@@ -345,7 +339,12 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
       async () => {
         let result: BuildResult;
         try {
-          const params: BuildParams = { books, format, settings: buildHtmlSettings() };
+          const params: BuildParams = {
+            books,
+            format,
+            settings: buildHtmlSettings(),
+            projectDirs: buildProjectDirs(),
+          };
           result = await c.sendRequest<BuildResult>(BuildRequest, params);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);

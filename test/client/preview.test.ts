@@ -445,8 +445,13 @@ test('renderDocument ships the settings snapshot on the renderFile request', asy
   await tick();
 
   const params = captured as { settings?: unknown };
-  // Overrides read from the store; the untouched key falls back to the product default.
-  assert.deepEqual(params.settings, { charsPerLine: 24, lineNumbers: true, edgeLine: 'red' });
+  // Overrides read from the store; untouched keys fall back to the product defaults.
+  assert.deepEqual(params.settings, {
+    charsPerLine: 24,
+    avoidLineBreaks: false,
+    lineNumbers: true,
+    edgeLine: 'red',
+  });
 });
 
 test('refresh() re-renders the shown document with fresh settings', async () => {

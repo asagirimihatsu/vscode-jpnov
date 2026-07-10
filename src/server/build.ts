@@ -1,5 +1,6 @@
 /**
- * The `jpnov/build` request handler. For each targeted valid root it enumerates every
+ * The `jpnov/build` request handler. The request's `projectDirs` map (the client's per-folder
+ * `jpnov.project.*` snapshot) defines the targeted roots; for each one it enumerates every
  * `*.filelist` under the root's `sourceDir`, reads the `.jpnov` files each one lists (in order,
  * resolved relative to the filelist's OWN directory), and emits one `.txt` (the concatenated
  * Aozora source via `concatBookText`) plus one `.html` (the paginated render via `renderBook`)
@@ -30,7 +31,7 @@ import type { BookInput } from '#/shared/compiler/document.ts';
 import { LocalizedError } from '#/shared/messages.ts';
 import { resolveHtmlSettings } from '#/shared/config/settings.ts';
 import { resolveContained } from '#/shared/config/validate.ts';
-import type { ResolvedConfig } from '#/shared/config/types.ts';
+import { PROJECT_DEFAULT } from '#/shared/config/types.ts';
 import type {
   BookEntry,
   BuildArtifact,
@@ -42,13 +43,14 @@ import type {
   ListBooksParams,
   ListBooksResult,
   LocalizableMessage,
+  ProjectDirsMap,
 } from '#/shared/protocol.ts';
 
 import { fileLevelError } from './diagnostics.ts';
 import { diagnoseFilelist } from './filelist.ts';
 import { childUri, isFileScheme } from './fsUri.ts';
 import { normalizeRootUri } from './roots.ts';
-import type { RootState, ServerContext } from './roots.ts';
+import type { ServerContext } from './roots.ts';
 
 const UTF8 = new TextDecoder('utf-8');
 
@@ -60,6 +62,13 @@ interface DiscoveredFilelist {
   readonly uri: string;
   /** Absolute URI of the directory holding it (the base for resolving its entries). */
   readonly dirUri: string;
+}
+
+/** One targeted root: its normalized URI plus the RESOLVED source/output dir URIs. */
+interface ProjectRoot {
+  readonly rootUri: string;
+  readonly sourceDirUri: string;
+  readonly outDirUri: string;
 }
 
 /**
@@ -159,19 +168,19 @@ function toBuildMessage(cause: unknown): LocalizableMessage {
 }
 
 /**
- * Builds the filelists under one valid root, accumulating artifacts + per-book errors.
+ * Builds the filelists under one targeted root, accumulating artifacts + per-book errors.
  * `selection.books` (when set) restricts WHICH filelists are built, but the output-path
  * collision map is still computed over ALL of them — a selected book that collides with an
  * UNSELECTED one still errors, so a later full build can never silently clobber it.
  */
 async function buildRoot(
   ctx: ServerContext,
-  config: ResolvedConfig,
+  target: ProjectRoot,
   selection: BuildSelection,
   artifacts: BuildArtifact[],
   errors: BuildError[],
 ): Promise<void> {
-  const filelists = await discoverFilelists(config.sourceDirUri);
+  const filelists = await discoverFilelists(target.sourceDirUri);
 
   // Derive each filelist's output path ONCE, then group by it to detect collisions across the
   // whole root up front.
@@ -230,35 +239,59 @@ async function buildRoot(
     // Emit only the requested kind(s); `format` absent => BOTH. renderBook (the paginator) is
     // the expensive step, so a txt-only build skips it entirely.
     if (selection.format !== 'html') {
-      artifacts.push({ path: childUri(config.outDirUri, `${outRel}.txt`), content: concatBookText(input) });
+      artifacts.push({ path: childUri(target.outDirUri, `${outRel}.txt`), content: concatBookText(input) });
     }
     if (selection.format !== 'txt') {
-      // Grid geometry + chrome come from the request's settings snapshot (HtmlSettings is a
-      // structural superset of BuildChrome, so it passes straight through); 禁則 stays a
-      // per-root novel.jp.* concern.
+      // Grid geometry, 禁則, and chrome all come from the request's settings snapshot
+      // (HtmlSettings is a structural superset of BuildChrome, so it passes straight through).
       const html = renderBook({
         books: [input],
         charsPerLine: selection.settings.charsPerLine,
         linesPerPage: selection.settings.linesPerPage,
-        avoidLineBreaks: config.avoidLineBreaks ?? false,
+        avoidLineBreaks: selection.settings.avoidLineBreaks,
         chrome: selection.settings,
       });
-      artifacts.push({ path: childUri(config.outDirUri, `${outRel}.html`), content: html });
+      artifacts.push({ path: childUri(target.outDirUri, `${outRel}.html`), content: html });
     }
   }
 }
 
-/** Selects the roots to build: a single named root, or every currently-valid root. */
-function targetRoots(ctx: ServerContext, root?: string): RootState[] {
-  if (root !== undefined) {
-    const state = ctx.roots.get(normalizeRootUri(root));
-    return state?.resolved ? [state] : [];
-  }
-  return [...ctx.roots.values()].filter((s) => s.resolved !== undefined);
+/**
+ * Resolves one configured project dir against its root: a contained relative path becomes
+ * its absolute URI; anything invalid (empty / absolute / escaping / `.` …) silently falls
+ * back to the default. The `'filelistEntry'` label is a placeholder — a failed resolution
+ * is discarded here, never rendered.
+ */
+function resolveProjectDir(rootUri: string, value: string, fallback: string): string {
+  const resolved = resolveContained(rootUri, value, 'filelistEntry');
+  // The defaults are single-segment relative paths, so this join cannot escape the root.
+  return resolved.ok ? resolved.abs : childUri(rootUri, fallback.replace(/^\.\//, ''));
 }
 
 /**
- * Handles `jpnov/build`. Omitting `root` builds every valid root. Reports coarse
+ * The roots a request targets: every `projectDirs` entry (narrowed to `root` when set),
+ * each with its source/output dirs resolved. The map is the SOLE source of buildable
+ * roots — the server's `novel.jp.*` state plays no part in book discovery.
+ */
+function targetRoots(projectDirs: ProjectDirsMap, root?: string): ProjectRoot[] {
+  const wanted = root === undefined ? undefined : normalizeRootUri(root);
+  const targets: ProjectRoot[] = [];
+  for (const [rawUri, dirs] of Object.entries(projectDirs)) {
+    const rootUri = normalizeRootUri(rawUri);
+    if (wanted !== undefined && rootUri !== wanted) {
+      continue;
+    }
+    targets.push({
+      rootUri,
+      sourceDirUri: resolveProjectDir(rootUri, dirs.sourceDir, PROJECT_DEFAULT.sourceDir),
+      outDirUri: resolveProjectDir(rootUri, dirs.outDir, PROJECT_DEFAULT.outDir),
+    });
+  }
+  return targets;
+}
+
+/**
+ * Handles `jpnov/build`. Omitting `root` builds every root in `projectDirs`. Reports coarse
  * `$/progress` via the supplied work-done reporter (one tick per root). The result is
  * `ok` when no build-level errors were collected; per-book errors are surfaced in
  * `errors[]` and as diagnostics on each offending `.filelist`.
@@ -268,7 +301,7 @@ export async function handleBuild(
   params: BuildParams,
   progress?: WorkDoneProgressReporter,
 ): Promise<BuildResult> {
-  const roots = targetRoots(ctx, params.root);
+  const roots = targetRoots(params.projectDirs, params.root);
   const artifacts: BuildArtifact[] = [];
   const errors: BuildError[] = [];
 
@@ -287,14 +320,11 @@ export async function handleBuild(
   progress?.begin('', 0, undefined, false);
 
   let done = 0;
-  for (const state of roots) {
-    const config = state.resolved;
-    if (config) {
-      try {
-        await buildRoot(ctx, config, selection, artifacts, errors);
-      } catch (cause) {
-        errors.push({ book: state.rootUri, ...toBuildMessage(cause) });
-      }
+  for (const target of roots) {
+    try {
+      await buildRoot(ctx, target, selection, artifacts, errors);
+    } catch (cause) {
+      errors.push({ book: target.rootUri, ...toBuildMessage(cause) });
     }
     done += 1;
     if (roots.length > 0) {
@@ -309,25 +339,17 @@ export async function handleBuild(
 }
 
 /**
- * Handles `jpnov/listBooks`: enumerates every `*.filelist` under each targeted valid root as a
+ * Handles `jpnov/listBooks`: enumerates every `*.filelist` under each targeted root as a
  * {@link BookEntry} for the client's Books panel. PURE discovery — no file reads, no diagnostics,
- * and no output-path collision check (those belong to an actual build). A root whose config failed
- * to resolve simply contributes no books.
+ * and no output-path collision check (those belong to an actual build).
  */
-export async function handleListBooks(
-  ctx: ServerContext,
-  params: ListBooksParams,
-): Promise<ListBooksResult> {
+export async function handleListBooks(params: ListBooksParams): Promise<ListBooksResult> {
   const books: BookEntry[] = [];
-  for (const state of targetRoots(ctx, params.root)) {
-    const config = state.resolved;
-    if (!config) {
-      continue;
-    }
-    for (const fl of await discoverFilelists(config.sourceDirUri)) {
+  for (const target of targetRoots(params.projectDirs, params.root)) {
+    for (const fl of await discoverFilelists(target.sourceDirUri)) {
       books.push({
         uri: fl.uri,
-        rootUri: state.rootUri,
+        rootUri: target.rootUri,
         fileRel: fl.fileRel,
         outRel: filelistOutRel(fl.fileRel),
       });

@@ -67,6 +67,7 @@ function singleLine(value: unknown, fallback: string): string {
 export function resolvePreviewSettings(s: PreviewSettings): PreviewSettings {
   return {
     charsPerLine: clampChars(s.charsPerLine, LAYOUT_DEFAULT.charsPerLine),
+    avoidLineBreaks: boolOr(s.avoidLineBreaks, LAYOUT_DEFAULT.avoidLineBreaks),
     lineNumbers: boolOr(s.lineNumbers, PREVIEW_CHROME_DEFAULT.lineNumbers),
     edgeLine: edgeLine(s.edgeLine),
   };
@@ -76,6 +77,7 @@ export function resolveHtmlSettings(s: HtmlSettings): HtmlSettings {
   return {
     charsPerLine: clampChars(s.charsPerLine, LAYOUT_DEFAULT.charsPerLine),
     linesPerPage: clampChars(s.linesPerPage, LAYOUT_DEFAULT.linesPerPage),
+    avoidLineBreaks: boolOr(s.avoidLineBreaks, LAYOUT_DEFAULT.avoidLineBreaks),
     lineNumbers: boolOr(s.lineNumbers, BUILD_CHROME_DEFAULT.lineNumbers),
     edgeLine: edgeLine(s.edgeLine),
     pageNumberPosition: pageNumberPosition(s.pageNumberPosition),

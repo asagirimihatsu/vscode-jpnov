@@ -3,23 +3,30 @@
  * the render-settings constants. Used by config-codegen.test.ts to hold package.json honest (the
  * deepEqual doubles as the "package.json defaults == resolver constants" lock), and by the one-off
  * generator that produced that block. NOT a test file (no `.test` suffix), so the runner skips it.
+ *
+ * Section order in the Settings UI (the `order` field, locked by the deepEqual):
+ * Layout(1) > HTML Output(2) > Preview(3) > Lint(4, all scopes merged) > Project(5).
  */
 import { EDGE_LINE_STYLES, PAGE_NUMBER_POSITIONS } from '../../../src/shared/compiler/chrome.ts';
 import {
   BUILD_CHROME_DEFAULT,
   PREVIEW_CHROME_DEFAULT,
 } from '../../../src/shared/config/settings.ts';
-import { CHARS_MAX, CHARS_MIN, LAYOUT_DEFAULT } from '../../../src/shared/config/types.ts';
+import {
+  CHARS_MAX,
+  CHARS_MIN,
+  LAYOUT_DEFAULT,
+  PROJECT_DEFAULT,
+} from '../../../src/shared/config/types.ts';
 import { RULES, settingKey } from '../../../src/shared/lint/catalog.ts';
 import type { RuleMeta, Scope } from '../../../src/shared/lint/catalog.ts';
 
-/** Section order in the Settings UI; scopes with no rules (e.g. `dialogue`) are skipped. */
+/**
+ * Rule ordering inside the merged Lint section (scopes with no rules, e.g. `dialogue`,
+ * contribute nothing). Every rule gets an explicit per-property `order` so the merged
+ * section keeps the common → narration → ruby clustering in the Settings UI.
+ */
 export const SCOPES: readonly Scope[] = ['common', 'narration', 'dialogue', 'ruby'];
-
-/** nls key for a section's title. */
-export function sectionTitleKey(scope: Scope): string {
-  return `jpnov.lint.${scope}.title`;
-}
 
 /** nls key for one rule's setting description. */
 export function ruleDescriptionKey(rule: RuleMeta): string {
@@ -32,10 +39,10 @@ export function enumValueKey(rule: RuleMeta, value: string): string {
 }
 
 /** The JSON-schema property for one rule (boolean / nullable-integer threshold / string enum). */
-function propertyFor(rule: RuleMeta): Record<string, unknown> {
+function propertyFor(rule: RuleMeta, order: number): Record<string, unknown> {
   const markdownDescription = `%${ruleDescriptionKey(rule)}%`;
   if (rule.kind === 'boolean') {
-    return { type: 'boolean', default: false, markdownDescription };
+    return { type: 'boolean', default: false, order, markdownDescription };
   }
   if (rule.kind === 'threshold') {
     return {
@@ -43,6 +50,7 @@ function propertyFor(rule: RuleMeta): Record<string, unknown> {
       default: null,
       minimum: rule.min,
       maximum: rule.max,
+      order,
       markdownDescription,
     };
   }
@@ -52,6 +60,7 @@ function propertyFor(rule: RuleMeta): Record<string, unknown> {
     enum: values,
     default: values[0],
     enumDescriptions: values.map((v) => `%${enumValueKey(rule, v)}%`),
+    order,
     markdownDescription,
   };
 }
@@ -68,13 +77,14 @@ function edgeLineProperty(keyPrefix: string): Record<string, unknown> {
 }
 
 /**
- * The render-settings sections (layout / preview / html), derived from the same constants
+ * The render-settings sections (layout / html / preview), derived from the same constants
  * the resolver uses — the codegen deepEqual is what locks package.json's defaults to them.
  */
 function renderSections(): unknown[] {
   return [
     {
       title: '%jpnov.layout.title%',
+      order: 1,
       properties: {
         'jpnov.layout.charsPerLine': {
           type: 'integer',
@@ -90,21 +100,16 @@ function renderSections(): unknown[] {
           maximum: CHARS_MAX,
           markdownDescription: '%jpnov.layout.linesPerPage.description%',
         },
-      },
-    },
-    {
-      title: '%jpnov.preview.title%',
-      properties: {
-        'jpnov.preview.lineNumbers': {
+        'jpnov.layout.avoidLineBreaks': {
           type: 'boolean',
-          default: PREVIEW_CHROME_DEFAULT.lineNumbers,
-          markdownDescription: '%jpnov.preview.lineNumbers.description%',
+          default: LAYOUT_DEFAULT.avoidLineBreaks,
+          markdownDescription: '%jpnov.layout.avoidLineBreaks.description%',
         },
-        'jpnov.preview.edgeLine': edgeLineProperty('jpnov.preview.edgeLine'),
       },
     },
     {
       title: '%jpnov.html.title%',
+      order: 2,
       properties: {
         'jpnov.html.lineNumbers': {
           type: 'boolean',
@@ -133,7 +138,57 @@ function renderSections(): unknown[] {
         },
       },
     },
+    {
+      title: '%jpnov.preview.title%',
+      order: 3,
+      properties: {
+        'jpnov.preview.lineNumbers': {
+          type: 'boolean',
+          default: PREVIEW_CHROME_DEFAULT.lineNumbers,
+          markdownDescription: '%jpnov.preview.lineNumbers.description%',
+        },
+        'jpnov.preview.edgeLine': edgeLineProperty('jpnov.preview.edgeLine'),
+      },
+    },
   ];
+}
+
+/** The single merged Lint section: every rule, ordered common → narration → ruby. */
+function lintSection(): unknown {
+  const properties: Record<string, unknown> = {};
+  let order = 1;
+  for (const scope of SCOPES) {
+    for (const rule of RULES.filter((r) => r.scope === scope)) {
+      properties[settingKey(rule)] = propertyFor(rule, order);
+      order += 1;
+    }
+  }
+  return { title: '%jpnov.lint.title%', order: 4, properties };
+}
+
+/**
+ * The Project section: the per-folder (`scope: resource`) source/output paths — the only
+ * settings that are file locations rather than rendering/proofing behavior.
+ */
+function projectSection(): unknown {
+  return {
+    title: '%jpnov.project.title%',
+    order: 5,
+    properties: {
+      'jpnov.project.sourceDir': {
+        type: 'string',
+        default: PROJECT_DEFAULT.sourceDir,
+        scope: 'resource',
+        markdownDescription: '%jpnov.project.sourceDir.description%',
+      },
+      'jpnov.project.outDir': {
+        type: 'string',
+        default: PROJECT_DEFAULT.outDir,
+        scope: 'resource',
+        markdownDescription: '%jpnov.project.outDir.description%',
+      },
+    },
+  };
 }
 
 /** The nls keys the render sections reference (titles + descriptions + enum labels). */
@@ -144,6 +199,7 @@ function renderNlsKeys(): string[] {
     'jpnov.html.title',
     'jpnov.layout.charsPerLine.description',
     'jpnov.layout.linesPerPage.description',
+    'jpnov.layout.avoidLineBreaks.description',
     'jpnov.preview.lineNumbers.description',
     'jpnov.preview.edgeLine.description',
     ...EDGE_LINE_STYLES.map((v) => `jpnov.preview.edgeLine.${v}`),
@@ -154,37 +210,23 @@ function renderNlsKeys(): string[] {
     ...PAGE_NUMBER_POSITIONS.map((v) => `jpnov.html.pageNumber.position.${v}`),
     'jpnov.html.pageNumber.template.description',
     'jpnov.html.header.description',
+    'jpnov.project.title',
+    'jpnov.project.sourceDir.description',
+    'jpnov.project.outDir.description',
   ];
 }
 
 /**
- * The full `contributes.configuration` array — one section per non-empty lint scope (rules in
- * order), then the render-settings sections.
+ * The full `contributes.configuration` array — render sections, then the merged Lint
+ * section, then Project (array position mirrors the `order` fields).
  */
 export function expectedConfiguration(): unknown[] {
-  const sections: unknown[] = [];
-  for (const scope of SCOPES) {
-    const rules = RULES.filter((r) => r.scope === scope);
-    if (rules.length === 0) {
-      continue;
-    }
-    const properties: Record<string, unknown> = {};
-    for (const rule of rules) {
-      properties[settingKey(rule)] = propertyFor(rule);
-    }
-    sections.push({ title: `%${sectionTitleKey(scope)}%`, properties });
-  }
-  return [...sections, ...renderSections()];
+  return [...renderSections(), lintSection(), projectSection()];
 }
 
 /** Every nls key the configuration block references (section titles + descriptions + enum labels). */
 export function expectedNlsKeys(): string[] {
-  const keys: string[] = [];
-  for (const scope of SCOPES) {
-    if (RULES.some((r) => r.scope === scope)) {
-      keys.push(sectionTitleKey(scope));
-    }
-  }
+  const keys: string[] = ['jpnov.lint.title'];
   for (const rule of RULES) {
     keys.push(ruleDescriptionKey(rule));
     if (rule.kind === 'enum') {

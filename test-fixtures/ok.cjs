@@ -1,1 +1,1 @@
-module.exports = { sourceDir: './src', charsPerLine: 40, linesPerPage: 34 };
+module.exports = { characters: ['朝霧　巳一'], sourceDir: './src', charsPerLine: 40 };

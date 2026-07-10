@@ -11,19 +11,12 @@ import * as vscode from 'vscode';
 import type { LabelId, LocalizableMessage } from '#/shared/protocol.ts';
 
 /**
- * Localized text for a label id. `sourceDir`/`outDir` name the user's literal JSON key and render
- * verbatim; `filelistEntry` is prose and is translated. Built per-call — `vscode.l10n` is ready by
- * the time anything renders.
+ * Localized text for a label id. `filelistEntry` (the only remaining label) is prose and is
+ * translated. Built per-call — `vscode.l10n` is ready by the time anything renders.
  */
 function labelText(label: LabelId): string {
-  switch (label) {
-    case 'sourceDir':
-      return 'sourceDir';
-    case 'outDir':
-      return 'outDir';
-    case 'filelistEntry':
-      return vscode.l10n.t('filelist entry');
-  }
+  const texts: Record<LabelId, string> = { filelistEntry: vscode.l10n.t('filelist entry') };
+  return texts[label];
 }
 
 /** Runtime guard for an `LSPAny` (a Diagnostic's `data`, or a custom-payload field). */

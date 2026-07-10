@@ -1,6 +1,7 @@
 /**
- * The config loader "seam": discover, read, and resolve a root's `novel.jp.*` config,
- * then push the resulting `jpnov/configState` (and a diagnostic on error).
+ * The config loader "seam": discover, read, and parse a root's `novel.jp.*` config
+ * (characters/keywords only), then push the resulting `jpnov/configState` (and a
+ * diagnostic on error).
  *
  * Byte access is scheme-aware: on `file:` we use `node:fs/promises`; on any other
  * scheme we ask the client over `jpnov/readFile` (CONFIG bytes only). JSON parses
@@ -14,8 +15,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { FILE_TYPE_FILE, isDataFormat, matchConfig, parseDataConfig, loadModuleConfig } from '#/shared/config/parser.ts';
 import { LocalizedError } from '#/shared/messages.ts';
-import type { NovelConfigFormat, RawNovelConfig, ResolvedConfig } from '#/shared/config/types.ts';
-import { resolveContained } from '#/shared/config/validate.ts';
+import type { NovelConfigFormat, RawNovelConfig } from '#/shared/config/types.ts';
 import type { ConfigStateParams, LocalizableMessage } from '#/shared/protocol.ts';
 import type { ReadFileParams, ReadFileResult } from '#/shared/protocol.ts';
 
@@ -111,28 +111,6 @@ async function importModuleConfig(uri: string): Promise<RawNovelConfig> {
   return loadModuleConfig(mod);
 }
 
-/**
- * Resolves a {@link RawNovelConfig} against the root, turning `sourceDir`/`outDir` into
- * contained absolute URIs. Throws on the first containment rejection (the caller maps
- * that into the `error` config-state).
- */
-function resolveConfig(rootUri: string, raw: RawNovelConfig): ResolvedConfig {
-  const sourceDir = resolveContained(rootUri, raw.sourceDir, 'sourceDir');
-  if (!sourceDir.ok) {
-    throw new LocalizedError({ code: sourceDir.code, args: sourceDir.args });
-  }
-  const outRel = raw.outDir ?? 'dist';
-  const outDir = resolveContained(rootUri, outRel, 'outDir');
-  if (!outDir.ok) {
-    throw new LocalizedError({ code: outDir.code, args: outDir.args });
-  }
-  return {
-    ...raw,
-    sourceDirUri: sourceDir.abs,
-    outDirUri: outDir.abs,
-  };
-}
-
 function clearConfigDiagnostics(ctx: ServerContext, configUri: string): void {
   // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
   void ctx.connection.sendDiagnostics({ uri: configUri, diagnostics: [] });
@@ -144,12 +122,12 @@ function pushConfigState(ctx: ServerContext, params: ConfigStateParams): void {
 }
 
 /**
- * The whole per-root pipeline: discover -> read -> parse -> resolve -> publish.
+ * The whole per-root pipeline: discover -> read -> parse -> publish.
  *
  * Mutates `state` (configUri / resolved / lastGood) and emits exactly one
  * `jpnov/configState` describing the outcome:
  * - no config found      -> `absent`
- * - resolved cleanly      -> `valid` (+ clears diagnostics, updates lastGood)
+ * - parsed cleanly        -> `valid` (+ clears diagnostics, updates lastGood)
  * - any failure           -> `error` (+ diagnostic on the config uri, keeps lastGood)
  *
  * Never throws: all failure paths funnel into the `error` state.
@@ -204,11 +182,9 @@ export async function loadRootConfig(
       raw = await importModuleConfig(configUri);
     }
 
-    const resolved = resolveConfig(rootUri, raw);
-
     clearConfigDiagnostics(ctx, configUri);
-    state.resolved = resolved;
-    state.lastGood = resolved;
+    state.resolved = raw;
+    state.lastGood = raw;
     pushConfigState(ctx, { root: rootUri, state: 'valid' });
   } catch (cause) {
     const message: LocalizableMessage = cause instanceof LocalizedError
