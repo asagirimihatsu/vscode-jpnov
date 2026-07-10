@@ -35,11 +35,13 @@ import {
 
 import {
   ConfigStateNotification,
+  HighlightChangedNotification,
   LintConfigChangedNotification,
   ReadFileRequest,
   ServerErrorNotification,
   WorkspaceTrustChangedNotification,
   type ConfigStateParams,
+  type HighlightChangedParams,
   type LintConfigChangedParams,
   type ReadFileParams,
   type ReadFileResult,
@@ -49,7 +51,9 @@ import {
 
 import { BooksView } from './booksView.ts';
 import { command } from './commands.ts';
+import { buildHighlightSnapshot } from './highlightConfig.ts';
 import { buildLintSnapshot } from './lintConfig.ts';
+import { folderIsNovelProject } from './probe.ts';
 import { isLocalizableMessage, renderMessage } from './messages.ts';
 import { Preview } from './preview.ts';
 import { StatusBar } from './statusBar.ts';
@@ -62,23 +66,15 @@ let extCtx: vscode.ExtensionContext | undefined;
 /** Phase-2 latch: `ensureStarted()` is single-flight and never un-runs until deactivate. */
 let started = false;
 
-/** The config filenames that mark a workspace folder root as a novel project (see configLoad.ts). */
-const CONFIG_NAMES = new Set(
-  ['json', 'js', 'cjs', 'mjs', 'ts'].map((ext) => `novel.jp.${ext}`),
-);
-
 /** Documents that justify starting the language server. */
 function isNovelDoc(doc: vscode.TextDocument): boolean {
   return doc.languageId === 'novel-jp' || doc.languageId === 'novel-jp-filelist';
 }
 
 /**
- * Starts the server iff some folder ROOT contains a `novel.jp.*` config or a root-level
- * `*.filelist` (books gate the panel now, so a filelist project self-starts without any
- * config file). One `readDirectory` per folder (not per-name stats): a single round-trip
- * matters on remote/virtual filesystems. Deliberately shallow — a filelist nested deeper
- * still starts the server the moment a novel document opens. Name-only membership —
- * the server is the robust arbiter.
+ * Starts the server iff some folder looks like a novel project. The per-folder decision
+ * (workspace/folder-level `jpnov.*` settings, or project filenames in the folder root)
+ * lives in `probe.ts`; this loop just short-circuits once anything started us.
  */
 async function startIfProjectPresent(
   folders: readonly vscode.WorkspaceFolder[],
@@ -87,17 +83,7 @@ async function startIfProjectPresent(
     if (started) {
       return; // another trigger won while we awaited
     }
-    let entries: [string, vscode.FileType][];
-    try {
-      entries = await vscode.workspace.fs.readDirectory(folder.uri);
-    } catch {
-      continue; // unreadable root (gone, permission, exotic scheme) -> not a novel root
-    }
-    if (
-      entries.some(
-        ([name]) => CONFIG_NAMES.has(name) || name.toLowerCase().endsWith('.filelist'),
-      )
-    ) {
+    if (await folderIsNovelProject(folder)) {
       ensureStarted();
       return;
     }
@@ -139,6 +125,7 @@ function ensureStarted(): void {
       isTrusted: vscode.workspace.isTrusted,
       configBaseName: 'novel.jp',
       lintConfig: buildLintSnapshot(),
+      highlight: buildHighlightSnapshot(),
     },
     middleware: {
       // Server diagnostics carry English in `.message` (the fallback VS Code shows) and the
@@ -247,6 +234,10 @@ function ensureStarted(): void {
         const params: LintConfigChangedParams = { lintConfig: buildLintSnapshot() };
         void client.sendNotification(LintConfigChangedNotification, params);
       }
+      if (e.affectsConfiguration('jpnov.highlight')) {
+        const params: HighlightChangedParams = { highlight: buildHighlightSnapshot() };
+        void client.sendNotification(HighlightChangedNotification, params);
+      }
       if (e.affectsConfiguration('jpnov.layout') || e.affectsConfiguration('jpnov.preview')) {
         preview?.refresh();
       }
@@ -266,15 +257,35 @@ function ensureStarted(): void {
     }),
   );
 
+  // Folder add/remove while running: re-push the FULL highlight map (replacement semantics —
+  // this is also how a removed root's vocabulary is dropped) and re-enumerate books. Gated on
+  // Running like the settings pushes above; a change inside the startup window is folded into
+  // the initialize snapshot / the post-start refresh below.
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      if (client?.state !== State.Running) {
+        return;
+      }
+      const params: HighlightChangedParams = { highlight: buildHighlightSnapshot() };
+      void client.sendNotification(HighlightChangedNotification, params);
+      void booksView?.refresh();
+    }),
+  );
+
   // Start the client (and the server process). start() is called exactly once (single-flight
-  // latch above), so a hard startup failure surfaces exactly one popup.
-  client.start().catch((err: unknown) => {
-    const message = err instanceof Error ? err.message : String(err);
-    // Terminal popup inside a .catch(); showErrorMessage never rejects so void is safe here.
-    void vscode.window.showErrorMessage(
-      vscode.l10n.t("Japanese Novel: couldn't start the language server. {0}", message),
-    );
-  });
+  // latch above), so a hard startup failure surfaces exactly one popup. On success, kick the
+  // first Books enumeration — nothing else fills the panel on a cold start (the filelist
+  // watcher only reacts to create/delete).
+  client.start().then(
+    () => void booksView?.refresh(),
+    (err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      // Terminal popup inside the rejection branch; showErrorMessage never rejects so void is safe.
+      void vscode.window.showErrorMessage(
+        vscode.l10n.t("Japanese Novel: couldn't start the language server. {0}", message),
+      );
+    },
+  );
 }
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -324,7 +335,8 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
     vscode.workspace.onDidChangeWorkspaceFolders((e) => {
-      // Once started, vscode-languageclient forwards folder changes to the server itself.
+      // Only the not-yet-started case lives here; once started, the Running-gated listener
+      // registered in ensureStarted() re-pushes the vocabulary map and refreshes the books.
       if (!started) {
         void startIfProjectPresent(e.added);
       }

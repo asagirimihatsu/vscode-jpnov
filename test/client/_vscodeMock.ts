@@ -212,6 +212,15 @@ export interface MockState {
   fsContent: Map<string, string>;
   /** Settings store for `workspace.getConfiguration().get(key, dflt)` (full key → value). */
   config: Record<string, unknown>;
+  /** Scope-aware settings values: `${scopeUri}|${section.key}` (or `|full.key`) → value. */
+  scopedConfig: Map<string, unknown>;
+  /** `inspect()` results: `${scopeUri}|${section.key}` → the per-scope value object. */
+  inspectResults: Map<
+    string,
+    { globalValue?: unknown; workspaceValue?: unknown; workspaceFolderValue?: unknown }
+  >;
+  /** `workspace.fs.readDirectory` responses: uri string → entries, or 'error' to reject. */
+  readDirectoryResults: Map<string, [string, number][] | 'error'>;
   createdDirs: string[];
   openedDocs: string[];
   errorMessages: string[];
@@ -244,6 +253,9 @@ export function createMockState(): MockState {
     fsEntries: new Map<string, number>(),
     fsContent: new Map<string, string>(),
     config: {},
+    scopedConfig: new Map<string, unknown>(),
+    inspectResults: new Map(),
+    readDirectoryResults: new Map<string, [string, number][] | 'error'>(),
     createdDirs: [],
     openedDocs: [],
     errorMessages: [],
@@ -280,6 +292,9 @@ export function resetMockState(s: MockState): void {
   s.fsEntries.clear();
   s.fsContent.clear();
   s.config = {};
+  s.scopedConfig.clear();
+  s.inspectResults.clear();
+  s.readDirectoryResults.clear();
   s.createdDirs.length = 0;
   s.openedDocs.length = 0;
   s.errorMessages.length = 0;
@@ -397,6 +412,13 @@ export function buildVscode(state: MockState): Record<string, unknown> {
       state.fsEntries.set(uri.toString(), FileType.Directory);
       return Promise.resolve();
     },
+    readDirectory(uri: Uri): Promise<[string, number][]> {
+      const entries = state.readDirectoryResults.get(uri.toString());
+      if (entries === 'error') {
+        return Promise.reject(FileSystemError.FileNotFound(uri));
+      }
+      return Promise.resolve(entries ?? []);
+    },
   };
 
   const workspace = {
@@ -412,12 +434,27 @@ export function buildVscode(state: MockState): Record<string, unknown> {
     fs: fsApi,
     onDidGrantWorkspaceTrust: state.onDidGrantTrust.event,
     onDidChangeTextDocument: state.onDidChangeDoc.event,
-    // Default-scope settings read (renderConfig.ts): the client calls getConfiguration()
-    // with no section and full keys, so the mock takes no params at all.
-    getConfiguration() {
+    // Settings reads. Bare getConfiguration() + full keys (renderConfig.ts) resolves from
+    // `state.config` as before; the section/scope form (highlightConfig.ts, probe.ts)
+    // consults `state.scopedConfig` first — keyed `${scopeUri}|${section ? section + '.' : ''}${key}`
+    // — and falls back to `state.config` under the same composite key. `inspect()` reads
+    // `state.inspectResults` under the same key shape (probe's section-level inspect included).
+    getConfiguration(section?: string, scope?: { toString(): string } | null) {
+      const scopeKey = scope ? scope.toString() : '';
+      const fullKey = (key: string): string => (section ? `${section}.${key}` : key);
       return {
         get<T>(key: string, dflt: T): T {
-          return key in state.config ? (state.config[key] as T) : dflt;
+          const scoped = `${scopeKey}|${fullKey(key)}`;
+          if (state.scopedConfig.has(scoped)) {
+            return state.scopedConfig.get(scoped) as T;
+          }
+          const full = fullKey(key);
+          return full in state.config ? (state.config[full] as T) : dflt;
+        },
+        inspect(key: string):
+          | { globalValue?: unknown; workspaceValue?: unknown; workspaceFolderValue?: unknown }
+          | undefined {
+          return state.inspectResults.get(`${scopeKey}|${fullKey(key)}`);
         },
       };
     },

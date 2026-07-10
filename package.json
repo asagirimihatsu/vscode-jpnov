@@ -361,6 +361,30 @@
             "markdownDescription": "%jpnov.project.outDir.description%"
           }
         }
+      },
+      {
+        "title": "%jpnov.highlight.title%",
+        "order": 6,
+        "properties": {
+          "jpnov.highlight.characters": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "scope": "resource",
+            "markdownDescription": "%jpnov.highlight.characters.description%"
+          },
+          "jpnov.highlight.keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "scope": "resource",
+            "markdownDescription": "%jpnov.highlight.keywords.description%"
+          }
+        }
       }
     ],
     "commands": [
@@ -544,6 +568,18 @@
             },
             "completionEvents": [
               "onView:jpnov.books"
+            ]
+          },
+          {
+            "id": "highlight",
+            "title": "%walkthrough.highlight.title%",
+            "description": "%walkthrough.highlight.description%",
+            "media": {
+              "markdown": "media/walkthrough/highlight.md"
+            },
+            "completionEvents": [
+              "onSettingChanged:jpnov.highlight.characters",
+              "onSettingChanged:jpnov.highlight.keywords"
             ]
           }
         ]

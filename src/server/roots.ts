@@ -22,6 +22,8 @@ import type { ResolvedConfig } from '#/shared/config/types.ts';
 import type { RuleSelection } from '#/shared/lint/select.ts';
 
 import { loadRootConfig } from './configLoad.ts';
+import { normalizeRootUri } from './fsUri.ts';
+import type { HighlightStore } from './highlight/vocabulary.ts';
 
 /**
  * Mutable, process-wide server state threaded through every server module. It is a
@@ -39,6 +41,8 @@ export interface ServerContext {
   /** Enabled prose-lint rules, resolved from the client's `jpnov.lint.*` settings snapshot. Workspace-
    *  (not root-) scoped, so it lives on the context rather than per-{@link RootState}. */
   lintSelection: RuleSelection;
+  /** Per-root narration vocabulary (characters/keywords), fed by the client's `jpnov.highlight.*` pushes. */
+  readonly highlight: HighlightStore;
 }
 
 /**
@@ -57,11 +61,6 @@ export interface RootState {
   lastGood?: ResolvedConfig | undefined;
   /** Disposable for the per-root `novel.jp.*` watch registration. */
   watcherDisposable?: Disposable | undefined;
-}
-
-/** Strips a single trailing slash so root URIs compare/hash consistently. */
-export function normalizeRootUri(uri: string): string {
-  return uri.endsWith('/') ? uri.slice(0, -1) : uri;
 }
 
 /**

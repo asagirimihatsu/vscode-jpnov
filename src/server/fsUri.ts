@@ -17,3 +17,8 @@ export function isFileScheme(uri: string): boolean {
 export function childUri(dirUri: string, name: string): string {
   return dirUri.endsWith('/') ? `${dirUri}${name}` : `${dirUri}/${name}`;
 }
+
+/** Strips a single trailing slash so root URIs compare/hash consistently. */
+export function normalizeRootUri(uri: string): string {
+  return uri.endsWith('/') ? uri.slice(0, -1) : uri;
+}
