@@ -1,6 +1,6 @@
 /**
- * Tiny URI string helpers shared across the server's filesystem seams (configLoad / build /
- * filelist). PURE string ops: no `node:fs`, no `vscode-languageserver` imports — a true leaf,
+ * Tiny URI string helpers shared across the server's filesystem seams (build / filelist).
+ * PURE string ops: no `node:fs`, no `vscode-languageserver` imports — a true leaf,
  * so any server module can pull it in without dragging dependencies along.
  *
  * Scheme handling is deliberately a prefix test, not URL parsing: the server only ever

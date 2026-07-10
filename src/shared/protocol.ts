@@ -26,15 +26,11 @@ export type RawLintConfigWire = Readonly<Record<string, boolean | number | strin
 
 /**
  * Carried on the standard LSP `initialize` request as `initializationOptions`.
- * `isTrusted` reflects the host workspace-trust state at startup; the server keeps
- * a `lastKnownTrust` and gates executable-config import() on it. `configBaseName`
- * is the fixed `"novel.jp"` stem the server watches/matches per root. `lintConfig` seeds the
- * prose-lint selection at startup (omitted = no rules enabled). `highlight` seeds the per-root
- * narration vocabulary the same way (omitted = no vocabulary anywhere).
+ * `lintConfig` seeds the prose-lint selection at startup (omitted = no rules enabled);
+ * `highlight` seeds the per-root narration vocabulary the same way (omitted = no
+ * vocabulary anywhere).
  */
 export interface InitializationOptions {
-  readonly isTrusted: boolean;
-  readonly configBaseName: 'novel.jp';
   readonly lintConfig?: RawLintConfigWire;
   readonly highlight?: HighlightVocabularyMap;
 }
@@ -52,9 +48,6 @@ export interface InitializationOptions {
  * in each message's English template.
  */
 export type MsgCode =
-  | 'config.execNeedsFileScheme' // args: [format]
-  | 'config.execNeedsTrust' // args: [format]
-  | 'config.loadFailed' // args: [detail]  (detail = raw parse/load error, untranslatable)
   | 'book.entryNeedsFileScheme' // args: [value]
   | 'book.entryFileNotFound' // args: [value]  (ENOENT)
   | 'book.entryReadFailed' // args: [value, why]  (why = raw OS error, untranslatable)
@@ -91,34 +84,7 @@ export interface LocalizableMessage {
 }
 
 // ---------------------------------------------------------------------------
-// jpnov/configState (S->C notification)
-// ---------------------------------------------------------------------------
-
-export const ConfigStateNotification = 'jpnov/configState';
-
-export type ConfigState = 'valid' | 'error' | 'absent' | 'removed';
-
-/**
- * One-shot report of a root's config status; drives the aggregated status-bar item.
- * The language id is bound declaratively to the `.jpnov` extension, so the status bar
- * is this notification's only consumer — there is no client-side language switching to drive.
- *
- * - `valid`   -> the root's config resolved cleanly; status item shows the book icon.
- * - `error`   -> `error` present; status item shows the red-cross + opens the config.
- * - `absent`  -> no config at this root.
- * - `removed` -> config (or the root) was deleted; status item drops this root.
- */
-export interface ConfigStateParams {
-  readonly root: string;
-  readonly state: ConfigState;
-  /** Present only for `error`: the localizable cause + the config uri to open on click. */
-  readonly error?: LocalizableMessage & {
-    readonly configUri: string;
-  };
-}
-
-// ---------------------------------------------------------------------------
-// jpnov/workspaceTrustChanged (C->S notification)
+// jpnov/serverError (S->C notification)
 // ---------------------------------------------------------------------------
 
 export const ServerErrorNotification = 'jpnov/serverError';
@@ -131,12 +97,6 @@ export const ServerErrorNotification = 'jpnov/serverError';
  */
 export interface ServerErrorParams {
   readonly message: LocalizableMessage;
-}
-
-export const WorkspaceTrustChangedNotification = 'jpnov/workspaceTrustChanged';
-
-export interface WorkspaceTrustChangedParams {
-  readonly isTrusted: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -326,20 +286,4 @@ export interface RenderFileParams {
 
 export interface RenderFileResult {
   readonly html: string;
-}
-
-// ---------------------------------------------------------------------------
-// jpnov/readFile (S->C request)
-// ---------------------------------------------------------------------------
-
-export const ReadFileRequest = 'jpnov/readFile';
-
-/** Virtual-fs bridge for CONFIG bytes on non-`file:` schemes only. */
-export interface ReadFileParams {
-  readonly uri: string;
-}
-
-export interface ReadFileResult {
-  /** base64 of the file bytes, or `null` when the file does not exist. */
-  readonly base64: string | null;
 }

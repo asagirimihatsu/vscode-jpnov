@@ -36,7 +36,7 @@ function projectsFor(uri: string, dirs: Partial<ProjectDirs> = {}): ProjectDirsM
   return { [uri]: { sourceDir: dirs.sourceDir ?? './src', outDir: dirs.outDir ?? 'dist' } };
 }
 
-/** A fresh server context + recording connection (no novel.jp.* involved in builds). */
+/** A fresh server context + recording connection (builds read only the request's projectDirs). */
 function boot(): { ctx: ServerContext; conn: FakeConnection } {
   const conn = makeFakeConnection();
   return { ctx: makeContext(conn), conn };

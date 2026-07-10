@@ -33,12 +33,6 @@ export function renderMessage(msg: LocalizableMessage): string {
   const a = msg.args ?? [];
   const s = (i: number): string => String(a[i] ?? '');
   switch (msg.code) {
-    case 'config.execNeedsFileScheme':
-      return vscode.l10n.t('executable config ({0}) requires a file:// workspace', s(0));
-    case 'config.execNeedsTrust':
-      return vscode.l10n.t('executable config ({0}) is not loaded in an untrusted workspace', s(0));
-    case 'config.loadFailed':
-      return vscode.l10n.t('cannot load config: {0}', s(0));
     case 'book.entryNeedsFileScheme':
       return vscode.l10n.t('cannot read "{0}": book files require a file:// workspace', s(0));
     case 'book.entryFileNotFound':

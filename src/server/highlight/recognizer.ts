@@ -1,10 +1,10 @@
 /**
  * Narration recognizer: highlights the author's cast and coined keywords in plain body-text runs.
  *
- * Built once from a project's `characters` + `keywords` config — pure and synchronous, with no
- * dictionary and no async load. A character is highlighted ONLY where it reads as a SUBJECT: a name
- * (a surname/given alone is fine, optionally followed by ONE honorific) immediately followed by は or
- * が. The particle marks the subject, so it triggers the match but is not itself coloured. Built-in
+ * Built from a root's `jpnov.highlight.*` settings (characters + keywords) — pure and synchronous,
+ * with no dictionary and no async load. A character is highlighted ONLY where it reads as a SUBJECT:
+ * a name (a surname/given alone is fine, optionally followed by ONE honorific) immediately followed
+ * by は or が. The particle marks the subject and is coloured together with the name. Built-in
  * pronouns (僕 私 彼 彼女 俺 あたし) follow the same subject rule. Keywords match exactly and only where
  * no character matched, so a surface in BOTH lists (e.g. 境無) reads as the character when it is a
  * subject (境無は) and as a plain keyword otherwise.

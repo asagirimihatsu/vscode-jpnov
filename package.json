@@ -588,8 +588,7 @@
   },
   "capabilities": {
     "untrustedWorkspaces": {
-      "supported": "limited",
-      "description": "%capabilities.untrustedWorkspaces.description%"
+      "supported": true
     }
   },
   "imports": {

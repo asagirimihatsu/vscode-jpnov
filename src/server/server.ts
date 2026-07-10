@@ -4,11 +4,10 @@
  * `import type` of vscode is permitted (and eslint enforces this for src/server/**).
  *
  * Responsibilities wired here:
- * - `initialize`: read workspace folders + `initializationOptions{isTrusted,
- *   configBaseName}`, reply the negotiated capabilities, seed roots.
- * - `workspace/didChangeWorkspaceFolders`: add/remove roots (multi-root).
- * - `workspace/didChangeWatchedFiles`: reparse the owning root on a `novel.jp.*` edit.
- * - `jpnov/build`, `jpnov/renderFile`, `jpnov/workspaceTrustChanged` handlers.
+ * - `initialize`: seed the lint selection + per-root vocabulary from
+ *   `initializationOptions`, reply the negotiated capabilities.
+ * - `jpnov/build`, `jpnov/listBooks`, `jpnov/renderFile` request handlers (per-root state
+ *   rides each request's `projectDirs`; the vocabulary rides `jpnov/highlightChanged`).
  */
 import {
   CodeActionKind,
@@ -21,17 +20,14 @@ import type {
   CancellationToken,
   CodeAction,
   CodeActionParams,
-  DidChangeWatchedFilesParams,
   InitializeParams,
   InitializeResult,
   WorkDoneProgressReporter,
-  WorkspaceFoldersChangeEvent,
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { renderPreview } from '#/shared/compiler/preview.ts';
 import { resolvePreviewSettings } from '#/shared/config/settings.ts';
-import type { ResolvedConfig } from '#/shared/config/types.ts';
 import { selectRules } from '#/shared/lint/select.ts';
 import type { InitializationOptions } from '#/shared/protocol.ts';
 import {
@@ -40,7 +36,6 @@ import {
   LintConfigChangedNotification,
   ListBooksRequest,
   RenderFileRequest,
-  WorkspaceTrustChangedNotification,
 } from '#/shared/protocol.ts';
 import type {
   BuildParams,
@@ -51,7 +46,6 @@ import type {
   ListBooksResult,
   RenderFileParams,
   RenderFileResult,
-  WorkspaceTrustChangedParams,
 } from '#/shared/protocol.ts';
 
 import { handleBuild, handleListBooks } from './build.ts';
@@ -59,15 +53,7 @@ import { buildCodeActions } from './lint/codeActions.ts';
 import { computeLintFindings, LintCancelled } from './lint/kernel.ts';
 import type { LintFinding } from './lint/kernel.ts';
 import { reportError } from './report.ts';
-import { normalizeRootUri } from './fsUri.ts';
-import {
-  addRoot,
-  reparseAllRoots,
-  removeRoot,
-  rootForUri,
-} from './roots.ts';
 import type { ServerContext } from './roots.ts';
-import type { Recognizer } from './highlight/recognizer.ts';
 import { createHighlightStore, handleHighlightChanged } from './highlight/vocabulary.ts';
 import { buildSemanticTokens, SEMANTIC_LEGEND } from './semanticTokens.ts';
 import { annotationDiagnostics } from './syntax.ts';
@@ -77,50 +63,26 @@ const connection = createConnection(ProposedFeatures.all);
 
 const context: ServerContext = {
   connection,
-  roots: new Map(),
-  configBaseName: 'novel.jp',
-  lastKnownTrust: false,
   lintSelection: selectRules({}), // all rules off until the client's snapshot arrives at initialize
   highlight: createHighlightStore(), // empty until the client's snapshot arrives at initialize
 };
 
-// Open-document tracker (so semantic-tokens requests have document text to highlight) plus the
-// per-root narration recognizer (cast names + coined keywords) that powers body highlighting.
+// Open-document tracker (so semantic-tokens requests have document text to highlight).
 const documents = new TextDocuments(TextDocument);
 documents.listen(connection);
-
-// Each root whose config declares `characters` / `keywords` gets a recognizer, cached by its
-// resolved-config identity — a reparse swaps in a fresh `resolved` (configLoad.ts), so we rebuild.
-// The recognizer is pure and synchronous (no dictionary, no async), so it is built on demand with
-// no startup cost.
-const rootRecognizers = new Map<string, { resolved: ResolvedConfig; recognizer: Recognizer }>();
 
 /** The document selector the client uses to route docs/requests to this server. */
 const DOCUMENT_SELECTOR = [
   { language: 'novel-jp' },
   { language: 'novel-jp-filelist' },
-  { pattern: '**/novel.jp.*' },
 ] as const;
-
-/** Whether the client declared `workspace.workspaceFolders` support at `initialize`. */
-let hasWorkspaceFolderCapability = false;
-/** Initial workspace-folder URIs, seeded into roots once the client is `initialized`. */
-let initialFolderUris: string[] = [];
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
   const options = params.initializationOptions as InitializationOptions | undefined;
-  context.lastKnownTrust = options?.isTrusted ?? false;
   context.lintSelection = selectRules(options?.lintConfig ?? {});
   // Vocabulary seed: no refresh here — the client is not `initialized` yet, and the first
   // semanticTokens request naturally lands after this.
   context.highlight.apply(options?.highlight);
-  hasWorkspaceFolderCapability = Boolean(params.capabilities.workspace?.workspaceFolders);
-  // configBaseName is frozen to "novel.jp" and already seeded on the context, so there
-  // is nothing to reconcile from initializationOptions here.
-
-  // Defer seeding to `onInitialized`: client-bound work (watch registration, configState
-  // notifications) and the workspace-folders event getter are only valid after that point.
-  initialFolderUris = (params.workspaceFolders ?? []).map((folder) => folder.uri);
 
   return {
     capabilities: {
@@ -145,12 +107,6 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       codeActionProvider: {
         codeActionKinds: [CodeActionKind.QuickFix, CodeActionKind.SourceFixAll],
       },
-      workspace: {
-        workspaceFolders: {
-          supported: true,
-          changeNotifications: true,
-        },
-      },
       // No executeCommandProvider: this extension drives everything through custom requests.
       // The document selector is advertised for the client to mirror onto its
       // LanguageClient (ServerCapabilities has no standard slot for it).
@@ -158,89 +114,6 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
     },
   };
 });
-
-// All client-bound work waits for `initialized`: seed the initial roots, and (only if the
-// client supports it) subscribe to multi-root add/remove. Touching the
-// `onDidChangeWorkspaceFolders` getter before `initialized` throws — which previously
-// crashed the forked server on load.
-connection.onInitialized(() => {
-  // Seed the initial roots. addRoot() never rejects today (loadRootConfig funnels every failure
-  // into the 'error' config-state, and registerConfigWatch self-catches), so this catch is
-  // DEFENSIVE per the error-reporting policy: any future-introduced rejection becomes a client
-  // popup instead of an unhandled rejection. The IIFE is voided because onInitialized is sync;
-  // the catch is what makes that void safe.
-  void Promise.all(initialFolderUris.map((uri) => addRoot(context, uri))).catch((err: unknown) => {
-    reportError(context, err);
-  });
-
-  if (hasWorkspaceFolderCapability) {
-    connection.workspace.onDidChangeWorkspaceFolders(
-      (event: WorkspaceFoldersChangeEvent) => {
-        // Multi-root add/remove. removeRoot awaits connection.sendNotification (can reject only on
-        // a dead connection); addRoot is defensive per above. Either rejection is reported to the
-        // client rather than dropped. The IIFE is voided because the event callback is sync; the
-        // inner try/catch is what makes that void safe.
-        void (async () => {
-          try {
-            await Promise.all(event.removed.map((f) => removeRoot(context, f.uri)));
-            for (const f of event.removed) {
-              // removeRoot drops the RootState; drop its cached recognizer too (same key form).
-              rootRecognizers.delete(normalizeRootUri(f.uri));
-            }
-            await Promise.all(event.added.map((f) => addRoot(context, f.uri)));
-          } catch (err) {
-            reportError(context, err);
-          }
-        })();
-      },
-    );
-  }
-});
-
-// A watched `novel.jp.*` change reparses the owning root. Dedupe by root so several
-// events on the same root in one batch trigger a single reparse.
-connection.onDidChangeWatchedFiles((params: DidChangeWatchedFilesParams) => {
-  const dirtyRoots = new Set<string>();
-  for (const change of params.changes) {
-    // Config file URIs (novel.jp.*) never carry a trailing slash, so the raw uri is
-    // already in the normalized form rootForUri compares against.
-    const state = rootForUri(context, change.uri);
-    if (state) {
-      dirtyRoots.add(state.rootUri);
-    }
-  }
-  void (async () => {
-    try {
-      for (const rootUri of dirtyRoots) {
-        // Re-add reuses the existing RootState (watcher kept) and reparses the config.
-        await addRoot(context, rootUri);
-      }
-    } catch (err) {
-      reportError(context, err);
-    }
-    // A config edit may have changed the cast / keywords; re-request semantic tokens so open
-    // documents recolor (recognizerForUri rebuilds the root's recognizer on the new config arrays).
-    // LSP send: rejects only on a dead connection (nothing to recover), so the promise is dropped.
-    void connection.languages.semanticTokens.refresh();
-  })();
-});
-
-// Workspace-trust transitions: update the gate; false->true unlocks executable configs.
-connection.onNotification(
-  WorkspaceTrustChangedNotification,
-  (params: WorkspaceTrustChangedParams) => {
-    const wasTrusted = context.lastKnownTrust;
-    context.lastKnownTrust = params.isTrusted;
-    if (!wasTrusted && params.isTrusted) {
-      // DEFENSIVE per the error-reporting policy: reparseAllRoots maps to loadRootConfig, which
-      // never throws today, so this effectively cannot reject — but route any future rejection to
-      // a client popup instead of dropping it. void because onNotification's callback is sync.
-      void reparseAllRoots(context).catch((err: unknown) => {
-        reportError(context, err);
-      });
-    }
-  },
-);
 
 // Prose-lint settings changed (jpnov.lint.*): re-resolve the enabled-rule selection from the fresh
 // snapshot and re-lint every open .jpnov so toggles take effect immediately. The findings cache is
@@ -304,8 +177,7 @@ connection.onRequest(
 // the owning root declares any. Fully synchronous — markup and colours emit on the first request.
 connection.languages.semanticTokens.on((params) => {
   const doc = documents.get(params.textDocument.uri);
-  // Only novel-jp documents are highlighted. The config files (novel.jp.json, etc.) also match the
-  // client's document selector but are plain JSON/JS — never highlight them.
+  // Only novel-jp documents are highlighted (filelists share the selector but stay plain).
   if (doc?.languageId !== 'novel-jp') {
     return { data: [] };
   }

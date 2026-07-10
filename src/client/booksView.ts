@@ -11,7 +11,7 @@
  *
  * The view is gated by the `jpnov.hasBooks` context key, recomputed after every refresh():
  * true while the enumeration finds at least one book ("a bookshelf appears once there are
- * books" — no `novel.jp.*` involved). The checkbox set defaults every newly-discovered book
+ * books"). The checkbox set defaults every newly-discovered book
  * to CHECKED, so a fresh panel builds everything until the user narrows it; un-checking is
  * the way to scope a build down.
  */
@@ -232,7 +232,7 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
   }
 
   /**
-   * `jpnov.books.refresh` (and the file watcher / configState): re-enumerate books and reconcile
+   * `jpnov.books.refresh` (and the file watcher / folder changes): re-enumerate books and reconcile
    * the checkbox set — drop ticks for books that vanished, and default any newly-discovered book to
    * CHECKED (so "all-checked" holds on first load and when a `.filelist` is added). Leaves the
    * current list in place if the request fails (e.g. server not yet started).
@@ -271,17 +271,6 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
       void vscode.commands.executeCommand('setContext', 'jpnov.hasBooks', hasBooks);
     }
     this._onDidChangeTreeData.fire(undefined);
-  }
-
-  /**
-   * A root's `novel.jp.*` state changed or a folder came/went: the book set may have changed
-   * with it, so re-list. Gating no longer reads configState — `jpnov.hasBooks` is recomputed
-   * from the enumeration itself in {@link refresh}.
-   */
-  onConfigState(): void {
-    // Fire-and-forget re-list driven by a server notification: refresh() self-catches and is
-    // refreshSeq-serialized, so a dropped/superseded result is harmless.
-    void this.refresh();
   }
 
   dispose(): void {
