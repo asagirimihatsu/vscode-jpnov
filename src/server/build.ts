@@ -48,8 +48,7 @@ import type {
 
 import { fileLevelError } from './diagnostics.ts';
 import { diagnoseFilelist } from './filelist.ts';
-import { childUri, isFileScheme } from './fsUri.ts';
-import { normalizeRootUri } from './roots.ts';
+import { childUri, isFileScheme, normalizeRootUri } from './fsUri.ts';
 import type { ServerContext } from './roots.ts';
 
 const UTF8 = new TextDecoder('utf-8');

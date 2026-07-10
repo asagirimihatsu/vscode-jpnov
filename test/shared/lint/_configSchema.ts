@@ -5,7 +5,8 @@
  * generator that produced that block. NOT a test file (no `.test` suffix), so the runner skips it.
  *
  * Section order in the Settings UI (the `order` field, locked by the deepEqual):
- * Layout(1) > HTML Output(2) > Preview(3) > Lint(4, all scopes merged) > Project(5).
+ * Layout(1) > HTML Output(2) > Preview(3) > Lint(4, all scopes merged) > Project(5) >
+ * Highlighting(6).
  */
 import { EDGE_LINE_STYLES, PAGE_NUMBER_POSITIONS } from '../../../src/shared/compiler/chrome.ts';
 import {
@@ -191,6 +192,34 @@ function projectSection(): unknown {
   };
 }
 
+/**
+ * The Highlighting section: the per-folder (`scope: resource`) narration vocabulary. Plain
+ * string arrays with NO `uniqueItems` — dedup/empty-drop is the server normalizer's single
+ * job, and the descriptions say so ("empty and duplicate items are ignored").
+ */
+function highlightSection(): unknown {
+  return {
+    title: '%jpnov.highlight.title%',
+    order: 6,
+    properties: {
+      'jpnov.highlight.characters': {
+        type: 'array',
+        items: { type: 'string' },
+        default: [],
+        scope: 'resource',
+        markdownDescription: '%jpnov.highlight.characters.description%',
+      },
+      'jpnov.highlight.keywords': {
+        type: 'array',
+        items: { type: 'string' },
+        default: [],
+        scope: 'resource',
+        markdownDescription: '%jpnov.highlight.keywords.description%',
+      },
+    },
+  };
+}
+
 /** The nls keys the render sections reference (titles + descriptions + enum labels). */
 function renderNlsKeys(): string[] {
   return [
@@ -213,6 +242,9 @@ function renderNlsKeys(): string[] {
     'jpnov.project.title',
     'jpnov.project.sourceDir.description',
     'jpnov.project.outDir.description',
+    'jpnov.highlight.title',
+    'jpnov.highlight.characters.description',
+    'jpnov.highlight.keywords.description',
   ];
 }
 
@@ -221,7 +253,7 @@ function renderNlsKeys(): string[] {
  * section, then Project (array position mirrors the `order` fields).
  */
 export function expectedConfiguration(): unknown[] {
-  return [...renderSections(), lintSection(), projectSection()];
+  return [...renderSections(), lintSection(), projectSection(), highlightSection()];
 }
 
 /** Every nls key the configuration block references (section titles + descriptions + enum labels). */

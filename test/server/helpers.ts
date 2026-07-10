@@ -1,8 +1,9 @@
 /**
  * Test scaffolding for the server integration tests: a fake LSP `Connection` that
- * records outgoing notifications/diagnostics and answers `jpnov/readFile`, plus tmp
- * workspace helpers. These tests run on real `file:` fixtures so the `node:fs` loader
- * and build paths are exercised end to end. NOT wired into `npm test` this round.
+ * records outgoing notifications/diagnostics (plus semanticTokens.refresh calls) and
+ * answers `jpnov/readFile`, plus tmp workspace helpers. Suites under
+ * `test/server/highlight/**` run inside plain `npm test`; the fs-heavy build/root
+ * suites still run with the loader documented in test/client/README.md.
  */
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -12,6 +13,7 @@ import { pathToFileURL } from 'node:url';
 import type { Connection } from 'vscode-languageserver/node';
 
 import { selectRules } from '../../src/shared/lint/select.ts';
+import { createHighlightStore } from '../../src/server/highlight/vocabulary.ts';
 import type { ServerContext } from '../../src/server/roots.ts';
 
 export interface RecordedNotification {
@@ -36,6 +38,8 @@ export interface FakeConnection {
   /** Optional override for `jpnov/readFile` responses, keyed by uri. */
   readFileResponses: Map<string, string | null>;
   readonly registeredWatchers: FakeDisposable[];
+  /** How many times the server asked the client to re-pull semantic tokens. */
+  semanticTokenRefreshes(): number;
   /** Cast to the real Connection for injection into a ServerContext. */
   asConnection(): Connection;
   /** All configState notifications seen so far, newest last. */
@@ -50,11 +54,24 @@ export function makeFakeConnection(): FakeConnection {
   const registeredWatchers: FakeDisposable[] = [];
   const readFileResponses = new Map<string, string | null>();
 
+  let refreshCount = 0;
+
   const impl = {
     notifications,
     diagnostics,
     readFileResponses,
     registeredWatchers,
+    languages: {
+      semanticTokens: {
+        refresh(): Promise<void> {
+          refreshCount += 1;
+          return Promise.resolve();
+        },
+      },
+    },
+    semanticTokenRefreshes(): number {
+      return refreshCount;
+    },
     sendNotification(method: string, params: unknown): Promise<void> {
       notifications.push({ method, params });
       return Promise.resolve();
@@ -118,6 +135,7 @@ export function makeContext(
     configBaseName: 'novel.jp',
     lastKnownTrust: opts?.isTrusted ?? false,
     lintSelection: selectRules({}),
+    highlight: createHighlightStore(),
   };
 }
 

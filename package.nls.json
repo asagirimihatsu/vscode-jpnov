@@ -22,6 +22,8 @@
   "walkthrough.filelist.description": "A `.filelist` lists one book's chapters, one file per line, in reading order. Save it inside your source folder (default `./src`). One `.filelist` is one book.\n[Create a Filelist](command:workbench.action.files.newUntitledFile?%7B%22languageId%22%3A%22novel-jp-filelist%22%7D)",
   "walkthrough.build.title": "Build your book",
   "walkthrough.build.description": "Open the Japanese Novel panel in the Activity Bar (the book icon), tick the books you want, and build them to paginated HTML or Aozora-format text from the title-bar actions.\n[Open the Books Panel](command:workbench.view.extension.jpnov)",
+  "walkthrough.highlight.title": "Highlight your cast",
+  "walkthrough.highlight.description": "Add your cast and coined words to settings — they light up in the narration as you write. A name is coloured where it reads as the subject (`巳一は`); keywords are bolded everywhere.\n[Open Highlight Settings](command:workbench.action.openSettings?%22jpnov.highlight%22)",
   "capabilities.untrustedWorkspaces.description": "Data config (`novel.jp.json`) loads in any workspace; executable config (`.js/.cjs/.mjs/.ts`) runs only when the workspace is trusted.",
   "jpnov.lint.title": "Japanese Novel — Lint",
   "jpnov.lint.common.sentenceLength.description": "Warn when a sentence is longer than this many characters. Recommended: 100. Leave empty to disable.",
@@ -68,5 +70,8 @@
   "jpnov.html.header.description": "Header text centered at the top of every page in the built HTML. Leave empty for none.",
   "jpnov.project.title": "Japanese Novel — Project",
   "jpnov.project.sourceDir.description": "Folder (relative to the workspace folder) holding your `.jpnov` chapters and `.filelist` books. Default: `./src`.",
-  "jpnov.project.outDir.description": "Folder where built `.html` / `.txt` books are written. Default: `dist`."
+  "jpnov.project.outDir.description": "Folder where built `.html` / `.txt` books are written. Default: `dist`.",
+  "jpnov.highlight.title": "Japanese Novel — Highlighting",
+  "jpnov.highlight.characters.description": "Your cast, one name per item (e.g. `朝霧　巳一`). A name is split on the half-/full-width space into surname + given, and the full name, the surname alone, and the given name alone are each recognised. Highlighted only in narration where it reads as a subject — the name (one honorific such as `さん` / `先生` allowed) directly followed by `は` or `が`. Dialogue is never coloured. Empty and duplicate items are ignored.",
+  "jpnov.highlight.keywords.description": "Coined terms — a fantasy noun, a place name, … — one per item. Bolded wherever they appear in narration, without changing colour. Where a term is also a character, the character subject wins (`境無は` is the character; a bare `境無` is a keyword). Empty and duplicate items are ignored."
 }

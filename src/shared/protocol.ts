@@ -29,12 +29,14 @@ export type RawLintConfigWire = Readonly<Record<string, boolean | number | strin
  * `isTrusted` reflects the host workspace-trust state at startup; the server keeps
  * a `lastKnownTrust` and gates executable-config import() on it. `configBaseName`
  * is the fixed `"novel.jp"` stem the server watches/matches per root. `lintConfig` seeds the
- * prose-lint selection at startup (omitted = no rules enabled).
+ * prose-lint selection at startup (omitted = no rules enabled). `highlight` seeds the per-root
+ * narration vocabulary the same way (omitted = no vocabulary anywhere).
  */
 export interface InitializationOptions {
   readonly isTrusted: boolean;
   readonly configBaseName: 'novel.jp';
   readonly lintConfig?: RawLintConfigWire;
+  readonly highlight?: HighlightVocabularyMap;
 }
 
 // ---------------------------------------------------------------------------
@@ -150,6 +152,39 @@ export const LintConfigChangedNotification = 'jpnov/lintConfigChanged';
  */
 export interface LintConfigChangedParams {
   readonly lintConfig: RawLintConfigWire;
+}
+
+// ---------------------------------------------------------------------------
+// jpnov/highlightChanged (C->S notification)
+// ---------------------------------------------------------------------------
+
+export const HighlightChangedNotification = 'jpnov/highlightChanged';
+
+/**
+ * One workspace folder's narration vocabulary, read from the `jpnov.highlight.*` settings.
+ * Both fields are always present — the client sends the folder's effective values verbatim
+ * (empty arrays included); the server normalizes (drops non-strings/empties, dedups) on apply.
+ */
+export interface HighlightVocabulary {
+  readonly characters: readonly string[];
+  readonly keywords: readonly string[];
+}
+
+/**
+ * The full per-root vocabulary snapshot, keyed by folder URI (as sent by the client, verbatim).
+ * REPLACEMENT semantics: each push carries every workspace folder — a root absent from the map
+ * has no vocabulary (mirrors ProjectDirsMap, where the map itself defines the target roots).
+ * Empty-listed roots still get an entry so a nested folder's (empty) vocabulary shadows its
+ * parent's under longest-prefix routing.
+ */
+export type HighlightVocabularyMap = Readonly<Record<string, HighlightVocabulary>>;
+
+/**
+ * Pushed when the user edits any `jpnov.highlight.*` setting, and re-pushed in full when
+ * workspace folders change while the client is running (mirrors the lint push).
+ */
+export interface HighlightChangedParams {
+  readonly highlight: HighlightVocabularyMap;
 }
 
 // ---------------------------------------------------------------------------

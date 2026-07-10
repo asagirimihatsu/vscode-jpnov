@@ -34,9 +34,18 @@ import { resolvePreviewSettings } from '#/shared/config/settings.ts';
 import type { ResolvedConfig } from '#/shared/config/types.ts';
 import { selectRules } from '#/shared/lint/select.ts';
 import type { InitializationOptions } from '#/shared/protocol.ts';
+import {
+  BuildRequest,
+  HighlightChangedNotification,
+  LintConfigChangedNotification,
+  ListBooksRequest,
+  RenderFileRequest,
+  WorkspaceTrustChangedNotification,
+} from '#/shared/protocol.ts';
 import type {
   BuildParams,
   BuildResult,
+  HighlightChangedParams,
   LintConfigChangedParams,
   ListBooksParams,
   ListBooksResult,
@@ -50,16 +59,16 @@ import { buildCodeActions } from './lint/codeActions.ts';
 import { computeLintFindings, LintCancelled } from './lint/kernel.ts';
 import type { LintFinding } from './lint/kernel.ts';
 import { reportError } from './report.ts';
+import { normalizeRootUri } from './fsUri.ts';
 import {
   addRoot,
-  normalizeRootUri,
   reparseAllRoots,
   removeRoot,
   rootForUri,
 } from './roots.ts';
 import type { ServerContext } from './roots.ts';
-import { createRecognizer } from './highlight/recognizer.ts';
 import type { Recognizer } from './highlight/recognizer.ts';
+import { createHighlightStore, handleHighlightChanged } from './highlight/vocabulary.ts';
 import { buildSemanticTokens, SEMANTIC_LEGEND } from './semanticTokens.ts';
 import { annotationDiagnostics } from './syntax.ts';
 import { completeFilelist, diagnoseFilelist, documentLinksForFilelist } from './filelist.ts';
@@ -72,6 +81,7 @@ const context: ServerContext = {
   configBaseName: 'novel.jp',
   lastKnownTrust: false,
   lintSelection: selectRules({}), // all rules off until the client's snapshot arrives at initialize
+  highlight: createHighlightStore(), // empty until the client's snapshot arrives at initialize
 };
 
 // Open-document tracker (so semantic-tokens requests have document text to highlight) plus the
@@ -84,28 +94,6 @@ documents.listen(connection);
 // The recognizer is pure and synchronous (no dictionary, no async), so it is built on demand with
 // no startup cost.
 const rootRecognizers = new Map<string, { resolved: ResolvedConfig; recognizer: Recognizer }>();
-const NONE: readonly string[] = [];
-
-/** The recognizer for a document's owning root, or undefined when it declares no cast/keywords. */
-function recognizerForUri(uri: string): Recognizer | undefined {
-  const root = rootForUri(context, uri);
-  const resolved = root?.resolved;
-  if (root === undefined || resolved === undefined) {
-    return undefined;
-  }
-  const characters = resolved.characters ?? NONE;
-  const keywords = resolved.keywords ?? NONE;
-  if (characters.length === 0 && keywords.length === 0) {
-    return undefined;
-  }
-  const cached = rootRecognizers.get(root.rootUri);
-  if (cached?.resolved === resolved) {
-    return cached.recognizer;
-  }
-  const recognizer = createRecognizer(characters, keywords);
-  rootRecognizers.set(root.rootUri, { resolved, recognizer });
-  return recognizer;
-}
 
 /** The document selector the client uses to route docs/requests to this server. */
 const DOCUMENT_SELECTOR = [
@@ -123,6 +111,9 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
   const options = params.initializationOptions as InitializationOptions | undefined;
   context.lastKnownTrust = options?.isTrusted ?? false;
   context.lintSelection = selectRules(options?.lintConfig ?? {});
+  // Vocabulary seed: no refresh here — the client is not `initialized` yet, and the first
+  // semanticTokens request naturally lands after this.
+  context.highlight.apply(options?.highlight);
   hasWorkspaceFolderCapability = Boolean(params.capabilities.workspace?.workspaceFolders);
   // configBaseName is frozen to "novel.jp" and already seeded on the context, so there
   // is nothing to reconcile from initializationOptions here.
@@ -236,7 +227,7 @@ connection.onDidChangeWatchedFiles((params: DidChangeWatchedFilesParams) => {
 
 // Workspace-trust transitions: update the gate; false->true unlocks executable configs.
 connection.onNotification(
-  'jpnov/workspaceTrustChanged',
+  WorkspaceTrustChangedNotification,
   (params: WorkspaceTrustChangedParams) => {
     const wasTrusted = context.lastKnownTrust;
     context.lastKnownTrust = params.isTrusted;
@@ -256,7 +247,7 @@ connection.onNotification(
 // keyed by document VERSION, which a settings toggle does NOT bump — so clear it explicitly, or a
 // code-action requested in the re-lint debounce window would be served from the stale selection.
 connection.onNotification(
-  'jpnov/lintConfigChanged',
+  LintConfigChangedNotification,
   (params: LintConfigChangedParams) => {
     context.lintSelection = selectRules(params.lintConfig);
     findingsCache.clear();
@@ -264,10 +255,19 @@ connection.onNotification(
   },
 );
 
+// Narration vocabulary changed (jpnov.highlight.*): swap the per-root snapshot and refresh
+// semantic tokens so open editors recolour immediately.
+connection.onNotification(
+  HighlightChangedNotification,
+  (params: HighlightChangedParams) => {
+    handleHighlightChanged(connection, context.highlight, params);
+  },
+);
+
 // Build: omit `root` to build all valid roots. Progress flows over $/progress via the
 // request's work-done reporter (3rd handler arg), tied to the client's workDoneToken.
 connection.onRequest(
-  'jpnov/build',
+  BuildRequest,
   (
     params: BuildParams,
     _token: unknown,
@@ -278,7 +278,7 @@ connection.onRequest(
 // List books: enumerate every `.filelist` of every root in the request's projectDirs map.
 // PURE enumeration (no reads/diagnostics); the wire may omit params, so accept the nullable form.
 connection.onRequest(
-  'jpnov/listBooks',
+  ListBooksRequest,
   (params: ListBooksParams | undefined): Promise<ListBooksResult> =>
     handleListBooks(params ?? { projectDirs: {} }),
 );
@@ -287,7 +287,7 @@ connection.onRequest(
 // charsPerLine, 禁則, and display chrome all ride the request's settings snapshot
 // (re-resolved here — the wire payload is untrusted).
 connection.onRequest(
-  'jpnov/renderFile',
+  RenderFileRequest,
   (params: RenderFileParams): RenderFileResult => {
     const settings = resolvePreviewSettings(params.settings);
     return {
@@ -309,7 +309,7 @@ connection.languages.semanticTokens.on((params) => {
   if (doc?.languageId !== 'novel-jp') {
     return { data: [] };
   }
-  return buildSemanticTokens(doc, recognizerForUri(params.textDocument.uri));
+  return buildSemanticTokens(doc, context.highlight.recognizerFor(params.textDocument.uri));
 });
 
 // --- *.filelist editor features (novel-jp-filelist) -------------------------
