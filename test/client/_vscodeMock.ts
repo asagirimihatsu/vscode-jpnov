@@ -124,7 +124,6 @@ export class MarkdownString {
   }
 }
 
-export const StatusBarAlignment = { Left: 1, Right: 2 } as const;
 export const ViewColumn = { One: 1, Two: 2, Three: 3, Beside: -2 } as const;
 export const ProgressLocation = { SourceControl: 1, Window: 10, Notification: 15 } as const;
 
@@ -132,20 +131,6 @@ export interface FakeTextDocument {
   uri: Uri;
   languageId: string;
   getText(): string;
-}
-
-export interface FakeStatusBarItem {
-  id: string;
-  name: string | undefined;
-  text: string;
-  tooltip: unknown;
-  color: unknown;
-  backgroundColor: unknown;
-  command: unknown;
-  shown: boolean;
-  show(): void;
-  hide(): void;
-  dispose(): void;
 }
 
 export interface FakeWebview {
@@ -183,13 +168,10 @@ export interface FakeWebviewPanel {
 
 /** Mutable test harness backing the mocked `vscode` namespace. */
 export interface MockState {
-  trusted: boolean;
   textDocuments: FakeTextDocument[];
-  statusItems: FakeStatusBarItem[];
   panels: FakeWebviewPanel[];
   registeredCommands: Map<string, (...args: unknown[]) => unknown>;
   writtenFiles: { uri: string; content: string }[];
-  onDidGrantTrust: EventEmitter<void>;
   onDidChangeDoc: EventEmitter<{ document: FakeTextDocument }>;
   onDidChangeActiveEditor: EventEmitter<{ document: FakeTextDocument } | undefined>;
   activeEditor: { document: FakeTextDocument; viewColumn?: number } | undefined;
@@ -229,13 +211,10 @@ export interface MockState {
 
 export function createMockState(): MockState {
   return {
-    trusted: true,
     textDocuments: [],
-    statusItems: [],
     panels: [],
     registeredCommands: new Map(),
     writtenFiles: [],
-    onDidGrantTrust: new EventEmitter<void>(),
     onDidChangeDoc: new EventEmitter<{ document: FakeTextDocument }>(),
     onDidChangeActiveEditor: new EventEmitter<
       { document: FakeTextDocument } | undefined
@@ -270,16 +249,13 @@ export function createMockState(): MockState {
  * instance here rather than swapping it (a swap would not reach already-cached modules).
  */
 export function resetMockState(s: MockState): void {
-  s.trusted = true;
   s.textDocuments.length = 0;
-  s.statusItems.length = 0;
   s.panels.length = 0;
   s.registeredCommands.clear();
   s.writtenFiles.length = 0;
   s.activeEditor = undefined;
   s.visibleEditors.length = 0;
   s.onDidChangeSelection.dispose();
-  s.onDidGrantTrust.dispose();
   s.onDidChangeDoc.dispose();
   s.onDidChangeActiveEditor.dispose();
   s.quickPickQueue.length = 0;
@@ -316,33 +292,6 @@ export function buildVscode(state: MockState): Record<string, unknown> {
     onDidChangeTextEditorSelection: state.onDidChangeSelection.event,
     get visibleTextEditors() {
       return state.visibleEditors;
-    },
-    createStatusBarItem(
-      id?: string | number,
-      ...rest: unknown[]
-    ): FakeStatusBarItem {
-      void rest; // alignment + priority are irrelevant to the mock
-      const item: FakeStatusBarItem = {
-        id: typeof id === 'string' ? id : 'anon',
-        name: undefined,
-        text: '',
-        tooltip: undefined,
-        color: undefined,
-        backgroundColor: undefined,
-        command: undefined,
-        shown: false,
-        show() {
-          this.shown = true;
-        },
-        hide() {
-          this.shown = false;
-        },
-        dispose() {
-          /* no-op */
-        },
-      };
-      state.statusItems.push(item);
-      return item;
     },
     createWebviewPanel(
       viewType: string,
@@ -422,9 +371,6 @@ export function buildVscode(state: MockState): Record<string, unknown> {
   };
 
   const workspace = {
-    get isTrusted() {
-      return state.trusted;
-    },
     get textDocuments() {
       return state.textDocuments;
     },
@@ -432,7 +378,6 @@ export function buildVscode(state: MockState): Record<string, unknown> {
       return state.workspaceFolders;
     },
     fs: fsApi,
-    onDidGrantWorkspaceTrust: state.onDidGrantTrust.event,
     onDidChangeTextDocument: state.onDidChangeDoc.event,
     // Settings reads. Bare getConfiguration() + full keys (renderConfig.ts) resolves from
     // `state.config` as before; the section/scope form (highlightConfig.ts, probe.ts)
@@ -506,7 +451,6 @@ export function buildVscode(state: MockState): Record<string, unknown> {
     MarkdownString,
     Disposable,
     EventEmitter,
-    StatusBarAlignment,
     ViewColumn,
     ProgressLocation,
   };

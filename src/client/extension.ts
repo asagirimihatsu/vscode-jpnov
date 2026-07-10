@@ -1,14 +1,13 @@
 /**
  * Extension entry (client / host side). This is the ONLY tree permitted to
  * value-import `vscode`. It launches the forked Node language server over IPC and owns
- * the host-side concerns: the aggregated status bar, the Books build panel (in the
- * extension's own Activity Bar container), and the live preview. The novel-jp language
- * id is bound declaratively to `.jpnov` (package.json), so there is no runtime
- * language-id management here.
+ * the host-side concerns: the Books build panel (in the extension's own Activity Bar
+ * container) and the live preview. The novel-jp language id is bound declaratively to
+ * `.jpnov` (package.json), so there is no runtime language-id management here.
  *
- * The pure compiler + all config/book parsing live server-side; the client is a thin
+ * The pure compiler + all book parsing live server-side; the client is a thin
  * orchestrator that translates `jpnov/*` protocol messages into VS Code UI effects
- * and translates VS Code events (workspace trust, build actions) back to the server.
+ * and translates VS Code events (settings pushes, build actions) back to the server.
  *
  * Activation is two-phase so the window-open path stays cheap (`onStartupFinished`
  * activates this extension in EVERY window, novel or not):
@@ -18,10 +17,9 @@
  *     depend on any of this — the TextMate grammar is applied by VS Code core.
  *   Phase 2 `ensureStarted()` — single-flight; constructs the client + UI singletons
  *     and forks the server on the FIRST real demand: a novel-jp/filelist document, a
- *     jpnov command, a restored preview panel, or a `novel.jp.*` config / root-level
- *     `*.filelist` found at a workspace folder (so a novel workspace still
- *     self-populates its status bar and Books view shortly after startup, just off
- *     the window-open critical path).
+ *     jpnov command, a restored preview panel, or a probe hit on a workspace folder
+ *     (so a novel workspace still self-populates its Books view shortly after
+ *     startup, just off the window-open critical path).
  */
 import * as vscode from 'vscode';
 
@@ -34,19 +32,12 @@ import {
 } from 'vscode-languageclient/node';
 
 import {
-  ConfigStateNotification,
   HighlightChangedNotification,
   LintConfigChangedNotification,
-  ReadFileRequest,
   ServerErrorNotification,
-  WorkspaceTrustChangedNotification,
-  type ConfigStateParams,
   type HighlightChangedParams,
   type LintConfigChangedParams,
-  type ReadFileParams,
-  type ReadFileResult,
   type ServerErrorParams,
-  type WorkspaceTrustChangedParams,
 } from '#/shared/protocol.ts';
 
 import { BooksView } from './booksView.ts';
@@ -56,10 +47,8 @@ import { buildLintSnapshot } from './lintConfig.ts';
 import { folderIsNovelProject } from './probe.ts';
 import { isLocalizableMessage, renderMessage } from './messages.ts';
 import { Preview } from './preview.ts';
-import { StatusBar } from './statusBar.ts';
 
 let client: LanguageClient | undefined;
-let statusBar: StatusBar | undefined;
 let preview: Preview | undefined;
 let booksView: BooksView | undefined;
 let extCtx: vscode.ExtensionContext | undefined;
@@ -119,11 +108,8 @@ function ensureStarted(): void {
     documentSelector: [
       { language: 'novel-jp' },
       { language: 'novel-jp-filelist' },
-      { pattern: '**/novel.jp.*' },
     ],
     initializationOptions: {
-      isTrusted: vscode.workspace.isTrusted,
-      configBaseName: 'novel.jp',
       lintConfig: buildLintSnapshot(),
       highlight: buildHighlightSnapshot(),
     },
@@ -173,52 +159,11 @@ function ensureStarted(): void {
     clientOptions,
   );
 
-  statusBar = new StatusBar();
   preview = new Preview(client);
   booksView = new BooksView(client);
 
   // Dispose UI singletons on deactivate (order: stop the client separately in deactivate()).
-  context.subscriptions.push(statusBar, preview, booksView);
-
-  // The server emits one configState per root whenever a root's config changes; the
-  // client only needs it to refresh the aggregated status-bar item.
-  context.subscriptions.push(
-    client.onNotification(ConfigStateNotification, (params: ConfigStateParams) => {
-      statusBar?.update(params.root, params.state, params.error);
-      booksView?.onConfigState();
-    }),
-  );
-
-  // Virtual-fs bridge: the forked Node server cannot read non-`file:` schemes itself, so
-  // it asks the client (which has the host `vscode.workspace.fs`) to fetch CONFIG bytes.
-  // base64 keeps the bytes intact over the IPC channel; a missing/unreadable file resolves
-  // to `null`, which the server treats as "config absent".
-  context.subscriptions.push(
-    client.onRequest(
-      ReadFileRequest,
-      async (params: ReadFileParams): Promise<ReadFileResult> => {
-        try {
-          const bytes = await vscode.workspace.fs.readFile(vscode.Uri.parse(params.uri));
-          return { base64: Buffer.from(bytes).toString('base64') };
-        } catch {
-          return { base64: null };
-        }
-      },
-    ),
-  );
-
-  // Trust can be granted AFTER activation; tell the server so it can (re)load any
-  // executable configs (novel.jp.{js,ts,mjs,cjs}) that were previously skipped.
-  // Wired here (not in activate()): trust granted before the server exists is simply
-  // captured by the isTrusted snapshot above when the start finally happens.
-  context.subscriptions.push(
-    vscode.workspace.onDidGrantWorkspaceTrust(() => {
-      const params: WorkspaceTrustChangedParams = { isTrusted: true };
-      // Fire-and-forget C->S notify: sendNotification rejects only if the connection is already
-      // dead (server gone), in which case there is nothing to (re)load and nothing to report.
-      void client?.sendNotification(WorkspaceTrustChangedNotification, params);
-    }),
-  );
+  context.subscriptions.push(preview, booksView);
 
   // Push jpnov.lint.* changes so the server re-lints open files live; re-render the preview
   // when its layout/preview settings change; re-enumerate books when a project dir moves.
@@ -347,7 +292,7 @@ export function activate(context: vscode.ExtensionContext): void {
     ensureStarted();
   } else {
     // Novel workspace with no novel editor open (the onStartupFinished case): probe the
-    // folder roots and self-populate status bar + Books view shortly after startup.
+    // folder roots and self-populate the Books view shortly after startup.
     // Not awaited — activate() must return immediately; the probe is internally
     // started-guarded, so racing another trigger is harmless.
     void startIfProjectPresent(vscode.workspace.workspaceFolders ?? []);
@@ -355,12 +300,11 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): Thenable<void> | undefined {
-  // The disposables (status bar, preview, books panel) are torn down by the extension host
-  // via context.subscriptions; we only need to stop the client, which shuts down the forked
+  // The disposables (preview, books panel) are torn down by the extension host via
+  // context.subscriptions; we only need to stop the client, which shuts down the forked
   // server process.
   const stopping = client?.stop();
   client = undefined;
-  statusBar = undefined;
   preview = undefined;
   booksView = undefined;
   extCtx = undefined;

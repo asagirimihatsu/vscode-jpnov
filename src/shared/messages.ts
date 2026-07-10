@@ -22,12 +22,6 @@ function englishLabel(label: LabelId): string {
 export function renderEnglish(code: MsgCode, args: readonly (string | number)[] = []): string {
   const a = (i: number): string => String(args[i] ?? '');
   switch (code) {
-    case 'config.execNeedsFileScheme':
-      return `executable config (${a(0)}) requires a file:// workspace`;
-    case 'config.execNeedsTrust':
-      return `executable config (${a(0)}) is not loaded in an untrusted workspace`;
-    case 'config.loadFailed':
-      return `cannot load config: ${a(0)}`;
     case 'book.entryNeedsFileScheme':
       return `cannot read "${a(0)}": book files require a file:// workspace`;
     case 'book.entryFileNotFound':

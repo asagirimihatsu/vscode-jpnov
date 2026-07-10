@@ -25,9 +25,6 @@ const { renderMessage } = await import('../../src/client/messages.ts');
 // Representative args per code. `Record<MsgCode, ...>` forces an entry for EVERY code, so adding a
 // new MsgCode without a case here is a COMPILE error — keeping the guard exhaustive.
 const ARGS: Record<MsgCode, readonly (string | number)[]> = {
-  'config.execNeedsFileScheme': ['mjs'],
-  'config.execNeedsTrust': ['ts'],
-  'config.loadFailed': ['Unexpected token }'],
   'book.entryNeedsFileScheme': ['a.jpnov'],
   'book.entryFileNotFound': ['a.jpnov'],
   'book.entryReadFailed': ['a.jpnov', 'EACCES: permission denied'],

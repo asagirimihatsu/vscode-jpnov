@@ -24,7 +24,6 @@
   "walkthrough.build.description": "アクティビティ バーの「小説」パネル（本のアイコン）を開き、ビルドしたい本にチェックを入れて、タイトル バーのボタンから HTML または青空文庫形式テキストへビルドします。\n[本パネルを開く](command:workbench.view.extension.jpnov)",
   "walkthrough.highlight.title": "登場人物をハイライト",
   "walkthrough.highlight.description": "設定に登場人物と造語を登録すると、執筆中の地の文でハイライトされます。名前は主語として読める箇所（`巳一は`）で色づき、造語はどこでも太字になります。\n[ハイライト設定を開く](command:workbench.action.openSettings?%22jpnov.highlight%22)",
-  "capabilities.untrustedWorkspaces.description": "データ設定（`novel.jp.json`）はすべてのワークスペースで読み込みます。実行可能な設定（`.js/.cjs/.mjs/.ts`）は信頼済みワークスペースでのみ実行します。",
   "jpnov.lint.title": "小説 — Lint",
   "jpnov.lint.common.sentenceLength.description": "一文がこの文字数を超えたら警告します。推奨: 100。空欄で無効。",
   "jpnov.lint.common.maxTen.description": "一文の読点（、）がこの数を超えたら警告します。推奨: 3。空欄で無効。",

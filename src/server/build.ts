@@ -269,8 +269,7 @@ function resolveProjectDir(rootUri: string, value: string, fallback: string): st
 
 /**
  * The roots a request targets: every `projectDirs` entry (narrowed to `root` when set),
- * each with its source/output dirs resolved. The map is the SOLE source of buildable
- * roots — the server's `novel.jp.*` state plays no part in book discovery.
+ * each with its source/output dirs resolved. The map is the SOLE source of buildable roots.
  */
 function targetRoots(projectDirs: ProjectDirsMap, root?: string): ProjectRoot[] {
   const wanted = root === undefined ? undefined : normalizeRootUri(root);
