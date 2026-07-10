@@ -18,19 +18,23 @@ Early scaffolding. Novel sources are written in `.jpnov` files (the editor binds
 to the **Japanese Novel** language for highlighting and live preview); a `.filelist`
 manifest lists, in reading order, the `.jpnov` chapters that make up one book.
 
-The extension activates when you open a `.jpnov` or `.filelist` file, or when a
-workspace folder root holds a `novel.jp.*` config or a `*.filelist`. **Preview** of a
-`.jpnov` and **`.filelist` editing** (completion, diagnostics, links) work with no
-configuration at all. A **Get started with Japanese Novel** walkthrough (Help →
-Get Started) covers the same steps as the quick start below.
+The extension activates when you open a `.jpnov` or `.filelist` file, when a workspace
+folder root holds a `*.filelist`, or when any `jpnov.*` setting is saved at the workspace
+or folder level. Startup scanning looks only at folder roots — a project whose filelists
+all sit in subfolders activates when you open a file, and keeps auto-activating once any
+`jpnov.*` workspace setting exists. Activation alone doesn't list books: the Books panel
+fills once a `.filelist` is found. **Preview** of a `.jpnov` and **`.filelist` editing**
+(completion, diagnostics, links) work with no configuration at all. A **Get started with
+Japanese Novel** walkthrough (Help → Get Started) covers the same steps as the quick
+start below.
 
 ## Quick start
 
-1. **Write a chapter.** Create a file ending in `.jpnov` (e.g. `src/chapter1.jpnov`) and start
+1. **Write a chapter.** Create a file ending in `.jpnov` (e.g. `chapter1.jpnov`) and start
    writing. [Aozora Bunko annotations](https://www.aozora.gr.jp/annotation/index.html) are
    highlighted as you type; click the preview icon in the editor title bar (or run **Japanese
    Novel: Open Preview to the Side**) to see it in vertical, right-to-left 原稿用紙 layout.
-2. **Make a book.** Create a `.filelist` (e.g. `src/volume1.filelist`) and list your chapter
+2. **Make a book.** Create a `.filelist` (e.g. `volume1.filelist`) and list your chapter
    files, one per line, in reading order. One `.filelist` is one book.
 3. **Build it.** Open the **Japanese Novel** view in the Activity Bar (the book icon appears
    once a `.filelist` exists), tick the books you want, and use **Build to HTML** (paginated
@@ -43,15 +47,6 @@ The output folder (`jpnov.project.outDir`, default `dist`, under **Japanese Nove
 dot-folders, and `node_modules` are never scanned for books. Layout, preview, HTML-output,
 lint, and highlighting behavior are plain VS Code settings too, under the other
 **Japanese Novel** sections; everything can be overridden per workspace folder.
-
-A `novel.jp.*` config file is only used for cast/keyword highlighting (see
-[below](#character--keyword-highlighting)). Supported forms, in precedence order:
-
-| Form | Loaded by | Notes |
-| --- | --- | --- |
-| `novel.jp.json` | `JSON.parse` | virtual/remote-fs safe, preferred |
-| `novel.jp.js` / `.mjs` / `.cjs` | `await import()`<br />(default export) | local + trusted workspace only |
-| `novel.jp.ts` | `await import()` via<br />Node native type-stripping | extra dependency may not work.<br />local + trusted workspace only |
 
 ## Annotations
 
@@ -78,28 +73,62 @@ relies on the browser synthesising an oblique for Japanese fonts.
 
 ## Character & keyword highlighting
 
-A `novel.jp.*` config may declare your **cast** and a few **coined keywords**, so they stand out
-while you write — handy where Japanese drops the subject:
+Declare your **cast** and a few **coined keywords** in settings (**Japanese Novel —
+Highlighting**, per workspace folder), so they stand out while you write — handy where
+Japanese drops the subject:
 
 ```json
+// .vscode/settings.json
 {
-  "characters": ["朝霧　巳一", "Arill Stains"],
-  "keywords": ["黒剣", "境無"]
+  "jpnov.highlight.characters": ["朝霧　巳一", "Arill Stains"],
+  "jpnov.highlight.keywords": ["黒剣", "境無"]
 }
 ```
 
-- **`characters`** — each name is split on the half-/full-width space into surname + given, so the
-  full name, the surname alone, and the given name alone are all recognised. A character is
-  highlighted only where it reads as a **subject**: a name (optionally with an honorific such as
-  `さん` / `先生` / `ちゃん`) immediately followed by `は` or `が` — e.g. `巳一は`, `朝霧ちゃんが`. The
-  common pronouns `僕` / `私` / `彼` / `彼女` are recognised the same way. Dialogue inside
-  `「」` / `『』` is left in the body colour; only narration is scanned.
-- **`keywords`** — coined terms (a fantasy noun, a place, …) are **bolded** wherever they appear in
-  narration, without changing colour. Where a surface is in both lists the subject form wins, so
-  `境無は` reads as a character while a bare `境無` is a keyword.
+- **`jpnov.highlight.characters`** — each name is split on the half-/full-width space into
+  surname + given, so the full name, the surname alone, and the given name alone are all
+  recognised. A character is highlighted only where it reads as a **subject**: a name
+  (optionally with one honorific such as `さん` / `先生` / `ちゃん`) immediately followed by `は`
+  or `が` — e.g. `巳一は`, `朝霧ちゃんが`. Common pronouns (`僕` / `私` / `俺` / `彼` / `彼女` …) are
+  recognised the same way. Dialogue inside `「」` / `『』` is left in the body colour; only
+  narration is scanned.
+- **`jpnov.highlight.keywords`** — coined terms (a fantasy noun, a place, …) are **bolded**
+  wherever they appear in narration, without changing colour. Where a surface is in both
+  lists the subject form wins, so `境無は` reads as a character while a bare `境無` is a keyword.
 
-Colouring is delivered as LSP semantic tokens with per-language default colours; override them in
-your settings under `editor.semanticTokenColorCustomizations` if you like.
+Both lists apply per workspace folder and take effect immediately in open editors — no
+reload, no rebuild. Empty and duplicate items are ignored. Colouring is delivered as LSP
+semantic tokens with per-language default colours; override them in your settings under
+`editor.semanticTokenColorCustomizations` if you like.
+
+## Migrating from `novel.jp.*`
+
+Earlier versions read the cast/keyword lists from a `novel.jp.*` config file in the
+workspace folder root. That file is no longer read — the lists are ordinary VS Code
+settings now.
+
+1. Copy the two arrays from your old `novel.jp.*` into **workspace or folder settings**
+   (`.vscode/settings.json`):
+
+```json
+{
+  "jpnov.highlight.characters": ["朝霧　巳一", "Arill Stains"],
+  "jpnov.highlight.keywords": ["黒剣", "境無"]
+}
+```
+
+2. Delete the `novel.jp.*` file — nothing reads it any more.
+
+Prefer workspace/folder settings over user settings: the cast belongs to the novel, each
+folder of a multi-root workspace can carry its own lists, and the presence of any `jpnov.*`
+workspace setting keeps the project auto-activating exactly as the config file used to. If
+your config was an executable module (`.js` / `.mjs` / `.cjs` / `.ts`), take the two arrays
+from its default export and paste the literal values.
+
+Also note: output paths now mirror from the workspace folder root — a `src/` layout that
+used to build `dist/volume1.html` now builds `dist/src/volume1.html` (`jpnov.project.sourceDir`
+is gone; books are discovered anywhere outside the output folder, dot-folders, and
+`node_modules`).
 
 ## Development
 
@@ -108,7 +137,7 @@ npm install
 ```
 
 Press <kbd>F5</kbd> to launch an Extension Development Host. Open a `.jpnov` file
-(or a folder containing a `novel.jp.*` config) to trigger activation.
+(or a folder with a `*.filelist` in its root) to trigger activation.
 
 Other commands:
 

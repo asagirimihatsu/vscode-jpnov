@@ -2,7 +2,8 @@
 
 These exercise the host-side client modules (`src/client/**`) against an in-memory
 `vscode` mock (`_vscodeMock.ts`). They are **authored but intentionally NOT wired into
-`npm test`** this round — `npm test` runs only the vscode-free `test/shared/**` suite.
+`npm test`** — its globs cover the vscode-free `test/shared/**` plus the
+`test/server/{highlight,lint}/**` suites; everything client-side runs via the recipe below.
 
 ## Running
 
