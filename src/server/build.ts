@@ -1,12 +1,13 @@
 /**
  * The `jpnov/build` request handler. The request's `projectDirs` map (the client's per-folder
  * `jpnov.project.*` snapshot) defines the targeted roots; for each one it enumerates every
- * `*.filelist` under the root's `sourceDir`, reads the `.jpnov` files each one lists (in order,
- * resolved relative to the filelist's OWN directory), and emits one `.txt` (the concatenated
- * Aozora source via `concatBookText`) plus one `.html` (the paginated render via `renderBook`)
- * per filelist, returning the artifacts for the CLIENT to write. The output path is derived
- * from the filelist's name/location (`filelistOutRel`, mirroring the source tree); two distinct
- * filelists that derive the same path are a build error and neither is emitted.
+ * `*.filelist` anywhere under the workspace folder root (skipping dot-folders, `node_modules`,
+ * and the resolved output folder), reads the `.jpnov` files each one lists (in order, resolved
+ * relative to the filelist's OWN directory), and emits one `.txt` (the concatenated Aozora
+ * source via `concatBookText`) plus one `.html` (the paginated render via `renderBook`) per
+ * filelist, returning the artifacts for the CLIENT to write. The output path is derived from
+ * the filelist's name/location (`filelistOutRel`, mirroring the tree under the folder root);
+ * two distinct filelists that derive the same path are a build error and neither is emitted.
  *
  * A build may be narrowed by {@link BuildParams.books} (a subset of `.filelist` URIs) and/or
  * {@link BuildParams.format} (only `.txt` or only `.html`). The companion {@link handleListBooks}
@@ -21,6 +22,7 @@
  * vscode-free: the runtime `Connection` is reached only through {@link ServerContext}.
  */
 import { readdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { WorkDoneProgressReporter } from 'vscode-languageserver/node';
@@ -53,9 +55,9 @@ import type { ServerContext } from './roots.ts';
 
 const UTF8 = new TextDecoder('utf-8');
 
-/** A `*.filelist` discovered under a root's sourceDir. */
+/** A `*.filelist` discovered under a workspace folder root. */
 interface DiscoveredFilelist {
-  /** Path relative to sourceDir (POSIX separators), e.g. `"part1/vol2.filelist"`. */
+  /** Path relative to the workspace folder root (POSIX separators), e.g. `"part1/vol2.filelist"`. */
   readonly fileRel: string;
   /** Absolute URI of the `.filelist` file (diagnostics target). */
   readonly uri: string;
@@ -63,10 +65,9 @@ interface DiscoveredFilelist {
   readonly dirUri: string;
 }
 
-/** One targeted root: its normalized URI plus the RESOLVED source/output dir URIs. */
+/** One targeted root: its normalized URI plus the RESOLVED output dir URI. */
 interface ProjectRoot {
   readonly rootUri: string;
-  readonly sourceDirUri: string;
   readonly outDirUri: string;
 }
 
@@ -89,20 +90,29 @@ function joinRel(parent: string, name: string): string {
 }
 
 /**
- * Recursively walks `sourceDirUri` collecting every `*.filelist` file. `file:` scheme only —
- * virtual-fs source trees cannot be enumerated, so such roots simply yield no books. Results
- * are sorted by `fileRel` for deterministic output and stable collision reporting.
+ * Recursively walks the workspace folder root collecting every `*.filelist` file. `file:`
+ * scheme only — virtual-fs trees cannot be enumerated, so such roots simply yield no books.
+ * Three fixed exclusions, deliberately NOT configurable ("your output folder, dot-folders,
+ * and node_modules are never scanned"): dot-DIRECTORIES (dot-files still match), any
+ * `node_modules` at any depth, and the resolved output dir. The outDir comparison happens in
+ * DECODED fs-path space — `resolveContained` returns a re-encoded URL href while dirents are
+ * raw bytes, so URI-string equality would miss any non-ASCII outDir (e.g. `出力`); running
+ * both sides through `fileURLToPath` sidesteps every percent-encoding mismatch (and the walk
+ * needs the fs path for `readdir` anyway). Symlinked dirents report neither file nor
+ * directory under `withFileTypes`, so links are never followed (no cycle risk). Results are
+ * sorted by `fileRel` for deterministic output and stable collision reporting.
  */
-async function discoverFilelists(sourceDirUri: string): Promise<DiscoveredFilelist[]> {
-  if (!isFileScheme(sourceDirUri)) {
+async function discoverFilelists(rootUri: string, outDirUri: string): Promise<DiscoveredFilelist[]> {
+  if (!isFileScheme(rootUri)) {
     return [];
   }
+  const outDirPath = fileURLToPath(outDirUri);
   const found: DiscoveredFilelist[] = [];
 
-  async function walk(dirUri: string, dirRel: string): Promise<void> {
+  async function walk(dirUri: string, dirPath: string, dirRel: string): Promise<void> {
     let dirents;
     try {
-      dirents = await readdir(fileURLToPath(dirUri), { withFileTypes: true });
+      dirents = await readdir(dirPath, { withFileTypes: true });
     } catch {
       return;
     }
@@ -114,12 +124,19 @@ async function discoverFilelists(sourceDirUri: string): Promise<DiscoveredFileli
           dirUri,
         });
       } else if (dirent.isDirectory()) {
-        await walk(childUri(dirUri, dirent.name), joinRel(dirRel, dirent.name));
+        if (dirent.name.startsWith('.') || dirent.name === 'node_modules') {
+          continue;
+        }
+        const childPath = join(dirPath, dirent.name);
+        if (childPath === outDirPath) {
+          continue;
+        }
+        await walk(childUri(dirUri, dirent.name), childPath, joinRel(dirRel, dirent.name));
       }
     }
   }
 
-  await walk(sourceDirUri, '');
+  await walk(rootUri, fileURLToPath(rootUri), '');
   found.sort((a, b) => (a.fileRel < b.fileRel ? -1 : a.fileRel > b.fileRel ? 1 : 0));
   return found;
 }
@@ -179,7 +196,7 @@ async function buildRoot(
   artifacts: BuildArtifact[],
   errors: BuildError[],
 ): Promise<void> {
-  const filelists = await discoverFilelists(target.sourceDirUri);
+  const filelists = await discoverFilelists(target.rootUri, target.outDirUri);
 
   // Derive each filelist's output path ONCE, then group by it to detect collisions across the
   // whole root up front.
@@ -269,7 +286,7 @@ function resolveProjectDir(rootUri: string, value: string, fallback: string): st
 
 /**
  * The roots a request targets: every `projectDirs` entry (narrowed to `root` when set),
- * each with its source/output dirs resolved. The map is the SOLE source of buildable roots.
+ * each with its output dir resolved. The map is the SOLE source of buildable roots.
  */
 function targetRoots(projectDirs: ProjectDirsMap, root?: string): ProjectRoot[] {
   const wanted = root === undefined ? undefined : normalizeRootUri(root);
@@ -281,7 +298,6 @@ function targetRoots(projectDirs: ProjectDirsMap, root?: string): ProjectRoot[] 
     }
     targets.push({
       rootUri,
-      sourceDirUri: resolveProjectDir(rootUri, dirs.sourceDir, PROJECT_DEFAULT.sourceDir),
       outDirUri: resolveProjectDir(rootUri, dirs.outDir, PROJECT_DEFAULT.outDir),
     });
   }
@@ -344,7 +360,7 @@ export async function handleBuild(
 export async function handleListBooks(params: ListBooksParams): Promise<ListBooksResult> {
   const books: BookEntry[] = [];
   for (const target of targetRoots(params.projectDirs, params.root)) {
-    for (const fl of await discoverFilelists(target.sourceDirUri)) {
+    for (const fl of await discoverFilelists(target.rootUri, target.outDirUri)) {
       books.push({
         uri: fl.uri,
         rootUri: target.rootUri,

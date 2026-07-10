@@ -168,20 +168,14 @@ function lintSection(): unknown {
 }
 
 /**
- * The Project section: the per-folder (`scope: resource`) source/output paths — the only
- * settings that are file locations rather than rendering/proofing behavior.
+ * The Project section: the per-folder (`scope: resource`) output path — the only setting
+ * that is a file location rather than rendering/proofing behavior.
  */
 function projectSection(): unknown {
   return {
     title: '%jpnov.project.title%',
     order: 5,
     properties: {
-      'jpnov.project.sourceDir': {
-        type: 'string',
-        default: PROJECT_DEFAULT.sourceDir,
-        scope: 'resource',
-        markdownDescription: '%jpnov.project.sourceDir.description%',
-      },
       'jpnov.project.outDir': {
         type: 'string',
         default: PROJECT_DEFAULT.outDir,
@@ -240,7 +234,6 @@ function renderNlsKeys(): string[] {
     'jpnov.html.pageNumber.template.description',
     'jpnov.html.header.description',
     'jpnov.project.title',
-    'jpnov.project.sourceDir.description',
     'jpnov.project.outDir.description',
     'jpnov.highlight.title',
     'jpnov.highlight.characters.description',

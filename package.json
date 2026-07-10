@@ -348,12 +348,6 @@
         "title": "%jpnov.project.title%",
         "order": 5,
         "properties": {
-          "jpnov.project.sourceDir": {
-            "type": "string",
-            "default": "./src",
-            "scope": "resource",
-            "markdownDescription": "%jpnov.project.sourceDir.description%"
-          },
           "jpnov.project.outDir": {
             "type": "string",
             "default": "dist",
