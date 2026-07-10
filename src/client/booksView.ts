@@ -1,7 +1,7 @@
 /**
  * The "Books" panel: a client-owned tree view in the extension's own Activity Bar container
  * (`contributes.viewsContainers.activitybar` + `views.jpnov`, see package.json). It lists every
- * buildable book — one `*.filelist` discovered under a root's sourceDir (`jpnov.project.*`) — with
+ * buildable book — one `*.filelist` discovered under each workspace folder root — with
  * a checkbox each, and drives the two build actions from the view title bar: "Build to HTML" and
  * "Build to Text" each render ONLY the checked books, in ONLY that one format.
  *

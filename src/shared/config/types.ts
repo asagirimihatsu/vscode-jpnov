@@ -18,7 +18,7 @@ export const LAYOUT_DEFAULT = {
 /**
  * `jpnov.project.*` defaults — the single source for the schema defaults and the server's
  * silent fallback when a configured path fails containment; the config-codegen test locks
- * package.json to these values. Both are single-segment relative paths, so resolving them
- * against any root always stays inside it.
+ * package.json to these values. A single-segment relative path, so resolving it against
+ * any root always stays inside it.
  */
-export const PROJECT_DEFAULT = { sourceDir: './src', outDir: 'dist' } as const;
+export const PROJECT_DEFAULT = { outDir: 'dist' } as const;

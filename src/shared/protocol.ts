@@ -184,13 +184,12 @@ export const BuildRequest = 'jpnov/build';
 export type BuildFormat = 'html' | 'txt';
 
 /**
- * The `jpnov.project.*` snapshot for ONE workspace folder: RAW relative strings exactly as
+ * The `jpnov.project.*` snapshot for ONE workspace folder: a RAW relative string exactly as
  * configured (`scope: resource`, read per folder — unlike the window-global render snapshot).
- * The client never resolves them; the server resolves each against its root and silently
+ * The client never resolves it; the server resolves it against its root and silently
  * falls back to the default on any invalid value (empty / absolute / escaping / `.`).
  */
 export interface ProjectDirs {
-  readonly sourceDir: string;
   readonly outDir: string;
 }
 
@@ -210,7 +209,7 @@ export type ProjectDirsMap = Readonly<Record<string, ProjectDirs>>;
  * - `format`      — emit only this kind. ABSENT = BOTH `.txt` and `.html`.
  * - `settings`    — the client's render-settings snapshot (required; client and server ship
  *                   together, so there is no legacy sender to tolerate).
- * - `projectDirs` — the per-root source/output dirs (see {@link ProjectDirsMap}).
+ * - `projectDirs` — the per-root output dir (see {@link ProjectDirsMap}).
  */
 export interface BuildParams {
   readonly root?: string;
@@ -228,7 +227,7 @@ export interface BuildArtifact {
 }
 
 export interface BuildError extends LocalizableMessage {
-  /** Book identity (e.g. the book dir relative to sourceDir). */
+  /** Book identity (e.g. the book dir relative to the workspace folder root). */
   readonly book: string;
 }
 
@@ -251,7 +250,7 @@ export interface ListBooksParams {
 }
 
 /**
- * One buildable book = one `*.filelist` discovered under a root's sourceDir. Its
+ * One buildable book = one `*.filelist` discovered under the workspace folder root. Its
  * `uri` is the STABLE identity the Books panel keys checkbox state on and echoes back in
  * {@link BuildParams.books}; `outRel` rides along so the panel can show the real output
  * path without re-deriving it (the derivation stays single-sourced in the server).
@@ -261,7 +260,7 @@ export interface BookEntry {
   readonly uri: string;
   /** Owning root URI (normalized, no trailing slash). */
   readonly rootUri: string;
-  /** Path relative to the root's sourceDir (POSIX separators), e.g. `"part1/vol2.filelist"`. */
+  /** Path relative to the workspace folder root (POSIX separators), e.g. `"part1/vol2.filelist"`. */
   readonly fileRel: string;
   /** Derived output relative path (`filelistOutRel`, POSIX `/`); the build writes `${outRel}.{txt,html}`. */
   readonly outRel: string;

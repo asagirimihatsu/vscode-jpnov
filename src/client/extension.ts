@@ -187,7 +187,8 @@ function ensureStarted(): void {
         preview?.refresh();
       }
       if (e.affectsConfiguration('jpnov.project')) {
-        // A moved sourceDir/outDir changes which books exist and where they land: re-list
+        // A moved outDir changes which books exist (it is excluded from discovery) and where
+        // output lands: re-list
         // (refresh() self-catches and is refreshSeq-serialized, so the dropped promise is safe).
         void booksView?.refresh();
       }

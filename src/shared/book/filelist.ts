@@ -100,8 +100,8 @@ export function parseFilelist(text: string): ParsedLine[] {
 }
 
 /**
- * Derives the output RELATIVE PATH (stem, no extension) for a `.filelist`, mirroring the source
- * tree under `sourceDir` (POSIX `/`; backslashes tolerated as separators). The build appends
+ * Derives the output RELATIVE PATH (stem, no extension) for a `.filelist`, mirroring the
+ * tree under the workspace folder root (POSIX `/`; backslashes tolerated as separators). The build appends
  * `.txt` and `.html` to it. Strips `.filelist`; a basename of `index` collapses to its parent
  * directory when one exists (so `vol1/index.filelist` and `vol1.filelist` agree on `vol1`);
  * remaining segments join with `/`. A root-level `index.filelist` has no parent, so it keeps

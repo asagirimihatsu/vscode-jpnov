@@ -37,10 +37,12 @@ Get Started) covers the same steps as the quick start below.
    vertical `.html`) or **Build to Text** (concatenated Aozora-format `.txt`) from the panel's
    title bar. Use **Select All** / **Deselect All** to bulk-toggle the selection.
 
-Chapters and filelists live under `jpnov.project.sourceDir` (default `./src`); build output
-lands in `jpnov.project.outDir` (default `dist`). Both are plain VS Code settings
-(**Japanese Novel — Project**) and can be overridden per workspace folder. Layout, preview,
-HTML-output, and lint behavior are settings too, under the other **Japanese Novel** sections.
+Chapters and `.filelist` books can live anywhere in the workspace folder — subfolders work
+and are mirrored into the output (`src/volume1.filelist` builds to `dist/src/volume1.html`).
+The output folder (`jpnov.project.outDir`, default `dist`, under **Japanese Novel — Project**),
+dot-folders, and `node_modules` are never scanned for books. Layout, preview, HTML-output,
+lint, and highlighting behavior are plain VS Code settings too, under the other
+**Japanese Novel** sections; everything can be overridden per workspace folder.
 
 A `novel.jp.*` config file is only used for cast/keyword highlighting (see
 [below](#character--keyword-highlighting)). Supported forms, in precedence order:
