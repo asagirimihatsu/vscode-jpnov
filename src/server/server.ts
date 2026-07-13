@@ -167,6 +167,7 @@ connection.onRequest(
       html: renderPreview(params.text, {
         charsPerLine: settings.charsPerLine,
         avoidLineBreaks: settings.avoidLineBreaks,
+        autoTcy: settings.autoTcy,
         chrome: settings,
       }),
     };

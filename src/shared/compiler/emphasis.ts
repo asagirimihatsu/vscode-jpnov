@@ -80,6 +80,13 @@ const STYLES: readonly StyleEntry[] = [
 const LEFT_LONG = 'の左に';
 const LEFT_SHORT = '左に';
 
+/**
+ * Which left prefix a variant may carry — fixed BY FORM in the Aozora spec (postfix = の左に,
+ * span = bare 左に; https://www.aozora.gr.jp/annotation/emphasis.html). `'none'` (default)
+ * accepts neither: block variants, and a postfix whose に/は connector was already stripped.
+ */
+export type DirectionForm = 'postfix' | 'span' | 'none';
+
 /** Variant name → its table entry. Built once from {@link STYLES}. */
 const VARIANTS: ReadonlyMap<string, StyleEntry> = (() => {
   const m = new Map<string, StyleEntry>();
@@ -91,7 +98,11 @@ const VARIANTS: ReadonlyMap<string, StyleEntry> = (() => {
   return m;
 })();
 
-/** Class name → full CSS rule. The ONLY place the style CSS values live. */
+/**
+ * Class name → full CSS rule. The ONLY place the style CSS values live.
+ * INVARIANT: no channel class may declare `position`/`transform` — a positioned channel span
+ * would capture the ruby lanes' absolutely positioned `<rt>`s (pinned in emphasis.test.ts).
+ */
 const RULES: ReadonlyMap<string, string> = (() => {
   const m = new Map<string, string>();
   for (const s of STYLES) {
@@ -127,19 +138,19 @@ const RULES: ReadonlyMap<string, string> = (() => {
 
 /**
  * The CSS class + channel for a style variant, or `null` for an unknown one. `variant` carries NO
- * connector (the tokenizer stripped に/は); a leading の左に / 左に yields the `-l` class and is
- * honoured ONLY for 傍点/傍線 (emph/line) — 太字/斜体 have no side, so 左に太字 → null (the caller
- * degrades it to a comment).
+ * connector (the tokenizer stripped に/は); the left prefix yields the `-l` class, honoured ONLY
+ * for 傍点/傍線 and only in the `form`-bound spelling ({@link DirectionForm}) — a cross-form
+ * 左に/の左に finds no VARIANTS entry and degrades naturally.
  */
-export function resolveStyle(variant: string): Style | null {
+export function resolveStyle(variant: string, form: DirectionForm = 'none'): Style | null {
   let name = variant;
   let left = false;
 
-  // 左に / の左に prefix => the mark sits on the left side. Strip the longer alias first.
-  if (name.startsWith(LEFT_LONG)) {
+  // Exactly one prefix spelling is tried per form (see DirectionForm).
+  if (form === 'postfix' && name.startsWith(LEFT_LONG)) {
     name = name.slice(LEFT_LONG.length);
     left = true;
-  } else if (name.startsWith(LEFT_SHORT)) {
+  } else if (form === 'span' && name.startsWith(LEFT_SHORT)) {
     name = name.slice(LEFT_SHORT.length);
     left = true;
   }

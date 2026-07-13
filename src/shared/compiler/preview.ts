@@ -1,3 +1,5 @@
+import type { AutoTcyMode } from '../config/types.ts';
+import { applyAutoTcy } from './autoTcy.ts';
 import type { PreviewChrome } from './chrome.ts';
 import { stylesheet } from './css.ts';
 import { buildRows, flowToHtml } from './layout.ts';
@@ -20,13 +22,19 @@ import { tokenize } from './tokenizer.ts';
  */
 export function renderPreview(
   src: string,
-  opts: { charsPerLine: number; avoidLineBreaks: boolean; chrome: PreviewChrome },
+  opts: {
+    charsPerLine: number;
+    avoidLineBreaks: boolean;
+    autoTcy: AutoTcyMode;
+    chrome: PreviewChrome;
+  },
 ): string {
-  // Render the body first so the CSS includes ONLY the classes it used. The sort is
-  // lexicographic by class name (deterministic output), not spec order.
+  // Render the body first so the CSS includes ONLY the classes it used (the sort is
+  // lexicographic, deterministic). The 自動縦中横 rewrite runs before tokenizing — the same
+  // front door as both build outputs, so the preview always agrees with them.
   const used = new Set<string>();
   const body = flowToHtml(
-    buildRows(tokenize(src)),
+    buildRows(tokenize(applyAutoTcy(src, opts.autoTcy))),
     opts.charsPerLine,
     opts.avoidLineBreaks,
     used,

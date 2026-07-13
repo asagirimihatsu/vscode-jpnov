@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   findBrokenAnnotations,
+  findTcyIssues,
   findUnpairedBlocks,
   tokenize,
   type Token,
@@ -352,6 +353,111 @@ test('connector×channel mismatches degrade to comments', () => {
   assert.deepEqual(kinds(tokenize('x［＃「x」の左に太字］')), ['text', 'comment']); // 太字 has no side
   // The lenient existing behaviour stays: bare 傍点 postfix (no に) is accepted.
   assert.deepEqual(kinds(tokenize('x［＃「x」傍点］')), ['text', 'emphasisPostfix']);
+});
+
+test('#11: the left prefix is form-bound — postfix takes の左に only, spans take bare 左に only', () => {
+  // The Aozora spec never writes a postfix with bare 左に nor a span with の左に; the wrong
+  // spelling degrades to a comment in BOTH layers (tmLanguage mirrors these exactly).
+  assert.deepEqual(kinds(tokenize('対象［＃「対象」左に傍線］')), ['text', 'comment']); // bare 左に postfix
+  assert.deepEqual(kinds(tokenize('［＃の左に傍線］')), ['comment']); // の左に span start
+  assert.deepEqual(kinds(tokenize('［＃の左に傍線終わり］')), ['comment']); // の左に span end
+  // Connector and direction prefix are mutually exclusive — にの左に never resolves.
+  assert.deepEqual(kinds(tokenize('対象［＃「対象」にの左に傍点］')), ['text', 'comment']);
+});
+
+// --------------------------------------------------------------- 左ルビ
+
+test('左ルビ postfix tokenizes with target and reading', () => {
+  assert.deepEqual(tokenize('青空文庫［＃「青空文庫」の左に「あおぞらぶんこ」のルビ］'), [
+    { kind: 'text', raw: '青空文庫', text: '青空文庫' },
+    {
+      kind: 'rubyLeftPostfix',
+      raw: '［＃「青空文庫」の左に「あおぞらぶんこ」のルビ］',
+      target: '青空文庫',
+      reading: 'あおぞらぶんこ',
+    },
+  ]);
+});
+
+test('左ルビ pairs with a 《》 right reading on the same base (両側 stream)', () => {
+  // The spec's flagship 両側 example: right reading via 《》, LATIN left reading (with a space)
+  // via the annotation — the annotation names the base only, never the 《》 part.
+  const toks = tokenize('青空文庫《あおぞらぶんこ》［＃「青空文庫」の左に「aozora bunko」のルビ］');
+  assert.deepEqual(kinds(toks), ['rubyImplicit', 'rubyLeftPostfix']);
+  assert.deepEqual(toks[1], {
+    kind: 'rubyLeftPostfix',
+    raw: '［＃「青空文庫」の左に「aozora bunko」のルビ］',
+    target: '青空文庫',
+    reading: 'aozora bunko',
+  });
+});
+
+test('左ルビ degrades to a comment on every malformed shape', () => {
+  assert.deepEqual(kinds(tokenize('［＃「」の左に「よみ」のルビ］')), ['comment']); // empty target
+  assert.deepEqual(kinds(tokenize('対象［＃「対象」の左に「」のルビ］')), ['text', 'comment']); // empty reading (silent)
+  assert.deepEqual(kinds(tokenize('対象［＃「対象」の左に「よみ」の注記］')), ['text', 'comment']); // 注記 family: out of scope
+  assert.deepEqual(kinds(tokenize('対象［＃「対象」の左に「よみ」］')), ['text', 'comment']); // missing のルビ tail
+  assert.deepEqual(kinds(tokenize('対象［＃「対象」左に「よみ」のルビ］')), ['text', 'comment']); // bare 左に (#11: postfix takes の左に)
+  assert.deepEqual(kinds(tokenize('対象［＃「対象」に「よみ」のルビ］')), ['text', 'comment']); // に (no right-side annotation ruby exists)
+});
+
+// --------------------------------------------------------------- 縦中横
+
+test('縦中横 span start/end tokenize as dedicated tokens', () => {
+  const toks = tokenize('序［＃縦中横］12［＃縦中横終わり］年');
+  assert.deepEqual(kinds(toks), ['text', 'tcySpanStart', 'text', 'tcySpanEnd', 'text']);
+  assert.equal(toks[1]?.raw, '［＃縦中横］');
+  assert.equal(toks[3]?.raw, '［＃縦中横終わり］');
+});
+
+test('縦中横 postfix requires the は connector (like 太字/斜体)', () => {
+  assert.deepEqual(tokenize('米機Ｂ29［＃「29」は縦中横］')[1], {
+    kind: 'tcyPostfix',
+    raw: '［＃「29」は縦中横］',
+    target: '29',
+  });
+  assert.deepEqual(kinds(tokenize('29［＃「29」に縦中横］')), ['text', 'comment']); // に connector
+  assert.deepEqual(kinds(tokenize('29［＃「29」縦中横］')), ['text', 'comment']); // bare (no は)
+  assert.deepEqual(kinds(tokenize('A［＃「」は縦中横］')), ['text', 'comment']); // empty target
+  // 縦中横 has no block (ここから/ここで) form.
+  assert.deepEqual(kinds(tokenize('［＃ここから縦中横］')), ['comment']);
+  assert.deepEqual(kinds(tokenize('［＃ここで縦中横終わり］')), ['comment']);
+});
+
+// --------------------------------------------------------------- findTcyIssues
+
+test('findTcyIssues: an unterminated span warns over its opening annotation (line-local)', () => {
+  assert.deepEqual(findTcyIssues('序［＃縦中横］12\n次'), [
+    { start: 1, end: 7, kind: 'unterminated' },
+  ]);
+  assert.deepEqual(findTcyIssues('［＃縦中横］12'), [
+    { start: 0, end: 6, kind: 'unterminated' }, // EOF closes with its line, still warned
+  ]);
+});
+
+test('findTcyIssues: a dangling 終わり warns; a balanced pair is clean', () => {
+  assert.deepEqual(findTcyIssues('AB［＃縦中横終わり］'), [
+    { start: 2, end: 11, kind: 'dangling' },
+  ]);
+  assert.deepEqual(findTcyIssues('令和［＃縦中横］12［＃縦中横終わり］年'), []);
+});
+
+test('findTcyIssues: over-long content warns in both forms (>3 code points)', () => {
+  // Span form: the range covers the CONTENT between the markers.
+  assert.deepEqual(findTcyIssues('［＃縦中横］1234［＃縦中横終わり］'), [
+    { start: 6, end: 10, kind: 'tooLong' },
+  ]);
+  assert.deepEqual(findTcyIssues('［＃縦中横］123［＃縦中横終わり］'), []); // 3 renders cleanly
+  // Postfix form: the range covers the annotation.
+  assert.deepEqual(findTcyIssues('1234［＃「1234」は縦中横］'), [
+    { start: 4, end: 17, kind: 'tooLong' },
+  ]);
+});
+
+test('findTcyIssues: an inner ruby raw joins the cell literally and counts as content', () => {
+  assert.deepEqual(findTcyIssues('［＃縦中横］漢《かん》［＃縦中横終わり］'), [
+    { start: 6, end: 11, kind: 'tooLong' },
+  ]);
 });
 
 // --------------------------------------------------------------- findUnpairedBlocks

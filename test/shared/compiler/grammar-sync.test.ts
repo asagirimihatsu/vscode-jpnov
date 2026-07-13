@@ -40,13 +40,47 @@ test('tmLanguage 太字|斜体 alternation == emphasis.ts variants', () => {
   }
 });
 
-test('every dot|line rule carries the optional direction prefix (の左に|左に)', () => {
-  // The direction prefix is repeated across three grammar rules (span END/START + postfix) and
-  // mirrored by emphasis.ts resolveStyle / semanticTokens directionLen — pin the grammar side
-  // so a new side alias cannot land in one rule and drift from the others.
+test('direction prefixes are form-bound: postfix (に|の左に)?, spans (左に)? (#11)', () => {
+  // The Aozora spec fixes the left-prefix spelling BY FORM (postfix = の左に, span = bare 左に),
+  // and a postfix connector excludes the direction prefix (single alternation). The literals
+  // repeat across the grammar, emphasis.ts resolveStyle (form param) and semanticTokens
+  // directionLen (form param) — pin the grammar side per form so no layer can drift.
   for (const m of matches.filter((x) => x.includes('傍点'))) {
-    assert.ok(m.includes('(の左に|左に)?'), `missing direction prefix in:\n${m}`);
+    if (m.includes('「')) {
+      // postfix rule: single connector|direction alternation, no bare 左に anywhere
+      assert.ok(m.includes('(に|の左に)?'), `postfix must use (に|の左に)?:\n${m}`);
+      assert.ok(!m.includes('|左に)') && !m.includes('(左に'), `postfix must not accept bare 左に:\n${m}`);
+    } else {
+      // span START/END rules: bare 左に only
+      assert.ok(m.includes('(左に)?'), `span must carry (左に)?:\n${m}`);
+      assert.ok(!m.includes('の左に'), `span must not accept の左に:\n${m}`);
+    }
   }
+});
+
+test('縦中横 / 左ルビ fixed-literal rules exist, ordered, form-bound', () => {
+  // These annotations are exact literals (not styleVariantsByChannel entries), so the variant
+  // drift tests cannot cover them — pin their presence, their END-before-START order and the
+  // 左ルビ prefix spelling here instead.
+  const tcyEnd = matches.findIndex((m) => m === '(［＃)(縦中横)(終わり)(］)');
+  const tcyStart = matches.findIndex((m) => m === '(［＃)(縦中横)(］)');
+  const tcyPost = matches.findIndex((m) => m.includes('(は)(縦中横)'));
+  const leftRuby = matches.findIndex((m) => m.includes('(のルビ)'));
+  const generic = matches.findIndex((m) => m === '(［＃)([^］]*)(］)');
+  assert.ok(generic >= 0, 'generic comment rule not found');
+  const rules: [string, number][] = [
+    ['tcy span END', tcyEnd],
+    ['tcy span START', tcyStart],
+    ['tcy postfix', tcyPost],
+    ['left ruby postfix', leftRuby],
+  ];
+  for (const [label, i] of rules) {
+    assert.ok(i >= 0 && i < generic, `${label} rule must exist before the generic comment rule`);
+  }
+  assert.ok(tcyEnd < tcyStart, 'tcy span END must precede START (終わり suffix)');
+  const lr = matches[leftRuby];
+  assert.ok(lr?.includes('(の左に)') === true && !lr.includes('|左に'), 'left ruby takes の左に only (#11)');
+  assert.ok(lr.includes('(「)([^」]+)(」)(のルビ)'), 'left ruby reading is a non-empty corner pair + のルビ tail');
 });
 
 test('the single-line 字下げ rule is line-head anchored and full-width-only', () => {

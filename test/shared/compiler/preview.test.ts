@@ -14,15 +14,29 @@ const edgeMixRe = (raw: string): RegExp => new RegExp(raw + EDGE_MIX.replace(/[(
 /** renderPreview with explicit resolved options (the compiler has no defaults); chrome all-off. */
 function preview(
   src: string,
-  o: Partial<{ charsPerLine: number; avoidLineBreaks: boolean; chrome: PreviewChrome }> = {},
+  o: Partial<{
+    charsPerLine: number;
+    avoidLineBreaks: boolean;
+    autoTcy: 'none' | 'punctuationPairs';
+    chrome: PreviewChrome;
+  }> = {},
 ): string {
   return renderPreview(src, {
     charsPerLine: 40,
     avoidLineBreaks: false,
+    autoTcy: 'none',
     chrome: { lineNumbers: false, edgeLine: 'none' },
     ...o,
   });
 }
+
+test('renderPreview: autoTcy=punctuationPairs combines pairs exactly like the build', () => {
+  const on = preview('えっ!?', { autoTcy: 'punctuationPairs' });
+  assert.match(on, /<span class="tcy">!\?<\/span>/);
+  assert.match(on, /\.tcy\{text-combine-upright:all\}/); // the on-demand rule rides along
+  const off = preview('えっ!?');
+  assert.doesNotMatch(off, /tcy/); // none: the pair stays plain rotated text, zero dead rules
+});
 
 test('renderPreview wraps the body in a standalone HTML document', () => {
   const html = preview('本文です。');
@@ -60,7 +74,7 @@ test('renderPreview never renders a book title', () => {
 
 test('renderPreview compiles ruby + emphasis inside the standalone doc', () => {
   const html = preview('漢字《かんじ》と語［＃「語」に傍点］');
-  assert.match(html, /<ruby>漢字<rt>かんじ<\/rt><\/ruby>/);
+  assert.match(html, /<ruby class="rr"><span>漢<\/span><span>字<\/span><rt><span>か<\/span><span>ん<\/span><span>じ<\/span><\/rt><\/ruby>/);
   assert.match(html, /<span class="emph-fs">語<\/span>/);
 });
 

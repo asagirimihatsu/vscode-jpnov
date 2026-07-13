@@ -1,3 +1,5 @@
+import type { AutoTcyMode } from '../config/types.ts';
+import { applyAutoTcy } from './autoTcy.ts';
 import type { BuildChrome } from './chrome.ts';
 import { stylesheet } from './css.ts';
 import { buildRows, paginate, pagesToHtml, type Row } from './layout.ts';
@@ -17,14 +19,17 @@ export interface BookInput {
  *
  * Each book concatenates its `files[]` in order; books are separated by a forced page break.
  * ［＃改ページ］ forces a page break. `avoidLineBreaks` is plumbed through to the 禁則処理
- * line-break engine. All options are required and pre-resolved (the settings resolver is the
- * only default layer); "off" is the explicit all-off chrome. Pure + vscode-free.
+ * line-break engine; `autoTcy` runs the 自動縦中横 source rewrite per file before tokenizing
+ * (the same front door as the `.txt` build and the preview). All options are required and
+ * pre-resolved (the settings resolver is the only default layer); "off" is the explicit
+ * all-off chrome. Pure + vscode-free.
  */
 export function renderBook(opts: {
   books: readonly BookInput[];
   charsPerLine: number;
   linesPerPage: number;
   avoidLineBreaks: boolean;
+  autoTcy: AutoTcyMode;
   chrome: BuildChrome;
 }): string {
   const rows: Row[] = [];
@@ -33,7 +38,7 @@ export function renderBook(opts: {
       rows.push({ kind: 'pagebreak' });
     }
     for (const file of book.files) {
-      rows.push(...buildRows(tokenize(file.src)));
+      rows.push(...buildRows(tokenize(applyAutoTcy(file.src, opts.autoTcy))));
     }
   });
 
@@ -76,8 +81,13 @@ export function renderBook(opts: {
  * and treats a lone `\r` as a literal, exactly as the HTML build does. An empty book -> "".
  * (A wholly-empty middle file contributes one blank separator line rather than nothing — a
  * benign divergence from the per-file render, harmless for the Aozora `.txt` deliverable.)
- * Pure + vscode-free.
+ *
+ * `autoTcy` is the ONE exception to byte-fidelity: `punctuationPairs` materializes the
+ * 自動縦中横 rewrite per file (the same front door {@link renderBook} tokenizes through), so
+ * the `.txt` carries explicit markers and round-trips idempotently. Pure + vscode-free.
  */
-export function concatBookText(book: BookInput): string {
-  return book.files.map((file) => file.src.replace(/\r?\n$/, '')).join('\n');
+export function concatBookText(book: BookInput, autoTcy: AutoTcyMode): string {
+  return book.files
+    .map((file) => applyAutoTcy(file.src, autoTcy).replace(/\r?\n$/, ''))
+    .join('\n');
 }

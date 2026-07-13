@@ -25,9 +25,13 @@ export type TokenKind =
   | 'text'
   | 'rubyExplicit'
   | 'rubyImplicit'
+  | 'rubyLeftPostfix'
   | 'emphasisPostfix'
   | 'emphasisSpanStart'
   | 'emphasisSpanEnd'
+  | 'tcyPostfix'
+  | 'tcySpanStart'
+  | 'tcySpanEnd'
   | 'comment'
   | 'brokenAnnotation'
   | 'pageBreak'
@@ -83,6 +87,42 @@ export interface EmphasisSpanEndToken extends TokenBase {
   readonly block?: true;
 }
 
+/**
+ * 左ルビ postfix ［＃「対象」の左に「よみ」のルビ］ — a reading on the LEFT of the nearest
+ * preceding `target` (https://www.aozora.gr.jp/annotation/etc.html#ruby). Pairs with a 《》
+ * right reading on the same base for 両側ルビ (the annotation names the BASE only, never the
+ * 《》 part); the sibling `…の注記` (ママ) family stays out of scope.
+ */
+export interface RubyLeftPostfixToken extends TokenBase {
+  readonly kind: 'rubyLeftPostfix';
+  readonly target: string;
+  readonly reading: string;
+}
+
+/**
+ * 縦中横 postfix ○○［＃「○○」は縦中横］ — sets the nearest preceding `target` upright in ONE
+ * square (https://www.aozora.gr.jp/annotation/etc.html#tatechu_yoko). The connector は is
+ * REQUIRED, exactly like 太字/斜体.
+ */
+export interface TcyPostfixToken extends TokenBase {
+  readonly kind: 'tcyPostfix';
+  readonly target: string;
+}
+
+/**
+ * 縦中横 span opener ［＃縦中横］ — combines the text up to ［＃縦中横終わり］ or the line end
+ * (LINE-local) into one upright cell; no block (ここから) form exists. Content is plain text
+ * only: inner annotations degrade as usual, a 《…》 stays literal (no nesting).
+ */
+export interface TcySpanStartToken extends TokenBase {
+  readonly kind: 'tcySpanStart';
+}
+
+/** 縦中横 span closer ［＃縦中横終わり］. Dangling (no open span) is a layout no-op. */
+export interface TcySpanEndToken extends TokenBase {
+  readonly kind: 'tcySpanEnd';
+}
+
 export interface CommentToken extends TokenBase {
   readonly kind: 'comment';
   /** Inner text of ［＃ ... ］, emitted verbatim into an HTML comment by the renderer. */
@@ -135,9 +175,13 @@ export type Token =
   | TextToken
   | RubyExplicitToken
   | RubyImplicitToken
+  | RubyLeftPostfixToken
   | EmphasisPostfixToken
   | EmphasisSpanStartToken
   | EmphasisSpanEndToken
+  | TcyPostfixToken
+  | TcySpanStartToken
+  | TcySpanEndToken
   | CommentToken
   | BrokenAnnotationToken
   | PageBreakToken
@@ -163,6 +207,9 @@ const BLOCK_TO = 'ここで';
 const INDENT_SUFFIX = '字下げ';
 const BOLD = '太字';
 const ITALIC = '斜体';
+const TCY = '縦中横';
+const LEFT_RUBY_OPEN = 'の左に「';
+const LEFT_RUBY_CLOSE = '」のルビ';
 
 /**
  * The indent count in `s` = 「<digits>字下げ」, or null. Aozora writes it as FULL-WIDTH digits
@@ -194,8 +241,9 @@ function indentAmount(s: string): number | null {
 /**
  * Connector matrix, kept literally consistent with tmLanguage rules 9/10 so both layers grey the
  * same inputs (zero-fight):
- *   - 傍点/傍線 (emph/line): connector に is OPTIONAL (grammar `(に)?`); a bare 「対象」傍点 or a
- *     の左に/左に-prefixed one (family=null) is accepted — preserves the current 傍点 behaviour.
+ *   - 傍点/傍線 (emph/line): connector に is OPTIONAL (grammar `(に|の左に)?`); a bare 「対象」傍点
+ *     or a の左に-prefixed one (family=null) is accepted (bare 左に is the span spelling —
+ *     resolveStyle('postfix') rejects it before this matrix is consulted).
  *   - 太字/斜体 (weight/style): connector は is REQUIRED (grammar `(は)`, NOT optional); a bare
  *     「対象」太字 (family=null) or a に-paired one → false → comment, matching the grammar.
  *   - Any cross-family pairing (は+傍点, に+太字) → false → comment.
@@ -251,10 +299,15 @@ function classifyAnnotation(inner: string, raw: string, atLineStart: boolean): T
     return { kind: 'comment', raw, inner }; // ここから傍点 / ここから…折り返して… → grey
   }
 
-  // Short (inline) span END ［＃傍点終わり／左に傍線終わり／太字終わり］.
+  // Short (inline) span END ［＃傍点終わり／左に傍線終わり／太字終わり］ — the span form's left
+  // prefix is bare 左に only. 縦中横終わり must be matched FIRST (not an emphasis variant, it
+  // would otherwise fall into this branch's comment degrade).
   if (inner.endsWith(SPAN_END_SUFFIX)) {
     const variant = inner.slice(0, inner.length - SPAN_END_SUFFIX.length);
-    if (resolveStyle(variant) !== null) {
+    if (variant === TCY) {
+      return { kind: 'tcySpanEnd', raw };
+    }
+    if (resolveStyle(variant, 'span') !== null) {
       return { kind: 'emphasisSpanEnd', raw, variant };
     }
     return { kind: 'comment', raw, inner };
@@ -268,8 +321,13 @@ function classifyAnnotation(inner: string, raw: string, atLineStart: boolean): T
       : { kind: 'comment', raw, inner };
   }
 
-  // Short (inline) span START ［＃傍点／左に傍線／太字］.
-  if (resolveStyle(inner) !== null) {
+  // 縦中横 span START ［＃縦中横］ — an exact literal, no block (ここから) form.
+  if (inner === TCY) {
+    return { kind: 'tcySpanStart', raw };
+  }
+
+  // Short (inline) span START ［＃傍点／左に傍線／太字］ — the span form's left prefix is bare 左に only.
+  if (resolveStyle(inner, 'span') !== null) {
     return { kind: 'emphasisSpanStart', raw, variant: inner };
   }
 
@@ -277,9 +335,10 @@ function classifyAnnotation(inner: string, raw: string, atLineStart: boolean): T
 }
 
 /**
- * Corner-target postfix. Connector rules: strip a single に / は; の is NOT a connector (の左に is
- * a direction prefix handled whole by resolveStyle). に→emph/line, は→weight/style; a channel
- * mismatch (「対象」は傍点 etc.) or unknown variant degrades to a comment.
+ * Corner-target postfix. Connector rules: strip a single に / は; の is NOT a connector (の左に
+ * is the postfix direction prefix, resolved whole). に→emph/line, は→weight/style; a channel
+ * mismatch, an unknown variant, or a connector combined with の左に (mutually exclusive — a
+ * stripped に/は resolves the rest form-less) degrades to a comment.
  */
 function classifyPostfix(inner: string, raw: string): Token {
   const close = inner.indexOf(CORNER_CLOSE, CORNER_OPEN.length);
@@ -288,6 +347,23 @@ function classifyPostfix(inner: string, raw: string): Token {
   }
   const target = inner.slice(CORNER_OPEN.length, close);
   let rest = inner.slice(close + CORNER_CLOSE.length);
+
+  // 左ルビ ［＃「対象」の左に「よみ」のルビ］ — before the connector strip (its の is not a
+  // connector); the second corner pair + のルビ tail never collides with の左に傍線. An empty
+  // or corner-bracketed reading degrades to a comment.
+  if (rest.startsWith(LEFT_RUBY_OPEN) && rest.endsWith(LEFT_RUBY_CLOSE)) {
+    const reading = rest.slice(LEFT_RUBY_OPEN.length, rest.length - LEFT_RUBY_CLOSE.length);
+    if (
+      target !== '' &&
+      reading !== '' &&
+      !reading.includes(CORNER_OPEN) &&
+      !reading.includes(CORNER_CLOSE)
+    ) {
+      return { kind: 'rubyLeftPostfix', raw, target, reading };
+    }
+    return { kind: 'comment', raw, inner };
+  }
+
   let family: 'ni' | 'ha' | null = null;
   if (rest.startsWith(CONNECTOR_HA)) {
     family = 'ha';
@@ -296,7 +372,15 @@ function classifyPostfix(inner: string, raw: string): Token {
     family = 'ni';
     rest = rest.slice(CONNECTOR_NI.length);
   }
-  const style = resolveStyle(rest);
+  // 縦中横 postfix ［＃「対象」は縦中横］ — the connector は is REQUIRED (like 太字/斜体):
+  // a bare or に-paired 縦中横 degrades to a comment.
+  if (rest === TCY) {
+    if (family === 'ha' && target !== '') {
+      return { kind: 'tcyPostfix', raw, target };
+    }
+    return { kind: 'comment', raw, inner };
+  }
+  const style = resolveStyle(rest, family === null ? 'postfix' : 'none');
   if (target !== '' && style !== null && connectorMatches(family, style.channel)) {
     return { kind: 'emphasisPostfix', raw, target, variant: rest };
   }
@@ -547,6 +631,101 @@ export function findUnpairedBlocks(src: string): UnpairedBlock[] {
 }
 
 // ---------------------------------------------------------------------------
+// 縦中横 structural issues (Warning diagnostics)
+// ---------------------------------------------------------------------------
+
+/** A structural 縦中横 problem as absolute source offsets. `kind` picks the message code. */
+export interface TcyIssue {
+  readonly start: number;
+  readonly end: number;
+  readonly kind: 'unterminated' | 'dangling' | 'tooLong';
+}
+
+/** Combined cells squish visibly beyond this many code points (measured in headless Chrome). */
+const TCY_MAX = 3;
+
+/**
+ * Source spans of every structural 縦中横 problem, re-derived from {@link tokenize} so the
+ * Warnings can never disagree with the (always lenient) render: `unterminated` = no 終わり
+ * before the line end (range = the opener), `dangling` = a 終わり with no open span, `tooLong`
+ * = content over {@link TCY_MAX} code points (the span form covers its content, the postfix
+ * form its annotation). Pairing is LINE-local and the content accounting mirrors buildRows'
+ * accumulator exactly.
+ */
+export function findTcyIssues(src: string): TcyIssue[] {
+  const issues: TcyIssue[] = [];
+  let open: { start: number; end: number } | null = null; // the ［＃縦中横］ annotation span
+  let contentStart = 0;
+  let contentEnd = 0;
+  let contentLen = 0; // code points, matching the visible squish
+
+  const reportTooLong = (): void => {
+    if (contentLen > TCY_MAX) {
+      issues.push({ start: contentStart, end: contentEnd, kind: 'tooLong' });
+    }
+  };
+  const closeAsUnterminated = (): void => {
+    if (open !== null) {
+      issues.push({ start: open.start, end: open.end, kind: 'unterminated' });
+      reportTooLong();
+      open = null;
+    }
+  };
+
+  let offset = 0;
+  for (const token of tokenize(src)) {
+    const end = offset + token.raw.length;
+    switch (token.kind) {
+      case 'tcySpanStart':
+        if (open === null) {
+          open = { start: offset, end };
+          contentStart = end;
+          contentEnd = end;
+          contentLen = 0;
+        }
+        break;
+      case 'tcySpanEnd':
+        if (open !== null) {
+          reportTooLong();
+          open = null;
+        } else {
+          issues.push({ start: offset, end, kind: 'dangling' });
+        }
+        break;
+      case 'tcyPostfix':
+        if (Array.from(token.target).length > TCY_MAX) {
+          issues.push({ start: offset, end, kind: 'tooLong' });
+        }
+        break;
+      case 'text':
+        if (open !== null) {
+          const nl = token.text.indexOf('\n');
+          const part = nl === -1 ? token.text : token.text.slice(0, nl);
+          contentLen += Array.from(part).length;
+          contentEnd = offset + part.length;
+          if (nl !== -1) {
+            closeAsUnterminated(); // the line break auto-closes the span (line-local)
+          }
+        }
+        break;
+      case 'rubyExplicit':
+      case 'rubyImplicit':
+      case 'brokenAnnotation':
+        if (open !== null) {
+          contentLen += Array.from(token.raw).length;
+          contentEnd = end;
+        }
+        break;
+      default:
+        break; // other annotations add no cell content and never contain a line break
+    }
+    offset = end;
+  }
+  closeAsUnterminated(); // an open span at EOF closes with its (last) line
+  return issues;
+}
+
+// ---------------------------------------------------------------------------
 // Implicit ruby-base detection
 // ---------------------------------------------------------------------------
 
@@ -566,11 +745,16 @@ export function findUnpairedBlocks(src: string): UnpairedBlock[] {
  */
 type CharClass = 'kanji' | 'hiragana' | 'katakana' | 'alnum' | null;
 
-/** Kanji: CJK Unified Ideographs (+ Ext A) plus the marks 々(U+3005) 〆(U+3006) ヶ(U+30F6). */
+/**
+ * Kanji: CJK Unified Ideographs (+ extensions) plus 々〆〇ヶ — the spec treats 「仝々〆〇ヶ」 as
+ * kanji for the ｜ rule (仝 U+4EDD already sits in the unified block).
+ * https://www.aozora.gr.jp/annotation/etc.html#ruby
+ */
 function isKanji(cp: number): boolean {
   return (
     cp === 0x3005 ||
     cp === 0x3006 ||
+    cp === 0x3007 ||
     cp === 0x30f6 ||
     (cp >= 0x3400 && cp <= 0x4dbf) || // CJK Ext A
     (cp >= 0x4e00 && cp <= 0x9fff) || // CJK Unified Ideographs

@@ -42,15 +42,56 @@ import * as S from './styles/styles.generated.ts';
 
 /**
  * The CSS rule for one used class name, or '' for an unknown one (keeps the "no stray rules"
- * invariant). `indent-N` (字下げ) is generated here — it is layout geometry, not a style-table
- * entry; the suffix check is defence in depth (emitLine only ever emits positive N_eff). Every
- * other class (emph-* / dec-* / b / i) is forwarded to emphasis.ts's {@link styleRule}, the
- * single home of the style CSS values.
+ * invariant). `indent-N` (字下げ) and `tcy` (縦中横) are generated here — they are layout
+ * geometry, not style-table entries; the indent suffix check is defence in depth (emitLine only
+ * ever emits positive N_eff). Every other class (emph-* / dec-* / b / i) is forwarded to
+ * emphasis.ts's {@link styleRule}, the single home of the style CSS values.
  */
 function classRule(name: string): string {
   if (name.startsWith('indent-')) {
     const n = name.slice('indent-'.length);
     return /^[1-9][0-9]*$/.test(n) ? `.indent-${n}{padding-inline-start:${n}em}` : '';
+  }
+  if (name.startsWith('rh-')) {
+    // Stretched ruby: the box grows to the unit's true advance — the SAME N layout.ts accounts
+    // as cells — and the lane flex below spreads the base across it, like native ruby.
+    const n = name.slice('rh-'.length);
+    return /^[1-9][0-9]*$/.test(n) ? `.rh-${n}{min-height:${n}em}` : '';
+  }
+  if (name === 'tcy') {
+    // 縦中横: combine the cell's chars upright in one square. Media-independent (pure text
+    // combination, no geometry), so the one rule serves preview and build alike.
+    return '.tcy{text-combine-upright:all}';
+  }
+  if (name === 'rr' || name === 'lr' || name === 'br') {
+    // Ruby lanes (rr right / lr left / br both) — every ruby renders here: Chrome has no
+    // working double-sided ruby (ruby-position on an <rt> is ignored; a second <rt> stacks
+    // under the base) and native's fractional advance breaks the whole-cell grid. The <ruby>
+    // is an inline-flex distributing its base spans; each <rt> is an absolute 0.5em
+    // vertical-rl lane — centre-anchored (top:50% + translateY(-50%)), min-height:100% (% of
+    // the ruby box), shifted ±1.5em of its own em (= ±0.75em base: base half + rt half), both
+    // sides spanning 2.0em inside the 2.25em LINE_PITCH. The flex space-around on box and
+    // lanes reproduces native ruby-align (kana distribute, a Latin word centres, an over-long
+    // reading overhangs symmetrically); channel classes must stay unpositioned (emphasis.ts
+    // RULES) or they would capture the <rt>s.
+    const shared =
+      `ruby.${name}{display:inline-flex;flex-direction:row;justify-content:space-around;position:relative}` +
+      `ruby.${name}>rt{position:absolute;top:50%;left:50%;min-height:100%;` +
+      'display:flex;flex-direction:row;justify-content:space-around;' +
+      'writing-mode:vertical-rl;font-size:0.5em;line-height:1;white-space:nowrap}';
+    if (name === 'rr') {
+      // The single <rt> IS the right reading (the conventional ruby side).
+      return `${shared}ruby.rr>rt{transform:translate(-50%,-50%) translateX(1.5em)}`;
+    }
+    if (name === 'lr') {
+      // The single <rt> IS the left reading.
+      return `${shared}ruby.lr>rt{transform:translate(-50%,-50%) translateX(-1.5em)}`;
+    }
+    // 両側: the class-less <rt> is the right reading, rt.rt-l the left.
+    return (
+      `${shared}ruby.br>rt{transform:translate(-50%,-50%) translateX(1.5em)}` +
+      'ruby.br>rt.rt-l{transform:translate(-50%,-50%) translateX(-1.5em)}'
+    );
   }
   return styleRule(name);
 }

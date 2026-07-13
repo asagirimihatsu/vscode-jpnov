@@ -13,7 +13,8 @@
 import type { EdgeLineStyle, PageNumberPosition } from '../compiler/chrome.ts';
 import { EDGE_LINE_STYLES, PAGE_NUMBER_POSITIONS } from '../compiler/chrome.ts';
 import type { HtmlSettings, PreviewSettings } from '../protocol.ts';
-import { CHARS_MAX, CHARS_MIN, LAYOUT_DEFAULT } from './types.ts';
+import type { AutoTcyMode } from './types.ts';
+import { AUTO_TCY_MODES, CHARS_MAX, CHARS_MIN, LAYOUT_DEFAULT } from './types.ts';
 
 export const PREVIEW_CHROME_DEFAULT = {
   lineNumbers: true,
@@ -59,6 +60,12 @@ function boolOr(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
 
+function autoTcyMode(value: unknown): AutoTcyMode {
+  return typeof value === 'string' && (AUTO_TCY_MODES as readonly string[]).includes(value)
+    ? (value as AutoTcyMode)
+    : LAYOUT_DEFAULT.autoTcy;
+}
+
 /** Folds the header to a single line (newline runs → one space); the literal spaces stay. */
 function singleLine(value: unknown, fallback: string): string {
   return typeof value === 'string' ? value.replace(/[\r\n]+/g, ' ') : fallback;
@@ -68,6 +75,7 @@ export function resolvePreviewSettings(s: PreviewSettings): PreviewSettings {
   return {
     charsPerLine: clampChars(s.charsPerLine, LAYOUT_DEFAULT.charsPerLine),
     avoidLineBreaks: boolOr(s.avoidLineBreaks, LAYOUT_DEFAULT.avoidLineBreaks),
+    autoTcy: autoTcyMode(s.autoTcy),
     lineNumbers: boolOr(s.lineNumbers, PREVIEW_CHROME_DEFAULT.lineNumbers),
     edgeLine: edgeLine(s.edgeLine),
   };
@@ -78,6 +86,7 @@ export function resolveHtmlSettings(s: HtmlSettings): HtmlSettings {
     charsPerLine: clampChars(s.charsPerLine, LAYOUT_DEFAULT.charsPerLine),
     linesPerPage: clampChars(s.linesPerPage, LAYOUT_DEFAULT.linesPerPage),
     avoidLineBreaks: boolOr(s.avoidLineBreaks, LAYOUT_DEFAULT.avoidLineBreaks),
+    autoTcy: autoTcyMode(s.autoTcy),
     lineNumbers: boolOr(s.lineNumbers, BUILD_CHROME_DEFAULT.lineNumbers),
     edgeLine: edgeLine(s.edgeLine),
     pageNumberPosition: pageNumberPosition(s.pageNumberPosition),

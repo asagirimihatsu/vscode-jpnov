@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import type { BuildChrome } from '../../../src/shared/compiler/chrome.ts';
 import {
   buildRows,
+  findPostfixTargetIssues,
   flowToHtml,
   paginate,
   pagesToHtml,
@@ -57,11 +58,14 @@ test('a long source line hard-wraps at charsPerLine', () => {
 test('a ruby unit is atomic — it wraps whole, never split', () => {
   // あ (hiragana) is a different class from 漢字 (kanji), so the implicit base is just
   // 漢字 (2 cells). あ(1)+漢字(2) = 3 > cpl 2, so the ruby unit wraps whole to line 2.
+  // EVERY ruby renders through the custom lanes (rr = right-only), base + reading as
+  // justification-unit spans.
   assert.equal(
     html('あ漢字《かんじ》', 2),
     '<div class="book"><div class="page" data-page="0">' +
       '<div class="line" data-line="0">あ</div>' +
-      '<div class="line" data-line="0"><ruby>漢字<rt>かんじ</rt></ruby></div></div></div>',
+      '<div class="line" data-line="0"><ruby class="rr"><span>漢</span><span>字</span>' +
+      '<rt><span>か</span><span>ん</span><span>じ</span></rt></ruby></div></div></div>',
   );
 });
 
@@ -327,6 +331,228 @@ test('終わり clears only its own channel: 傍点終わり leaves 太字 activ
 
 test('傍線 postfix marks the last occurrence with the line channel', () => {
   assert.match(html('語と語［＃「語」に傍線］'), /語と<span class="dec-solid">語<\/span>/);
+});
+
+// --------------------------------------------------------------- 左ルビ (left ruby)
+
+test('左ルビ on plain text merges into ONE lr ruby unit (custom layout classes)', () => {
+  // Base AND readings are split into justification-unit spans (one per kana glyph) so the
+  // flex space-around boxes distribute them like native ruby-align.
+  assert.equal(
+    html('青空文庫［＃「青空文庫」の左に「あおぞらぶんこ」のルビ］'),
+    '<div class="book"><div class="page" data-page="0"><div class="line" data-line="0">' +
+      '<ruby class="lr"><span>青</span><span>空</span><span>文</span><span>庫</span><rt class="rt-l">' +
+      '<span>あ</span><span>お</span><span>ぞ</span><span>ら</span><span>ぶ</span><span>ん</span><span>こ</span>' +
+      '</rt></ruby></div></div></div>',
+  );
+});
+
+test('両側ルビ: the left reading joins the existing right-ruby unit (br, both <rt>s)', () => {
+  // Kana per glyph; the Latin words stay whole units (a rotated word must not split) with the
+  // space re-created by the distribution gap. Neither reading outruns the base (7 kana =
+  // 3.5em, "aozora bunko" ≈ 3em, base 4em) so there is no rh-N stretch class.
+  assert.equal(
+    html('青空文庫《あおぞらぶんこ》［＃「青空文庫」の左に「aozora bunko」のルビ］'),
+    '<div class="book"><div class="page" data-page="0"><div class="line" data-line="0">' +
+      '<ruby class="br"><span>青</span><span>空</span><span>文</span><span>庫</span><rt>' +
+      '<span>あ</span><span>お</span><span>ぞ</span><span>ら</span><span>ぶ</span><span>ん</span><span>こ</span>' +
+      '</rt><rt class="rt-l"><span>aozora</span><span>bunko</span></rt></ruby>' +
+      '</div></div></div>',
+  );
+});
+
+test('右-only ruby uses the rr lane; JIS ルビ掛け keeps odd readings on-grid', () => {
+  assert.match(html('漢字《かんじ》'), /<ruby class="rr">/);
+  // 1:3 — the 1.5em reading hangs ≤0.25em over the plain あ/い neighbours (ルビ掛け): the
+  // unit stays ONE on-grid cell, no stretch. (Native painted a fractional 1.5em here — the
+  // half-cell drift — and plain round-up took 2 loose cells.)
+  const hang = 'あ字《かんじ》い';
+  assert.match(html(hang), /<ruby class="rr">/);
+  assert.doesNotMatch(html(hang), /rh-/);
+  assert.equal(pages(hang, 3).flat()[0]?.units.reduce((n, u) => n + u.cells, 0), 3);
+  // 1:5 exceeds the half-glyph-per-side allowance: stretch to 2 whole cells, grid follows.
+  const long = 'あ志《こころざし》い';
+  assert.match(html(long), /<ruby class="rr rh-2">/);
+  const p = pages(long, 4);
+  assert.equal(p.flat().length, 1);
+  assert.equal(p.flat()[0]?.units.reduce((n, u) => n + u.cells, 0), 4); // あ + [2] + い
+});
+
+test('ルビ掛け falls back to whole cells over unsafe neighbours (ruby / 傍点)', () => {
+  // Adjacent rubies would collide in the shared lane — both keep their safe 2-cell width.
+  const twin = html('字《かんじ》字《かんじ》');
+  assert.equal((twin.match(/rh-2/g) ?? []).length, 2);
+  // A dotted neighbour occupies the lane too.
+  assert.match(html('［＃傍点］あ［＃傍点終わり］字《かんじ》'), /<ruby class="rr rh-2">/);
+});
+
+test('左ルビ stretches its base like native ruby when the reading is longer', () => {
+  // base 字 (1 cell) with an 8-kana reading (8 × 0.5em = 4em): the unit advances 4 cells —
+  // the grid follows the paint — and carries the on-demand rh-4 min-height class.
+  const src = '字［＃「字」の左に「ながいひだりよみ」のルビ］い';
+  const p = pages(src, 5);
+  assert.equal(p.flat().length, 1);
+  assert.equal(p.flat()[0]?.units.reduce((n, u) => n + u.cells, 0), 5); // 4 (stretched) + い
+  assert.match(html(src), /<ruby class="lr rh-4">/);
+  const used = new Set<string>();
+  pagesToHtml(pages(src, 5), used, OFF);
+  assert.ok(used.has('lr') && used.has('rh-4')); // both on-demand classes reach the sink
+});
+
+test('a long HALF-width reading counts at ≈quarter-em: no premature stretch', () => {
+  // "aozora bunko" (12 half-width cps ≈ 3em at the 0.5em lane) never outruns the 4-char base.
+  const out = html('青空文庫《あ》［＃「青空文庫」の左に「aozora bunko」のルビ］');
+  assert.match(out, /<ruby class="br">/);
+  assert.doesNotMatch(out, /rh-/);
+});
+
+test('左ルビ cutting into a ruby unit is unaligned → degrade + warn', () => {
+  assert.equal(
+    html('漢字《かんじ》［＃「字」の左に「よみ」のルビ］'),
+    '<div class="book"><div class="page" data-page="0"><div class="line" data-line="0">' +
+      '<ruby class="rr"><span>漢</span><span>字</span>' +
+      '<rt><span>か</span><span>ん</span><span>じ</span></rt></ruby>' +
+      '<!--「字」の左に「よみ」のルビ--></div></div></div>',
+  );
+  assert.equal(findPostfixTargetIssues('漢字《かんじ》［＃「字」の左に「よみ」のルビ］').length, 1);
+});
+
+test('左ルビ over MIXED coverage (a ruby unit plus text) degrades + warns', () => {
+  // 青空 is a ruby unit, 文庫 plain text: aligned, but re-basing would drop the inner right
+  // reading — the author must split the annotation.
+  const src = '青空《あお》文庫［＃「青空文庫」の左に「x」のルビ］';
+  assert.match(html(src), /<ruby class="rr"><span>青<\/span><span>空<\/span><rt><span>あ<\/span><span>お<\/span><\/rt><\/ruby>文庫<!--/);
+  assert.equal(findPostfixTargetIssues(src).length, 1);
+});
+
+test('左ルビ inherits the replaced units’ channels and stays postfix-matchable', () => {
+  // The merge inherits the ORIGINAL units' weight channel (set while the 太字 span was open),
+  // and the merged unit's text keeps the base, so the later 傍点 postfix covers it whole-unit.
+  const out = html('［＃太字］青空［＃太字終わり］［＃「青空」の左に「あお」のルビ］［＃「青空」に傍点］');
+  assert.match(
+    out,
+    /<span class="emph-fs b"><ruby class="lr"><span>青<\/span><span>空<\/span><rt class="rt-l"><span>あ<\/span><span>お<\/span><\/rt><\/ruby><\/span>/,
+  );
+});
+
+test('the used sink collects lr / br', () => {
+  const used = new Set<string>();
+  pagesToHtml(pages('青空文庫《あ》［＃「青空文庫」の左に「b」のルビ］'), used, OFF);
+  assert.ok(used.has('br'));
+  assert.ok(!used.has('lr'));
+});
+
+// --------------------------------------------------------------- 縦中横 (tate-chu-yoko)
+
+test('縦中横 span combines its content into ONE upright cell', () => {
+  assert.equal(
+    html('令和［＃縦中横］12［＃縦中横終わり］年'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line" data-line="0">令和<span class="tcy">12</span>年</div></div></div>',
+  );
+  // The pair takes ONE cell: 令+和+[12]+年 = 4 cells, so cpl 4 still fits on one display line.
+  const p = pages('令和［＃縦中横］12［＃縦中横終わり］年', 4);
+  assert.equal(p.flat().length, 1);
+});
+
+test('縦中横 postfix merges the aligned match into one 1-cell unit', () => {
+  assert.equal(
+    html('米機Ｂ29［＃「29」は縦中横］'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line" data-line="0">米機Ｂ<span class="tcy">29</span></div></div></div>',
+  );
+});
+
+test('a merged 縦中横 cell keeps its text: a later postfix can cover it whole-unit', () => {
+  assert.match(
+    html('米機Ｂ29［＃「29」は縦中横］［＃「29」に傍点］'),
+    /<span class="emph-fs"><span class="tcy">29<\/span><\/span>/,
+  );
+});
+
+test('an unclosed ［＃縦中横］ auto-closes at its line end (line-local)', () => {
+  assert.equal(
+    html('序［＃縦中横］12\n次'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line" data-line="0">序<span class="tcy">12</span></div>' +
+      '<div class="line" data-line="1">次</div></div></div>',
+  );
+});
+
+test('a dangling ［＃縦中横終わり］ is a render no-op', () => {
+  assert.equal(
+    html('AB［＃縦中横終わり］'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line" data-line="0">AB</div></div></div>',
+  );
+});
+
+test('縦中横 content is plain text: an inner ruby stays literal (no nesting)', () => {
+  assert.match(
+    html('［＃縦中横］漢《かん》［＃縦中横終わり］'),
+    /<span class="tcy">漢《かん》<\/span>/,
+  );
+});
+
+test('縦中横 inside a 太字 span inherits the weight channel', () => {
+  assert.match(
+    html('［＃太字］［＃縦中横］12［＃縦中横終わり］［＃太字終わり］'),
+    /<span class="b"><span class="tcy">12<\/span><\/span>/,
+  );
+});
+
+test('the used sink collects the tcy class (on-demand stylesheet)', () => {
+  const used = new Set<string>();
+  pagesToHtml(pages('令和［＃縦中横］12［＃縦中横終わり］年'), used, OFF);
+  assert.ok(used.has('tcy'));
+  const clean = new Set<string>();
+  pagesToHtml(pages('ただの本文'), clean, OFF);
+  assert.ok(!clean.has('tcy'));
+});
+
+test('findPostfixTargetIssues covers 縦中横 postfix misses too', () => {
+  assert.deepEqual(findPostfixTargetIssues('あ［＃「99」は縦中横］'), [
+    { start: 1, end: 1 + '［＃「99」は縦中横］'.length, target: '99' },
+  ]);
+});
+
+// --------------------------------------------------------------- postfix boundary alignment (#12)
+
+test('#12: a postfix cutting into an atomic ruby unit does not apply (boundary alignment)', () => {
+  // 字 sits INSIDE the atomic ruby unit 漢字 — the old overlap rule dotted the whole unit;
+  // the aligned rule refuses and degrades to a comment (plus the editor Warning, below).
+  assert.equal(
+    html('漢字《かんじ》［＃「字」に傍点］'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line" data-line="0"><ruby class="rr"><span>漢</span><span>字</span>' +
+      '<rt><span>か</span><span>ん</span><span>じ</span></rt></ruby><!--「字」に傍点--></div></div></div>',
+  );
+});
+
+test('#12: whole-unit coverage of a ruby unit still applies (aligned)', () => {
+  assert.match(
+    html('漢字《かんじ》［＃「漢字」に傍点］'),
+    /<span class="emph-fs"><ruby class="rr"><span>漢<\/span><span>字<\/span><rt><span>か<\/span><span>ん<\/span><span>じ<\/span><\/rt><\/ruby><\/span>/,
+  );
+});
+
+test('findPostfixTargetIssues: absent and unaligned targets warn; aligned matches stay silent', () => {
+  // absent — the annotation starts after 別の文 (3 chars)
+  assert.deepEqual(findPostfixTargetIssues('別の文［＃「無」に傍点］'), [
+    { start: 3, end: 3 + '［＃「無」に傍点］'.length, target: '無' },
+  ]);
+  // unaligned — 字 cuts into the ruby unit 漢字 (annotation starts after the 7-char ruby raw)
+  assert.deepEqual(findPostfixTargetIssues('漢字《かんじ》［＃「字」に傍点］'), [
+    { start: 7, end: 7 + '［＃「字」に傍点］'.length, target: '字' },
+  ]);
+  // aligned whole-ruby-unit coverage applies — no issue
+  assert.deepEqual(findPostfixTargetIssues('漢字《かんじ》［＃「漢字」に傍点］'), []);
+  // plain-text partial coverage stays legal (1-char text units always align)
+  assert.deepEqual(findPostfixTargetIssues('文字［＃「字」に傍点］'), []);
+  // postfix binding is line-local: a target on the PREVIOUS line does not resolve
+  assert.deepEqual(findPostfixTargetIssues('対象\n［＃「対象」に傍点］'), [
+    { start: 3, end: 3 + '［＃「対象」に傍点］'.length, target: '対象' },
+  ]);
 });
 
 // --------------------------------------------------------------- 字下げ (indent)

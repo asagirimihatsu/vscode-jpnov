@@ -14,6 +14,7 @@ import {
   PREVIEW_CHROME_DEFAULT,
 } from '../../../src/shared/config/settings.ts';
 import {
+  AUTO_TCY_MODES,
   CHARS_MAX,
   CHARS_MIN,
   LAYOUT_DEFAULT,
@@ -105,6 +106,13 @@ function renderSections(): unknown[] {
           type: 'boolean',
           default: LAYOUT_DEFAULT.avoidLineBreaks,
           markdownDescription: '%jpnov.layout.avoidLineBreaks.description%',
+        },
+        'jpnov.layout.autoTateChuYoko': {
+          type: 'string',
+          enum: [...AUTO_TCY_MODES],
+          default: LAYOUT_DEFAULT.autoTcy,
+          enumDescriptions: AUTO_TCY_MODES.map((v) => `%jpnov.layout.autoTateChuYoko.${v}%`),
+          markdownDescription: '%jpnov.layout.autoTateChuYoko.description%',
         },
       },
     },
@@ -223,6 +231,8 @@ function renderNlsKeys(): string[] {
     'jpnov.layout.charsPerLine.description',
     'jpnov.layout.linesPerPage.description',
     'jpnov.layout.avoidLineBreaks.description',
+    'jpnov.layout.autoTateChuYoko.description',
+    ...AUTO_TCY_MODES.map((v) => `jpnov.layout.autoTateChuYoko.${v}`),
     'jpnov.preview.lineNumbers.description',
     'jpnov.preview.edgeLine.description',
     ...EDGE_LINE_STYLES.map((v) => `jpnov.preview.edgeLine.${v}`),

@@ -16,7 +16,8 @@ body{margin:0;}
 
 /* Each line is one fixed-thickness column (2.25em = LINE_PITCH, ruby-safe). */
 .line{block-size:2.25em;margin:0;white-space:pre;}
-ruby>rt{font-size:0.5em;}
+/* No ruby rules here: every <rt> lives inside a classed ruby (rr/lr/br), whose on-demand
+   classRule (css.ts) owns the lane layout INCLUDING the 0.5em rt size — the single home. */
 
 /* Print fixes, verified against headless Chromium:
    - root goes vertical-rl so the sheets are ordinary in-flow blocks — as ORTHOGONAL flows

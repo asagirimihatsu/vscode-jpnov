@@ -139,6 +139,19 @@
             "type": "boolean",
             "default": false,
             "markdownDescription": "%jpnov.layout.avoidLineBreaks.description%"
+          },
+          "jpnov.layout.autoTateChuYoko": {
+            "type": "string",
+            "enum": [
+              "none",
+              "punctuationPairs"
+            ],
+            "default": "none",
+            "enumDescriptions": [
+              "%jpnov.layout.autoTateChuYoko.none%",
+              "%jpnov.layout.autoTateChuYoko.punctuationPairs%"
+            ],
+            "markdownDescription": "%jpnov.layout.autoTateChuYoko.description%"
           }
         }
       },

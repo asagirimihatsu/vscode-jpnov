@@ -112,3 +112,46 @@ test('lexical Errors come first, then block Warnings', () => {
     [DiagnosticSeverity.Error, DiagnosticSeverity.Warning],
   );
 });
+
+// --------------------------------------------------------------- 縦中横 Warnings
+
+test('縦中横 structural issues surface as Warnings with their codes', () => {
+  const unterminated = annotationDiagnostics(doc('序［＃縦中横］12'));
+  assert.equal(unterminated.length, 1);
+  const d = unterminated[0];
+  assert.ok(d);
+  assert.equal(d.severity, DiagnosticSeverity.Warning);
+  assert.deepEqual(d.data, { code: 'syntax.unterminatedTcy' });
+  assert.deepEqual(annotationDiagnostics(doc('［＃縦中横終わり］'))[0]?.data, {
+    code: 'syntax.danglingTcyEnd',
+  });
+  assert.deepEqual(annotationDiagnostics(doc('［＃縦中横］1234［＃縦中横終わり］'))[0]?.data, {
+    code: 'syntax.tcyTooLong',
+  });
+  assert.deepEqual(annotationDiagnostics(doc('令和［＃縦中横］12［＃縦中横終わり］年')), []);
+});
+
+// --------------------------------------------------------------- postfix target Warnings (#12)
+
+test('an unresolved postfix target yields one Warning over the annotation, carrying the target', () => {
+  const diags = annotationDiagnostics(doc('別の文［＃「無」に傍点］'));
+  assert.equal(diags.length, 1);
+  const d = diags[0];
+  assert.ok(d);
+  assert.equal(d.severity, DiagnosticSeverity.Warning);
+  assert.equal(d.source, 'jpnov');
+  assert.deepEqual(d.data, { code: 'syntax.postfixTargetMissing', args: ['無'] });
+  assert.equal(d.message, 'annotation target "無" not found or not aligned on this line');
+  assert.deepEqual(d.range, {
+    start: { line: 0, character: 3 },
+    end: { line: 0, character: 12 }, // ［＃「無」に傍点］
+  });
+});
+
+test('a boundary-unaligned target warns; whole-unit and plain-text matches stay silent', () => {
+  // 字 cuts into the atomic ruby unit 漢字 → Warning (the mark is not applied).
+  assert.equal(annotationDiagnostics(doc('漢字《かんじ》［＃「字」に傍点］')).length, 1);
+  // Whole-unit coverage and plain-prose substrings are aligned → clean.
+  assert.deepEqual(annotationDiagnostics(doc('漢字《かんじ》［＃「漢字」に傍点］')), []);
+  assert.deepEqual(annotationDiagnostics(doc('文字［＃「字」に傍点］')), []);
+});

@@ -175,6 +175,48 @@ test('太字/斜体 rules come through classRule → styleRule forwarding', () =
   assert.match(css, /\.i\{font-style:italic\}/);
 });
 
+test('縦中横 .tcy rule is on-demand and identical in both media', () => {
+  const rule = '.tcy{text-combine-upright:all}';
+  assert.ok(preview({ usedClasses: ['tcy'] }).includes(rule));
+  assert.ok(build({ usedClasses: ['tcy'] }).includes(rule));
+  assert.doesNotMatch(preview(), /\.tcy\b/); // zero dead rules
+  assert.doesNotMatch(build(), /\.tcy\b/);
+});
+
+test('ruby rr/lr/br rule sets are on-demand, self-contained and media-identical', () => {
+  for (const make of [preview, build]) {
+    // rr: the right-only lane every plain ruby now uses (native ruby layout is retired).
+    const rr = make({ usedClasses: ['rr'] });
+    assert.match(
+      rr,
+      /ruby\.rr\{display:inline-flex;flex-direction:row;justify-content:space-around;position:relative\}/,
+    );
+    assert.match(rr, /ruby\.rr>rt\{transform:translate\(-50%,-50%\) translateX\(1\.5em\)\}/);
+    assert.doesNotMatch(rr, /ruby\.(lr|br)/);
+    const lr = make({ usedClasses: ['lr'] });
+    // The ruby box itself distributes its base spans (stretches with rh-N like native ruby).
+    assert.match(
+      lr,
+      /ruby\.lr\{display:inline-flex;flex-direction:row;justify-content:space-around;position:relative\}/,
+    );
+    // Centre-anchored, box-extent lane distributing its reading spans (native ruby-align).
+    assert.match(
+      lr,
+      /ruby\.lr>rt\{position:absolute;top:50%;left:50%;min-height:100%;display:flex;flex-direction:row;justify-content:space-around;writing-mode:vertical-rl;font-size:0\.5em;line-height:1;white-space:nowrap\}/,
+    );
+    assert.match(lr, /ruby\.lr>rt\{transform:translate\(-50%,-50%\) translateX\(-1\.5em\)\}/);
+    assert.doesNotMatch(lr, /ruby\.br/); // only the requested set
+    const br = make({ usedClasses: ['br'] });
+    assert.match(br, /ruby\.br>rt\{transform:translate\(-50%,-50%\) translateX\(1\.5em\)\}/); // right lane
+    assert.match(br, /ruby\.br>rt\.rt-l\{transform:translate\(-50%,-50%\) translateX\(-1\.5em\)\}/); // left lane
+    assert.doesNotMatch(br, /ruby\.lr/);
+    assert.doesNotMatch(make(), /ruby\.(rr|lr|br)/); // zero dead rules
+    // The stretched-ruby min-height family is on-demand too, like indent-N.
+    assert.match(make({ usedClasses: ['rh-23'] }), /\.rh-23\{min-height:23em\}/);
+    assert.doesNotMatch(make(), /\.rh-/);
+  }
+});
+
 test('.indent-N rules generate on demand; malformed suffixes are ignored', () => {
   const css = preview({ usedClasses: ['indent-2', 'indent-10'] });
   assert.match(css, /\.indent-2\{padding-inline-start:2em\}/);
