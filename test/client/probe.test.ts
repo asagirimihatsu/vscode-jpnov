@@ -68,6 +68,16 @@ test('no settings, no matching filenames: not a novel project', async () => {
   assert.equal(await folderIsNovelProject(folder() as never), false);
 });
 
+test('a non-file named *.filelist is no signal (directory or symlink)', async () => {
+  // Strict FileType.File: matches server-side discovery, where a Dirent that is a
+  // directory or a symlink is never a book either.
+  state.readDirectoryResults.set(FOLDER_URI, [
+    ['x.filelist', 2], // directory
+    ['link.filelist', 65], // File | SymbolicLink
+  ]);
+  assert.equal(await folderIsNovelProject(folder() as never), false);
+});
+
 test('an unreadable root is skipped, not fatal', async () => {
   state.readDirectoryResults.set(FOLDER_URI, 'error');
   assert.equal(await folderIsNovelProject(folder() as never), false);

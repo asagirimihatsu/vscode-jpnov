@@ -7,10 +7,12 @@
  *     the user level: a personal cast list in user settings must not auto-start every
  *     window). Synchronous, zero I/O — one section-level `inspect('jpnov')`.
  *  2. Filenames — one shallow `readDirectory` of the folder root matching a root-level
- *     `*.filelist`. A single round-trip matters on remote/virtual filesystems; deeper
+ *     `*.filelist` that is a PLAIN FILE (strict FileType.File: a directory named
+ *     `x.filelist` is no book, and symlinks match the server's discovery, which never
+ *     follows them). A single round-trip matters on remote/virtual filesystems; deeper
  *     filelists still start the server the moment a document opens.
  *
- * Name-only membership — the server is the robust arbiter.
+ * Beyond that, name-only membership — the server is the robust arbiter.
  */
 import * as vscode from 'vscode';
 
@@ -30,5 +32,7 @@ export async function folderIsNovelProject(
   } catch {
     return false; // unreadable root (gone, permission, exotic scheme) -> not a novel root
   }
-  return entries.some(([name]) => name.toLowerCase().endsWith('.filelist'));
+  return entries.some(
+    ([name, type]) => type === vscode.FileType.File && name.toLowerCase().endsWith('.filelist'),
+  );
 }
