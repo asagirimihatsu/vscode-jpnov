@@ -255,16 +255,21 @@ async function buildRoot(
     // Emit only the requested kind(s); `format` absent => BOTH. renderBook (the paginator) is
     // the expensive step, so a txt-only build skips it entirely.
     if (selection.format !== 'html') {
-      artifacts.push({ path: childUri(target.outDirUri, `${outRel}.txt`), content: concatBookText(input) });
+      artifacts.push({
+        path: childUri(target.outDirUri, `${outRel}.txt`),
+        content: concatBookText(input, selection.settings.autoTcy),
+      });
     }
     if (selection.format !== 'txt') {
-      // Grid geometry, 禁則, and chrome all come from the request's settings snapshot
-      // (HtmlSettings is a structural superset of BuildChrome, so it passes straight through).
+      // Grid geometry, 禁則, 自動縦中横, and chrome all come from the request's settings
+      // snapshot (HtmlSettings is a structural superset of BuildChrome, so it passes straight
+      // through).
       const html = renderBook({
         books: [input],
         charsPerLine: selection.settings.charsPerLine,
         linesPerPage: selection.settings.linesPerPage,
         avoidLineBreaks: selection.settings.avoidLineBreaks,
+        autoTcy: selection.settings.autoTcy,
         chrome: selection.settings,
       });
       artifacts.push({ path: childUri(target.outDirUri, `${outRel}.html`), content: html });

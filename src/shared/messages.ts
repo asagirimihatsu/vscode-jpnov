@@ -60,6 +60,14 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return 'unterminated block annotation (missing ［＃ここで…終わり］)';
     case 'syntax.danglingBlockEnd':
       return 'block-end annotation without a matching start';
+    case 'syntax.postfixTargetMissing':
+      return `annotation target "${a(0)}" not found or not aligned on this line`;
+    case 'syntax.unterminatedTcy':
+      return 'unterminated 縦中横 (missing ［＃縦中横終わり］ before the line end)';
+    case 'syntax.danglingTcyEnd':
+      return '［＃縦中横終わり］ without a matching ［＃縦中横］';
+    case 'syntax.tcyTooLong':
+      return '縦中横 is too long (3 characters or fewer avoid distortion)';
     // --- prose lint (one static, arg-less code per (scope, rule); see lint/catalog.ts).
     // `common` rules run on both 地の文 + 台詞 under one code; JA lives in bundle.l10n.ja.json.
     case 'lint.common.sentenceLength':

@@ -24,6 +24,7 @@ const render = (
     charsPerLine: opts.charsPerLine ?? 40,
     linesPerPage: opts.linesPerPage ?? 34,
     avoidLineBreaks: false,
+    autoTcy: 'none',
     chrome: { ...OFF, ...opts.chrome },
   });
 
@@ -53,6 +54,7 @@ test('renderBook concatenates files[] in order', () => {
     charsPerLine: 40,
     linesPerPage: 34,
     avoidLineBreaks: false,
+    autoTcy: 'none',
     chrome: OFF,
   });
   assert.equal(
@@ -100,32 +102,33 @@ test('renderBook wraps a long source line at charsPerLine', () => {
 
 test('renderBook renders ruby + emphasis inside the page lines', () => {
   const html = render('漢字《かんじ》と語［＃「語」に傍点］');
-  assert.match(html, /<ruby>漢字<rt>かんじ<\/rt><\/ruby>/);
+  assert.match(html, /<ruby class="rr"><span>漢<\/span><span>字<\/span><rt><span>か<\/span><span>ん<\/span><span>じ<\/span><\/rt><\/ruby>/);
   assert.match(html, /<span class="emph-fs">語<\/span>/);
-  // On-demand: the used class's rule is present inside the stylesheet.
+  // On-demand: the used classes' rules are present inside the stylesheet.
   assert.match(html, /\.emph-fs\{text-emphasis-style:filled sesame\}/);
+  assert.match(html, /ruby\.rr>rt\{transform:translate\(-50%,-50%\) translateX\(1\.5em\)\}/);
 });
 
 test('concatBookText strips one trailing newline per file and joins with a single \\n', () => {
   // no trailing newline: exactly one separator inserted between files
   assert.equal(
-    concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あいう' }, { name: 'b.jpnov', src: 'かきく' }] })),
+    concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あいう' }, { name: 'b.jpnov', src: 'かきく' }] }), 'none'),
     'あいう\nかきく',
   );
   // one trailing newline per file: NOT doubled at the seam
   assert.equal(
-    concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あ\n' }, { name: 'b.jpnov', src: 'か\n' }] })),
+    concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あ\n' }, { name: 'b.jpnov', src: 'か\n' }] }), 'none'),
     'あ\nか',
   );
   // a genuine blank line (\n\n) is preserved: only the final newline artifact is stripped
   assert.equal(
-    concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あ\n\n' }, { name: 'b.jpnov', src: 'か' }] })),
+    concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あ\n\n' }, { name: 'b.jpnov', src: 'か' }] }), 'none'),
     'あ\n\nか',
   );
   // CRLF trailing is stripped as one EOL too
-  assert.equal(concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あ\r\n' }] })), 'あ');
+  assert.equal(concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あ\r\n' }] }), 'none'), 'あ');
   // empty book -> ""
-  assert.equal(concatBookText(book({ files: [] })), '');
+  assert.equal(concatBookText(book({ files: [] }), 'none'), '');
 });
 
 test('renderBook: a 太字 span emits <span class="b"> and the .b rule on demand', () => {

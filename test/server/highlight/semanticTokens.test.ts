@@ -202,11 +202,45 @@ test('太字 postfix: は is a marker, 太字 a directive, the target uncovered'
   assert.ok(!toks.some((t) => t.char <= 3 && t.char + t.len > 3)); // 本 uncovered
 });
 
-test('傍線 span with の左に: direction prefix + 傍線 directive', () => {
-  // ［＃(0,1) の左に(2..4) 傍線(5,6) ］(7)
+test('傍線 postfix with の左に: direction prefix + 傍線 directive (#11 form-bound)', () => {
+  // 語(0) ［＃(1,2) 「(3) 語(4) 」(5) の左に(6..8) 傍線(9,10) ］(11)
+  const toks = decode(buildSemanticTokens(doc('語［＃「語」の左に傍線］'), rec).data);
+  assert.deepEqual(at(toks, 0, 6), { line: 0, char: 6, len: 3, type: tokenTypeIndex('direction') });
+  assert.deepEqual(at(toks, 0, 9), { line: 0, char: 9, len: 2, type: tokenTypeIndex('directive') });
+});
+
+test('a の左に SPAN greys whole (#11: the span form takes bare 左に only)', () => {
+  // The wrong-form spelling is a comment token in both layers: ONE whole-annotation marker span,
+  // no directive keyword inside. (direction shares the marker colour, so length pins it.)
   const toks = decode(buildSemanticTokens(doc('［＃の左に傍線］'), rec).data);
-  assert.deepEqual(at(toks, 0, 2), { line: 0, char: 2, len: 3, type: tokenTypeIndex('direction') });
-  assert.deepEqual(at(toks, 0, 5), { line: 0, char: 5, len: 2, type: tokenTypeIndex('directive') });
+  assert.deepEqual(toks, [{ line: 0, char: 0, len: 8, type: MARKER }]);
+});
+
+test('縦中横 span START/END: 縦中横 is a directive, 終わり demotes to a marker', () => {
+  // ［＃(0,1) 縦中横(2..4) ］(5)
+  const start = decode(buildSemanticTokens(doc('［＃縦中横］'), rec).data);
+  assert.deepEqual(at(start, 0, 2), { line: 0, char: 2, len: 3, type: tokenTypeIndex('directive') });
+  // ［＃(0,1) 縦中横(2..4) 終わり(5..7) ］(8)
+  const end = decode(buildSemanticTokens(doc('［＃縦中横終わり］'), rec).data);
+  assert.deepEqual(at(end, 0, 2), { line: 0, char: 2, len: 3, type: tokenTypeIndex('directive') });
+  assert.deepEqual(at(end, 0, 5), { line: 0, char: 5, len: 3, type: MARKER }); // 終わり
+});
+
+test('縦中横 postfix: は is a marker, 縦中横 a directive, the target uncovered', () => {
+  // 29(0,1) ［＃(2,3) 「(4) 29(5,6) 」(7) は(8) 縦中横(9..11) ］(12)
+  const toks = decode(buildSemanticTokens(doc('29［＃「29」は縦中横］'), rec).data);
+  assert.deepEqual(at(toks, 0, 8), { line: 0, char: 8, len: 1, type: MARKER }); // は
+  assert.deepEqual(at(toks, 0, 9), { line: 0, char: 9, len: 3, type: tokenTypeIndex('directive') }); // 縦中横
+  assert.ok(!toks.some((t) => t.char <= 5 && t.char + t.len > 5)); // 29 uncovered
+});
+
+test('左ルビ postfix: 対象 default, の左に direction, reading greyed whole, のルビ directive', () => {
+  // 字(0) ［＃(1,2) 「(3) 字(4) 」(5) の左に(6..8) 「(9) よみ(10,11) 」(12) のルビ(13..15) ］(16)
+  const toks = decode(buildSemanticTokens(doc('字［＃「字」の左に「よみ」のルビ］'), rec).data);
+  assert.deepEqual(at(toks, 0, 6), { line: 0, char: 6, len: 3, type: tokenTypeIndex('direction') }); // の左に
+  assert.deepEqual(at(toks, 0, 9), { line: 0, char: 9, len: 4, type: MARKER }); // 「よみ」 like a 《》 reading
+  assert.deepEqual(at(toks, 0, 13), { line: 0, char: 13, len: 3, type: tokenTypeIndex('directive') }); // のルビ
+  assert.ok(!toks.some((t) => t.char <= 4 && t.char + t.len > 4)); // the 対象 字 keeps default
 });
 
 test('unrecognised forms grey whole: 折り返して indent and half-width digits', () => {

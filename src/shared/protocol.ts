@@ -10,6 +10,7 @@
  * (structured-clone over the forked-process channel) without vscode value types.
  */
 import type { BuildChrome, PreviewChrome } from './compiler/chrome.ts';
+import type { AutoTcyMode } from './config/types.ts';
 import type { LintCode } from './lint/catalog.ts';
 
 // ---------------------------------------------------------------------------
@@ -67,6 +68,10 @@ export type MsgCode =
   | 'syntax.unclosedAnnotation' // args: [] — unterminated ［＃ (no ］ before the line end); the diagnostic range IS the span
   | 'syntax.unterminatedBlock' // args: [] — ［＃ここから…］ with no matching ［＃ここで…終わり］ before EOF; range = the ここから annotation
   | 'syntax.danglingBlockEnd' // args: [] — ［＃ここで…終わり］ with no open block; range = the 終わり annotation
+  | 'syntax.postfixTargetMissing' // args: [target] — a corner-target postfix (傍点系/縦中横/左ルビ) whose target is absent from its line or not aligned to unit boundaries; range = the annotation
+  | 'syntax.unterminatedTcy' // args: [] — ［＃縦中横］ with no 終わり before its line end (the render auto-closes); range = the opening annotation
+  | 'syntax.danglingTcyEnd' // args: [] — ［＃縦中横終わり］ with no open span (render no-op); range = the annotation
+  | 'syntax.tcyTooLong' // args: [] — combined 縦中横 content over 3 code points (renders but squishes); range = the content (span form) / the annotation (postfix form)
   | LintCode // args: [] — one static prose-lint code per (stream, rule); see lint/catalog.ts
   | 'server.unexpected'; // args: [detail]  (detail = raw unexpected server error, untranslatable)
 
@@ -161,6 +166,8 @@ export interface PreviewSettings extends PreviewChrome {
   readonly charsPerLine: number;
   /** 禁則処理 toggle; rides BOTH snapshots so preview and build stay same-source. */
   readonly avoidLineBreaks: boolean;
+  /** 自動縦中横 mode; rides BOTH snapshots so preview and build stay same-source. */
+  readonly autoTcy: AutoTcyMode;
 }
 
 /**
@@ -172,6 +179,8 @@ export interface HtmlSettings extends BuildChrome {
   readonly linesPerPage: number;
   /** 禁則処理 toggle; rides BOTH snapshots so preview and build stay same-source. */
   readonly avoidLineBreaks: boolean;
+  /** 自動縦中横 mode; rides BOTH snapshots so preview and build stay same-source. */
+  readonly autoTcy: AutoTcyMode;
 }
 
 // ---------------------------------------------------------------------------

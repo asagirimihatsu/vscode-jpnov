@@ -449,6 +449,7 @@ test('renderDocument ships the settings snapshot on the renderFile request', asy
   assert.deepEqual(params.settings, {
     charsPerLine: 24,
     avoidLineBreaks: false,
+    autoTcy: 'none',
     lineNumbers: true,
     edgeLine: 'red',
   });

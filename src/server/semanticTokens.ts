@@ -94,12 +94,16 @@ interface Span {
   readonly type: TokenType;
 }
 
-/** Length (UTF-16 units) of a leading の左に / 左に direction prefix, else 0. */
-function directionLen(variant: string): number {
-  if (variant.startsWith('の左に')) {
+/**
+ * Length (UTF-16 units) of the leading direction prefix valid for `form`, else 0 — form-bound
+ * in lockstep with emphasis.ts resolveStyle (postfix = の左に, span = bare 左に). For accepted
+ * tokens this equals an unconditional strip; the parameter keeps the layers congruent.
+ */
+function directionLen(variant: string, form: 'postfix' | 'span'): number {
+  if (form === 'postfix' && variant.startsWith('の左に')) {
     return 'の左に'.length;
   }
-  if (variant.startsWith('左に')) {
+  if (form === 'span' && variant.startsWith('左に')) {
     return '左に'.length;
   }
   return 0;
@@ -250,8 +254,8 @@ export function buildSemanticTokens(
           mark(last, ONE, 'marker'); // ］
           break;
         }
-        const dir = directionLen(token.variant);
-        mark(ds, dir, 'direction'); // の?左に
+        const dir = directionLen(token.variant, 'span');
+        mark(ds, dir, 'direction'); // 左に
         mark(ds + dir, token.variant.length - dir, 'directive'); // variant name
         mark(last, ONE, 'marker'); // ］
         break;
@@ -268,8 +272,8 @@ export function buildSemanticTokens(
           mark(last, ONE, 'marker'); // ］
           break;
         }
-        const dir = directionLen(token.variant);
-        mark(ds, dir, 'direction'); // の?左に
+        const dir = directionLen(token.variant, 'span');
+        mark(ds, dir, 'direction'); // 左に
         mark(ds + dir, token.variant.length - dir, 'directive'); // variant name
         mark(ds + token.variant.length, raw - ANNOT_OPEN - token.variant.length - ONE, 'marker'); // 終わり (demoted)
         mark(last, ONE, 'marker'); // ］
@@ -286,9 +290,53 @@ export function buildSemanticTokens(
         const conn = raw - (afterCorner - offset) - token.variant.length - ONE; // に / は (0 or 1)
         mark(afterCorner, conn, 'marker');
         const vs = afterCorner + conn;
-        const dir = directionLen(token.variant);
-        mark(vs, dir, 'direction'); // の?左に
+        const dir = directionLen(token.variant, 'postfix');
+        mark(vs, dir, 'direction'); // の左に
         mark(vs + dir, token.variant.length - dir, 'directive'); // variant name
+        mark(last, ONE, 'marker'); // ］
+        break;
+      }
+      case 'rubyLeftPostfix': {
+        // ［＃「対象」の左に「よみ」のルビ］ — corners marker, 対象 default, の左に direction,
+        // the reading greyed like a 《》 reading, のルビ the directive.
+        flushRun();
+        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
+        const openCorner = offset + ANNOT_OPEN;
+        mark(openCorner, ONE, 'marker'); // 「
+        const closeCorner = openCorner + ONE + token.target.length; // ( 対象 kept default )
+        mark(closeCorner, ONE, 'marker'); // 」
+        const dirStart = closeCorner + ONE;
+        mark(dirStart, 'の左に'.length, 'direction'); // の左に
+        const openReading = dirStart + 'の左に'.length;
+        mark(openReading, ONE + token.reading.length + ONE, 'marker'); // 「よみ」 greyed whole
+        mark(openReading + ONE + token.reading.length + ONE, 'のルビ'.length, 'directive'); // のルビ
+        mark(last, ONE, 'marker'); // ］
+        break;
+      }
+      case 'tcyPostfix': {
+        // ［＃「対象」は縦中横］ — mirrors emphasisPostfix: corners + the は connector demote to
+        // marker, the 対象 keeps its default colour, 縦中横 is the directive.
+        flushRun();
+        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
+        const openCorner = offset + ANNOT_OPEN;
+        mark(openCorner, ONE, 'marker'); // 「
+        const closeCorner = openCorner + ONE + token.target.length; // ( 対象 kept default )
+        mark(closeCorner, ONE, 'marker'); // 」
+        mark(closeCorner + ONE, ONE, 'marker'); // は (connector, demoted like に)
+        mark(closeCorner + ONE + ONE, '縦中横'.length, 'directive'); // 縦中横
+        mark(last, ONE, 'marker'); // ］
+        break;
+      }
+      case 'tcySpanStart': {
+        markDirective(); // ［＃縦中横］ — a lone command word, like 改ページ
+        break;
+      }
+      case 'tcySpanEnd': {
+        flushRun();
+        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
+        const ds = offset + ANNOT_OPEN;
+        mark(ds, '縦中横'.length, 'directive'); // 縦中横
+        mark(ds + '縦中横'.length, '終わり'.length, 'marker'); // 終わり (demoted)
         mark(last, ONE, 'marker'); // ］
         break;
       }

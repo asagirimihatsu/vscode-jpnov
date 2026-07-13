@@ -15,6 +15,7 @@ const HTML_BASE: HtmlSettings = { ...LAYOUT_DEFAULT, ...BUILD_CHROME_DEFAULT };
 const PREVIEW_BASE: PreviewSettings = {
   charsPerLine: LAYOUT_DEFAULT.charsPerLine,
   avoidLineBreaks: LAYOUT_DEFAULT.avoidLineBreaks,
+  autoTcy: LAYOUT_DEFAULT.autoTcy,
   ...PREVIEW_CHROME_DEFAULT,
 };
 
@@ -64,6 +65,20 @@ test('avoidLineBreaks rides both snapshots: kept when boolean, defaulted otherwi
     resolveHtmlSettings(badHtml({ avoidLineBreaks: 'on' })).avoidLineBreaks,
     LAYOUT_DEFAULT.avoidLineBreaks,
   );
+});
+
+test('autoTcy rides both snapshots: kept when a known member, defaulted otherwise', () => {
+  assert.equal(
+    resolveHtmlSettings({ ...HTML_BASE, autoTcy: 'punctuationPairs' }).autoTcy,
+    'punctuationPairs',
+  );
+  assert.equal(
+    resolvePreviewSettings({ ...PREVIEW_BASE, autoTcy: 'punctuationPairs' }).autoTcy,
+    'punctuationPairs',
+  );
+  assert.equal(resolveHtmlSettings(badHtml({ autoTcy: 'always' })).autoTcy, LAYOUT_DEFAULT.autoTcy);
+  assert.equal(resolveHtmlSettings(badHtml({ autoTcy: true })).autoTcy, LAYOUT_DEFAULT.autoTcy);
+  assert.equal(LAYOUT_DEFAULT.autoTcy, 'none'); // 自動縦中横 ships off (Aozora-manual by default)
 });
 
 test('bogus enum and boolean values coerce to their defaults', () => {

@@ -87,9 +87,10 @@ test('the .css geometry literals equal the geometry.ts constants (@page double-h
   assert.equal(cssValue(buildBase, '.page', 'margin', '@media print'), PRINT_MARGIN);
 });
 
-test('the ruby size is duplicated identically in both base fragments (kept in lockstep)', () => {
-  assert.equal(
-    cssValue(read('preview.base.css'), 'ruby>rt', 'font-size'),
-    cssValue(read('build.base.css'), 'ruby>rt', 'font-size'),
-  );
+test('the base fragments carry NO ruby rules (the css.ts classRule lanes own rt sizing)', () => {
+  // Every <rt> the layout emits sits inside a classed ruby (rr/lr/br) whose on-demand rule
+  // set declares font-size:0.5em itself — a fragment-level ruby>rt rule would be a silent
+  // second home for that value. Guard the absence in both fragments.
+  assert.ok(!read('preview.base.css').includes('ruby>rt{'), 'preview.base.css grew a ruby>rt rule');
+  assert.ok(!read('build.base.css').includes('ruby>rt{'), 'build.base.css grew a ruby>rt rule');
 });

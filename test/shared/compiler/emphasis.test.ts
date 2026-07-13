@@ -48,20 +48,31 @@ test('resolveStyle maps 太字/斜体 to the weight/style channels (b / i)', () 
   assert.deepEqual(resolveStyle('斜体'), { channel: 'style', className: 'i' });
 });
 
-test('resolveStyle adds -l for 左に / の左に on emph AND line channels', () => {
-  assert.deepEqual(resolveStyle('左に傍点'), { channel: 'emph', className: 'emph-fs-l' });
-  assert.deepEqual(resolveStyle('の左に傍点'), { channel: 'emph', className: 'emph-fs-l' });
-  assert.deepEqual(resolveStyle('左に二重丸傍点'), { channel: 'emph', className: 'emph-fd-l' });
-  assert.deepEqual(resolveStyle('の左にばつ傍点'), { channel: 'emph', className: 'emph-x-l' });
-  assert.deepEqual(resolveStyle('左に傍線'), { channel: 'line', className: 'dec-solid-l' });
-  assert.deepEqual(resolveStyle('の左に波線'), { channel: 'line', className: 'dec-wavy-l' });
+test('resolveStyle adds -l form-bound: bare 左に for spans, の左に for postfixes (#11)', () => {
+  assert.deepEqual(resolveStyle('左に傍点', 'span'), { channel: 'emph', className: 'emph-fs-l' });
+  assert.deepEqual(resolveStyle('左に二重丸傍点', 'span'), { channel: 'emph', className: 'emph-fd-l' });
+  assert.deepEqual(resolveStyle('左に傍線', 'span'), { channel: 'line', className: 'dec-solid-l' });
+  assert.deepEqual(resolveStyle('の左に傍点', 'postfix'), { channel: 'emph', className: 'emph-fs-l' });
+  assert.deepEqual(resolveStyle('の左にばつ傍点', 'postfix'), { channel: 'emph', className: 'emph-x-l' });
+  assert.deepEqual(resolveStyle('の左に波線', 'postfix'), { channel: 'line', className: 'dec-wavy-l' });
+});
+
+test('resolveStyle rejects the cross-form left prefixes and any prefix under none (#11)', () => {
+  // The Aozora spec fixes the spelling by form: a span never carries の左に, a postfix never
+  // carries bare 左に; both degrade to null (→ comment) instead of resolving to -l.
+  assert.equal(resolveStyle('の左に傍点', 'span'), null);
+  assert.equal(resolveStyle('左に傍点', 'postfix'), null);
+  // The default 'none' (block variants; a postfix whose connector was stripped) takes neither —
+  // にの左に傍点 dies here: the connector and the direction prefix are mutually exclusive.
+  assert.equal(resolveStyle('の左に傍点'), null);
+  assert.equal(resolveStyle('左に傍点'), null);
 });
 
 test('resolveStyle rejects 左に on 太字/斜体 (no side) and unknown / empty variants', () => {
-  assert.equal(resolveStyle('左に太字'), null);
-  assert.equal(resolveStyle('の左に斜体'), null);
+  assert.equal(resolveStyle('左に太字', 'span'), null);
+  assert.equal(resolveStyle('の左に斜体', 'postfix'), null);
   for (const v of ['', 'なぞ傍点', '傍', 'ページ', '左に']) {
-    assert.equal(resolveStyle(v), null, `unknown ${v} must be null`);
+    assert.equal(resolveStyle(v, 'span'), null, `unknown ${v} must be null`);
   }
 });
 
@@ -101,6 +112,29 @@ test('styleRule owns b / i too (single home of the style CSS); they have no -l v
   assert.equal(styleRule('i'), '.i{font-style:italic}');
   assert.equal(styleRule('b-l'), '');
   assert.equal(styleRule('i-l'), '');
+});
+
+test('no channel class ever declares position/transform (custom-ruby containment invariant)', () => {
+  // Channel spans wrap ruby units; the custom left-ruby layout (ruby.lr / ruby.br) absolutely
+  // positions its <rt> against the NEAREST positioned ancestor. A positioned/transformed channel
+  // span would capture those annotations — so the rule table must never grow such a property.
+  // (text-emphasis-position / text-underline-position are fine; the regex anchors on {/;.)
+  const byChannel = styleVariantsByChannel();
+  const classNames = new Set<string>();
+  for (const v of [...byChannel.weight, ...byChannel.style]) {
+    classNames.add(resolveStyle(v, 'none')?.className ?? '');
+  }
+  for (const v of [...byChannel.emph, ...byChannel.line]) {
+    classNames.add(resolveStyle(v, 'none')?.className ?? '');
+    classNames.add(resolveStyle(`左に${v}`, 'span')?.className ?? '');
+  }
+  classNames.delete('');
+  assert.ok(classNames.size >= 16, 'expected every channel class (base + -l) to be enumerated');
+  for (const cn of classNames) {
+    const rule = styleRule(cn);
+    assert.notEqual(rule, '', `rule missing for ${cn}`);
+    assert.doesNotMatch(rule, /[{;](position|transform):/, `positioned channel class ${cn}`);
+  }
 });
 
 test('styleVariantsByChannel exposes the full variant table per channel', () => {

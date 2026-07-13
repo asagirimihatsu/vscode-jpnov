@@ -9,6 +9,7 @@ import * as vscode from 'vscode';
 
 import type { EdgeLineStyle, PageNumberPosition } from '#/shared/compiler/chrome.ts';
 import { BUILD_CHROME_DEFAULT, PREVIEW_CHROME_DEFAULT } from '#/shared/config/settings.ts';
+import type { AutoTcyMode } from '#/shared/config/types.ts';
 import { LAYOUT_DEFAULT } from '#/shared/config/types.ts';
 import type { HtmlSettings, PreviewSettings } from '#/shared/protocol.ts';
 
@@ -20,6 +21,7 @@ export function buildPreviewSettings(): PreviewSettings {
       'jpnov.layout.avoidLineBreaks',
       LAYOUT_DEFAULT.avoidLineBreaks,
     ),
+    autoTcy: c.get<AutoTcyMode>('jpnov.layout.autoTateChuYoko', LAYOUT_DEFAULT.autoTcy),
     lineNumbers: c.get<boolean>('jpnov.preview.lineNumbers', PREVIEW_CHROME_DEFAULT.lineNumbers),
     edgeLine: c.get<EdgeLineStyle>('jpnov.preview.edgeLine', PREVIEW_CHROME_DEFAULT.edgeLine),
   };
@@ -34,6 +36,7 @@ export function buildHtmlSettings(): HtmlSettings {
       'jpnov.layout.avoidLineBreaks',
       LAYOUT_DEFAULT.avoidLineBreaks,
     ),
+    autoTcy: c.get<AutoTcyMode>('jpnov.layout.autoTateChuYoko', LAYOUT_DEFAULT.autoTcy),
     lineNumbers: c.get<boolean>('jpnov.html.lineNumbers', BUILD_CHROME_DEFAULT.lineNumbers),
     edgeLine: c.get<EdgeLineStyle>('jpnov.html.edgeLine', BUILD_CHROME_DEFAULT.edgeLine),
     pageNumberPosition: c.get<PageNumberPosition>(

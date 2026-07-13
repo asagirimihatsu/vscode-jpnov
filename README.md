@@ -57,6 +57,8 @@ comment (never an error), so unusual markup degrades quietly.
 | Effect | Inline / postfix | Block (each on its own line) |
 | --- | --- | --- |
 | Ruby | `漢字《かんじ》`, `｜親文字《ルビ》` | — |
+| Left ruby 左ルビ | `［＃「対象」の左に「よみ」のルビ］` | — |
+| Tate-chu-yoko 縦中横 | `対象［＃「対象」は縦中横］`, `［＃縦中横］…［＃縦中横終わり］` | — |
 | Emphasis dots 傍点 | `［＃「対象」に傍点］`, `［＃傍点］…［＃傍点終わり］` | — |
 | Side line 傍線 (5 styles) | `［＃「対象」に傍線］` (傍線/二重傍線/鎖線/破線/波線) | — |
 | Bold 太字 | `［＃「対象」は太字］`, `［＃太字］…［＃太字終わり］` | `［＃ここから太字］…［＃ここで太字終わり］` |
@@ -64,12 +66,22 @@ comment (never an error), so unusual markup degrades quietly.
 | Indent 字下げ | `［＃○字下げ］` (line head) | `［＃ここから○字下げ］…［＃ここで字下げ終わり］` |
 | Page break | — | `［＃改ページ］` |
 
-Notes: 傍点/傍線 take a left-side variant with `の左に` / `左に` (e.g. `［＃「対象」の左に傍点］`);
+Notes: 傍点/傍線 take a left-side variant, fixed by form: the **postfix** form uses `の左に`
+(`［＃「対象」の左に傍点］`), the **span** form uses bare `左に` (`［＃左に傍点］…［＃左に傍点終わり］`);
 bold/italic use the connector **は**, not に. Indent counts (`○`) are **full-width digits**
 (２, １０); the block indent also indents wrapped continuation lines. The hanging-indent form
 (`折り返して`) is not supported and degrades to a comment. An unclosed block (`ここから` with no
 `ここで…終わり`) still renders to the end of the file but raises an editor **Warning**; italic
 relies on the browser synthesising an oblique for Japanese fonts.
+
+**Left ruby 左ルビ** puts a reading on the LEFT of the preceding text; pair it with an ordinary
+right ruby for 両側ルビ (`青空文庫《あおぞらぶんこ》［＃「青空文庫」の左に「aozora bunko」のルビ］` —
+the annotation names the base only, never the `《》` part). Left readings are exempt from the
+ruby-kana lint, since they are often Latin. **縦中横** stands a short run (a 2–3 digit number,
+`!?`) upright in one square — keep it to 3 characters or fewer (longer squishes and raises a
+Warning). Turning on **自動縦中横** (`jpnov.layout.autoTateChuYoko`, under Layout) auto-combines
+the half-width pairs `!!` `!?` `?!` `??` with no markup — runs of three or more are never
+touched — and the text build writes the explicit markers out, so the `.txt` round-trips.
 
 ## Character & keyword highlighting
 

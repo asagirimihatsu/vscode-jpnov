@@ -18,20 +18,32 @@ import { DiagnosticSeverity } from 'vscode-languageserver/node';
 import type { Diagnostic } from 'vscode-languageserver/node';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 
-import { findBrokenAnnotations, findUnpairedBlocks } from '../shared/compiler/tokenizer.ts';
+import { findPostfixTargetIssues } from '../shared/compiler/layout.ts';
+import {
+  findBrokenAnnotations,
+  findTcyIssues,
+  findUnpairedBlocks,
+} from '../shared/compiler/tokenizer.ts';
 
 import { diagnostic } from './diagnostics.ts';
 
-// findUnpairedBlocks returns a STRUCTURAL kind ('unterminated' | 'dangling'), not a protocol
-// code — the tokenizer stays message-code-free. The kind→MsgCode mapping lives here, server-side.
+// findUnpairedBlocks / findTcyIssues return a STRUCTURAL kind, not a protocol code — the
+// tokenizer stays message-code-free. The kind→MsgCode mappings live here, server-side.
 const BLOCK_WARNING_CODE = {
   unterminated: 'syntax.unterminatedBlock',
   dangling: 'syntax.danglingBlockEnd',
 } as const;
 
+const TCY_WARNING_CODE = {
+  unterminated: 'syntax.unterminatedTcy',
+  dangling: 'syntax.danglingTcyEnd',
+  tooLong: 'syntax.tcyTooLong',
+} as const;
+
 /**
- * One Error per unclosed ［＃ (covering exactly the swallowed ［＃…-to-line-end span), then one
- * Warning per unpaired block directive (covering the ここから / ここで…終わり annotation body).
+ * One Error per unclosed ［＃, then Warnings: unpaired blocks, structural 縦中横 issues, and
+ * corner-target postfixes whose target is absent or not unit-aligned (the latter derived by
+ * running the layout itself, so the Warning surface always matches the render).
  */
 export function annotationDiagnostics(doc: TextDocument): Diagnostic[] {
   const text = doc.getText();
@@ -49,5 +61,19 @@ export function annotationDiagnostics(doc: TextDocument): Diagnostic[] {
       DiagnosticSeverity.Warning,
     ),
   );
-  return [...errors, ...warnings];
+  const tcyWarnings = findTcyIssues(text).map((span) =>
+    diagnostic(
+      { start: doc.positionAt(span.start), end: doc.positionAt(span.end) },
+      { code: TCY_WARNING_CODE[span.kind] },
+      DiagnosticSeverity.Warning,
+    ),
+  );
+  const targetWarnings = findPostfixTargetIssues(text).map((span) =>
+    diagnostic(
+      { start: doc.positionAt(span.start), end: doc.positionAt(span.end) },
+      { code: 'syntax.postfixTargetMissing', args: [span.target] },
+      DiagnosticSeverity.Warning,
+    ),
+  );
+  return [...errors, ...warnings, ...tcyWarnings, ...targetWarnings];
 }
