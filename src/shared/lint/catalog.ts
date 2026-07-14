@@ -44,6 +44,8 @@ export interface RuleMeta {
   readonly suggested?: number;
   /** Enum rules only: the drop-down choices; `values[0]` is the off/default. */
   readonly values?: readonly string[];
+  /** Boolean rules only: the package.json default (omit -> `false`); the data-hygiene rules ship `true`. */
+  readonly default?: boolean;
 }
 
 /**
@@ -64,10 +66,10 @@ export const RULES = [
   { id: 'maxKanjiRun', scope: 'common', kind: 'threshold', min: 1, max: 20, suggested: 6 },
   { id: 'noEmDash', scope: 'common', kind: 'boolean' },
   { id: 'noUnmatchedPair', scope: 'common', kind: 'boolean' },
-  { id: 'noHankakuKana', scope: 'common', kind: 'boolean' },
-  { id: 'noNfd', scope: 'common', kind: 'boolean' },
-  { id: 'noZeroWidth', scope: 'common', kind: 'boolean' },
-  { id: 'noControlChar', scope: 'common', kind: 'boolean' },
+  { id: 'noHankakuKana', scope: 'common', kind: 'boolean', default: true },
+  { id: 'noNfd', scope: 'common', kind: 'boolean', default: true },
+  { id: 'noZeroWidth', scope: 'common', kind: 'boolean', default: true },
+  { id: 'noControlChar', scope: 'common', kind: 'boolean', default: true },
   { id: 'jaNoSpaceBetweenFullWidth', scope: 'common', kind: 'boolean' },
   { id: 'jaUnnaturalAlphabet', scope: 'common', kind: 'boolean' },
   { id: 'minusPosition', scope: 'common', kind: 'boolean' },

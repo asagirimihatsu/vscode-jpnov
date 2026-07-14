@@ -156,7 +156,7 @@
               "none",
               "punctuationPairs"
             ],
-            "default": "none",
+            "default": "punctuationPairs",
             "enumDescriptions": [
               "%jpnov.layout.autoTateChuYoko.none%",
               "%jpnov.layout.autoTateChuYoko.punctuationPairs%"
@@ -297,25 +297,25 @@
           },
           "jpnov.lint.common.noHankakuKana": {
             "type": "boolean",
-            "default": false,
+            "default": true,
             "order": 6,
             "markdownDescription": "%jpnov.lint.common.noHankakuKana.description%"
           },
           "jpnov.lint.common.noNfd": {
             "type": "boolean",
-            "default": false,
+            "default": true,
             "order": 7,
             "markdownDescription": "%jpnov.lint.common.noNfd.description%"
           },
           "jpnov.lint.common.noZeroWidth": {
             "type": "boolean",
-            "default": false,
+            "default": true,
             "order": 8,
             "markdownDescription": "%jpnov.lint.common.noZeroWidth.description%"
           },
           "jpnov.lint.common.noControlChar": {
             "type": "boolean",
-            "default": false,
+            "default": true,
             "order": 9,
             "markdownDescription": "%jpnov.lint.common.noControlChar.description%"
           },
@@ -380,8 +380,20 @@
         }
       },
       {
-        "title": "%jpnov.highlight.title%",
+        "title": "%jpnov.build.title%",
         "order": 6,
+        "properties": {
+          "jpnov.build.browserPath": {
+            "type": "string",
+            "default": "",
+            "scope": "machine-overridable",
+            "markdownDescription": "%jpnov.build.browserPath.description%"
+          }
+        }
+      },
+      {
+        "title": "%jpnov.highlight.title%",
+        "order": 7,
         "properties": {
           "jpnov.highlight.characters": {
             "type": "array",
@@ -416,6 +428,12 @@
         "category": "%command.category%",
         "title": "%command.books.buildTxt.title%",
         "icon": "$(file)"
+      },
+      {
+        "command": "jpnov.books.buildPdf",
+        "category": "%command.category%",
+        "title": "%command.books.buildPdf.title%",
+        "icon": "$(file-pdf)"
       },
       {
         "command": "jpnov.books.selectAll",
@@ -453,11 +471,17 @@
           "id": "jpnov.books",
           "name": "%view.books.name%",
           "icon": "$(book)",
-          "when": "jpnov.hasBooks",
+          "when": "jpnov.active",
           "contextualTitle": "%view.books.contextualTitle%"
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "jpnov.books",
+        "contents": "%viewsWelcome.books.content%"
+      }
+    ],
     "menus": {
       "view/title": [
         {
@@ -471,18 +495,23 @@
           "when": "view == jpnov.books"
         },
         {
-          "command": "jpnov.books.selectAll",
+          "command": "jpnov.books.buildPdf",
           "group": "navigation@3",
           "when": "view == jpnov.books"
         },
         {
-          "command": "jpnov.books.deselectAll",
+          "command": "jpnov.books.selectAll",
           "group": "navigation@4",
           "when": "view == jpnov.books"
         },
         {
-          "command": "jpnov.books.refresh",
+          "command": "jpnov.books.deselectAll",
           "group": "navigation@5",
+          "when": "view == jpnov.books"
+        },
+        {
+          "command": "jpnov.books.refresh",
+          "group": "navigation@6",
           "when": "view == jpnov.books"
         }
       ],
@@ -508,6 +537,10 @@
         },
         {
           "command": "jpnov.books.buildTxt",
+          "when": "false"
+        },
+        {
+          "command": "jpnov.books.buildPdf",
           "when": "false"
         },
         {
@@ -566,17 +599,6 @@
             ]
           },
           {
-            "id": "filelist",
-            "title": "%walkthrough.filelist.title%",
-            "description": "%walkthrough.filelist.description%",
-            "media": {
-              "markdown": "media/walkthrough/filelist.md"
-            },
-            "completionEvents": [
-              "onContext:jpnov.hasBooks"
-            ]
-          },
-          {
             "id": "build",
             "title": "%walkthrough.build.title%",
             "description": "%walkthrough.build.description%",
@@ -584,7 +606,9 @@
               "markdown": "media/walkthrough/build.md"
             },
             "completionEvents": [
-              "onView:jpnov.books"
+              "onCommand:jpnov.books.buildHtml",
+              "onCommand:jpnov.books.buildTxt",
+              "onCommand:jpnov.books.buildPdf"
             ]
           },
           {
@@ -596,7 +620,8 @@
             },
             "completionEvents": [
               "onSettingChanged:jpnov.highlight.characters",
-              "onSettingChanged:jpnov.highlight.keywords"
+              "onSettingChanged:jpnov.highlight.keywords",
+              "onSettingChanged:jpnov.lint.narration.generalNovelStyle"
             ]
           }
         ]
@@ -621,7 +646,7 @@
     "watch:tsc": "tsc --noEmit --watch",
     "watch": "npm run watch:tsc & npm run watch:esbuild & wait",
     "pretest": "npm run type-check",
-    "test": "node --test --experimental-test-module-mocks \"test/shared/**/*.test.ts\" \"test/server/highlight/**/*.test.ts\" \"test/server/lint/**/*.test.ts\"",
+    "test": "node --test --experimental-test-module-mocks \"test/shared/**/*.test.ts\" \"test/server/highlight/**/*.test.ts\" \"test/server/lint/**/*.test.ts\" \"test/client/browser.test.ts\"",
     "vscode:prepublish": "npm run type-check && npm run lint && npm run build",
     "package": "vsce package"
   },

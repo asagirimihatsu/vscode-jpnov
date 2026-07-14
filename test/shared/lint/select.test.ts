@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 
 import { isSelectionEmpty, selectRules } from '../../../src/shared/lint/select.ts';
 
-test('empty config leaves every stream empty (default off)', () => {
+test('an empty snapshot (nothing enabled) leaves every stream empty', () => {
   const sel = selectRules({});
   assert.ok(isSelectionEmpty(sel));
   assert.deepEqual(sel, { narration: [], dialogue: [], ruby: [] });

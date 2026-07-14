@@ -21,7 +21,7 @@ export const KINSOKU_MODES = ['none', 'normal', 'strict'] as const;
 export type KinsokuMode = (typeof KINSOKU_MODES)[number];
 
 /**
- * `jpnov.layout.*` defaults (原稿用紙 40×34, 禁則 normal, 自動縦中横 off) — the single source
+ * `jpnov.layout.*` defaults (投稿書式 40×34, 禁則 normal, 自動縦中横 punctuationPairs) — the single source
  * for the schema defaults and the settings resolver's fallbacks; the config-codegen test locks
  * package.json to these values.
  */
@@ -29,7 +29,7 @@ export const LAYOUT_DEFAULT = {
   charsPerLine: 40,
   linesPerPage: 34,
   kinsoku: 'normal' as KinsokuMode,
-  autoTcy: 'none' as AutoTcyMode,
+  autoTcy: 'punctuationPairs' as AutoTcyMode,
 } as const;
 
 /**
