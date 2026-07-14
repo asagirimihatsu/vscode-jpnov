@@ -8,10 +8,12 @@
  * Line breaking is a simple hard wrap at `charsPerLine` cells (full-width char = 1 cell,
  * a ruby unit = its TRUE advance — the base char count, or the longest reading's extent in
  * whole cells when that is longer — and is atomic, a 縦中横 cell = ALWAYS 1 cell however many
- * chars it combines, emphasis adds no cells, comments are zero-width). 禁則処理 is gated by
- * the `avoidLineBreaks` flag and folded into {@link wrapRow} as a leftward nudge of each break
- * point (追い出し only). ［＃改ページ］ forces a new page.
+ * chars it combines, emphasis adds no cells, comments are zero-width). 禁則処理 is selected
+ * by the `kinsoku` mode (`none` = bare wrap) and lives in {@link wrapRow}: 分離禁止 binding,
+ * ぶら下げ of a trailing 句読点, then the leftward 追い出し nudge of the break point.
+ * ［＃改ページ］ forces a new page.
  */
+import type { KinsokuMode } from '../config/types.ts';
 import type { BuildChrome, PageNumberPosition } from './chrome.ts';
 import { resolveStyle } from './emphasis.ts';
 import { escapeComment, escapeHtml } from './escape.ts';
@@ -65,6 +67,8 @@ export interface DisplayLine {
   readonly srcLine: number;
   readonly units: readonly Unit[];
   readonly indent?: number;
+  /** ぶら下げ: a hung 句読点 rendered as a zero-cell virtual square past the last cell. */
+  readonly hang?: Unit;
 }
 
 /**
@@ -582,26 +586,95 @@ export function findPostfixTargetIssues(src: string): PostfixTargetIssue[] {
 }
 
 /**
- * Single chars forbidden at line END (追い出し: push down to next line) — 行末禁則.
- * Opening brackets per JIS X 4051 / common Japanese novel typesetting.
+ * Chars forbidden at line END (追い出し: push down to the next line) — 行末禁則.
+ * 始め括弧 (cl-01, https://www.w3.org/TR/jlreq/#character_classes).
  */
-const KINSOKU_OPEN = new Set('「『（〔［｛〈《【〘〖｟');
+const KINSOKU_OPEN = new Set('「『（〔［｛〈《【〘〖｟〝');
 /**
- * Single chars forbidden at line START (pull the preceding char down) — 行頭禁則.
- * Closing brackets, punctuation, small kana, and prolonged-sound / iteration marks
- * per JIS X 4051 / common Japanese novel typesetting.
+ * Chars forbidden at line START (pull the preceding char down) — 行頭禁則, the normal tier:
+ * 終わり括弧・句読点・区切り約物・長音・小書き仮名 (cl-02/04/06/07/10/11) plus the everyday
+ * 々 (https://www.w3.org/TR/jlreq/#character_classes).
  */
 const KINSOKU_CLOSE = new Set(
-  '」』）〕］｝〉》】〙〗｠' + // 閉じ括弧
-    '、。，．・：；！？' + // 区切り・終止符号
+  '」』）〕］｝〉》】〙〗｠〟' + // 終わり括弧
+    '、。，．' + // 句読点
+    '！？!?‼⁇⁈⁉' + // 区切り約物 (full-width, half-width, single-codepoint)
+    'ー' + // 長音
     'ぁぃぅぇぉっゃゅょゎゕゖ' + // 小書き平仮名
     'ァィゥェォッャュョヮヵヶ' + // 小書き片仮名
-    'ーゝゞヽヾ々〻', // 長音符・繰り返し記号
+    '々', // 繰り返し (常用)
 );
+/** The strict tier layers 中点類 (cl-05) and the remaining 繰り返し記号 (cl-09) on top. */
+const KINSOKU_CLOSE_STRICT = new Set('・：；〻ゝゞヽヾ' + [...KINSOKU_CLOSE].join(''));
 
-/** A unit is a forbidden single char iff it is real (cells>0), one char, and in `set`. */
-function inSet(u: Unit | undefined, set: Set<string>): boolean {
-  return u !== undefined && u.cells > 0 && u.text.length === 1 && set.has(u.text);
+/** The 行頭禁則 set for a tier. */
+function closeFor(mode: KinsokuMode): Set<string> {
+  return mode === 'strict' ? KINSOKU_CLOSE_STRICT : KINSOKU_CLOSE;
+}
+
+/**
+ * EVERY char of a real (cells>0) unit is in `set` — so a 縦中横 約物 pair (text "!?") counts
+ * whole, while a digit tcy or a ruby base stays free. The cells guard keeps zero-width
+ * comments (text '') out of the vacuously-true empty iteration.
+ */
+function everyCharIn(u: Unit | undefined, set: Set<string>): boolean {
+  if (u === undefined || u.cells === 0 || u.text.length === 0) {
+    return false;
+  }
+  for (const c of u.text) {
+    if (!set.has(c)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * ぶら下げ対象は句読点のみ (JIS X 4051 の慣例; 閉じ括弧・約物は対象外). The hung glyph's ink
+ * reaches ≤0.35em past the last cell — inside the EDGE_INSET reserve, clear of the 枠.
+ */
+const HANGABLE = new Set('、。，．');
+
+/** Index of the first real (cells>0) unit in `units[from..)`, or -1 if none. */
+function nextReal(units: readonly Unit[], from: number): number {
+  for (let i = from; i < units.length; i += 1) {
+    if ((units[i]?.cells ?? 0) > 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * A break point may hang `units[i]` iff it is a single 句読点, the line would not then END on
+ * an opening bracket, and the next real unit would not open the following line on a 行頭禁則
+ * char — those cases fall through to 追い出し. No next unit at all hangs fine.
+ */
+function canHang(units: readonly Unit[], start: number, i: number, close: Set<string>): boolean {
+  const h = units[i];
+  if (h === undefined || h.cells === 0 || h.text.length !== 1 || !HANGABLE.has(h.text)) {
+    return false;
+  }
+  const p = lastReal(units, start, i);
+  if (p >= 0 && everyCharIn(units[p], KINSOKU_OPEN)) {
+    return false;
+  }
+  const n = nextReal(units, i + 1);
+  return n < 0 || !everyCharIn(units[n], close);
+}
+
+/** The hung unit: zero cells (outside the budget), its glyph wrapped for the `.hang` rule. */
+function makeHangUnit(u: Unit): Unit {
+  return {
+    cells: 0,
+    text: u.text,
+    html: `<span class="hang">${u.html}</span>`,
+    cssClass: 'hang',
+    emph: u.emph,
+    line: u.line,
+    weight: u.weight,
+    style: u.style,
+  };
 }
 
 /** Index of the last real (cells>0) unit in `units[start..before)`, or -1 if none. */
@@ -615,24 +688,126 @@ function lastReal(units: readonly Unit[], start: number, before: number): number
 }
 
 /**
+ * 分離禁止 classes (cl-08, https://www.w3.org/TR/jlreq/#character_classes): adjacent SAME-CLASS
+ * chars bind (mixed codepoints included, e.g. —―). Half-width 約物 bind only as an exact pair —
+ * the shape autoTcy targets — and only when it left them as two cells (full-width ！？ need no
+ * binding: they are 行頭禁則, so the 追い出し cascade already moves a split pair whole).
+ */
+const INSEP_DASH = new Set('—―'); // U+2014 U+2015
+const INSEP_LEADER = new Set('…‥'); // U+2026 U+2025
+const INSEP_BANG = new Set('!?'); // half-width; exactly-2 runs only
+
+/** The 分離禁止 class a unit binds under, or undefined (classed / ruby / multi-char / zero-width). */
+function insepClass(u: Unit | undefined): Set<string> | undefined {
+  if (u?.cells !== 1 || u.text.length !== 1 || u.cssClass !== undefined || u.ruby !== undefined) {
+    return undefined;
+  }
+  if (INSEP_DASH.has(u.text)) {
+    return INSEP_DASH;
+  }
+  if (INSEP_LEADER.has(u.text)) {
+    return INSEP_LEADER;
+  }
+  return INSEP_BANG.has(u.text) ? INSEP_BANG : undefined;
+}
+
+/** One atomic unit from `units[start..end)`; channels are `head`'s (the run requires them equal). */
+function mergeRun(units: readonly Unit[], head: Unit, start: number, end: number): Unit {
+  let cells = 0;
+  let text = '';
+  let html = '';
+  for (let i = start; i < end; i += 1) {
+    const u = units[i];
+    if (u !== undefined) {
+      cells += u.cells;
+      text += u.text;
+      html += u.html;
+    }
+  }
+  return { cells, text, html, emph: head.emph, line: head.line, weight: head.weight, style: head.style };
+}
+
+/**
+ * Binds 分離禁止 runs into atomic multi-cell units BEFORE wrapping, so {@link wrapRow} needs no
+ * keep-together logic — atomicity rides the existing unit paths (an over-budget run overflows on
+ * its own line, like an over-wide ruby). `normal` pairs a run from the left (an odd tail stays a
+ * free single); `strict` binds the whole run. Returns `units` itself when nothing binds.
+ */
+function separate(units: readonly Unit[], mode: KinsokuMode): readonly Unit[] {
+  let out: Unit[] | undefined; // created on the first bind; units[0..copied) are already in it
+  let copied = 0;
+  for (let i = 0; i < units.length; i += 1) {
+    const head = units[i];
+    const cls = insepClass(head);
+    if (head === undefined || cls === undefined) {
+      continue;
+    }
+    const key = unitKey(head);
+    let end = i + 1;
+    while (end < units.length) {
+      const next = units[end];
+      if (next === undefined || insepClass(next) !== cls || unitKey(next) !== key) {
+        break;
+      }
+      end += 1;
+    }
+    const len = end - i;
+    if (len >= 2 && (cls !== INSEP_BANG || len === 2)) {
+      out ??= [];
+      for (let j = copied; j < i; j += 1) {
+        const u = units[j];
+        if (u !== undefined) {
+          out.push(u);
+        }
+      }
+      if (mode === 'strict' && cls !== INSEP_BANG) {
+        out.push(mergeRun(units, head, i, end));
+      } else {
+        for (let j = i; j < end; j += 2) {
+          const u = units[j];
+          if (u !== undefined) {
+            out.push(end - j >= 2 ? mergeRun(units, u, j, j + 2) : u);
+          }
+        }
+      }
+      copied = end;
+    }
+    i = end - 1;
+  }
+  if (out === undefined) {
+    return units;
+  }
+  for (let j = copied; j < units.length; j += 1) {
+    const u = units[j];
+    if (u !== undefined) {
+      out.push(u);
+    }
+  }
+  return out;
+}
+
+/**
  * Hard-wraps one line row's units into display lines of at most `charsPerLine` cells. A unit
  * is atomic (never split) and an over-wide unit gets its own line. A 字下げ row narrows the
  * budget to `charsPerLine − N_eff` (N_eff = indent clamped to keep ≥1 content cell) and stamps
  * the SAME N_eff onto every display line — the first AND each wrapped continuation are indented
  * alike, and class / CSS padding / wrap budget all derive from this one value so the column can
- * never overflow. When `avoidLineBreaks` is on, 禁則処理 nudges each break point LEFTWARD so a
- * line never ENDS on an opening bracket (「『【（) nor STARTS with a closing/punctuation char
- * (」』】）、。！？) — 追い出し only. The leftward walk re-tests the new boundary, so cascades
- * and the resulting reflow fall out naturally; the `> start` guard never empties a line, which
- * also leaves a lone-char row as-is. (禁則 walks unit text only — the indent is CSS padding,
- * not a unit, so the two never interact.)
+ * never overflow. When `kinsoku` is not `none`, 分離禁止 runs are first bound into atomic units
+ * (see {@link separate}); at each overflowing break a trailing 句読点 hangs as a zero cell when
+ * that alone resolves the boundary (ぶら下げ, see {@link canHang}), and otherwise 禁則処理
+ * nudges the break point LEFTWARD so a line never ENDS on an opening bracket (「『【（) nor
+ * STARTS with a 行頭禁則 char (」』】）、。！？) — 追い出し. The walk re-tests the new
+ * boundary, so cascades and the resulting reflow fall out naturally; the `> start` guard
+ * never empties a line, which also leaves a lone-char row as-is. (禁則 walks unit text only —
+ * the indent is CSS padding, not a unit, so the two never interact.)
  */
 function wrapRow(
   row: Extract<Row, { kind: 'line' }>,
   charsPerLine: number,
-  avoidLineBreaks: boolean,
+  mode: KinsokuMode,
 ): DisplayLine[] {
-  const { srcLine, units } = row;
+  const { srcLine } = row;
+  const units = mode === 'none' ? row.units : separate(row.units, mode);
   const indent = Math.min(row.indent ?? 0, charsPerLine - 1); // N_eff: keep >=1 content cell
   const budget = charsPerLine - indent;
   if (units.length === 0) {
@@ -648,12 +823,26 @@ function wrapRow(
     }
     if (u.cells > 0 && i > start && cells + u.cells > budget) {
       let brk = i; // break BEFORE units[brk]
-      if (avoidLineBreaks) {
-        // Find the last acceptable break point
+      if (mode !== 'none') {
+        const close = closeFor(mode);
+        if (canHang(units, start, i, close)) {
+          // ぶら下げ: the 句読点 hangs off the full column as a zero cell. Trailing
+          // zero-width units ride along so they never open a units-less column.
+          let ns = i + 1;
+          while (ns < units.length && (units[ns]?.cells ?? 0) === 0) {
+            ns += 1;
+          }
+          const kept = [...units.slice(start, i), ...units.slice(i + 1, ns)];
+          lines.push({ srcLine, units: kept, indent, hang: makeHangUnit(u) });
+          start = ns;
+          cells = 0;
+          continue; // u is consumed as the hang — it must not count into the next column
+        }
+        // 追い出し: find the last acceptable break point
         while (
           brk > start + 1 &&
-          (inSet(units[brk], KINSOKU_CLOSE) ||
-            inSet(units[lastReal(units, start, brk)], KINSOKU_OPEN))
+          (everyCharIn(units[brk], close) ||
+            everyCharIn(units[lastReal(units, start, brk)], KINSOKU_OPEN))
         ) {
           brk -= 1;
         }
@@ -667,7 +856,10 @@ function wrapRow(
     }
     cells += u.cells;
   }
-  lines.push({ srcLine, units: units.slice(start), indent });
+  if (start < units.length) {
+    // A hang can consume the row's very last unit; only a non-empty tail becomes a column.
+    lines.push({ srcLine, units: units.slice(start), indent });
+  }
   return lines;
 }
 
@@ -676,7 +868,7 @@ export function paginate(
   rows: readonly Row[],
   charsPerLine: number,
   linesPerPage: number,
-  avoidLineBreaks: boolean,
+  kinsoku: KinsokuMode,
 ): DisplayLine[][] {
   const pages: DisplayLine[][] = [];
   let page: DisplayLine[] = [];
@@ -693,7 +885,7 @@ export function paginate(
       flushPage();
       continue;
     }
-    const lines = wrapRow(row, charsPerLine, avoidLineBreaks);
+    const lines = wrapRow(row, charsPerLine, kinsoku);
     for (const line of lines) {
       if (page.length >= linesPerPage) {
         pages.push(page);
@@ -763,6 +955,26 @@ function emitLine(line: DisplayLine, used?: Set<string>, anchor = true, head = '
   }
   if (open !== '') {
     html += '</span>';
+  }
+  if (line.hang !== undefined) {
+    // The hung 句読点 lands after the last cell; its channel span cannot join a neighbour's
+    // (that span just closed above), so it carries its own.
+    if (used && line.hang.cssClass !== undefined) {
+      for (const c of line.hang.cssClass.split(' ')) {
+        used.add(c);
+      }
+    }
+    const hk = unitKey(line.hang);
+    if (hk === '') {
+      html += line.hang.html;
+    } else {
+      if (used) {
+        for (const c of hk.split(' ')) {
+          used.add(c);
+        }
+      }
+      html += `<span class="${hk}">${line.hang.html}</span>`;
+    }
   }
   const ind = line.indent ?? 0;
   const indentClass = ind > 0 ? ` indent-${String(ind)}` : '';
@@ -860,7 +1072,7 @@ export function pagesToHtml(
 export function flowToHtml(
   rows: readonly Row[],
   charsPerLine: number,
-  avoidLineBreaks: boolean,
+  kinsoku: KinsokuMode,
   used?: Set<string>,
   lineNumbers = false,
 ): string {
@@ -878,7 +1090,7 @@ export function flowToHtml(
       }
       continue;
     }
-    for (const line of wrapRow(row, charsPerLine, avoidLineBreaks)) {
+    for (const line of wrapRow(row, charsPerLine, kinsoku)) {
       if (pendingBreak) {
         // The seam: close the segment and drop the marker BETWEEN segments — the shared
         // opener below reopens for this very line, so the marker never sits inside a

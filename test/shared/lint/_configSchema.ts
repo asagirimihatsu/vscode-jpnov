@@ -17,6 +17,7 @@ import {
   AUTO_TCY_MODES,
   CHARS_MAX,
   CHARS_MIN,
+  KINSOKU_MODES,
   LAYOUT_DEFAULT,
   PROJECT_DEFAULT,
 } from '../../../src/shared/config/types.ts';
@@ -102,10 +103,12 @@ function renderSections(): unknown[] {
           maximum: CHARS_MAX,
           markdownDescription: '%jpnov.layout.linesPerPage.description%',
         },
-        'jpnov.layout.avoidLineBreaks': {
-          type: 'boolean',
-          default: LAYOUT_DEFAULT.avoidLineBreaks,
-          markdownDescription: '%jpnov.layout.avoidLineBreaks.description%',
+        'jpnov.layout.kinsoku': {
+          type: 'string',
+          enum: [...KINSOKU_MODES],
+          default: LAYOUT_DEFAULT.kinsoku,
+          enumDescriptions: KINSOKU_MODES.map((v) => `%jpnov.layout.kinsoku.${v}%`),
+          markdownDescription: '%jpnov.layout.kinsoku.description%',
         },
         'jpnov.layout.autoTateChuYoko': {
           type: 'string',
@@ -230,7 +233,8 @@ function renderNlsKeys(): string[] {
     'jpnov.html.title',
     'jpnov.layout.charsPerLine.description',
     'jpnov.layout.linesPerPage.description',
-    'jpnov.layout.avoidLineBreaks.description',
+    'jpnov.layout.kinsoku.description',
+    ...KINSOKU_MODES.map((v) => `jpnov.layout.kinsoku.${v}`),
     'jpnov.layout.autoTateChuYoko.description',
     ...AUTO_TCY_MODES.map((v) => `jpnov.layout.autoTateChuYoko.${v}`),
     'jpnov.preview.lineNumbers.description',

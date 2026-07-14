@@ -448,7 +448,7 @@ test('renderDocument ships the settings snapshot on the renderFile request', asy
   // Overrides read from the store; untouched keys fall back to the product defaults.
   assert.deepEqual(params.settings, {
     charsPerLine: 24,
-    avoidLineBreaks: false,
+    kinsoku: 'normal',
     autoTcy: 'none',
     lineNumbers: true,
     edgeLine: 'red',

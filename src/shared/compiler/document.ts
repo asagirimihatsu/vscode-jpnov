@@ -1,4 +1,4 @@
-import type { AutoTcyMode } from '../config/types.ts';
+import type { AutoTcyMode, KinsokuMode } from '../config/types.ts';
 import { applyAutoTcy } from './autoTcy.ts';
 import type { BuildChrome } from './chrome.ts';
 import { stylesheet } from './css.ts';
@@ -18,8 +18,8 @@ export interface BookInput {
  * page numbers, header) around that grid.
  *
  * Each book concatenates its `files[]` in order; books are separated by a forced page break.
- * ［＃改ページ］ forces a page break. `avoidLineBreaks` is plumbed through to the 禁則処理
- * line-break engine; `autoTcy` runs the 自動縦中横 source rewrite per file before tokenizing
+ * ［＃改ページ］ forces a page break. `kinsoku` selects the 禁則処理 tier of the line-break
+ * engine; `autoTcy` runs the 自動縦中横 source rewrite per file before tokenizing
  * (the same front door as the `.txt` build and the preview). All options are required and
  * pre-resolved (the settings resolver is the only default layer); "off" is the explicit
  * all-off chrome. Pure + vscode-free.
@@ -28,7 +28,7 @@ export function renderBook(opts: {
   books: readonly BookInput[];
   charsPerLine: number;
   linesPerPage: number;
-  avoidLineBreaks: boolean;
+  kinsoku: KinsokuMode;
   autoTcy: AutoTcyMode;
   chrome: BuildChrome;
 }): string {
@@ -42,7 +42,7 @@ export function renderBook(opts: {
     }
   });
 
-  const pages = paginate(rows, opts.charsPerLine, opts.linesPerPage, opts.avoidLineBreaks);
+  const pages = paginate(rows, opts.charsPerLine, opts.linesPerPage, opts.kinsoku);
 
   // Blank-template normalization (single source): a template that is blank after trim
   // means "no folio", folded into the one `pageNumberPosition === 'none'` gate so the

@@ -268,7 +268,7 @@ async function buildRoot(
         books: [input],
         charsPerLine: selection.settings.charsPerLine,
         linesPerPage: selection.settings.linesPerPage,
-        avoidLineBreaks: selection.settings.avoidLineBreaks,
+        kinsoku: selection.settings.kinsoku,
         autoTcy: selection.settings.autoTcy,
         chrome: selection.settings,
       });

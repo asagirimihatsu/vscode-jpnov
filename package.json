@@ -135,10 +135,20 @@
             "maximum": 64,
             "markdownDescription": "%jpnov.layout.linesPerPage.description%"
           },
-          "jpnov.layout.avoidLineBreaks": {
-            "type": "boolean",
-            "default": false,
-            "markdownDescription": "%jpnov.layout.avoidLineBreaks.description%"
+          "jpnov.layout.kinsoku": {
+            "type": "string",
+            "enum": [
+              "none",
+              "normal",
+              "strict"
+            ],
+            "default": "normal",
+            "enumDescriptions": [
+              "%jpnov.layout.kinsoku.none%",
+              "%jpnov.layout.kinsoku.normal%",
+              "%jpnov.layout.kinsoku.strict%"
+            ],
+            "markdownDescription": "%jpnov.layout.kinsoku.description%"
           },
           "jpnov.layout.autoTateChuYoko": {
             "type": "string",

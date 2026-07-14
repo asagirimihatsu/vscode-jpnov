@@ -16,14 +16,14 @@ function preview(
   src: string,
   o: Partial<{
     charsPerLine: number;
-    avoidLineBreaks: boolean;
+    kinsoku: 'none' | 'normal' | 'strict';
     autoTcy: 'none' | 'punctuationPairs';
     chrome: PreviewChrome;
   }> = {},
 ): string {
   return renderPreview(src, {
     charsPerLine: 40,
-    avoidLineBreaks: false,
+    kinsoku: 'none',
     autoTcy: 'none',
     chrome: { lineNumbers: false, edgeLine: 'none' },
     ...o,
@@ -104,12 +104,18 @@ test('renderPreview hard-wraps at charsPerLine; data-line is first-only on a wra
   );
 });
 
-test('renderPreview honors avoidLineBreaks (禁則) — the same engine as the build', () => {
+test('renderPreview honors the kinsoku mode (禁則) — the same engine as the build', () => {
   // cpl 2: naive ああ|」 would leave 」 at a line start; 追い出し pulls あ down → あ|あ」.
   assert.match(
-    preview('ああ」', { charsPerLine: 2, avoidLineBreaks: true }),
+    preview('ああ」', { charsPerLine: 2, kinsoku: 'normal' }),
     /<div class="line" data-line="0">あ<\/div><div class="line">あ」<\/div>/,
   );
+  // A trailing 。 hangs (ぶら下げ): the .hang span and its on-demand rule ride together,
+  // and neither appears when nothing hangs.
+  const hung = preview('文だ。', { charsPerLine: 2, kinsoku: 'normal' });
+  assert.match(hung, /<div class="line" data-line="0">文だ<span class="hang">。<\/span><\/div>/);
+  assert.match(hung, /\.hang\{letter-spacing:-1em\}/);
+  assert.doesNotMatch(preview('文だ', { charsPerLine: 2, kinsoku: 'normal' }), /\.hang/);
   // With 禁則 off, the naive wrap returns (」 leads the second column).
   assert.match(
     preview('ああ」', { charsPerLine: 2 }),
@@ -140,10 +146,10 @@ test('renderPreview pins line font-size to the root and emits no CSS width cap',
 
 test('renderPreview scales the root font so a full line fills the pane height', () => {
   // The SAME charsPerLine drives both the JS hard wrap and the stylesheet's
-  // fit-to-viewport formula — a full 20-char column plus the two reserved 0.25em frame
+  // fit-to-viewport formula — a full 20-char column plus the two reserved 0.35em frame
   // gaps measures exactly 100vh − padding.
   const html = preview('本文', { charsPerLine: 20 });
-  assert.match(html, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ \(var\(--cpl\) \+ 0\.5\)\)/);
+  assert.match(html, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ \(var\(--cpl\) \+ 0\.7\)\)/);
   assert.match(html, /:root\{--cpl:20\}/);
 });
 

@@ -83,6 +83,13 @@ Warning). Turning on **自動縦中横** (`jpnov.layout.autoTateChuYoko`, under 
 the half-width pairs `!!` `!?` `?!` `??` with no markup — runs of three or more are never
 touched — and the text build writes the explicit markers out, so the `.txt` round-trips.
 
+**禁則処理** (`jpnov.layout.kinsoku`, under Layout, default `normal`) applies Japanese
+line-breaking rules at every wrap, in the preview and the built book alike: opening brackets
+never end a line; closing brackets, punctuation, small kana, `ー` and `々` never start one;
+`――` and `……` pairs never split; and a trailing `、` `。` hangs into the margin (ぶら下げ)
+instead of pushing text down. `strict` adds the 中点 (`・：；`) and repetition-mark
+(`ゝゞヽヾ〻`) classes and keeps whole symbol runs unbroken; `none` restores the bare wrap.
+
 ## Character & keyword highlighting
 
 Declare your **cast** and a few **coined keywords** in settings (**Japanese Novel —
