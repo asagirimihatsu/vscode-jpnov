@@ -91,6 +91,9 @@ function ensureStarted(): void {
     return;
   }
   started = true;
+  // Reveal the Books panel (gated on `jpnov.active`); its empty state shows the welcome guide.
+  // Never un-set for the session, like the `started` latch above.
+  void vscode.commands.executeCommand('setContext', 'jpnov.active', true);
   const context = extCtx;
 
   // Run the bundled server as a forked Node process over IPC. We deliberately do NOT set
@@ -263,6 +266,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     command('jpnov.books.buildHtml', () => { ensureStarted(); return booksView?.buildHtml(); }),
     command('jpnov.books.buildTxt', () => { ensureStarted(); return booksView?.buildTxt(); }),
+    command('jpnov.books.buildPdf', () => { ensureStarted(); return booksView?.buildPdf(); }),
     command('jpnov.books.selectAll', () => { ensureStarted(); return booksView?.selectAll(); }),
     command('jpnov.books.deselectAll', () => { ensureStarted(); return booksView?.deselectAll(); }),
     command('jpnov.books.refresh', () => { ensureStarted(); return booksView?.refresh(); }),

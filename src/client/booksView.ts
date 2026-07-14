@@ -9,12 +9,14 @@
  * renders them (`jpnov/build` with a `books`/`format` selection); this view only owns the VS Code
  * UI — the tree, the checkbox set, and the artifact writes (the server never touches `vscode.fs`).
  *
- * The view is gated by the `jpnov.hasBooks` context key, recomputed after every refresh():
- * true while the enumeration finds at least one book ("a bookshelf appears once there are
- * books"). The checkbox set defaults every newly-discovered book
- * to CHECKED, so a fresh panel builds everything until the user narrows it; un-checking is
- * the way to scope a build down.
+ * The view's visibility is gated by the `jpnov.active` context key (set once in extension.ts
+ * when the extension starts), so the panel — and its empty-state `viewsWelcome` guide — appear
+ * for any novel workspace, not only once a book exists. The checkbox set defaults every
+ * newly-discovered book to CHECKED, so a fresh panel builds everything until the user narrows
+ * it; un-checking is the way to scope a build down.
  */
+import { existsSync } from 'node:fs';
+
 import * as vscode from 'vscode';
 
 import type { LanguageClient } from 'vscode-languageclient/node';
@@ -31,10 +33,15 @@ import {
 } from '#/shared/protocol.ts';
 
 import { buildForest, type TreeDir } from './bookTree.ts';
+import { resolveBrowserExecutable } from './browser.ts';
 import { renderMessage } from './messages.ts';
 import { lastPathSegment } from './paths.ts';
+import { convertHtmlToPdf } from './pdf.ts';
 import { buildProjectDirs } from './projectConfig.ts';
 import { buildHtmlSettings } from './renderConfig.ts';
+
+/** A Books-panel build action: the two wire formats plus the client-only PDF post-process. */
+type BuildAction = BuildFormat | 'pdf';
 
 /**
  * A tree node: a per-root GROUP header (only when more than one valid root has books), a FOLDER in
@@ -95,10 +102,10 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
   private forest = new Map<string, TreeDir>();
   /** The build selection: book URIs whose checkbox is ticked. */
   private readonly checked = new Set<string>();
-  /** Last pushed `jpnov.hasBooks` context value (books.length > 0 after a refresh). */
-  private hasBooks = false;
   /** Serializes `refresh()` so a slow `listBooks` can't clobber a newer enumeration. */
   private refreshSeq = 0;
+  /** True while a PDF build runs, so a second click can't spawn an overlapping browser batch. */
+  private pdfBuilding = false;
 
   constructor(client: LanguageClient) {
     this.client = client;
@@ -126,10 +133,6 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
       watcher.onDidCreate(() => void this.refresh()),
       watcher.onDidDelete(() => void this.refresh()),
     );
-
-    // Start hidden until the first enumeration finds a book. setContext rejects only on a
-    // dead connection (extension shutting down); the gate then no longer matters, so void it.
-    void vscode.commands.executeCommand('setContext', 'jpnov.hasBooks', false);
   }
 
   // --- TreeDataProvider ----------------------------------------------------
@@ -217,6 +220,11 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
     return this.buildSelected('txt');
   }
 
+  /** `jpnov.books.buildPdf`: render the checked books to `.html`, then convert each to `.pdf`. */
+  buildPdf(): Promise<void> {
+    return this.buildSelected('pdf');
+  }
+
   /** `jpnov.books.selectAll`: tick every book. */
   selectAll(): void {
     for (const b of this.books) {
@@ -264,12 +272,6 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
     }
     this.books = result.books;
     this.forest = buildForest(this.books);
-    const hasBooks = this.books.length > 0;
-    if (hasBooks !== this.hasBooks) {
-      this.hasBooks = hasBooks;
-      // setContext rejects only on a dead connection (shutdown); the gate is then irrelevant.
-      void vscode.commands.executeCommand('setContext', 'jpnov.hasBooks', hasBooks);
-    }
     this._onDidChangeTreeData.fire(undefined);
   }
 
@@ -297,15 +299,28 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
   }
 
   /**
+   * The localized "built N {label} file(s)" success toast. l10n.t has no plural support, so the
+   * singular/plural bundle pair lives here (Japanese maps both to one number-invariant string).
+   */
+  private reportBuilt(count: number, label: string): void {
+    // showInformationMessage never rejects, so void is safe.
+    void vscode.window.showInformationMessage(
+      count === 1
+        ? vscode.l10n.t('Japanese Novel: built 1 {0} file.', label)
+        : vscode.l10n.t('Japanese Novel: built {0} {1} files.', String(count), label),
+    );
+  }
+
+  /**
    * The build driver behind the panel's title actions: render the CHECKED books to `format`,
    * write the returned artifacts (the client owns all filesystem writes), and report results.
    * An empty selection is a no-op with a nudge rather than a silent "built 0".
    */
-  async buildSelected(format: BuildFormat): Promise<void> {
+  async buildSelected(action: BuildAction): Promise<void> {
     const books = [...this.checked];
-    // 'HTML' is a proper noun (not localized); 'text' translates. The label is passed
+    // 'HTML' / 'PDF' are proper nouns (not localized); 'text' translates. The label is passed
     // already-localized into the count templates below.
-    const label = format === 'html' ? 'HTML' : vscode.l10n.t('text');
+    const label = action === 'pdf' ? 'PDF' : action === 'html' ? 'HTML' : vscode.l10n.t('text');
     if (books.length === 0) {
       // UI notification: showInformationMessage never rejects, so void is safe.
       void vscode.window.showInformationMessage(
@@ -313,79 +328,180 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
       );
       return;
     }
+    // A PDF build spawns a browser per book and is slow; block an overlapping second run.
+    if (action === 'pdf') {
+      if (this.pdfBuilding) {
+        void vscode.window.showInformationMessage(
+          vscode.l10n.t('Japanese Novel: a PDF build is already in progress.'),
+        );
+        return;
+      }
+      this.pdfBuilding = true;
+    }
 
     const c = this.client;
-    await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        // l10n.t has no plural support, so branch into a singular/plural pair of bundle keys;
-        // Japanese maps both to one (number-invariant) string.
-        title: books.length === 1
-          ? vscode.l10n.t('Japanese Novel: building 1 book to {0}…', label)
-          : vscode.l10n.t('Japanese Novel: building {0} books to {1}…', String(books.length), label),
-        cancellable: false,
-      },
-      async () => {
-        let result: BuildResult;
-        try {
-          const params: BuildParams = {
-            books,
-            format,
-            settings: buildHtmlSettings(),
-            projectDirs: buildProjectDirs(),
-          };
-          result = await c.sendRequest<BuildResult>(BuildRequest, params);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          // UI notification: showErrorMessage never rejects, so void is safe. This granular popup
-          // means buildSelected returns normally (no rethrow) -> no boundary double-popup.
-          void vscode.window.showErrorMessage(vscode.l10n.t('Japanese Novel: build failed. {0}', message));
-          return;
-        }
-
-        // The CLIENT owns all filesystem writes (the server never touches vscode.fs).
-        const written: string[] = [];
-        for (const artifact of result.artifacts ?? []) {
+    // A PDF build asks the server for HTML on the wire, then converts client-side; txt/html pass through.
+    const wireFormat: BuildFormat = action === 'pdf' ? 'html' : action;
+    try {
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          // l10n.t has no plural support, so branch into a singular/plural pair of bundle keys;
+          // Japanese maps both to one (number-invariant) string.
+          title: books.length === 1
+            ? vscode.l10n.t('Japanese Novel: building 1 book to {0}…', label)
+            : vscode.l10n.t('Japanese Novel: building {0} books to {1}…', String(books.length), label),
+          cancellable: action === 'pdf',
+        },
+        async (progress, token) => {
+          let result: BuildResult;
           try {
-            await vscode.workspace.fs.writeFile(
-              vscode.Uri.parse(artifact.path),
-              Buffer.from(artifact.content, 'utf8'),
-            );
-            written.push(artifact.path);
+            const params: BuildParams = {
+              books,
+              format: wireFormat,
+              settings: buildHtmlSettings(),
+              projectDirs: buildProjectDirs(),
+            };
+            result = await c.sendRequest<BuildResult>(BuildRequest, params);
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
+            // UI notification: showErrorMessage never rejects, so void is safe. This granular popup
+            // means buildSelected returns normally (no rethrow) -> no boundary double-popup.
+            void vscode.window.showErrorMessage(vscode.l10n.t('Japanese Novel: build failed. {0}', message));
+            return;
+          }
+
+          // The CLIENT owns all filesystem writes (the server never touches vscode.fs).
+          const written: string[] = [];
+          for (const artifact of result.artifacts ?? []) {
+            try {
+              await vscode.workspace.fs.writeFile(
+                vscode.Uri.parse(artifact.path),
+                Buffer.from(artifact.content, 'utf8'),
+              );
+              written.push(artifact.path);
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              // UI notification: showErrorMessage never rejects, so void is safe.
+              void vscode.window.showErrorMessage(
+                vscode.l10n.t("Japanese Novel: couldn't write {0}. {1}", artifact.path, message),
+              );
+            }
+          }
+
+          // Per-book build errors (each isolated server-side; never aborts the rest). The server
+          // sends a {code,args}; the client renders it to localized text.
+          const errors = result.errors ?? [];
+          for (const e of errors) {
             // UI notification: showErrorMessage never rejects, so void is safe.
             void vscode.window.showErrorMessage(
-              vscode.l10n.t("Japanese Novel: couldn't write {0}. {1}", artifact.path, message),
+              vscode.l10n.t('Japanese Novel: build error for {0}. {1}', e.book, renderMessage(e)),
             );
           }
-        }
 
-        // Per-book build errors (each isolated server-side; never aborts the rest). The server
-        // sends a {code,args}; the client renders it to localized text.
-        const errors = result.errors ?? [];
-        for (const e of errors) {
+          // PDF: convert the just-written .html files, then report the PDF count in place of HTML.
+          if (action === 'pdf' && written.length > 0) {
+            await this.convertToPdf(written, label, progress, token);
+            return;
+          }
+
+          if (written.length > 0) {
+            // One artifact per book now (a single format), so the file count IS the book count.
+            this.reportBuilt(written.length, label);
+          } else if (errors.length === 0) {
+            // UI notification: showInformationMessage never rejects, so void is safe.
+            void vscode.window.showInformationMessage(
+              vscode.l10n.t('Japanese Novel: nothing to build.'),
+            );
+          }
+        },
+      );
+    } finally {
+      if (action === 'pdf') {
+        this.pdfBuilding = false;
+      }
+    }
+  }
+
+  /**
+   * Converts the just-written `.html` artifacts (URI strings) to sibling `.pdf` files with a
+   * detected Chromium-family browser. With no browser found the HTML is left in place and the
+   * user is nudged to print it or set a path, so a PDF build never hard-fails once the HTML
+   * exists. Conversions run serially (one browser at a time) and stop on cancellation.
+   */
+  private async convertToPdf(
+    htmlUris: readonly string[],
+    label: string,
+    progress: vscode.Progress<{ message?: string }>,
+    token: vscode.CancellationToken,
+  ): Promise<void> {
+    const browserExe = resolveBrowserExecutable({
+      configuredPath: vscode.workspace.getConfiguration().get<string>('jpnov.build.browserPath', ''),
+      env: process.env,
+      platform: process.platform,
+      exists: existsSync,
+    });
+    if (browserExe === undefined) {
+      const openFolder = vscode.l10n.t('Open Output Folder');
+      const configure = vscode.l10n.t('Configure Browser Path');
+      // showWarningMessage never rejects; void the button-handling promise so this can't re-throw.
+      void vscode.window
+        .showWarningMessage(
+          vscode.l10n.t(
+            'Japanese Novel: no Chrome, Edge, or Chromium browser found. Built the HTML instead — open it in a browser and print to PDF, or set jpnov.build.browserPath.',
+          ),
+          openFolder,
+          configure,
+        )
+        .then((pick) => {
+          if (pick === openFolder && htmlUris[0] !== undefined) {
+            void vscode.commands.executeCommand('revealFileInOS', vscode.Uri.parse(htmlUris[0]));
+          } else if (pick === configure) {
+            void vscode.commands.executeCommand('workbench.action.openSettings', 'jpnov.build.browserPath');
+          }
+        });
+      return;
+    }
+
+    // Kill the in-flight conversion when the user cancels the progress notification.
+    const abort = new AbortController();
+    const cancelSub = token.onCancellationRequested(() => {
+      abort.abort();
+    });
+    const pdfs: string[] = [];
+    try {
+      let done = 0;
+      for (const htmlUri of htmlUris) {
+        if (token.isCancellationRequested) {
+          break;
+        }
+        done += 1;
+        progress.report({
+          message: vscode.l10n.t('converting to PDF… ({0}/{1})', String(done), String(htmlUris.length)),
+        });
+        const htmlPath = vscode.Uri.parse(htmlUri).fsPath;
+        const pdfPath = htmlPath.replace(/\.html$/i, '.pdf');
+        try {
+          await convertHtmlToPdf(browserExe, htmlPath, pdfPath, 60_000, abort.signal);
+          pdfs.push(pdfPath);
+        } catch (err) {
+          // A cancel aborts the child, surfacing as a rejection here — don't report that as a failure.
+          if (abort.signal.aborted) {
+            break;
+          }
+          const message = err instanceof Error ? err.message : String(err);
           // UI notification: showErrorMessage never rejects, so void is safe.
           void vscode.window.showErrorMessage(
-            vscode.l10n.t('Japanese Novel: build error for {0}. {1}', e.book, renderMessage(e)),
+            vscode.l10n.t("Japanese Novel: couldn't convert {0} to PDF. {1}", lastPathSegment(htmlUri), message),
           );
         }
+      }
+    } finally {
+      cancelSub.dispose();
+    }
 
-        if (written.length > 0) {
-          // One artifact per book now (a single format), so the file count IS the book count.
-          // UI notification: showInformationMessage never rejects, so void is safe.
-          void vscode.window.showInformationMessage(
-            written.length === 1
-              ? vscode.l10n.t('Japanese Novel: built 1 {0} file.', label)
-              : vscode.l10n.t('Japanese Novel: built {0} {1} files.', String(written.length), label),
-          );
-        } else if (errors.length === 0) {
-          // UI notification: showInformationMessage never rejects, so void is safe.
-          void vscode.window.showInformationMessage(
-            vscode.l10n.t('Japanese Novel: nothing to build.'),
-          );
-        }
-      },
-    );
+    if (pdfs.length > 0) {
+      this.reportBuilt(pdfs.length, label);
+    }
   }
 }

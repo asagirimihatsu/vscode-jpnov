@@ -6,7 +6,7 @@
  *
  * Section order in the Settings UI (the `order` field, locked by the deepEqual):
  * Layout(1) > HTML Output(2) > Preview(3) > Lint(4, all scopes merged) > Project(5) >
- * Highlighting(6).
+ * Build(6) > Highlighting(7).
  */
 import { EDGE_LINE_STYLES, PAGE_NUMBER_POSITIONS } from '../../../src/shared/compiler/chrome.ts';
 import {
@@ -45,7 +45,7 @@ export function enumValueKey(rule: RuleMeta, value: string): string {
 function propertyFor(rule: RuleMeta, order: number): Record<string, unknown> {
   const markdownDescription = `%${ruleDescriptionKey(rule)}%`;
   if (rule.kind === 'boolean') {
-    return { type: 'boolean', default: false, order, markdownDescription };
+    return { type: 'boolean', default: rule.default ?? false, order, markdownDescription };
   }
   if (rule.kind === 'threshold') {
     return {
@@ -198,6 +198,25 @@ function projectSection(): unknown {
 }
 
 /**
+ * The Build section: the machine-specific browser path used to convert built HTML to PDF. A
+ * client-only setting (never sent to the resolver), so its default is a bare literal here.
+ */
+function buildSection(): unknown {
+  return {
+    title: '%jpnov.build.title%',
+    order: 6,
+    properties: {
+      'jpnov.build.browserPath': {
+        type: 'string',
+        default: '',
+        scope: 'machine-overridable',
+        markdownDescription: '%jpnov.build.browserPath.description%',
+      },
+    },
+  };
+}
+
+/**
  * The Highlighting section: the per-folder (`scope: resource`) narration vocabulary. Plain
  * string arrays with NO `uniqueItems` — dedup/empty-drop is the server normalizer's single
  * job, and the descriptions say so ("empty and duplicate items are ignored").
@@ -205,7 +224,7 @@ function projectSection(): unknown {
 function highlightSection(): unknown {
   return {
     title: '%jpnov.highlight.title%',
-    order: 6,
+    order: 7,
     properties: {
       'jpnov.highlight.characters': {
         type: 'array',
@@ -249,6 +268,8 @@ function renderNlsKeys(): string[] {
     'jpnov.html.header.description',
     'jpnov.project.title',
     'jpnov.project.outDir.description',
+    'jpnov.build.title',
+    'jpnov.build.browserPath.description',
     'jpnov.highlight.title',
     'jpnov.highlight.characters.description',
     'jpnov.highlight.keywords.description',
@@ -257,10 +278,10 @@ function renderNlsKeys(): string[] {
 
 /**
  * The full `contributes.configuration` array — render sections, then the merged Lint
- * section, then Project (array position mirrors the `order` fields).
+ * section, then Project, Build, Highlighting (array position mirrors the `order` fields).
  */
 export function expectedConfiguration(): unknown[] {
-  return [...renderSections(), lintSection(), projectSection(), highlightSection()];
+  return [...renderSections(), lintSection(), projectSection(), buildSection(), highlightSection()];
 }
 
 /** Every nls key the configuration block references (section titles + descriptions + enum labels). */

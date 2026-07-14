@@ -23,7 +23,8 @@ folder root holds a `*.filelist`, or when any `jpnov.*` setting is saved at the 
 or folder level. Startup scanning looks only at folder roots — a project whose filelists
 all sit in subfolders activates when you open a file, and keeps auto-activating once any
 `jpnov.*` workspace setting exists. Activation alone doesn't list books: the Books panel
-fills once a `.filelist` is found. **Preview** of a `.jpnov` and **`.filelist` editing**
+appears for any novel workspace and fills once a `.filelist` is found (its empty state links
+you to create one). **Preview** of a `.jpnov` and **`.filelist` editing**
 (completion, diagnostics, links) work with no configuration at all. A **Get started with
 Japanese Novel** walkthrough (Help → Get Started) covers the same steps as the quick
 start below.
@@ -36,17 +37,19 @@ start below.
    Novel: Open Preview to the Side**) to see it in vertical, right-to-left 原稿用紙 layout.
 2. **Make a book.** Create a `.filelist` (e.g. `volume1.filelist`) and list your chapter
    files, one per line, in reading order. One `.filelist` is one book.
-3. **Build it.** Open the **Japanese Novel** view in the Activity Bar (the book icon appears
-   once a `.filelist` exists), tick the books you want, and use **Build to HTML** (paginated
-   vertical `.html`) or **Build to Text** (concatenated Aozora-format `.txt`) from the panel's
-   title bar. Use **Select All** / **Deselect All** to bulk-toggle the selection.
+3. **Build it.** Save your chapters and the `.filelist` (builds read from disk), then open the
+   **Japanese Novel** view in the Activity Bar (the book icon), tick the books you want, and use
+   **Build to HTML** (paginated vertical `.html`), **Build to PDF** (print-ready `.pdf`), or
+   **Build to Text** (concatenated Aozora-format `.txt`) from the panel's title bar. Use
+   **Select All** / **Deselect All** to bulk-toggle the selection.
 
 Chapters and `.filelist` books can live anywhere in the workspace folder — subfolders work
 and are mirrored into the output (`src/volume1.filelist` builds to `dist/src/volume1.html`).
 The output folder (`jpnov.project.outDir`, default `dist`, under **Japanese Novel — Project**),
 dot-folders, and `node_modules` are never scanned for books. Layout, preview, HTML-output,
-lint, and highlighting behavior are plain VS Code settings too, under the other
-**Japanese Novel** sections; everything can be overridden per workspace folder.
+and lint are plain window-level VS Code settings under the other **Japanese Novel** sections;
+the output folder and the highlighting lists are resource-scoped, so those can be overridden
+per workspace folder.
 
 ## Annotations
 
@@ -79,9 +82,10 @@ right ruby for 両側ルビ (`青空文庫《あおぞらぶんこ》［＃「�
 the annotation names the base only, never the `《》` part). Left readings are exempt from the
 ruby-kana lint, since they are often Latin. **縦中横** stands a short run (a 2–3 digit number,
 `!?`) upright in one square — keep it to 3 characters or fewer (longer squishes and raises a
-Warning). Turning on **自動縦中横** (`jpnov.layout.autoTateChuYoko`, under Layout) auto-combines
-the half-width pairs `!!` `!?` `?!` `??` with no markup — runs of three or more are never
-touched — and the text build writes the explicit markers out, so the `.txt` round-trips.
+Warning). **自動縦中横** (`jpnov.layout.autoTateChuYoko`, under Layout, default `punctuationPairs`)
+auto-combines the half-width pairs `!!` `!?` `?!` `??` with no markup — runs of three or more are
+never touched — and the text build writes the explicit markers out, so the `.txt` round-trips; set
+it to `none` to turn it off.
 
 **禁則処理** (`jpnov.layout.kinsoku`, under Layout, default `normal`) applies Japanese
 line-breaking rules at every wrap, in the preview and the built book alike: opening brackets
@@ -119,6 +123,25 @@ Both lists apply per workspace folder and take effect immediately in open editor
 reload, no rebuild. Empty and duplicate items are ignored. Colouring is delivered as LSP
 semantic tokens with per-language default colours; override them in your settings under
 `editor.semanticTokenColorCustomizations` if you like.
+
+## Proofreading (lint)
+
+Japanese Novel runs [textlint](https://textlint.github.io/)-based checks as you write, surfaced
+as editor diagnostics with quick-fixes (and a **Fix all auto-fixable problems** source action).
+Everything is a plain `jpnov.lint.*` setting under **Japanese Novel — Lint**, overridable per
+workspace folder.
+
+- **Hygiene checks are on by default** — half-width kana, decomposed (NFD) characters,
+  zero-width / invisible characters, and invalid control characters — so a stray malformed or
+  invisible character never slips into a manuscript.
+- **Publication-style checks are opt-in.** `jpnov.lint.narration.generalNovelStyle` (a paragraph
+  begins with a full-width indent `　` or an opening bracket) and
+  `jpnov.lint.narration.jaNoMixedPeriod` (a narration sentence ends with `。`) catch
+  manuscript-convention slips many editors expect fixed before submission; both are auto-fixable.
+  The length and run-length limits (`sentenceLength`, `maxTen`, `maxKanjiRun`) and the ruby-kana
+  rule are opt-in too.
+
+Turn the publication-style checks on when you prepare a submission; leave them off while drafting.
 
 ## Migrating from `novel.jp.*`
 

@@ -71,7 +71,7 @@ test('autoTcy rides both snapshots: kept when a known member, defaulted otherwis
   );
   assert.equal(resolveHtmlSettings(badHtml({ autoTcy: 'always' })).autoTcy, LAYOUT_DEFAULT.autoTcy);
   assert.equal(resolveHtmlSettings(badHtml({ autoTcy: true })).autoTcy, LAYOUT_DEFAULT.autoTcy);
-  assert.equal(LAYOUT_DEFAULT.autoTcy, 'none'); // 自動縦中横 ships off (Aozora-manual by default)
+  assert.equal(LAYOUT_DEFAULT.autoTcy, 'punctuationPairs'); // 自動縦中横 ships ON (auto-combines half-width !! !? ?! ??)
 });
 
 test('bogus enum and boolean values coerce to their defaults', () => {
