@@ -166,7 +166,7 @@ connection.onRequest(
     return {
       html: renderPreview(params.text, {
         charsPerLine: settings.charsPerLine,
-        avoidLineBreaks: settings.avoidLineBreaks,
+        kinsoku: settings.kinsoku,
         autoTcy: settings.autoTcy,
         chrome: settings,
       }),

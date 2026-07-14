@@ -1,17 +1,16 @@
 /* Edge rules (罫線 + 枠) — included when edgeLine ≠ none. Same --edge + 80% color-mix recipe as
-   the preview (one recipe, both media). Pure paint: the 0.25em EDGE_INSET gap is reserved by
+   the preview (one recipe, both media). Pure paint: the 0.35em EDGE_INSET gap is reserved by
    the grid whether the frame is drawn or not, so toggling edgeLine never moves a glyph, a line
    number, or a page boundary. */
 
 /* The frame floats EDGE_INSET off the text grid, borrowed from the bands, so the glyphs never
    touch the stroke while line numbers, header and folio still sit OUTSIDE it — like the printed
-   枠 of 原稿用紙. Insets: top = --htop band − 0.25em; bottom:2.25em = FOLIO_BAND 2.5 −
-   EDGE_INSET 0.25 (a folio-band derivation — NOT the 2.25 LINE_PITCH, despite the same text;
-   guarded against a FOLIO_BAND change by styles-codegen.test.ts). */
-.page::before{content:"";position:absolute;top:calc(var(--htop)*1em - 0.25em);right:0;bottom:2.25em;left:0;border:1px solid color-mix(in srgb,var(--edge) 80%,transparent);pointer-events:none;}
+   枠 of 原稿用紙. Insets: top = --htop band − 0.35em; bottom:2.15em = FOLIO_BAND 2.5 −
+   EDGE_INSET 0.35 (a folio-band derivation, guarded against drift by styles-codegen.test.ts). */
+.page::before{content:"";position:absolute;top:calc(var(--htop)*1em - 0.35em);right:0;bottom:2.15em;left:0;border:1px solid color-mix(in srgb,var(--edge) 80%,transparent);pointer-events:none;}
 
 /* The inter-column rule is the preview's recipe transplanted: each column but the page's last
-   draws ONE left rule (out-of-flow paint — the pitch never moves), stretched 0.25em past both
+   draws ONE left rule (out-of-flow paint — the pitch never moves), stretched 0.35em past both
    grid ends so it meets the outset frame exactly. The last column draws none: its outer edge is
    the frame's own border, and the 80%-alpha strokes would composite into a darker line. */
-.line:not(:last-child)::after{content:"";position:absolute;top:-0.25em;bottom:-0.25em;left:0;right:0;border-left:1px solid color-mix(in srgb,var(--edge) 80%,transparent);pointer-events:none;}
+.line:not(:last-child)::after{content:"";position:absolute;top:-0.35em;bottom:-0.35em;left:0;right:0;border-left:1px solid color-mix(in srgb,var(--edge) 80%,transparent);pointer-events:none;}

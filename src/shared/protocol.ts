@@ -10,7 +10,7 @@
  * (structured-clone over the forked-process channel) without vscode value types.
  */
 import type { BuildChrome, PreviewChrome } from './compiler/chrome.ts';
-import type { AutoTcyMode } from './config/types.ts';
+import type { AutoTcyMode, KinsokuMode } from './config/types.ts';
 import type { LintCode } from './lint/catalog.ts';
 
 // ---------------------------------------------------------------------------
@@ -164,8 +164,8 @@ export interface HighlightChangedParams {
  */
 export interface PreviewSettings extends PreviewChrome {
   readonly charsPerLine: number;
-  /** 禁則処理 toggle; rides BOTH snapshots so preview and build stay same-source. */
-  readonly avoidLineBreaks: boolean;
+  /** 禁則処理 mode; rides BOTH snapshots so preview and build stay same-source. */
+  readonly kinsoku: KinsokuMode;
   /** 自動縦中横 mode; rides BOTH snapshots so preview and build stay same-source. */
   readonly autoTcy: AutoTcyMode;
 }
@@ -177,8 +177,8 @@ export interface PreviewSettings extends PreviewChrome {
 export interface HtmlSettings extends BuildChrome {
   readonly charsPerLine: number;
   readonly linesPerPage: number;
-  /** 禁則処理 toggle; rides BOTH snapshots so preview and build stay same-source. */
-  readonly avoidLineBreaks: boolean;
+  /** 禁則処理 mode; rides BOTH snapshots so preview and build stay same-source. */
+  readonly kinsoku: KinsokuMode;
   /** 自動縦中横 mode; rides BOTH snapshots so preview and build stay same-source. */
   readonly autoTcy: AutoTcyMode;
 }

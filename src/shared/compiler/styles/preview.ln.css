@@ -8,4 +8,4 @@
    lands at the same pad-band spot at ANY fit size), then 2px clear of the 枠 stroke.
    PHYSICAL top/left/right on purpose: the element is horizontal-tb INSIDE a vertical-rl
    container — logical insets would resolve against its own writing mode and land wrong. */
-.ln{position:absolute;top:0;left:0;right:0;transform:translateY(calc(-100% - 0.25rem - 2px));writing-mode:horizontal-tb;text-align:center;font-size:10px;line-height:1;color:var(--vscode-editorLineNumber-foreground,#888);pointer-events:none;user-select:none;}
+.ln{position:absolute;top:0;left:0;right:0;transform:translateY(calc(-100% - 0.35rem - 2px));writing-mode:horizontal-tb;text-align:center;font-size:10px;line-height:1;color:var(--vscode-editorLineNumber-foreground,#888);pointer-events:none;user-select:none;}

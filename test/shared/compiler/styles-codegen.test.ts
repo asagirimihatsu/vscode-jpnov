@@ -79,9 +79,9 @@ test('the .css geometry literals equal the geometry.ts constants (@page double-h
   // FOLIO_BAND: the always-reserved bottom band.
   assert.equal(cssValue(buildBase, '.page', 'padding-inline-end'), FOLIO_BAND);
   // …and its one DERIVED literal: the outset frame's bottom inset in build.edge.css is
-  // FOLIO_BAND − EDGE_INSET (0.25, a .css-only constant). Its 2.25em text collides with
-  // LINE_PITCH's, so a FOLIO_BAND change could silently leave it behind — guard it here.
-  assert.equal(cssValue(read('build.edge.css'), '.page::before', 'bottom'), FOLIO_BAND - 0.25);
+  // FOLIO_BAND − EDGE_INSET (0.35, a .css-only constant); a FOLIO_BAND change could
+  // silently leave it behind — guard it here.
+  assert.equal(cssValue(read('build.edge.css'), '.page::before', 'bottom'), FOLIO_BAND - 0.35);
 
   // PRINT_MARGIN: the sheet's paper inset under @media print.
   assert.equal(cssValue(buildBase, '.page', 'margin', '@media print'), PRINT_MARGIN);

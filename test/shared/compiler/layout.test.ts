@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { BuildChrome } from '../../../src/shared/compiler/chrome.ts';
+import type { KinsokuMode } from '../../../src/shared/config/types.ts';
 import {
   buildRows,
   findPostfixTargetIssues,
@@ -20,16 +21,21 @@ const OFF: BuildChrome = {
 };
 
 // The continuous preview flow (no pagination); mirrors what renderPreview emits as <body>.
-const flow = (src: string, charsPerLine = 40, avoidLineBreaks = false): string =>
-  flowToHtml(buildRows(tokenize(src)), charsPerLine, avoidLineBreaks);
+const flow = (src: string, charsPerLine = 40, kinsoku: KinsokuMode = 'none'): string =>
+  flowToHtml(buildRows(tokenize(src)), charsPerLine, kinsoku);
 
 const pages = (src: string, charsPerLine = 40, linesPerPage = 34) =>
-  paginate(buildRows(tokenize(src)), charsPerLine, linesPerPage, false);
-// With 禁則処理 on, return each display line as its concatenated unit text (one page only).
-const klines = (src: string, charsPerLine: number): string[] =>
-  paginate(buildRows(tokenize(src)), charsPerLine, 34, true)
+  paginate(buildRows(tokenize(src)), charsPerLine, linesPerPage, 'none');
+// With 禁則処理 on, return each display line as its concatenated unit text (one page only);
+// a hung 句読点 shows as ⟪x⟫ after the column's cells.
+const klines = (src: string, charsPerLine: number, kinsoku: KinsokuMode = 'normal'): string[] =>
+  paginate(buildRows(tokenize(src)), charsPerLine, 34, kinsoku)
     .flat()
-    .map((line) => line.units.map((u) => u.text).join(''));
+    .map(
+      (line) =>
+        line.units.map((u) => u.text).join('') +
+        (line.hang === undefined ? '' : `⟪${line.hang.text}⟫`),
+    );
 const html = (src: string, charsPerLine = 40, linesPerPage = 34) =>
   pagesToHtml(pages(src, charsPerLine, linesPerPage), undefined, OFF);
 
@@ -144,8 +150,6 @@ test('禁則 rule 1: a line must not END with an opening bracket — push it dow
 test('禁則 rule 2: a line must not START with a closing/punctuation char — pull preceding down', () => {
   // cpl 2: naive ああ | 」 leaves 」 at line start. Pull あ down: あ | あ」.
   assert.deepEqual(klines('ああ」', 2), ['あ', 'あ」']);
-  // Trailing punctuation behaves the same: naive 文だ | 。 → pull だ down: 文 | だ。.
-  assert.deepEqual(klines('文だ。', 2), ['文', 'だ。']);
 });
 
 test('禁則 cascade: forbidden chars reflow and no line overflows cpl', () => {
@@ -171,6 +175,138 @@ test('禁則 exception: a lone forbidden char as the whole row is left as-is', (
   // The source row is a single 。 — the > start guard refuses to empty the line.
   assert.deepEqual(klines('。', 1), ['。']);
   assert.deepEqual(klines('「', 1), ['「']);
+});
+
+test('禁則 tiers: ・：； and ゝゞヽヾ〻 are 行頭禁則 only in strict', () => {
+  assert.deepEqual(klines('いあ・', 2), ['いあ', '・']);
+  assert.deepEqual(klines('いあ・', 2, 'strict'), ['い', 'あ・']);
+  assert.deepEqual(klines('いあゝ', 2), ['いあ', 'ゝ']);
+  assert.deepEqual(klines('いあゝ', 2, 'strict'), ['い', 'あゝ']);
+});
+
+test('禁則 tiers: 々 is 行頭禁則 already in normal', () => {
+  assert.deepEqual(klines('いあ々', 2), ['い', 'あ々']);
+});
+
+test('禁則 predicate: half-width !? and single-codepoint ‼⁇⁈⁉ are 行頭禁則', () => {
+  assert.deepEqual(klines('ああ!', 2), ['あ', 'あ!']);
+  assert.deepEqual(klines('ああ‼', 2), ['あ', 'あ‼']);
+});
+
+test('禁則 predicate: a 縦中横 約物 cell participates in 行頭禁則 whole', () => {
+  // The tcy unit's text is "!?" (two chars): the every-char predicate still catches it at
+  // a line head; a digit tcy stays free.
+  assert.deepEqual(klines('ああ!?［＃「!?」は縦中横］', 2), ['あ', 'あ!?']);
+  assert.deepEqual(klines('ああ12［＃「12」は縦中横］', 2), ['ああ', '12']);
+});
+
+test('禁則: 〝 must not end a line, 〟 must not start one', () => {
+  assert.deepEqual(klines('ああ〝い〟', 3), ['ああ', '〝い〟']);
+  assert.deepEqual(klines('ああ〟', 2), ['あ', 'あ〟']);
+});
+
+test('分離禁止: a dash pair crosses the wrap whole (mixed codepoints bind too)', () => {
+  // cpl 6: naive あいうえお― | ―か splits ――; the bound 2-cell unit moves whole.
+  assert.deepEqual(klines('あいうえお――か', 6), ['あいうえお', '――か']);
+  assert.deepEqual(klines('あいう—―え', 4), ['あいう', '—―え']); // U+2014 + U+2015
+});
+
+test('分離禁止: leader pairs (…… / ‥‥) cross the wrap whole', () => {
+  assert.deepEqual(klines('あいうえお……か', 6), ['あいうえお', '……か']);
+  assert.deepEqual(klines('あいう‥‥え', 4), ['あいう', '‥‥え']);
+});
+
+test('約物対: half-width !! / full-width ！！ / tcy stay whole and off the line head', () => {
+  // Three shapes, one outcome: the pair never splits, and (being 行頭禁則) never heads a
+  // line either — the cascade pulls the preceding char down with it.
+  assert.deepEqual(klines('ああ!!', 3), ['あ', 'あ!!']); // bound 2-cell pair (autoTcy off)
+  assert.deepEqual(klines('ああ！！', 3), ['あ', 'あ！！']); // full-width: two 1-cell units
+  assert.deepEqual(klines('ああ!!［＃「!!」は縦中横］', 3), ['ああ!!']); // tcy: 1 cell, fits
+});
+
+test('分離禁止 normal vs strict: a long run pairs from the left / binds whole', () => {
+  // 4 leaders = two pairs: normal may break BETWEEN pairs; an odd tail stays a free single.
+  assert.deepEqual(klines('あい…………うえ', 4), ['あい……', '……うえ']);
+  assert.deepEqual(klines('あい………', 4), ['あい……', '…']);
+  // strict binds the whole run — it moves down atomically, and an over-budget run
+  // overflows on its own line (same degrade as an over-wide ruby).
+  assert.deepEqual(klines('あい…………うえ', 4, 'strict'), ['あい', '…………', 'うえ']);
+  assert.deepEqual(klines('あ――――――', 4, 'strict'), ['あ', '――――――']);
+});
+
+test('分離禁止: a zero-width unit interrupts a run (no binding across a comment)', () => {
+  // The degraded postfix becomes a zero-width comment between the dashes → two length-1
+  // runs, nothing binds, and the wrap may split them (a defensible degrade).
+  assert.deepEqual(klines('あ―［＃「z」に傍点］―', 2), ['あ―', '―']);
+});
+
+test('ぶら下げ: a trailing 句読点 hangs as a zero cell instead of 追い出し', () => {
+  // cpl 2: 。 would head the next line; it hangs off the full 文だ column instead — the
+  // column keeps its budget and no char moves. 、。，． all hang.
+  assert.deepEqual(klines('文だ。', 2), ['文だ⟪。⟫']);
+  assert.deepEqual(klines('文だ、あ', 2), ['文だ⟪、⟫', 'あ']);
+  assert.deepEqual(klines('文だ，', 2), ['文だ⟪，⟫']);
+  assert.deepEqual(klines('文だ．', 2), ['文だ⟪．⟫']);
+  // none never hangs (bare wrap), and non-句読点 行頭禁則 chars still 追い出し.
+  assert.deepEqual(klines('文だ。', 2, 'none'), ['文だ', '。']);
+  assert.deepEqual(klines('いあー', 2), ['い', 'あー']);
+});
+
+test('ぶら下げ: the hung unit is zero cells and the column stays at budget', () => {
+  const line = paginate(buildRows(tokenize('文だ。')), 2, 34, 'normal')[0]?.[0];
+  assert.ok(line);
+  assert.ok(line.hang);
+  assert.equal(line.hang.text, '。');
+  assert.equal(line.hang.cells, 0);
+  assert.equal(
+    line.units.reduce((n, u) => n + u.cells, 0),
+    2,
+  );
+});
+
+test('ぶら下げ: a following 行頭禁則 char cancels the hang — 追い出し instead', () => {
+  // 。」: hanging 。 would leave 」 heading the next line → give up, 追い出し (the head
+  // violation left at the > start+1 guard is the same degrade as today's cascade).
+  assert.deepEqual(klines('文。」', 2), ['文', '。」']);
+  // 。。: the first 。 cannot hang (the second would head a line); the second one hangs.
+  assert.deepEqual(klines('ああ。。', 2), ['あ', 'あ。⟪。⟫']);
+});
+
+test('ぶら下げ: 行末禁則 wins — no hang off a line ending on an opening bracket', () => {
+  // 「、 at the boundary: hanging 、 would trap 「 at the line end → 追い出し first.
+  assert.deepEqual(klines('あ「、い', 2), ['あ', '「、', 'い']);
+});
+
+test('ぶら下げ: a stretched-ruby line hangs its trailing 句読点 with no special-casing', () => {
+  // The hang touches no spacing, so a ruby column (rh-N stretched — 志 is 2 cells here —
+  // or not) hangs as-is: cpl 4 holds 志(2)+あ+い and the 。 hangs off the full column.
+  assert.deepEqual(klines('志《こころざし》あい。', 4), ['志あい⟪。⟫']);
+});
+
+test('ぶら下げ: row-local only — an author line-head 。 is never borrowed up', () => {
+  assert.deepEqual(klines('あ\n。', 3), ['あ', '。']);
+});
+
+test('ぶら下げ: 字下げ narrows the budget but the hang rides the column foot as usual', () => {
+  assert.deepEqual(klines('［＃２字下げ］文だ。', 4), ['文だ⟪。⟫']);
+});
+
+test('ぶら下げ: the cell ledger resets after a hang — later wraps stay on budget', () => {
+  // If the hung cell leaked into the next column's count, あい would split a cell early.
+  assert.deepEqual(klines('文だ。あい', 2), ['文だ⟪。⟫', 'あい']);
+});
+
+test('ぶら下げ: trailing zero-width units ride the hung column (no orphan empty column)', () => {
+  assert.deepEqual(klines('文だ。［＃「z」に傍点］', 2), ['文だ⟪。⟫']);
+});
+
+test('ぶら下げ: a decorated hung 句読点 keeps its channel span around the .hang span', () => {
+  const out = pagesToHtml(
+    paginate(buildRows(tokenize('文だ。［＃「文だ。」に傍点］')), 2, 34, 'normal'),
+    undefined,
+    OFF,
+  );
+  assert.match(out, /<span class="emph-fs"><span class="hang">。<\/span><\/span>/);
 });
 
 // --- flowToHtml: the continuous preview flow over the shared engine -------------------
@@ -245,10 +381,10 @@ test('flowToHtml: a break followed by a blank line opens the next segment on the
   );
 });
 
-test('flowToHtml: honors avoidLineBreaks (禁則) — the SAME engine as the build', () => {
+test('flowToHtml: honors the kinsoku mode (禁則) — the SAME engine as the build', () => {
   // cpl 2: naive ああ | 」 leaves 」 at line start; 追い出し pulls あ down → あ | あ」.
   assert.equal(
-    flow('ああ」', 2, true),
+    flow('ああ」', 2, 'normal'),
     '<div class="book"><div class="segment">' +
       '<div class="line" data-line="0">あ</div><div class="line">あ」</div></div></div>',
   );
@@ -259,7 +395,7 @@ test('flowToHtml: lineNumbers emits JS-numbered .ln heads that restart at a brea
   // following siblings in Chromium); a wrapped continuation column counts as its own line,
   // and a collapsed (doubled) break still restarts only once — with the segment it opens.
   assert.equal(
-    flowToHtml(buildRows(tokenize('一二三\n［＃改ページ］\n［＃改ページ］\n四')), 2, false, undefined, true),
+    flowToHtml(buildRows(tokenize('一二三\n［＃改ページ］\n［＃改ページ］\n四')), 2, 'none', undefined, true),
     '<div class="book"><div class="segment">' +
       '<div class="line" data-line="0"><span class="ln">1</span>一二</div>' +
       '<div class="line"><span class="ln">2</span>三</div></div>' +

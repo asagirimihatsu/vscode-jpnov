@@ -8,10 +8,10 @@
 /* Each column but the segment's last draws ONE left rule (a right+left pair per boundary would
    stack into a fat 2px line; the last column's outer edge is the frame's own border, and the
    80%-alpha strokes would composite into a visibly darker line). The rule anchors on a .line
-   already inset 0.25rem by the segment padding, so it climbs back the same length — in REM,
+   already inset 0.35rem by the segment padding, so it climbs back the same length — in REM,
    the exact unit of that padding, so a webview-injected body{font-size} can't desync the two —
    to meet the frame's top edge exactly. */
-.line:not(:last-child)::after{content:"";position:absolute;top:-0.25rem;left:0;right:0;height:calc(100vh - 32px);border-left:1px solid color-mix(in srgb,var(--edge) 80%,transparent);pointer-events:none;}
+.line:not(:last-child)::after{content:"";position:absolute;top:-0.35rem;left:0;right:0;height:calc(100vh - 32px);border-left:1px solid color-mix(in srgb,var(--edge) 80%,transparent);pointer-events:none;}
 
 /* A real frame per .segment closes the outer edges — the build's per-.page 枠 transplanted, so
    the frames on either side of a ［＃改ページ］ close independently and the marker rides

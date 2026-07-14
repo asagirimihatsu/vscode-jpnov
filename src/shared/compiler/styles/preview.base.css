@@ -5,8 +5,8 @@
 /* Fit-to-viewport type scale: in vertical-rl a full-width char advances exactly 1em along the
    column, so (100vh − 2·16px pad) / (charsPerLine + 2·EDGE_INSET) makes a full line PLUS the
    always-reserved frame gaps fill the pane top to bottom; vh re-evaluates on panel resize, so
-   no script is involved. --cpl is the only dynamic input; 0.5 = 2 × EDGE_INSET (0.25). */
-html{writing-mode:vertical-rl;font-family:serif;line-height:2.25;font-size:calc((100vh - 32px) / (var(--cpl) + 0.5));}
+   no script is involved. --cpl is the only dynamic input; 0.7 = 2 × EDGE_INSET (0.35). */
+html{writing-mode:vertical-rl;font-family:serif;line-height:2.25;font-size:calc((100vh - 32px) / (var(--cpl) + 0.7));}
 
 /* The inline axis is vertical here: padding-inline is the top/bottom breathing room the
    fit formula subtracts (32px = 2 × this pad). The bottom half also keeps the horizontal
@@ -14,12 +14,12 @@ html{writing-mode:vertical-rl;font-family:serif;line-height:2.25;font-size:calc(
    as the band the .ln numbers are lifted into (see preview.ln.css). */
 body{margin:0;padding-inline:16px;}
 
-/* EDGE_INSET reserve (0.25): every segment insets its text from both band ends — the reserve
+/* EDGE_INSET reserve (0.35): every segment insets its text from both band ends — the reserve
    the fit formula's denominator pays for. Unconditional (frame or not): toggling edgeLine must
    not move the text. REM, not em: the webview host injects body{font-size}, and an em here
    would follow it while the text follows the 1rem-pinned .line. position:relative doubles as
    the frame's anchor box (see preview.edge.css). */
-.segment{position:relative;padding-inline:0.25rem;}
+.segment{position:relative;padding-inline:0.35rem;}
 
 /* Re-pin the manuscript to the scaled root (1rem) on .line, so a host/webview-injected
    body{font-size} can't desync the glyph advance from the em-based line pitch.

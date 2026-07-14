@@ -63,6 +63,13 @@ function classRule(name: string): string {
     // combination, no geometry), so the one rule serves preview and build alike.
     return '.tcy{text-combine-upright:all}';
   }
+  if (name === 'hang') {
+    // ぶら下げ: negative letter-spacing cancels the hung 句読点's own advance, so only its
+    // INK reaches past the last cell into the 0.35em EDGE_INSET reserve. Ink overflow never
+    // extends the scrollable area — an inline-block/overflow box here would grow the
+    // preview's scrollHeight past the exact-fill viewport and summon a scrollbar.
+    return '.hang{letter-spacing:-1em}';
+  }
   if (name === 'rr' || name === 'lr' || name === 'br') {
     // Ruby lanes (rr right / lr left / br both) — every ruby renders here: Chrome has no
     // working double-sided ruby (ruby-position on an <rt> is ignored; a second <rt> stacks

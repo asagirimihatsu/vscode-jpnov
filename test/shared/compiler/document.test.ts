@@ -23,7 +23,7 @@ const render = (
     books: [book({ files: [{ name: 'a.jpnov', src }] })],
     charsPerLine: opts.charsPerLine ?? 40,
     linesPerPage: opts.linesPerPage ?? 34,
-    avoidLineBreaks: false,
+    kinsoku: 'none',
     autoTcy: 'none',
     chrome: { ...OFF, ...opts.chrome },
   });
@@ -53,7 +53,7 @@ test('renderBook concatenates files[] in order', () => {
     ],
     charsPerLine: 40,
     linesPerPage: 34,
-    avoidLineBreaks: false,
+    kinsoku: 'none',
     autoTcy: 'none',
     chrome: OFF,
   });

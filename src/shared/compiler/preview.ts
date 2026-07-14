@@ -1,4 +1,4 @@
-import type { AutoTcyMode } from '../config/types.ts';
+import type { AutoTcyMode, KinsokuMode } from '../config/types.ts';
 import { applyAutoTcy } from './autoTcy.ts';
 import type { PreviewChrome } from './chrome.ts';
 import { stylesheet } from './css.ts';
@@ -9,8 +9,8 @@ import { tokenize } from './tokenizer.ts';
  * Renders ONE file as a full standalone `<html>` document for the preview pane: a CONTINUOUS
  * line flow (no pagination) built by the SAME layout engine the book build uses, so the preview
  * agrees with the printed page. Lines hard-wrap at `charsPerLine` (折り返し), and the stylesheet
- * scales its font so a full charsPerLine-char line fills the pane height; `avoidLineBreaks`
- * enables 禁則処理; ［＃改ページ］ shows as a labelled `<div class="pagebreak">` marker rather
+ * scales its font so a full charsPerLine-char line fills the pane height; `kinsoku` selects
+ * the 禁則処理 tier; ［＃改ページ］ shows as a labelled `<div class="pagebreak">` marker rather
  * than a real page break. `chrome` drives the line-head numbers (JS-numbered `.ln` spans that
  * restart after every break marker, see {@link flowToHtml}) and the CSS-only column edge rules.
  * Each source line's first display column carries a `data-line` anchor so the client can
@@ -24,7 +24,7 @@ export function renderPreview(
   src: string,
   opts: {
     charsPerLine: number;
-    avoidLineBreaks: boolean;
+    kinsoku: KinsokuMode;
     autoTcy: AutoTcyMode;
     chrome: PreviewChrome;
   },
@@ -36,7 +36,7 @@ export function renderPreview(
   const body = flowToHtml(
     buildRows(tokenize(applyAutoTcy(src, opts.autoTcy))),
     opts.charsPerLine,
-    opts.avoidLineBreaks,
+    opts.kinsoku,
     used,
     opts.chrome.lineNumbers,
   );

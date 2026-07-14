@@ -307,19 +307,19 @@ test('two filelists colliding on the output path error BOTH and emit neither', a
   }
 });
 
-test('build honors avoidLineBreaks from the settings snapshot (禁則)', async () => {
+test('build honors the kinsoku mode from the settings snapshot (禁則)', async () => {
   const ws = makeTmpWorkspace();
   try {
     // 禁則 rides the request's settings snapshot (same source as the preview). At width 16 a
     // naive wrap ends column 1 on the opening 「 (cell 16); 追い出し pushes it down →
-    // 15×あ | 「い」. Proves settings.avoidLineBreaks reaches renderBook alongside charsPerLine.
+    // 15×あ | 「い」. Proves settings.kinsoku reaches renderBook alongside charsPerLine.
     const { ctx } = boot();
     const head = 'あ'.repeat(15);
     writeUnder(ws.dir, 'vol1/index.filelist', 'a.jpnov');
     writeUnder(ws.dir, 'vol1/a.jpnov', `${head}「い」`);
 
     const result = await handleBuild(ctx, {
-      settings: { ...SETTINGS, charsPerLine: 16, avoidLineBreaks: true, pageNumberPosition: 'none' },
+      settings: { ...SETTINGS, charsPerLine: 16, kinsoku: 'normal', pageNumberPosition: 'none' },
       projectDirs: projectsFor(ws.uri),
     });
     const html = result.artifacts?.find((a) => a.path.endsWith('.html'))?.content ?? '';

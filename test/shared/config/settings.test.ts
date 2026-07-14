@@ -14,7 +14,7 @@ import type { HtmlSettings, PreviewSettings } from '../../../src/shared/protocol
 const HTML_BASE: HtmlSettings = { ...LAYOUT_DEFAULT, ...BUILD_CHROME_DEFAULT };
 const PREVIEW_BASE: PreviewSettings = {
   charsPerLine: LAYOUT_DEFAULT.charsPerLine,
-  avoidLineBreaks: LAYOUT_DEFAULT.avoidLineBreaks,
+  kinsoku: LAYOUT_DEFAULT.kinsoku,
   autoTcy: LAYOUT_DEFAULT.autoTcy,
   ...PREVIEW_CHROME_DEFAULT,
 };
@@ -52,19 +52,12 @@ test('grid geometry clamps to [16..64] and falls back on non-integers', () => {
   assert.equal(resolvePreviewSettings({ ...PREVIEW_BASE, charsPerLine: 64 }).charsPerLine, 64);
 });
 
-test('avoidLineBreaks rides both snapshots: kept when boolean, defaulted otherwise', () => {
-  assert.equal(
-    resolveHtmlSettings({ ...HTML_BASE, avoidLineBreaks: true }).avoidLineBreaks,
-    true,
-  );
-  assert.equal(
-    resolvePreviewSettings({ ...PREVIEW_BASE, avoidLineBreaks: true }).avoidLineBreaks,
-    true,
-  );
-  assert.equal(
-    resolveHtmlSettings(badHtml({ avoidLineBreaks: 'on' })).avoidLineBreaks,
-    LAYOUT_DEFAULT.avoidLineBreaks,
-  );
+test('kinsoku rides both snapshots: kept when a known member, defaulted otherwise', () => {
+  assert.equal(resolveHtmlSettings({ ...HTML_BASE, kinsoku: 'strict' }).kinsoku, 'strict');
+  assert.equal(resolvePreviewSettings({ ...PREVIEW_BASE, kinsoku: 'none' }).kinsoku, 'none');
+  assert.equal(resolveHtmlSettings(badHtml({ kinsoku: 'loose' })).kinsoku, LAYOUT_DEFAULT.kinsoku);
+  // A legacy boolean (the retired pre-enum shape) is just another invalid value.
+  assert.equal(resolveHtmlSettings(badHtml({ kinsoku: true })).kinsoku, LAYOUT_DEFAULT.kinsoku);
 });
 
 test('autoTcy rides both snapshots: kept when a known member, defaulted otherwise', () => {
