@@ -1,7 +1,7 @@
 ```text
 // .vscode/settings.json
-"jpnov.highlight.characters": ["朝霧　巳一", "Arill Stains"],
-"jpnov.highlight.keywords":   ["黒剣", "境無"]
+"jpnov.highlight.characters": ["神木　林", "Arill Stains"],
+"jpnov.highlight.keywords":   ["境無"]
 
-　巳一は黒剣を構えた。  ──▶  「巳一は」＝登場人物、「黒剣」＝造語
+　林は境無を構えた。  ──▶  「林は」＝登場人物、「境無」＝造語
 ```
