@@ -14,7 +14,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/asagirimihatsu/vscode-jpnov.git"
+    "url": "https://github.com/asagirimihatsu/vscode-jpnov.git"
   },
   "license": "MIT",
   "author": "Mihatsu Asagiri",
