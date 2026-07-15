@@ -1,195 +1,185 @@
 # Japanese Novel
 
-A Visual Studio Code extension for formatting, previewing, and generating vertical writing books of Japanese novels annotated with [Aozora Bunko annotations](https://www.aozora.gr.jp/annotation/index.html).
+日本語 ｜ [English](./README.en.md)
 
-## Novel Publishment
+**書いて、確かめて、一冊にする。すべて縦書きのまま。**
 
-Publishing a novel is a serious matter. Many editors explicitly forbid the use of **any AI**. This tool will **NOT** introduce any AI tools **for writing**, and will disable the Copilot extension by default for `*.jpnov` / `*.filelist`.
+![縦書きに組まれた小説のページ。ルビ付きの本文、上部に柱、右下にページ番号](docs/images/hero-page.png)
 
-All `*.filelist` completion relies entirely on non-AI programs.
+*「PDF に出力」の結果をそのまま画像にしたものです（夏目漱石『吾輩は猫である』・青空文庫より）*
 
-**Writing must be done entirely by human author from beginning to end.**
+「Japanese Novel」は、無料のエディター「Visual Studio Code（VS Code）」を日本語小説の執筆環境に変える拡張機能です。書いた文章はすぐ隣に縦書きで表示され、章をまとめて HTML・PDF・テキストの「本」として出力できます。記法は青空文庫の注記そのまま。原稿はただのテキスト ファイルで、特別な形式に囲い込まれることはありません。
 
-Some authors might think this is "making a mountain out of a molehill". But, commercial publishing is indeed a complex issue. Determining copyright boundaries and resolving infringement disputes incurs high costs in terms of human and material resources.
+## できること
 
-## Status
+- **縦書きプレビュー** — 書きながら、組み上がった姿をすぐ隣で確認できます。
+- **青空文庫の注記に対応** — ルビ・傍点・傍線・太字・斜体・縦中横・改ページなど。
+- **本づくり** — 章をまとめて、縦書きの HTML・印刷用の PDF・青空文庫形式のテキストに出力。
+- **文章チェック** — 目に見えない不正な文字や、投稿前の体裁くずれに気づけます。
+- **登場人物と造語のハイライト** — 人物の名前や造語が、地の文で目立つ表示になります。
 
-Early scaffolding. Novel sources are written in `.jpnov` files (the editor binds them
-to the **Japanese Novel** language for highlighting and live preview); a `.filelist`
-manifest lists, in reading order, the `.jpnov` chapters that make up one book.
+![エディターと縦書きプレビューを並べた VS Code の画面](docs/images/vscode-side-by-side.png)
 
-The extension activates when you open a `.jpnov` or `.filelist` file, when a workspace
-folder root holds a `*.filelist`, or when any `jpnov.*` setting is saved at the workspace
-or folder level. Startup scanning looks only at folder roots — a project whose filelists
-all sit in subfolders activates when you open a file, and keeps auto-activating once any
-`jpnov.*` workspace setting exists. Activation alone doesn't list books: the Books panel
-appears for any novel workspace and fills once a `.filelist` is found (its empty state links
-you to create one). **Preview** of a `.jpnov` and **`.filelist` editing**
-(completion, diagnostics, links) work with no configuration at all. A **Get started with
-Japanese Novel** walkthrough (Help → Get Started) covers the same steps as the quick
-start below.
+## AI は使いません
 
-## Quick start
+小説の投稿や出版では、AI の利用を禁じる編集部や賞が少なくありません。この拡張機能は、**執筆のための AI 機能を一切持ち込みません**。`.jpnov`・`.filelist` を開いている間は GitHub Copilot 拡張機能も既定で無効になり、入力補完はすべて AI ではない、ふつうのプログラムで動きます。
 
-1. **Write a chapter.** Create a file ending in `.jpnov` (e.g. `chapter1.jpnov`) and start
-   writing. [Aozora Bunko annotations](https://www.aozora.gr.jp/annotation/index.html) are
-   highlighted as you type; click the preview icon in the editor title bar (or run **Japanese
-   Novel: Open Preview to the Side**) to see it in vertical, right-to-left 原稿用紙 layout.
-2. **Make a book.** Create a `.filelist` (e.g. `volume1.filelist`) and list your chapter
-   files, one per line, in reading order. One `.filelist` is one book.
-3. **Build it.** Save your chapters and the `.filelist` (builds read from disk), then open the
-   **Japanese Novel** view in the Activity Bar (the book icon), tick the books you want, and use
-   **Build to HTML** (paginated vertical `.html`), **Build to PDF** (print-ready `.pdf`), or
-   **Build to Text** (concatenated Aozora-format `.txt`) from the panel's title bar. Use
-   **Select All** / **Deselect All** to bulk-toggle the selection.
+**執筆は最初から最後まで、人間の手で。**
 
-Chapters and `.filelist` books can live anywhere in the workspace folder — subfolders work
-and are mirrored into the output (`src/volume1.filelist` builds to `dist/src/volume1.html`).
-The output folder (`jpnov.project.outDir`, default `dist`, under **Japanese Novel — Project**),
-dot-folders, and `node_modules` are never scanned for books. Layout, preview, HTML-output,
-and lint are plain window-level VS Code settings under the other **Japanese Novel** sections;
-the output folder and the highlighting lists are resource-scoped, so those can be overridden
-per workspace folder.
+## はじめかた
 
-## Annotations
+パソコンに慣れていなくても大丈夫です。順番にどうぞ。
 
-Novel sources use [Aozora Bunko annotations](https://www.aozora.gr.jp/annotation/index.html).
-Recognised forms are highlighted and rendered; anything else passes through as an HTML
-comment (never an error), so unusual markup degrades quietly.
+1. **VS Code を入れる** — [公式サイト](https://code.visualstudio.com/)から無料でダウンロードして、インストールします。
+2. **日本語表示にする** — VS Code を起動したら、左端の四角いブロックのアイコン（拡張機能）をクリックし、検索欄に `Japanese Language Pack` と入力してインストール。案内に従って再起動すると、画面が日本語になります。
+3. **この拡張機能を入れる** — 同じ検索欄に `Japanese Novel` と入力してインストールします。
+4. **小説のフォルダーを開く** — 原稿を入れるフォルダーを作り、メニューの「ファイル」→「フォルダーを開く」で開きます。「このフォルダー内のファイルの作成者を信頼しますか?」と聞かれたら、「はい、作成者を信頼します」を選んでください。自分で作ったフォルダーなので心配ありません。
+5. **章を書く** — 「ファイル」→「新しいテキスト ファイル」で書き始め、保存するときに `第一章.jpnov` のように**名前の末尾を `.jpnov` にします**。この名前が「小説の章」の目印です。
+6. **縦書きで確かめる** — `.jpnov` のファイルを開いた状態で、エディター右上の「プレビューを横に開く」アイコンを押すと、隣に縦書きの組み上がりが表示されます。
+7. **目次を作る** — 章がいくつかできたら、`作品名.filelist` というファイルを作り、**読む順に 1 行 1 ファイル**で章の名前を書きます。`.filelist` 1 つが本 1 冊です。
 
-| Effect | Inline / postfix | Block (each on its own line) |
-| --- | --- | --- |
-| Ruby | `漢字《かんじ》`, `｜親文字《ルビ》` | — |
-| Left ruby 左ルビ | `［＃「対象」の左に「よみ」のルビ］` | — |
-| Tate-chu-yoko 縦中横 | `対象［＃「対象」は縦中横］`, `［＃縦中横］…［＃縦中横終わり］` | — |
-| Emphasis dots 傍点 | `［＃「対象」に傍点］`, `［＃傍点］…［＃傍点終わり］` | — |
-| Side line 傍線 (5 styles) | `［＃「対象」に傍線］` (傍線/二重傍線/鎖線/破線/波線) | — |
-| Bold 太字 | `［＃「対象」は太字］`, `［＃太字］…［＃太字終わり］` | `［＃ここから太字］…［＃ここで太字終わり］` |
-| Italic 斜体 | `［＃「対象」は斜体］`, `［＃斜体］…［＃斜体終わり］` | `［＃ここから斜体］…［＃ここで斜体終わり］` |
-| Indent 字下げ | `［＃○字下げ］` (line head) | `［＃ここから○字下げ］…［＃ここで字下げ終わり］` |
-| Page break | — | `［＃改ページ］` |
+   ```text
+   第一章.jpnov
+   第二章.jpnov
+   最終章.jpnov
+   ```
 
-Notes: 傍点/傍線 take a left-side variant, fixed by form: the **postfix** form uses `の左に`
-(`［＃「対象」の左に傍点］`), the **span** form uses bare `左に` (`［＃左に傍点］…［＃左に傍点終わり］`);
-bold/italic use the connector **は**, not に. Indent counts (`○`) are **full-width digits**
-(２, １０); the block indent also indents wrapped continuation lines. The hanging-indent form
-(`折り返して`) is not supported and degrades to a comment. An unclosed block (`ここから` with no
-`ここで…終わり`) still renders to the end of the file but raises an editor **Warning**; italic
-relies on the browser synthesising an oblique for Japanese fonts.
+8. **本にする** — 左端のアクティビティ バーに現れる本のアイコン（小説）を開くと、「本の一覧」に今の `.filelist` が並んでいます。チェックが入っているのを確かめて、一覧の右上の「PDF に出力」を押せば、フォルダー内の `dist` に印刷用の PDF ができあがります。
 
-**Left ruby 左ルビ** puts a reading on the LEFT of the preceding text; pair it with an ordinary
-right ruby for 両側ルビ (`青空文庫《あおぞらぶんこ》［＃「青空文庫」の左に「aozora bunko」のルビ］` —
-the annotation names the base only, never the `《》` part). Left readings are exempt from the
-ruby-kana lint, since they are often Latin. **縦中横** stands a short run (a 2–3 digit number,
-`!?`) upright in one square — keep it to 3 characters or fewer (longer squishes and raises a
-Warning). **自動縦中横** (`jpnov.layout.autoTateChuYoko`, under Layout, default `punctuationPairs`)
-auto-combines the half-width pairs `!!` `!?` `?!` `??` with no markup — runs of three or more are
-never touched — and the text build writes the explicit markers out, so the `.txt` round-trips; set
-it to `none` to turn it off.
+![「小説」パネルの「本の一覧」と出力ボタン](docs/images/vscode-books-panel.png)
 
-**禁則処理** (`jpnov.layout.kinsoku`, under Layout, default `normal`) applies Japanese
-line-breaking rules at every wrap, in the preview and the built book alike: opening brackets
-never end a line; closing brackets, punctuation, small kana, `ー` and `々` never start one;
-`――` and `……` pairs never split; and a trailing `、` `。` hangs into the margin (ぶら下げ)
-instead of pushing text down. `strict` adds the 中点 (`・：；`) and repetition-mark
-(`ゝゞヽヾ〻`) classes and keeps whole symbol runs unbroken; `none` restores the bare wrap.
+同じ流れは、「ようこそ」画面（メニューの「ヘルプ」→「ようこそ」）にあるガイド「小説をはじめる」でも案内しています。
 
-## Character & keyword highlighting
+## 書き方（青空文庫の注記）
 
-Declare your **cast** and a few **coined keywords** in settings (**Japanese Novel —
-Highlighting**, per workspace folder), so they stand out while you write — handy where
-Japanese drops the subject:
+本文はふつうに書くだけです。ルビや傍点を付けたいところにだけ、決まった書き方――[青空文庫の注記](https://www.aozora.gr.jp/annotation/index.html)――を添えます。青空文庫は日本語の電子テキストで長く使われてきた形式なので、原稿がこの拡張機能に縛られることはありません。
 
-```json
-// .vscode/settings.json
-{
-  "jpnov.highlight.characters": ["朝霧　巳一", "Arill Stains"],
-  "jpnov.highlight.keywords": ["黒剣", "境無"]
-}
+| やりたいこと | 書き方 |
+| --- | --- |
+| ルビを振る | `漢字《かんじ》` |
+| ルビの範囲を指定する | `｜お茶の間《おちゃのま》` |
+| 左側にルビを振る | `英雄［＃「英雄」の左に「ヒーロー」のルビ］` |
+| 傍点を打つ | `言葉［＃「言葉」に傍点］` |
+| 傍線を引く | `言葉［＃「言葉」に傍線］` |
+| 太字にする | `言葉［＃「言葉」は太字］` |
+| 斜体にする | `言葉［＃「言葉」は斜体］` |
+| 数字などを 1 マスに収める（縦中横） | `42［＃「42」は縦中横］` |
+| 字下げする | 一般的には全角スペース、必要なら`［＃２字下げ］`（数字は全角で） |
+| ページを改める | `［＃改ページ］`（行の頭で） |
+
+<img src="docs/images/notation.png" width="800" alt="注記の見本を縦書きに組んだ表示。ルビ・両側ルビ・傍点・波線・太字・縦中横が並ぶ">
+
+上の見本の原稿はこちらです。コピーしてそのまま試せます。
+
+```text
+　物語《ものがたり》が始まる。
+　｜お茶の間《おちゃのま》へ届け。
+　覚悟［＃「覚悟」に傍点］を決めた。
+　運命［＃「運命」に波線］が動く。
+　英雄《えいゆう》［＃「英雄」の左に「ヒーロー」のルビ］の登場。
+　第42［＃「42」は縦中横］話、太字［＃「太字」は太字］で。
+「何だと!?」
 ```
 
-- **`jpnov.highlight.characters`** — each name is split on the half-/full-width space into
-  surname + given, so the full name, the surname alone, and the given name alone are all
-  recognised. A character is highlighted only where it reads as a **subject**: a name
-  (optionally with one honorific such as `さん` / `先生` / `ちゃん`) immediately followed by `は`
-  or `が` — e.g. `巳一は`, `朝霧ちゃんが`. Common pronouns (`僕` / `私` / `俺` / `彼` / `彼女` …) are
-  recognised the same way. Dialogue inside `「」` / `『』` is left in the body colour; only
-  narration is scanned.
-- **`jpnov.highlight.keywords`** — coined terms (a fantasy noun, a place, …) are **bolded**
-  wherever they appear in narration, without changing colour. Where a surface is in both
-  lists the subject form wins, so `境無は` reads as a character while a bare `境無` is a keyword.
+覚えておくと便利なこと：
 
-Both lists apply per workspace folder and take effect immediately in open editors — no
-reload, no rebuild. Empty and duplicate items are ignored. Colouring is delivered as LSP
-semantic tokens with per-language default colours; override them in your settings under
-`editor.semanticTokenColorCustomizations` if you like.
+- 注記の `［＃…］` は**すべて全角**で書きます。半角の `[#…]` は効きません。
+- `!?` `!!` のような半角 2 文字の組は、注記を書かなくても自動で 1 マスに収まります（自動縦中横）。
+- 見出しの記法はありません。**章＝ 1 ファイル**が区切りです。
+- 対応していない注記はメモ扱いになり、出力には現れません。書きかけの注記（`］` の閉じ忘れ）は波線でお知らせします。
 
-## Proofreading (lint)
+## 縦書きプレビュー
 
-Japanese Novel runs [textlint](https://textlint.github.io/)-based checks as you write, surfaced
-as editor diagnostics with quick-fixes (and a **Fix all auto-fixable problems** source action).
-Everything is a plain `jpnov.lint.*` setting under **Japanese Novel — Lint**, overridable per
-workspace folder.
+エディター右上の「プレビューを横に開く」で、隣のパネルに組み上がりが表示されます。
 
-- **Hygiene checks are on by default** — half-width kana, decomposed (NFD) characters,
-  zero-width / invisible characters, and invalid control characters — so a stray malformed or
-  invisible character never slips into a manuscript.
-- **Publication-style checks are opt-in.** `jpnov.lint.narration.generalNovelStyle` (a paragraph
-  begins with a full-width indent `　` or an opening bracket) and
-  `jpnov.lint.narration.jaNoMixedPeriod` (a narration sentence ends with `。`) catch
-  manuscript-convention slips many editors expect fixed before submission; both are auto-fixable.
-  The length and run-length limits (`sentenceLength`, `maxTen`, `maxKanjiRun`) and the ruby-kana
-  rule are opt-in too.
+- 入力するたびに、すぐ反映されます。
+- エディターでカーソルを動かすと、プレビューも同じ場所まで追いかけます。
+- 行の折り返しや禁則処理は、出力される本とまったく同じ計算です。
+- `［＃改ページ］` は破線の目印として表示されます。行番号は改ページごとに 1 から数え直します。
 
-Turn the publication-style checks on when you prepare a submission; leave them off while drafting.
+行番号を消したいときや、原稿用紙のような罫線を出したいときは、設定「小説 — プレビュー」で選べます。
 
-## Migrating from `novel.jp.*`
+## 本にする（HTML・PDF・テキスト）
 
-Earlier versions read the cast/keyword lists from a `novel.jp.*` config file in the
-workspace folder root. That file is no longer read — the lists are ordinary VS Code
-settings now.
+`.filelist`（目次）1 つが本 1 冊になります。アクティビティ バーの「小説」を開き、出力したい本にチェックを入れて、「本の一覧」の右上のボタンで出力します。
 
-1. Copy the two arrays from your old `novel.jp.*` into **workspace or folder settings**
-   (`.vscode/settings.json`):
+- **PDF に出力** — 印刷用の PDF。
+- **HTML に出力** — ページ組版の縦書き HTML。ブラウザーで開け、1 ファイルで完結します。
+- **テキストに出力** — 章をつないだ青空文庫形式のテキスト。投稿サイトや他のソフトへの受け渡しに。
 
-```json
-{
-  "jpnov.highlight.characters": ["朝霧　巳一", "Arill Stains"],
-  "jpnov.highlight.keywords": ["黒剣", "境無"]
-}
-```
+出力先はフォルダー内の `dist` です（設定「小説 — プロジェクト」で変更できます）。章と目次はフォルダー分けしても大丈夫で、並びはそのまま出力先に反映されます。
 
-2. Delete the `novel.jp.*` file — nothing reads it any more.
+> **PDF 出力には Google Chrome か Microsoft Edge が必要です**（Chromium・Brave でも可）。パソコンに入っていれば自動で見つけます。見つからないときは、代わりに HTML を出力してお知らせしますので、ブラウザーを入れるか、設定「小説 — PDF 出力」で場所を指定してください。
 
-Prefer workspace/folder settings over user settings: the cast belongs to the novel, each
-folder of a multi-root workspace can carry its own lists, and the presence of any `jpnov.*`
-workspace setting keeps the project auto-activating exactly as the config file used to. If
-your config was an executable module (`.js` / `.mjs` / `.cjs` / `.ts`), take the two arrays
-from its default export and paste the literal values.
+## 組版の設定
 
-Also note: output paths now mirror from the workspace folder root — a `src/` layout that
-used to build `dist/volume1.html` now builds `dist/src/volume1.html` (`jpnov.project.sourceDir`
-is gone; books are discovered anywhere outside the output folder, dot-folders, and
-`node_modules`).
+既定の組版は **40字×34行**。投稿原稿でよく使われる書式です。字数と行数は設定「小説 — 組版」で変えられます。
 
-## Development
+設定を開くには：左下の歯車 →「設定」→ 検索欄に `jpnov`（章ファイルの拡張子と同じ綴り・半角）と入力すると、この拡張機能の設定だけが並びます。プログラムの知識は要りません。
 
-```sh
-npm install
-```
+![設定画面で jpnov と検索したところ](docs/images/vscode-settings.png)
 
-Press <kbd>F5</kbd> to launch an Extension Development Host. Open a `.jpnov` file
-(or a folder with a `*.filelist` in its root) to trigger activation.
+### 禁則処理
 
-Other commands:
+行の頭に句読点が来ない、行の末尾にかぎ括弧の開き（「）が残らない――日本語組版の約束事は、既定で守られます。
 
-```sh
-npm run lint        # typescript-eslint (type-aware)
-npm run type-check  # tsc --noEmit
-npm test            # node --test — shared + highlight unit tests
-npm run build:dev   # bundle to dist/extension.js (ESM)
-```
+| 禁則処理なし | 禁則処理あり（既定） |
+| :---: | :---: |
+| <img src="docs/images/kinsoku-off.png" width="250" alt="禁則処理を切った例。行頭に句点、行末にかぎ括弧の開きが現れている"> | <img src="docs/images/kinsoku-on.png" width="250" alt="禁則処理を有効にした例。句点は前の行の末尾にぶら下がり、かぎ括弧は行中に収まっている"> |
 
-## License
+行末の句読点は「ぶら下げ」で処理します。中点なども対象にしたい場合は、設定で「strict」を選べます。
 
-Licensed under the MIT License. See the [`LICENSE`](./LICENSE) file for the full text.
+### 原稿用紙風の表示
+
+罫線と行番号をオンにすると、原稿用紙のような見た目になります。プレビューは「小説 — プレビュー」、出力は「小説 — HTML 出力」で、それぞれ選べます。
+
+![罫線（赤）と行番号をオンにした縦書きページ](docs/images/genkoyoshi.png)
+
+*罫線を「red」、行番号をオンにした PDF 出力例*
+
+### ページ番号と柱
+
+HTML と PDF には、ページ番号と柱（ページ上部の題名）を入れられます。位置や書式も「小説 — HTML 出力」で設定できます。
+
+## 文章チェック
+
+書いている間、原稿を静かに点検します。
+
+- **既定でオン** — 半角カナ、壊れた文字（NFD）、ゼロ幅スペース、不正な制御文字。コピー＆ペーストで紛れ込む「見えない事故」を防ぎます。
+- **投稿前にオン** — 段落頭の字下げや地の文の句点、一文の長さ、読点の数、括弧の閉じ忘れなど。設定「小説 — 文章チェック」で必要なものだけ選べます。
+
+指摘は波線で表示され、多くは電球アイコンから自動修正できます。まとめて直したいときは「自動修正できる問題をすべて修正」も使えます。下書きの間はオフにしておき、投稿前だけオンにする、という使い方がおすすめです。
+
+![文章チェックの波線と自動修正メニュー](docs/images/vscode-lint-quickfix.png)
+
+## 登場人物と造語のハイライト
+
+登場人物の名前と、作品だけの造語を登録しておくと、執筆中に目立つ表示になります。日本語は主語が省略されがちなので、「いま誰の場面か」を見失いにくくなります。
+
+- **登場人物**は、主語として読める場所（「林は」「神木ちゃんが」など）だけ色が付きます。会話「」の中は染めません。
+- **造語**は地の文で太字になります。
+
+登録は、設定「小説 — ハイライト」の「項目の追加」から。フォルダーごとに設定できるので、作品ごとに別の人物表を持てます。
+
+![登場人物の名前に色が付き、造語が太字になった地の文](docs/images/vscode-highlight.png)
+
+## よくある質問
+
+**Q. 原稿が独自の形式に囲い込まれませんか？**
+いいえ。`.jpnov` も `.filelist` も中身はただのテキストです。どのエディターでも開けますし、青空文庫の注記はこの拡張機能がなくても意味が通ります。
+
+**Q. いま書いている原稿からの引っ越しは大変ですか？**
+本文を `.jpnov` ファイルに貼り付けるだけです。Word などの装飾（ルビや太字）は引き継がれないので、注記で付け直してください。
+
+**Q. 原稿はどこかに送信されますか？**
+いいえ。原稿は手元のフォルダーに保存されるだけで、この拡張機能が外部へ送ることはありません。
+
+**Q. 自分は Copilot を使いたいのですが。**
+`.jpnov`・`.filelist` では既定で無効にしていますが、設定の `github.copilot.enable` を上書きすれば戻せます。有効にする場合は**自己責任**でお願いします。
+
+**Q. 見出しや目次ページは作れますか？**
+いまのところ対応していません。章＝ 1 ファイルで区切り、`.filelist` の並び順がそのまま本の順序になります。
+
+## ライセンス
+
+このプロジェクトは MIT ライセンスで公開されています。詳しくは [LICENSE](./LICENSE) をご覧ください。
