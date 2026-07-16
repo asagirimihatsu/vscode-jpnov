@@ -36,9 +36,14 @@ export function ruleDescriptionKey(rule: RuleMeta): string {
   return `${settingKey(rule)}.description`;
 }
 
-/** nls key for one enum choice's drop-down label (enum rules only). */
-export function enumValueKey(rule: RuleMeta, value: string): string {
-  return `${settingKey(rule)}.${value}`;
+/** nls key for one enum choice's drop-down label (`enumItemLabels`, enum rules only). */
+export function enumLabelKey(rule: RuleMeta, value: string): string {
+  return `${settingKey(rule)}.${value}.label`;
+}
+
+/** nls key for one enum choice's drop-down sub-text (`enumDescriptions`, enum rules only). */
+export function enumDescriptionKey(rule: RuleMeta, value: string): string {
+  return `${settingKey(rule)}.${value}.description`;
 }
 
 /** The JSON-schema property for one rule (boolean / nullable-integer threshold / string enum). */
@@ -62,7 +67,8 @@ function propertyFor(rule: RuleMeta, order: number): Record<string, unknown> {
     type: 'string',
     enum: values,
     default: values[0],
-    enumDescriptions: values.map((v) => `%${enumValueKey(rule, v)}%`),
+    enumItemLabels: values.map((v) => `%${enumLabelKey(rule, v)}%`),
+    enumDescriptions: values.map((v) => `%${enumDescriptionKey(rule, v)}%`),
     order,
     markdownDescription,
   };
@@ -74,7 +80,8 @@ function edgeLineProperty(keyPrefix: string): Record<string, unknown> {
     type: 'string',
     enum: [...EDGE_LINE_STYLES],
     default: 'none',
-    enumDescriptions: EDGE_LINE_STYLES.map((v) => `%${keyPrefix}.${v}%`),
+    enumItemLabels: EDGE_LINE_STYLES.map((v) => `%${keyPrefix}.${v}.label%`),
+    enumDescriptions: EDGE_LINE_STYLES.map((v) => `%${keyPrefix}.${v}.description%`),
     markdownDescription: `%${keyPrefix}.description%`,
   };
 }
@@ -107,14 +114,18 @@ function renderSections(): unknown[] {
           type: 'string',
           enum: [...KINSOKU_MODES],
           default: LAYOUT_DEFAULT.kinsoku,
-          enumDescriptions: KINSOKU_MODES.map((v) => `%jpnov.layout.kinsoku.${v}%`),
+          enumItemLabels: KINSOKU_MODES.map((v) => `%jpnov.layout.kinsoku.${v}.label%`),
+          enumDescriptions: KINSOKU_MODES.map((v) => `%jpnov.layout.kinsoku.${v}.description%`),
           markdownDescription: '%jpnov.layout.kinsoku.description%',
         },
         'jpnov.layout.autoTateChuYoko': {
           type: 'string',
           enum: [...AUTO_TCY_MODES],
           default: LAYOUT_DEFAULT.autoTcy,
-          enumDescriptions: AUTO_TCY_MODES.map((v) => `%jpnov.layout.autoTateChuYoko.${v}%`),
+          enumItemLabels: AUTO_TCY_MODES.map((v) => `%jpnov.layout.autoTateChuYoko.${v}.label%`),
+          enumDescriptions: AUTO_TCY_MODES.map(
+            (v) => `%jpnov.layout.autoTateChuYoko.${v}.description%`,
+          ),
           markdownDescription: '%jpnov.layout.autoTateChuYoko.description%',
         },
       },
@@ -133,8 +144,11 @@ function renderSections(): unknown[] {
           type: 'string',
           enum: [...PAGE_NUMBER_POSITIONS],
           default: BUILD_CHROME_DEFAULT.pageNumberPosition,
+          enumItemLabels: PAGE_NUMBER_POSITIONS.map(
+            (v) => `%jpnov.html.pageNumber.position.${v}.label%`,
+          ),
           enumDescriptions: PAGE_NUMBER_POSITIONS.map(
-            (v) => `%jpnov.html.pageNumber.position.${v}%`,
+            (v) => `%jpnov.html.pageNumber.position.${v}.description%`,
           ),
           markdownDescription: '%jpnov.html.pageNumber.position.description%',
         },
@@ -244,6 +258,11 @@ function highlightSection(): unknown {
   };
 }
 
+/** The `.label` + `.description` key pair for one enum choice. */
+function enumChoiceKeys(choiceKey: string): string[] {
+  return [`${choiceKey}.label`, `${choiceKey}.description`];
+}
+
 /** The nls keys the render sections reference (titles + descriptions + enum labels). */
 function renderNlsKeys(): string[] {
   return [
@@ -253,17 +272,17 @@ function renderNlsKeys(): string[] {
     'jpnov.layout.charsPerLine.description',
     'jpnov.layout.linesPerPage.description',
     'jpnov.layout.kinsoku.description',
-    ...KINSOKU_MODES.map((v) => `jpnov.layout.kinsoku.${v}`),
+    ...KINSOKU_MODES.flatMap((v) => enumChoiceKeys(`jpnov.layout.kinsoku.${v}`)),
     'jpnov.layout.autoTateChuYoko.description',
-    ...AUTO_TCY_MODES.map((v) => `jpnov.layout.autoTateChuYoko.${v}`),
+    ...AUTO_TCY_MODES.flatMap((v) => enumChoiceKeys(`jpnov.layout.autoTateChuYoko.${v}`)),
     'jpnov.preview.lineNumbers.description',
     'jpnov.preview.edgeLine.description',
-    ...EDGE_LINE_STYLES.map((v) => `jpnov.preview.edgeLine.${v}`),
+    ...EDGE_LINE_STYLES.flatMap((v) => enumChoiceKeys(`jpnov.preview.edgeLine.${v}`)),
     'jpnov.html.lineNumbers.description',
     'jpnov.html.edgeLine.description',
-    ...EDGE_LINE_STYLES.map((v) => `jpnov.html.edgeLine.${v}`),
+    ...EDGE_LINE_STYLES.flatMap((v) => enumChoiceKeys(`jpnov.html.edgeLine.${v}`)),
     'jpnov.html.pageNumber.position.description',
-    ...PAGE_NUMBER_POSITIONS.map((v) => `jpnov.html.pageNumber.position.${v}`),
+    ...PAGE_NUMBER_POSITIONS.flatMap((v) => enumChoiceKeys(`jpnov.html.pageNumber.position.${v}`)),
     'jpnov.html.pageNumber.template.description',
     'jpnov.html.header.description',
     'jpnov.project.title',
@@ -291,7 +310,7 @@ export function expectedNlsKeys(): string[] {
     keys.push(ruleDescriptionKey(rule));
     if (rule.kind === 'enum') {
       for (const v of rule.values) {
-        keys.push(enumValueKey(rule, v));
+        keys.push(enumLabelKey(rule, v), enumDescriptionKey(rule, v));
       }
     }
   }

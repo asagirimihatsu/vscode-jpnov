@@ -143,10 +143,15 @@
               "strict"
             ],
             "default": "normal",
+            "enumItemLabels": [
+              "%jpnov.layout.kinsoku.none.label%",
+              "%jpnov.layout.kinsoku.normal.label%",
+              "%jpnov.layout.kinsoku.strict.label%"
+            ],
             "enumDescriptions": [
-              "%jpnov.layout.kinsoku.none%",
-              "%jpnov.layout.kinsoku.normal%",
-              "%jpnov.layout.kinsoku.strict%"
+              "%jpnov.layout.kinsoku.none.description%",
+              "%jpnov.layout.kinsoku.normal.description%",
+              "%jpnov.layout.kinsoku.strict.description%"
             ],
             "markdownDescription": "%jpnov.layout.kinsoku.description%"
           },
@@ -157,9 +162,13 @@
               "punctuationPairs"
             ],
             "default": "punctuationPairs",
+            "enumItemLabels": [
+              "%jpnov.layout.autoTateChuYoko.none.label%",
+              "%jpnov.layout.autoTateChuYoko.punctuationPairs.label%"
+            ],
             "enumDescriptions": [
-              "%jpnov.layout.autoTateChuYoko.none%",
-              "%jpnov.layout.autoTateChuYoko.punctuationPairs%"
+              "%jpnov.layout.autoTateChuYoko.none.description%",
+              "%jpnov.layout.autoTateChuYoko.punctuationPairs.description%"
             ],
             "markdownDescription": "%jpnov.layout.autoTateChuYoko.description%"
           }
@@ -182,10 +191,15 @@
               "red"
             ],
             "default": "none",
+            "enumItemLabels": [
+              "%jpnov.html.edgeLine.none.label%",
+              "%jpnov.html.edgeLine.text.label%",
+              "%jpnov.html.edgeLine.red.label%"
+            ],
             "enumDescriptions": [
-              "%jpnov.html.edgeLine.none%",
-              "%jpnov.html.edgeLine.text%",
-              "%jpnov.html.edgeLine.red%"
+              "%jpnov.html.edgeLine.none.description%",
+              "%jpnov.html.edgeLine.text.description%",
+              "%jpnov.html.edgeLine.red.description%"
             ],
             "markdownDescription": "%jpnov.html.edgeLine.description%"
           },
@@ -199,12 +213,19 @@
               "none"
             ],
             "default": "rightThenLeft",
+            "enumItemLabels": [
+              "%jpnov.html.pageNumber.position.rightThenLeft.label%",
+              "%jpnov.html.pageNumber.position.leftThenRight.label%",
+              "%jpnov.html.pageNumber.position.alwaysRight.label%",
+              "%jpnov.html.pageNumber.position.alwaysLeft.label%",
+              "%jpnov.html.pageNumber.position.none.label%"
+            ],
             "enumDescriptions": [
-              "%jpnov.html.pageNumber.position.rightThenLeft%",
-              "%jpnov.html.pageNumber.position.leftThenRight%",
-              "%jpnov.html.pageNumber.position.alwaysRight%",
-              "%jpnov.html.pageNumber.position.alwaysLeft%",
-              "%jpnov.html.pageNumber.position.none%"
+              "%jpnov.html.pageNumber.position.rightThenLeft.description%",
+              "%jpnov.html.pageNumber.position.leftThenRight.description%",
+              "%jpnov.html.pageNumber.position.alwaysRight.description%",
+              "%jpnov.html.pageNumber.position.alwaysLeft.description%",
+              "%jpnov.html.pageNumber.position.none.description%"
             ],
             "markdownDescription": "%jpnov.html.pageNumber.position.description%"
           },
@@ -237,10 +258,15 @@
               "red"
             ],
             "default": "none",
+            "enumItemLabels": [
+              "%jpnov.preview.edgeLine.none.label%",
+              "%jpnov.preview.edgeLine.text.label%",
+              "%jpnov.preview.edgeLine.red.label%"
+            ],
             "enumDescriptions": [
-              "%jpnov.preview.edgeLine.none%",
-              "%jpnov.preview.edgeLine.text%",
-              "%jpnov.preview.edgeLine.red%"
+              "%jpnov.preview.edgeLine.none.description%",
+              "%jpnov.preview.edgeLine.text.description%",
+              "%jpnov.preview.edgeLine.red.description%"
             ],
             "markdownDescription": "%jpnov.preview.edgeLine.description%"
           }
@@ -357,10 +383,15 @@
               "katakana"
             ],
             "default": "off",
+            "enumItemLabels": [
+              "%jpnov.lint.ruby.kana.off.label%",
+              "%jpnov.lint.ruby.kana.hiragana.label%",
+              "%jpnov.lint.ruby.kana.katakana.label%"
+            ],
             "enumDescriptions": [
-              "%jpnov.lint.ruby.kana.off%",
-              "%jpnov.lint.ruby.kana.hiragana%",
-              "%jpnov.lint.ruby.kana.katakana%"
+              "%jpnov.lint.ruby.kana.off.description%",
+              "%jpnov.lint.ruby.kana.hiragana.description%",
+              "%jpnov.lint.ruby.kana.katakana.description%"
             ],
             "order": 15,
             "markdownDescription": "%jpnov.lint.ruby.kana.description%"
