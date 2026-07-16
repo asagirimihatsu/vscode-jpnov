@@ -17,30 +17,26 @@ import {
 import { makeTmpWorkspace, writeUnder } from './helpers.ts';
 
 test('diagnoseFilelist flags missing / directory / backslash / non-.jpnov as Error and dupes as Warning', async () => {
-  const ws = makeTmpWorkspace();
-  try {
-    writeUnder(ws.dir, 'src/vol1/ok.jpnov', 'x');
-    writeUnder(ws.dir, 'src/vol1/adir.jpnov/keep', 'x'); // makes adir.jpnov a directory
-    const uri = `${ws.uri}/src/vol1/index.filelist`;
-    const text = ['ok.jpnov', 'missing.jpnov', 'adir.jpnov', 'sub\\bad.jpnov', 'note.md', 'ok.jpnov'].join('\n');
+  await using ws = await makeTmpWorkspace();
+  await writeUnder(ws.dir, 'src/vol1/ok.jpnov', 'x');
+  await writeUnder(ws.dir, 'src/vol1/adir.jpnov/keep', 'x'); // makes adir.jpnov a directory
+  const uri = `${ws.uri}/src/vol1/index.filelist`;
+  const text = ['ok.jpnov', 'missing.jpnov', 'adir.jpnov', 'sub\\bad.jpnov', 'note.md', 'ok.jpnov'].join('\n');
 
-    const diags = await diagnoseFilelist(uri, text);
-    // The localized text lives client-side; each diagnostic carries its {code,args} in `.data`.
-    const codes = diags.map((d) => (d.data as { code: string }).code);
+  const diags = await diagnoseFilelist(uri, text);
+  // The localized text lives client-side; each diagnostic carries its {code,args} in `.data`.
+  const codes = diags.map((d) => (d.data as { code: string }).code);
 
-    assert.equal(diags.length, 5, 'ok.jpnov (first) produces no diagnostic');
-    assert.equal(diags.filter((d) => d.severity === DiagnosticSeverity.Error).length, 4);
-    assert.equal(diags.filter((d) => d.severity === DiagnosticSeverity.Warning).length, 1);
-    assert.ok(codes.includes('filelist.fileNotFound')); // missing.jpnov
-    assert.ok(codes.includes('filelist.entryIsDirectory')); // adir.jpnov
-    assert.ok(codes.includes('filelist.backslashSeparator')); // sub\bad.jpnov
-    assert.ok(codes.includes('filelist.notJpnov')); // note.md
-    assert.ok(codes.includes('filelist.duplicateEntry')); // 2nd ok.jpnov
-    const notJp = diags.find((d) => (d.data as { code: string }).code === 'filelist.notJpnov');
-    assert.deepEqual((notJp?.data as { args: unknown[] }).args, ['note.md']);
-  } finally {
-    ws.cleanup();
-  }
+  assert.equal(diags.length, 5, 'ok.jpnov (first) produces no diagnostic');
+  assert.equal(diags.filter((d) => d.severity === DiagnosticSeverity.Error).length, 4);
+  assert.equal(diags.filter((d) => d.severity === DiagnosticSeverity.Warning).length, 1);
+  assert.ok(codes.includes('filelist.fileNotFound')); // missing.jpnov
+  assert.ok(codes.includes('filelist.entryIsDirectory')); // adir.jpnov
+  assert.ok(codes.includes('filelist.backslashSeparator')); // sub\bad.jpnov
+  assert.ok(codes.includes('filelist.notJpnov')); // note.md
+  assert.ok(codes.includes('filelist.duplicateEntry')); // 2nd ok.jpnov
+  const notJp = diags.find((d) => (d.data as { code: string }).code === 'filelist.notJpnov');
+  assert.deepEqual((notJp?.data as { args: unknown[] }).args, ['note.md']);
 });
 
 test('diagnoseFilelist does not check existence off the file: scheme (syntax-only)', async () => {
@@ -50,37 +46,29 @@ test('diagnoseFilelist does not check existence off the file: scheme (syntax-onl
 });
 
 test('completeFilelist offers matching .jpnov files and drillable subdirs; hides .filelist', async () => {
-  const ws = makeTmpWorkspace();
-  try {
-    writeUnder(ws.dir, 'src/vol1/chapter1.jpnov', 'x');
-    writeUnder(ws.dir, 'src/vol1/chapter2.jpnov', 'x');
-    writeUnder(ws.dir, 'src/vol1/sub/inner.jpnov', 'x'); // makes sub a directory
-    const uri = `${ws.uri}/src/vol1/index.filelist`;
+  await using ws = await makeTmpWorkspace();
+  await writeUnder(ws.dir, 'src/vol1/chapter1.jpnov', 'x');
+  await writeUnder(ws.dir, 'src/vol1/chapter2.jpnov', 'x');
+  await writeUnder(ws.dir, 'src/vol1/sub/inner.jpnov', 'x'); // makes sub a directory
+  const uri = `${ws.uri}/src/vol1/index.filelist`;
 
-    const ch = await completeFilelist(uri, 'ch', { line: 0, character: 2 });
-    assert.deepEqual(ch.map((i) => i.label).sort(), ['chapter1.jpnov', 'chapter2.jpnov']);
+  const ch = await completeFilelist(uri, 'ch', { line: 0, character: 2 });
+  assert.deepEqual(ch.map((i) => i.label).sort(), ['chapter1.jpnov', 'chapter2.jpnov']);
 
-    const all = await completeFilelist(uri, '', { line: 0, character: 0 });
-    const sub = all.find((i) => i.label === 'sub');
-    assert.ok(sub);
-    assert.equal(sub.kind, CompletionItemKind.Folder);
-    assert.equal(sub.textEdit?.newText, 'sub/');
-    assert.ok(!all.some((i) => i.label === 'index.filelist'), '.filelist files are hidden');
-  } finally {
-    ws.cleanup();
-  }
+  const all = await completeFilelist(uri, '', { line: 0, character: 0 });
+  const sub = all.find((i) => i.label === 'sub');
+  assert.ok(sub);
+  assert.equal(sub.kind, CompletionItemKind.Folder);
+  assert.equal(sub.textEdit?.newText, 'sub/');
+  assert.ok(!all.some((i) => i.label === 'index.filelist'), '.filelist files are hidden');
 });
 
 test('completeFilelist suppresses suggestions when the whole line already names a file', async () => {
-  const ws = makeTmpWorkspace();
-  try {
-    writeUnder(ws.dir, 'src/vol1/chapter1.jpnov', 'x');
-    const uri = `${ws.uri}/src/vol1/index.filelist`;
-    const items = await completeFilelist(uri, 'chapter1.jpnov', { line: 0, character: 14 });
-    assert.equal(items.length, 0);
-  } finally {
-    ws.cleanup();
-  }
+  await using ws = await makeTmpWorkspace();
+  await writeUnder(ws.dir, 'src/vol1/chapter1.jpnov', 'x');
+  const uri = `${ws.uri}/src/vol1/index.filelist`;
+  const items = await completeFilelist(uri, 'chapter1.jpnov', { line: 0, character: 14 });
+  assert.equal(items.length, 0);
 });
 
 test('completeFilelist returns nothing off the file: scheme', async () => {
@@ -89,31 +77,28 @@ test('completeFilelist returns nothing off the file: scheme', async () => {
 });
 
 test('completeFilelist handles "./", absolute "/", and digit-leading names', async () => {
-  const ws = makeTmpWorkspace();
-  try {
-    writeUnder(ws.dir, 'src/vol1/01-intro.jpnov', 'x');
-    writeUnder(ws.dir, 'src/vol1/chapter1.jpnov', 'x');
-    writeUnder(ws.dir, 'src/vol1/sub/inner.jpnov', 'x'); // makes sub a directory
-    const uri = `${ws.uri}/src/vol1/index.filelist`;
+  await using ws = await makeTmpWorkspace();
 
-    // "./" lists the filelist's own directory (previously returned nothing).
-    const dot = await completeFilelist(uri, './', { line: 0, character: 2 });
-    assert.deepEqual(dot.map((i) => i.label).sort(), ['01-intro.jpnov', 'chapter1.jpnov', 'sub']);
+  await writeUnder(ws.dir, 'src/vol1/01-intro.jpnov', 'x');
+  await writeUnder(ws.dir, 'src/vol1/chapter1.jpnov', 'x');
+  await writeUnder(ws.dir, 'src/vol1/sub/inner.jpnov', 'x'); // makes sub a directory
+  const uri = `${ws.uri}/src/vol1/index.filelist`;
 
-    // "./0" filters the current dir by a digit-leading segment.
-    const dotDigit = await completeFilelist(uri, './0', { line: 0, character: 3 });
-    assert.deepEqual(dotDigit.map((i) => i.label), ['01-intro.jpnov']);
+  // "./" lists the filelist's own directory (previously returned nothing).
+  const dot = await completeFilelist(uri, './', { line: 0, character: 2 });
+  assert.deepEqual(dot.map((i) => i.label).sort(), ['01-intro.jpnov', 'chapter1.jpnov', 'sub']);
 
-    // A bare digit-leading prefix resolves correctly (auto-trigger is editor-side; content is right).
-    const digit = await completeFilelist(uri, '0', { line: 0, character: 1 });
-    assert.deepEqual(digit.map((i) => i.label), ['01-intro.jpnov']);
+  // "./0" filters the current dir by a digit-leading segment.
+  const dotDigit = await completeFilelist(uri, './0', { line: 0, character: 3 });
+  assert.deepEqual(dotDigit.map((i) => i.label), ['01-intro.jpnov']);
 
-    // Absolute paths offer nothing (previously wrongly listed the current dir).
-    assert.equal((await completeFilelist(uri, '/', { line: 0, character: 1 })).length, 0);
-    assert.equal((await completeFilelist(uri, '/etc', { line: 0, character: 4 })).length, 0);
-  } finally {
-    ws.cleanup();
-  }
+  // A bare digit-leading prefix resolves correctly (auto-trigger is editor-side; content is right).
+  const digit = await completeFilelist(uri, '0', { line: 0, character: 1 });
+  assert.deepEqual(digit.map((i) => i.label), ['01-intro.jpnov']);
+
+  // Absolute paths offer nothing (previously wrongly listed the current dir).
+  assert.equal((await completeFilelist(uri, '/', { line: 0, character: 1 })).length, 0);
+  assert.equal((await completeFilelist(uri, '/etc', { line: 0, character: 4 })).length, 0);
 });
 
 test('documentLinksForFilelist links every valid line (existence not required) to its resolved URI', () => {

@@ -28,13 +28,12 @@ export async function convertHtmlToPdf(
   const userDataDir = await mkdtemp(join(tmpdir(), 'jpnov-pdf-'));
   // Drop any stale output so a settled non-empty file unambiguously means "freshly written".
   await rm(pdfPath, { force: true }).catch(() => undefined);
-  const child = spawn(browserExe, printToPdfArgs(pathToFileURL(htmlPath).href, pdfPath, userDataDir), {
+  using child = spawn(browserExe, printToPdfArgs(pathToFileURL(htmlPath).href, pdfPath, userDataDir), {
     stdio: 'ignore',
   });
   try {
     await waitForOutput(pdfPath, child, timeoutMs, signal);
   } finally {
-    child.kill('SIGKILL');
     await rm(userDataDir, { recursive: true, force: true }).catch(() => undefined);
   }
 }

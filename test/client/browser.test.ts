@@ -13,8 +13,8 @@ const CHROME_MAC = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome
 /** An `exists` predicate that accepts exactly the given paths. */
 const only =
   (...present: string[]) =>
-  (path: string): boolean =>
-    present.includes(path);
+    (path: string): boolean =>
+      present.includes(path);
 
 test('configured path wins when it exists', () => {
   const got = resolveBrowserExecutable({

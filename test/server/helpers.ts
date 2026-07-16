@@ -4,7 +4,7 @@
  * helpers. Suites under `test/server/highlight/**` run inside plain `npm test`; the
  * fs-heavy build suite still runs with the loader documented in test/client/README.md.
  */
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { rm, mkdir, writeFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -82,26 +82,24 @@ export function makeContext(conn: FakeConnection): ServerContext {
 }
 
 /** Creates an isolated tmp workspace directory; returns its fs path + file:// uri. */
-export function makeTmpWorkspace(): {
+export async function makeTmpWorkspace(): Promise<{
   dir: string;
   uri: string;
-  cleanup: () => void;
-} {
-  const dir = mkdtempSync(join(tmpdir(), 'jpnov-server-'));
+  [Symbol.asyncDispose](): Promise<void>;
+}> {
+  const dir = await mkdtemp(join(tmpdir(), 'jpnov-server-'));
   const uri = pathToFileURL(dir).href.replace(/\/$/, '');
   return {
     dir,
     uri,
-    cleanup: () => {
-      rmSync(dir, { recursive: true, force: true });
-    },
+    [Symbol.asyncDispose]: () => rm(dir, { recursive: true, force: true }),
   };
 }
 
 /** Writes a file under `dir`, creating parent directories as needed. */
-export function writeUnder(dir: string, rel: string, content: string): string {
+export async function writeUnder(dir: string, rel: string, content: string): Promise<string> {
   const full = join(dir, ...rel.split('/'));
-  mkdirSync(join(full, '..'), { recursive: true });
-  writeFileSync(full, content, 'utf-8');
+  await mkdir(join(full, '..'), { recursive: true });
+  await writeFile(full, content, 'utf-8');
   return full;
 }

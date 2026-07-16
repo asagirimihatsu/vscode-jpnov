@@ -55,11 +55,11 @@ interface Unit {
 /** A source row: a line of units (+ optional 字下げ), or a forced page break. */
 export type Row =
   | {
-      readonly kind: 'line';
-      readonly srcLine: number;
-      readonly units: Unit[];
-      readonly indent?: number;
-    }
+    readonly kind: 'line';
+    readonly srcLine: number;
+    readonly units: Unit[];
+    readonly indent?: number;
+  }
   | { readonly kind: 'pagebreak' };
 
 /** A laid-out display line — one column on the page. `indent` = 字下げ cells (already clamped). */

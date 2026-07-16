@@ -20,11 +20,13 @@ export class EventEmitter<T> {
     this.listeners.add(listener);
     return new Disposable(() => this.listeners.delete(listener));
   };
+
   fire(data: T): void {
     for (const l of [...this.listeners]) {
       l(data);
     }
   }
+
   dispose(): void {
     this.listeners.clear();
   }
@@ -35,9 +37,11 @@ export class Disposable {
   constructor(fn: () => void) {
     this.fn = fn;
   }
+
   dispose(): void {
     this.fn();
   }
+
   static from(...items: { dispose(): void }[]): Disposable {
     return new Disposable(() => {
       for (const i of items) {
@@ -57,6 +61,7 @@ export class Uri {
     this.authority = authority;
     this.path = path;
   }
+
   static parse(value: string): Uri {
     const m = /^([a-zA-Z][a-zA-Z0-9+.-]*):\/\/([^/]*)(\/.*)?$/.exec(value);
     if (m) {
@@ -66,16 +71,20 @@ export class Uri {
     // Fallback: treat as a file path.
     return new Uri('file', '', value.startsWith('/') ? value : `/${value}`);
   }
+
   static file(path: string): Uri {
     return new Uri('file', '', path);
   }
+
   static joinPath(base: Uri, ...segments: string[]): Uri {
     const joined = [base.path.replace(/\/+$/, ''), ...segments].join('/');
     return new Uri(base.scheme, base.authority, joined);
   }
+
   toString(): string {
     return `${this.scheme}://${this.authority}${this.path}`;
   }
+
   get fsPath(): string {
     return this.path;
   }
@@ -92,9 +101,11 @@ export class FileSystemError extends Error {
     this.code = code;
     this.name = 'FileSystemError';
   }
+
   static FileNotFound(uri?: Uri | string): FileSystemError {
     return new FileSystemError('FileNotFound', uri === undefined ? undefined : String(uri));
   }
+
   static FileExists(uri?: Uri | string): FileSystemError {
     return new FileSystemError('FileExists', uri === undefined ? undefined : String(uri));
   }

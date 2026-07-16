@@ -56,11 +56,11 @@ const ALLOWED_PERIOD_MARKS = ['―', '…', '」', '』'];
  */
 export type RuleImpl =
   | {
-      readonly kind: 'kernel';
-      readonly rule: TextlintRuleModule;
-      readonly options?: Record<string, unknown>;
-      readonly insertAfter?: string;
-    }
+    readonly kind: 'kernel';
+    readonly rule: TextlintRuleModule;
+    readonly options?: Record<string, unknown>;
+    readonly insertAfter?: string;
+  }
   | { readonly kind: 'prescan'; readonly scan: PreScan };
 
 /** Catalog id -> implementation. The `Record<CatalogId, …>` type requires exactly the catalog ids
