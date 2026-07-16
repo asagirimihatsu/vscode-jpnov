@@ -54,7 +54,7 @@ export async function generateStylesModule(): Promise<string> {
   const styles = await Promise.all(paths.map(async (path) => [path, normalize(await readFile(path, 'utf8'))] as const));
   const exports = styles.map(([path, css]) => {
     const file = path.slice(path.lastIndexOf('/') + 1);
-    return `export const ${exportName(file)} = ${JSON.stringify(css)};\n`;
+    return `export const ${exportName(file)} = '${css.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}';\n`;
   });
   return HEADER + exports.join('');
 }

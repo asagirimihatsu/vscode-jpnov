@@ -237,6 +237,13 @@ function ensureStarted(): void {
   );
 }
 
+function serverCommand(id: string, run: () => Promise<void> | void): vscode.Disposable {
+  return command(id, () => {
+    ensureStarted();
+    return run();
+  });
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   extCtx = context;
 
@@ -258,20 +265,20 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  // Commands. All server-dependent bodies go through ensureStarted() so any command is a
-  // start trigger. The build actions live on the Books panel (the extension's Activity Bar
-  // container) and operate on its checkbox selection; there is no command-palette build
-  // entry — a build needs at least one discovered, selected book, so the palette is the
+  // Commands. All server-dependent bodies go through ensureStarted() (via serverCommand) so
+  // any command is a start trigger. The build actions live on the Books panel (the extension's
+  // Activity Bar container) and operate on its checkbox selection; there is no command-palette
+  // build entry — a build needs at least one discovered, selected book, so the palette is the
   // wrong home for it.
   context.subscriptions.push(
-    command('jpnov.books.buildHtml', () => { ensureStarted(); return booksView?.buildHtml(); }),
-    command('jpnov.books.buildTxt', () => { ensureStarted(); return booksView?.buildTxt(); }),
-    command('jpnov.books.buildPdf', () => { ensureStarted(); return booksView?.buildPdf(); }),
-    command('jpnov.books.selectAll', () => { ensureStarted(); return booksView?.selectAll(); }),
-    command('jpnov.books.deselectAll', () => { ensureStarted(); return booksView?.deselectAll(); }),
-    command('jpnov.books.refresh', () => { ensureStarted(); return booksView?.refresh(); }),
-    command('jpnov.preview', () => { ensureStarted(); return preview?.open(false); }),
-    command('jpnov.previewToSide', () => { ensureStarted(); return preview?.open(true); }),
+    serverCommand('jpnov.books.buildHtml', () => booksView?.buildHtml()),
+    serverCommand('jpnov.books.buildTxt', () => booksView?.buildTxt()),
+    serverCommand('jpnov.books.buildPdf', () => booksView?.buildPdf()),
+    serverCommand('jpnov.books.selectAll', () => booksView?.selectAll()),
+    serverCommand('jpnov.books.deselectAll', () => booksView?.deselectAll()),
+    serverCommand('jpnov.books.refresh', () => booksView?.refresh()),
+    serverCommand('jpnov.preview', () => preview?.open(false)),
+    serverCommand('jpnov.previewToSide', () => preview?.open(true)),
   );
 
   // Lazy-start triggers. The listener covers documents opened AFTER activation; the

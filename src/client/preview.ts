@@ -394,7 +394,7 @@ export class Preview {
 
   private cspMeta(nonce: string, webview: vscode.Webview): string {
     const csp = [
-      `default-src 'none'`,
+      "default-src 'none'",
       `style-src 'nonce-${nonce}' ${webview.cspSource}`,
       `script-src 'nonce-${nonce}'`,
       `img-src ${webview.cspSource} https: data:`,

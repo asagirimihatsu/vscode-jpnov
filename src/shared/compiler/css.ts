@@ -144,18 +144,18 @@ function atPage(charsPerLine: number, linesPerPage: number, hTop: number): strin
 
 type StylesheetOptions =
   | {
-      readonly paginate: true;
-      readonly charsPerLine: number;
-      readonly linesPerPage: number;
-      readonly chrome: BuildChrome;
-      readonly usedClasses?: readonly string[];
-    }
+    readonly paginate: true;
+    readonly charsPerLine: number;
+    readonly linesPerPage: number;
+    readonly chrome: BuildChrome;
+    readonly usedClasses?: readonly string[];
+  }
   | {
-      readonly paginate: false;
-      readonly charsPerLine: number;
-      readonly chrome: PreviewChrome;
-      readonly usedClasses?: readonly string[];
-    };
+    readonly paginate: false;
+    readonly charsPerLine: number;
+    readonly chrome: PreviewChrome;
+    readonly usedClasses?: readonly string[];
+  };
 
 /**
  * Renders the stylesheet for one document. `usedClasses` is the on-demand class sink

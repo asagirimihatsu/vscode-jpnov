@@ -85,7 +85,7 @@ test('styleRule yields the full CSS rule; emph-x uses the real × glyph, not ASC
     '.emph-fs-l{text-emphasis-style:filled sesame;text-emphasis-position:under left}',
   );
   // The slug is 'x' but the emitted CSS value is the full-width × glyph.
-  assert.equal(styleRule('emph-x'), `.emph-x{text-emphasis-style:'×'}`);
+  assert.equal(styleRule('emph-x'), ".emph-x{text-emphasis-style:'×'}");
   // Unknown class names yield ''.
   assert.equal(styleRule('emph-nope'), '');
 });
