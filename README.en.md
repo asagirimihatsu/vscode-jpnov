@@ -220,11 +220,12 @@ Everything is a plain `jpnov.lint.*` setting under **Japanese Novel — Lint**.
   characters — so a stray malformed or invisible character never slips into a
   manuscript.
 - **Publication-style checks are opt-in.** `narration.generalNovelStyle`
-  (paragraphs begin with a full-width indent or an opening bracket) and
-  `narration.jaNoMixedPeriod` (narration sentences end with `。`) catch
-  manuscript-convention slips many editors expect fixed before submission; both
-  are auto-fixable. Length/run limits (`sentenceLength`, `maxTen`,
-  `maxKanjiRun`) and the ruby-kana rule are opt-in too.
+  (a bundle of general conventions: paragraph indent, punctuation spacing,
+  numeral style, and more) and `narration.jaNoMixedPeriod` (narration
+  sentences end with `。`) catch manuscript-convention slips many editors
+  expect fixed before submission; both are auto-fixable. Length/run limits
+  (`sentenceLength`, `maxTen`, `maxKanjiRun`) and the ruby-kana rule are
+  opt-in too.
 
 Turn the publication-style checks on when you prepare a submission; leave them
 off while drafting. Syntax problems (an unclosed `［＃` annotation, a dangling
@@ -283,11 +284,11 @@ Threshold rules take an integer or `null` (off). All rules run on narration;
 | `jpnov.lint.common.jaNoSpaceBetweenFullWidth` | `false` | Space between full-width characters (auto-fix) |
 | `jpnov.lint.common.jaUnnaturalAlphabet` | `false` | Unnatural alphabet usage |
 | `jpnov.lint.common.minusPosition` | `false` | Minus sign not before a number |
-| `jpnov.lint.narration.generalNovelStyle` | `false` | Paragraph indent / line-head conventions (auto-fix) |
+| `jpnov.lint.narration.generalNovelStyle` | `false` | General novel conventions bundle (auto-fix) |
 | `jpnov.lint.narration.jaNoMixedPeriod` | `false` | Narration sentences end with `。` (auto-fix) |
 | `jpnov.lint.ruby.kana` | `off` | Ruby readings all-hiragana / all-katakana |
 
-### Japanese Novel — Project / Build / Highlighting
+### Japanese Novel — Project / PDF Output / Highlighting
 
 | Setting | Default | Scope | Meaning |
 | --- | --- | --- | --- |
