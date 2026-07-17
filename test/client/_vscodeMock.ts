@@ -112,9 +112,9 @@ export class FileSystemError extends Error {
 }
 
 export class RelativePattern {
-  readonly base: Uri | string;
+  readonly base: Uri | string | { uri: Uri };
   readonly pattern: string;
-  constructor(base: Uri | string, pattern: string) {
+  constructor(base: Uri | string | { uri: Uri }, pattern: string) {
     this.base = base;
     this.pattern = pattern;
   }
@@ -214,6 +214,10 @@ export interface MockState {
   >;
   /** `workspace.fs.readDirectory` responses: uri string → entries, or 'error' to reject. */
   readDirectoryResults: Map<string, [string, number][] | 'error'>;
+  /** `workspace.findFiles` responses: base folder uri string → matches ([] when absent), or 'error'. */
+  findFilesResults: Map<string, Uri[] | 'error'>;
+  /** Recorded findFiles invocations, so tests can assert the deep search was (not) consulted. */
+  findFilesCalls: { include: RelativePattern; maxResults: number | undefined }[];
   createdDirs: string[];
   openedDocs: string[];
   errorMessages: string[];
@@ -246,6 +250,8 @@ export function createMockState(): MockState {
     scopedConfig: new Map<string, unknown>(),
     inspectResults: new Map(),
     readDirectoryResults: new Map<string, [string, number][] | 'error'>(),
+    findFilesResults: new Map<string, Uri[] | 'error'>(),
+    findFilesCalls: [],
     createdDirs: [],
     openedDocs: [],
     errorMessages: [],
@@ -282,6 +288,8 @@ export function resetMockState(s: MockState): void {
   s.scopedConfig.clear();
   s.inspectResults.clear();
   s.readDirectoryResults.clear();
+  s.findFilesResults.clear();
+  s.findFilesCalls.length = 0;
   s.createdDirs.length = 0;
   s.openedDocs.length = 0;
   s.errorMessages.length = 0;
@@ -425,6 +433,24 @@ export function buildVscode(state: MockState): Record<string, unknown> {
         (d) => d.uri.toString() === uri.toString(),
       );
       return Promise.resolve(existing ?? doc(uri.toString(), 'novel-jp'));
+    },
+    findFiles(
+      include: RelativePattern,
+      _exclude?: string | null,
+      maxResults?: number,
+    ): Promise<Uri[]> {
+      state.findFilesCalls.push({ include, maxResults });
+      const base = include.base;
+      const key = typeof base === 'string'
+        ? base
+        : base instanceof Uri
+          ? base.toString()
+          : base.uri.toString();
+      const found = state.findFilesResults.get(key);
+      if (found === 'error') {
+        return Promise.reject(new Error('findFiles failed'));
+      }
+      return Promise.resolve((found ?? []).slice(0, maxResults));
     },
   };
 

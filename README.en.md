@@ -43,9 +43,9 @@ Chapters and filelists can live anywhere in the workspace folder; subfolders are
 mirrored into the output (`src/volume1.filelist` builds to
 `dist/src/volume1.html`). The output folder (`jpnov.project.outDir`, default
 `dist`), dot-folders, and `node_modules` are never scanned. The extension
-activates when you open a `.jpnov`/`.filelist`, when a workspace folder root
-holds a `*.filelist`, or when any `jpnov.*` setting is saved at workspace or
-folder level — preview and filelist editing need no configuration at all. A
+activates when you open a `.jpnov`/`.filelist`, when a workspace folder
+contains a `*.filelist`, or when any `jpnov.*` setting is saved at workspace
+or folder level — preview and filelist editing need no configuration at all. A
 **Get started with Japanese Novel** walkthrough covers the same steps.
 
 ## A 60-second Japanese typography primer
@@ -329,7 +329,7 @@ npm install
 ```
 
 Press <kbd>F5</kbd> to launch an Extension Development Host. Open a `.jpnov`
-file (or a folder with a `*.filelist` in its root) to trigger activation.
+file (or a folder containing a `*.filelist`) to trigger activation.
 
 Other commands:
 
