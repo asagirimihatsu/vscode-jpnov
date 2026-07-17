@@ -119,41 +119,17 @@ function commentUnit(raw: string): Unit {
 const RUBY_OVERHANG_QUARTERS = 2;
 
 /**
- * A ruby unit's advance in WHOLE cells: max of the base run and each reading at the 0.5em lane
- * size (full-width glyph = 2 quarter-em, half-width ≈ 1, so a rotated Latin reading is not
- * over-counted), minus an optional ルビ掛け `overhang` allowance per reading. Cells, `rh-N`
- * and the lane distribution all derive from this ONE number, so grid and paint never disagree.
+ * Justification units for a ruby-lane run (a reading or a base): one per CJK glyph (U+3000
+ * included — it paints as its own full-width blank), one per half-width run with its U+0020s
+ * kept inside — a space must reach the DOM and paint at word-space width. The ONE source
+ * {@link readingSpans} paints and {@link rubyCells} measures, so grid and ink cannot drift.
  */
-function rubyCells(
-  r: { base: string; right?: string | undefined; left?: string | undefined },
-  overhang = 0,
-): number {
-  const advance = (s: string | undefined): number => {
-    let quarters = 0;
-    for (const ch of s ?? '') {
-      quarters += /[\x20-\x7e]/.test(ch) ? 1 : 2;
-    }
-    return Math.ceil(Math.max(0, quarters - overhang) / 4);
-  };
-  return Math.max(Array.from(r.base).length, advance(r.right), advance(r.left));
-}
-
-/**
- * Justification units for a ruby-lane run (a reading or a base): one `<span>` per CJK glyph,
- * one per half-width word (spaces only separate). The lanes' flex space-around then reproduces
- * native `ruby-align: space-around` — kana stretch across the box, a Latin word centres on it.
- */
-function readingSpans(reading: string): string {
+function readingUnits(reading: string): string[] {
   const units: string[] = [];
   let word = '';
   for (const ch of reading) {
-    if (ch === ' ' || ch === '　') {
-      if (word !== '') {
-        units.push(word);
-        word = '';
-      }
-    } else if (/[\x21-\x7e]/.test(ch)) {
-      word += ch; // a rotated half-width word must not split
+    if (/[\x20-\x7e]/.test(ch)) {
+      word += ch; // a rotated half-width run must not split — U+0020 stays inside it
     } else {
       if (word !== '') {
         units.push(word);
@@ -165,7 +141,34 @@ function readingSpans(reading: string): string {
   if (word !== '') {
     units.push(word);
   }
-  return units.map((u) => `<span>${escapeHtml(u)}</span>`).join('');
+  return units;
+}
+
+/**
+ * A ruby unit's advance in WHOLE cells: max of the base run and each reading at the 0.5em lane
+ * size (full-width glyph = 2 quarter-em, half-width ≈ 1, so a rotated Latin reading is not
+ * over-counted), minus an optional ルビ掛け `overhang` allowance per reading. Cells, `rh-N`
+ * and the lane distribution all derive from this ONE number, so grid and paint never disagree.
+ */
+function rubyCells(
+  r: { base: string; right?: string | undefined; left?: string | undefined },
+  overhang = 0,
+): number {
+  const advance = (s: string | undefined): number => {
+    let quarters = 0;
+    for (const u of readingUnits(s ?? '')) {
+      // Painted width, not source length: CSS collapses a U+0020 run to one space and trims a
+      // unit's edges, so counting raw chars would stretch the base under phantom spaces.
+      quarters += /^[\x20-\x7e]/.test(u) ? u.replace(/ +/g, ' ').trim().length : 2;
+    }
+    return Math.ceil(Math.max(0, quarters - overhang) / 4);
+  };
+  return Math.max(Array.from(r.base).length, advance(r.right), advance(r.left));
+}
+
+/** The lane markup for a run: its {@link readingUnits}, HTML-escaped, one `<span>` each. */
+function readingSpans(reading: string): string {
+  return readingUnits(reading).map((u) => `<span>${escapeHtml(u)}</span>`).join('');
 }
 
 /**
