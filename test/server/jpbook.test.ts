@@ -2,8 +2,8 @@
  * Integration tests for the impure `*.jpbook` editor features (diagnostics, completion,
  * document links) against real `file:` fixtures. Entries are root-relative, so every
  * function takes the owning workspace-folder root (null = no root: syntax-only).
- * Authored for the server stage; NOT wired into `npm test`. Run with:
- *   node --test --experimental-test-module-mocks "test/server/jpbook.test.ts"
+ * Runs via `npm run test:integration` (not plain `npm test`): `src/server/jpbook.ts`
+ * has `#/*` VALUE imports, which need the resolve hook in `test/resolve-hooks.mjs`.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

@@ -1,7 +1,8 @@
 {
   "name": "jpnov",
   "displayName": "Japanese Novel",
-  "version": "0.0.2",
+  "publisher": "asagirimihatsu",
+  "version": "0.0.5",
   "description": "A plugin for Visual Studio Code for formatting, previewing, and generating ebooks of Japanese novels annotated by Aozora Bunko",
   "keywords": [
     "plugin",
@@ -754,7 +755,10 @@
     "watch:tsc": "tsc --noEmit --watch",
     "watch": "npm run watch:tsc & npm run watch:esbuild & wait",
     "pretest": "npm run type-check",
-    "test": "node --test --experimental-test-module-mocks \"test/shared/**/*.test.ts\" \"test/server/highlight/**/*.test.ts\" \"test/server/lint/**/*.test.ts\" \"test/client/browser.test.ts\" \"test/client/bookRename.test.ts\"",
+    "test": "node --import ./test/register.mjs --test --experimental-test-module-mocks \"test/shared/**/*.test.ts\" \"test/server/highlight/**/*.test.ts\" \"test/server/lint/**/*.test.ts\" \"test/client/browser.test.ts\" \"test/client/bookRename.test.ts\" \"test/client/bookTree.test.ts\"",
+    "test:integration": "node --import ./test/register.mjs --test --experimental-test-module-mocks \"test/client/highlightConfig.test.ts\" \"test/client/messages.test.ts\" \"test/client/preview.test.ts\" \"test/client/probe.test.ts\" \"test/server/build.test.ts\" \"test/server/jpbook.test.ts\"",
+    "pretest:e2e": "npm run build:dev",
+    "test:e2e": "node --import ./test/register.mjs --test \"test/e2e/**/*.test.ts\"",
     "vscode:prepublish": "npm run type-check && npm run lint && npm run build",
     "package": "vsce package"
   },
