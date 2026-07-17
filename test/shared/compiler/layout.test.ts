@@ -484,17 +484,50 @@ test('左ルビ on plain text merges into ONE lr ruby unit (custom layout classe
 });
 
 test('両側ルビ: the left reading joins the existing right-ruby unit (br, both <rt>s)', () => {
-  // Kana per glyph; the Latin words stay whole units (a rotated word must not split) with the
-  // space re-created by the distribution gap. Neither reading outruns the base (7 kana =
-  // 3.5em, "aozora bunko" ≈ 3em, base 4em) so there is no rh-N stretch class.
+  // Kana per glyph; the Latin reading stays ONE rotated run with its U+0020 inside. Neither
+  // reading outruns the base (7 kana = 3.5em, "aozora bunko" ≈ 3em, base 4em) so there is
+  // no rh-N stretch class.
   assert.equal(
     html('青空文庫《あおぞらぶんこ》［＃「青空文庫」の左に「aozora bunko」のルビ］'),
     '<div class="book"><div class="page" data-page="0"><div class="line" data-line="0">' +
       '<ruby class="br"><span>青</span><span>空</span><span>文</span><span>庫</span><rt>' +
       '<span>あ</span><span>お</span><span>ぞ</span><span>ら</span><span>ぶ</span><span>ん</span><span>こ</span>' +
-      '</rt><rt class="rt-l"><span>aozora</span><span>bunko</span></rt></ruby>' +
+      '</rt><rt class="rt-l"><span>aozora bunko</span></rt></ruby>' +
       '</div></div></div>',
   );
+});
+
+test('a half-width space in a reading survives into the lane (right, left AND base runs)', () => {
+  assert.match(html('英雄《Super Hero》'), /<rt><span>Super Hero<\/span><\/rt>/);
+  assert.match(
+    html('英雄《えいゆう》［＃「英雄」の左に「Super Hero」のルビ］'),
+    /<rt class="rt-l"><span>Super Hero<\/span><\/rt>/,
+  );
+  assert.match(html('｜Au revoir《さらば》'), /<ruby class="rr"><span>Au revoir<\/span><rt>/);
+});
+
+test('a full-width space in a reading is its own blank unit', () => {
+  // U+3000 is not a run separator: it paints as a full-width blank of its own (advance
+  // already counts it at 2 quarters).
+  assert.match(
+    html('漢字《かん　じ》'),
+    /<rt><span>か<\/span><span>ん<\/span><span>　<\/span><span>じ<\/span><\/rt>/,
+  );
+});
+
+test('phantom spaces: a U+0020 run measures at its PAINTED width — no base stretch', () => {
+  // CSS collapses a U+0020 run to one space and trims unit edges; measurement follows the
+  // paint, so geometry equals the single-space form and only the DOM keeps the author's run.
+  const spaced = `英雄《えいゆう》［＃「英雄」の左に「Super${' '.repeat(38)}Hero」のルビ］`;
+  const single = '英雄《えいゆう》［＃「英雄」の左に「Super Hero」のルビ］';
+  const cells = (src: string): number | undefined =>
+    pages(src, 40)
+      .flat()[0]
+      ?.units.reduce((n, u) => n + u.cells, 0);
+  assert.equal(cells(spaced), cells(single));
+  assert.equal(html(spaced).replace(' '.repeat(38), ' '), html(single));
+  // Edge spaces trim to zero width, so they add no cells either.
+  assert.equal(cells('字《 かん 》'), cells('字《かん》'));
 });
 
 test('右-only ruby uses the rr lane; JIS ルビ掛け keeps odd readings on-grid', () => {
