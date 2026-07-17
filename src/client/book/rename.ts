@@ -2,7 +2,7 @@
  * Pure planning half of the rename tracking (import-style reference updates): given the
  * renames of one `onDidRenameFiles` event, compute the exact line edits each `.jpbook`
  * needs so its chapter paths keep pointing at the moved files. vscode-free — the event
- * wiring, the prompt, and the `WorkspaceEdit` live in `renameTracking.ts`; everything here is
+ * wiring, the prompt, and the `WorkspaceEdit` live in `tracking.ts`; everything here is
  * unit-testable with plain paths.
  *
  * All paths are ABSOLUTE, POSIX-normalized fs paths (the caller normalizes `Uri.fsPath`).
@@ -14,7 +14,7 @@
  */
 import { posix } from 'node:path';
 
-import { parseJpbook } from '../shared/book/jpbook.ts';
+import { parseJpbook } from '../../shared/book/jpbook.ts';
 
 /** One rename from the event, as normalized absolute paths. */
 export interface FileRename {

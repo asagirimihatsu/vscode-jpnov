@@ -178,7 +178,7 @@ export interface PreviewSettings extends PreviewChrome {
 /**
  * The `jpnov.layout.*` / `jpnov.html.*` snapshot the client ships on every `jpnov/build`
  * request. Only the `.html` artifact consumes it (`.txt` is the raw Aozora source).
- * Page furniture (柱/ノンブル) is deliberately ABSENT: it is book identity, carried by each
+ * Page furniture (ヘッダー/ノンブル) is deliberately ABSENT: it is book identity, carried by each
  * `.jpbook`'s own front matter and composed per book via `composeBookChrome`.
  */
 export interface HtmlSettings {

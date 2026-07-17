@@ -134,7 +134,7 @@ function renderSections(): unknown[] {
       title: '%jpnov.html.title%',
       order: 2,
       properties: {
-        // Page furniture (柱/ノンブル) is deliberately NOT here: it is book identity, carried
+        // Page furniture (ヘッダー/ノンブル) is deliberately NOT here: it is book identity, carried
         // by each `.jpbook`'s front matter (parsed in shared/book/jpbook.ts), never a setting.
         'jpnov.html.lineNumbers': {
           type: 'boolean',
@@ -243,7 +243,7 @@ const UPDATE_REFERENCES_MODES = ['prompt', 'always', 'never'] as const;
 /**
  * The Book Files section: rename tracking for `.jpbook` references — the
  * `updateImportsOnFileMove` triad. Client-only (never sent to the resolver), so the
- * default and members are bare literals here, mirrored in `renameTracking.ts`.
+ * default and members are bare literals here, mirrored in `client/book/tracking.ts`.
  */
 function bookSection(): unknown {
   return {

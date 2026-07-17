@@ -364,7 +364,7 @@ test('build all-on chrome: bands, outset frame, counters, rules, furniture style
   // it clears the outset frame; line-height:1 keeps it inside the line-number band.
   assert.match(css, /\.line::before\{[^}]*translateY\(calc\(-100% - 0\.35rem\)\)/);
   assert.match(css, /\.line::before\{[^}]*line-height:1;/);
-  // The 柱 floats 1em inside the sheet edge — the mirror of .pn{bottom:1em} below.
+  // The header floats 1em inside the sheet edge — the mirror of .pn{bottom:1em} below.
   assert.match(css, /\.hd\{position:absolute;top:1em;left:0;right:0/);
   assert.match(css, /\.hd\{[^}]*line-height:1;/);
   assert.match(css, /\.pn\{position:absolute;bottom:1em/);

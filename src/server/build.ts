@@ -9,7 +9,7 @@
  * book, returning the artifacts for the CLIENT to write. The output path is derived from
  * the `.jpbook`'s name/location (`jpbookOutRel`, mirroring the tree under the folder root);
  * two distinct book files that derive the same path are a build error and neither is emitted.
- * Page furniture (柱/ノンブル) comes from each book's OWN front matter (`composeBookChrome`),
+ * Page furniture (ヘッダー/ノンブル) comes from each book's OWN front matter (`composeBookChrome`),
  * so one build renders per-volume headers; the settings snapshot carries only the shared
  * layout + proofing chrome.
  *
@@ -266,7 +266,7 @@ async function buildRoot(
     if (selection.format !== 'txt') {
       // Grid geometry, 禁則, and 自動縦中横 come from the request's settings snapshot; the
       // page furniture is composed per book from its own front matter (this is what lets
-      // one batch build carry a different 柱 per volume).
+      // one batch build carry a different header per volume).
       const html = renderBook({
         books: [input],
         charsPerLine: selection.settings.charsPerLine,

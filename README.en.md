@@ -183,6 +183,14 @@ and enum values), diagnostics (missing files, duplicates, escaping the
 workspace, unknown metadata keys…), and document links — Cmd/Ctrl-click an
 entry to open the chapter.
 
+The panel manages books, too: expand one for its Book Info rows and chapter
+list — [+] adds chapters, drag (or the context menu) reorders them, and
+clicking an Info row edits the title, header, or page number in place. Every
+action rewrites the `.jpbook` text itself, so the panel and code mode always
+agree.
+
+![A book expanded in the Books view: its chapter list and the Book Info rows](docs/images/vscode-book-manage.png)
+
 Renaming or moving a chapter (or a folder of chapters) inside VS Code offers
 to update every `.jpbook` that references it —
 `jpnov.book.updateReferencesOnFileMove` picks `prompt` (default), `always`, or
@@ -214,7 +222,8 @@ pageNumberFormat: {page} / {totalPage}
 | `pageNumberFormat` | `{page} / {totalPage}` | Folio text; blank suppresses it |
 
 Every key is optional; unknown keys warn and are ignored, so future keys stay
-forward-compatible.
+forward-compatible. The same four keys are also editable from the Books
+panel's Book Info rows.
 
 ## Character & keyword highlighting
 

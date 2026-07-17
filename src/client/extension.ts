@@ -40,14 +40,15 @@ import {
   type ServerErrorParams,
 } from '#/shared/protocol.ts';
 
-import { BooksView } from './booksView.ts';
+import { registerBookCommands } from './book/manage.ts';
+import { BooksView } from './book/view.ts';
 import { command } from './commands.ts';
 import { buildHighlightSnapshot } from './highlightConfig.ts';
 import { buildLintSnapshot } from './lintConfig.ts';
 import { folderIsNovelProject } from './probe.ts';
 import { isLocalizableMessage, renderMessage } from './messages.ts';
 import { Preview } from './preview.ts';
-import { registerRenameTracking } from './renameTracking.ts';
+import { registerRenameTracking } from './book/tracking.ts';
 
 let client: LanguageClient | undefined;
 let preview: Preview | undefined;
@@ -297,6 +298,8 @@ export function activate(context: vscode.ExtensionContext): void {
         `${context.extension.id}#jpnov.gettingStarted`,
       );
     }),
+    // The Books panel's tree-as-form editing (plain: they only fire from tree nodes).
+    ...registerBookCommands(),
   );
 
   // Lazy-start triggers. The listener covers documents opened AFTER activation; the

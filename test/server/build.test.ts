@@ -547,7 +547,7 @@ test('a non-ASCII outDir (出力) is still excluded from discovery', async () =>
   assert.ok(result.artifacts.some((a) => a.path.endsWith('/vol1.html')));
 });
 
-test('one batch build renders a DIFFERENT 柱 per volume, each from its own front matter', async () => {
+test('one batch build renders a DIFFERENT header per volume, each from its own front matter', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
   await writeUnder(ws.dir, 'vol1.jpbook', '---\nheader: 作品名　一\n---\nch/a.jpnov');
@@ -567,8 +567,8 @@ test('one batch build renders a DIFFERENT 柱 per volume, each from its own fron
   const vol2 = result.artifacts.find((a) => a.path.endsWith('/vol2.html'));
   assert.ok(vol1);
   assert.ok(vol2);
-  assert.ok(vol1.content.includes('<div class="hd">作品名　一</div>'), 'vol1 carries its own 柱');
-  assert.ok(vol2.content.includes('<div class="hd">作品名　二</div>'), 'vol2 carries its own 柱');
+  assert.ok(vol1.content.includes('<div class="hd">作品名　一</div>'), 'vol1 carries its own header');
+  assert.ok(vol2.content.includes('<div class="hd">作品名　二</div>'), 'vol2 carries its own header');
   assert.ok(!vol1.content.includes('作品名　二'), 'no cross-contamination');
   // The settings snapshot carries no furniture: vol1 gets the default folio, vol2 opted out.
   assert.match(vol1.content, /<div class="pn [rl]">/);

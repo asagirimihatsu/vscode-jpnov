@@ -13,12 +13,13 @@ import * as vscode from 'vscode';
 
 /**
  * Register `id` with a body shielded by one try/catch. On an unexpected throw, show a single
- * localized error notification; on success nothing extra happens.
+ * localized error notification; on success nothing extra happens. Command arguments (e.g.
+ * the tree node a view menu passes) flow through untouched.
  */
-export function command(id: string, run: () => Promise<void> | void): vscode.Disposable {
-  return vscode.commands.registerCommand(id, async () => {
+export function command(id: string, run: (...args: unknown[]) => Promise<void> | void): vscode.Disposable {
+  return vscode.commands.registerCommand(id, async (...args: unknown[]) => {
     try {
-      await run();
+      await run(...args);
     } catch (err) {
       const m = err instanceof Error ? err.message : String(err);
       // The last-resort popup itself never rejects; void it so this catch can't re-throw.

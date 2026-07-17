@@ -300,18 +300,44 @@ for (const shot of shots) {
 
 ## B. Manual VS Code captures
 
-Five shots need a real VS Code window (all captured 2026-07; retake one by
-overwriting its PNG in `docs/images/` under the same filename — both READMEs
-reference the same files, and the Japanese UI in the shots is on-brand for the
-English audience too).
+Six shots need a real VS Code window. Retake one by overwriting its PNG in
+`docs/images/` under the same filename (both READMEs reference the same
+files).
 
 Common setup:
 
 - macOS retina display (2× pixel density), whole-window capture
   (<kbd>⇧⌘4</kbd> then <kbd>Space</kbd>; hold <kbd>⌥</kbd> while clicking to
   drop the drop shadow if you prefer).
-- VS Code in **Japanese display language**, **Dark Modern** theme, window
-  ≈ 1600 × 1000.
+- VS Code in **Japanese display language**, **Dark Modern** theme.
+- Pin the window, then:
+
+  ```sh
+  osascript -e 'tell application "System Events" to tell process "Code"
+    set position of front window to {80, 40}
+    set size of front window to {1600, 1000}
+  end tell'
+  ```
+
+  On "not allowed assistive access": システム設定 → プライバシーとセキュリティ →
+  アクセシビリティ → allow your terminal. The Extension Development Host is the
+  same `Code` process; Insiders is `"Code - Insiders"`.
+
+  Windows equivalent (PowerShell; capture with <kbd>Alt</kbd>+<kbd>PrtScn</kbd>):
+
+  ```powershell
+  Add-Type -Namespace Native -Name Win -MemberDefinition @'
+  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+  [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int W, int H, bool Repaint);
+  '@
+  [Native.Win]::SetProcessDPIAware() | Out-Null
+  $hwnd = (Get-Process Code | Where-Object MainWindowHandle -ne 0 | Select-Object -First 1).MainWindowHandle
+  [Native.Win]::MoveWindow($hwnd, 80, 40, 1600, 1000, $true) | Out-Null
+  ```
+
+  Sizes are physical pixels — use 3200 × 2000 on a HiDPI monitor. With several
+  VS Code windows open, close the extras or pick one by title:
+  `Where-Object MainWindowTitle -like '*拡張機能開発ホスト*'`.
 - Bump the editor font one step (<kbd>⌘+</kbd>) so text survives README
   downscaling.
 
@@ -321,7 +347,7 @@ Sample project to open (any temp folder):
 novel-sample/
 ├── 第一章.jpnov        ← paste the source below
 ├── 第二章.jpnov        ← a few plain lines are enough
-├── 作品集.jpbook      ← two lines: 第一章.jpnov / 第二章.jpnov
+├── 作品集.jpbook       ← the front-mattered sample below
 └── .vscode/settings.json
 ```
 
@@ -330,6 +356,17 @@ novel-sample/
   "jpnov.highlight.characters": ["神木　林", "Arill Stains"],
   "jpnov.highlight.keywords": ["境無"]
 }
+```
+
+`作品集.jpbook` source:
+
+```
+---
+title: 作品集
+header: 作品集　その一
+---
+第一章.jpnov
+第二章.jpnov
 ```
 
 `第一章.jpnov` source (same spirit as the walkthrough sample):
@@ -357,29 +394,37 @@ novel-sample/
 　次のシーン「焼肉、やはりうまくね？」
 ```
 
-### B-1 `vscode-side-by-side.png` — editor + vertical preview
+### `vscode-side-by-side.png` — editor + vertical preview
 
 Open `第一章.jpnov`, click the editor-title 「プレビューを横に開く」 icon.
 Must show: annotated source with syntax highlighting on the left, the vertical
 preview on the right, cursor somewhere mid-text.
 
-### B-2 `vscode-books-panel.png` — Books panel
+### `vscode-books-panel.png` — Books panel
 
-Open the activity-bar 「小説」 icon. Must show: the 「本の一覧」 view with 作品集
-checked, and the view title-bar build buttons (HTML・テキスト・PDF) visible.
+Open the activity-bar 「小説」 icon, book row COLLAPSED. Must show: the
+「本の一覧」 view with 作品集 checked (labelled by its front-matter title), and
+the view title-bar build buttons (HTML・テキスト・PDF) visible.
 
-### B-3 `vscode-highlight.png` — cast & keyword highlighting
+### `vscode-book-manage.png` — managing a book from the panel
+
+Expand 作品集 and its 「本の情報」 group. Must show: the two chapter rows above
+the gear group, all four 本の情報 rows with their values (題名・ヘッダー set,
+ページ番号 rows showing 「…（既定）」), ideally the pointer on a chapter row with
+the inline remove button visible. Crop to the panel.
+
+### `vscode-highlight.png` — cast & keyword highlighting
 
 Frame a narration paragraph containing 「林は境無を構えた。」. Must show:
 `林は` coloured as a subject, `境無` bold, dialogue lines left in body colour.
 
-### B-4 `vscode-lint-quickfix.png` — lint quick fix
+### `vscode-lint-quickfix.png` — lint quick fix
 
 Enable `jpnov.lint.narration.generalNovelStyle`, write a narration line without
 the leading full-width indent, open the lightbulb menu on the squiggle. Must
 show: the squiggle and the open quick-fix menu.
 
-### B-5 `vscode-settings.png` — settings UI
+### `vscode-settings.png` — settings UI
 
 Settings (<kbd>⌘,</kbd>) → search `jpnov` (settings search matches the key
 prefix; it does not index the localized group titles, so 「小説」 finds
