@@ -33,7 +33,9 @@ one-command HTML / PDF / text builds. No AI anywhere in the writing path
    click the preview icon in the editor title bar (**Japanese Novel: Open
    Preview to the Side**) to see the vertical layout.
 2. **Make a book.** Create a `.jpbook` (e.g. `volume1.jpbook`) and list your
-   chapter files, one per line, in reading order. One `.jpbook` is one book.
+   chapter files, one per line, in reading order — paths count from the
+   workspace folder, so moving the `.jpbook` never breaks them. One `.jpbook`
+   is one book.
    An optional `---`-fenced front-matter block at the top carries the book's
    own metadata (title, running head, page-number style — see
    [Per-book metadata](#per-book-metadata-front-matter)).
@@ -181,6 +183,12 @@ and enum values), diagnostics (missing files, duplicates, escaping the
 workspace, unknown metadata keys…), and document links — Cmd/Ctrl-click an
 entry to open the chapter.
 
+Renaming or moving a chapter (or a folder of chapters) inside VS Code offers
+to update every `.jpbook` that references it —
+`jpnov.book.updateReferencesOnFileMove` picks `prompt` (default), `always`, or
+`never`, the `updateImportsOnFileMove` triad. Renames made outside VS Code
+can't be tracked; the missing path is flagged in the editor instead.
+
 ### Per-book metadata (front matter)
 
 Page furniture is a property of the book, not of the workspace — two volumes
@@ -321,7 +329,7 @@ Threshold rules take an integer or `null` (off). All rules run on narration;
 | `jpnov.lint.narration.jaNoMixedPeriod` | `false` | Narration sentences end with `。` (auto-fix) |
 | `jpnov.lint.ruby.kana` | `off` | Ruby readings all-hiragana / all-katakana |
 
-### Japanese Novel — Project / PDF Output / Highlighting
+### Japanese Novel — Project / PDF Output / Highlighting / Book Files
 
 | Setting | Default | Scope | Meaning |
 | --- | --- | --- | --- |
@@ -329,6 +337,7 @@ Threshold rules take an integer or `null` (off). All rules run on narration;
 | `jpnov.build.browserPath` | `""` | machine | Chromium-family executable for PDF export |
 | `jpnov.highlight.characters` | `[]` | folder | Cast names (see highlighting) |
 | `jpnov.highlight.keywords` | `[]` | folder | Coined terms (see highlighting) |
+| `jpnov.book.updateReferencesOnFileMove` | `prompt` | user | Update `.jpbook` paths on rename/move (`always`, `never`) |
 
 ## Commands
 

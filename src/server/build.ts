@@ -3,8 +3,9 @@
  * `jpnov.project.*` snapshot) defines the targeted roots; for each one it enumerates every
  * `*.jpbook` anywhere under the workspace folder root (skipping dot-folders, `node_modules`,
  * and the resolved output folder), reads the `.jpnov` files each one lists (in order, resolved
- * relative to the `.jpbook`'s OWN directory), and emits one `.txt` (the concatenated Aozora
- * source via `concatBookText`) plus one `.html` (the paginated render via `renderBook`) per
+ * relative to the WORKSPACE FOLDER ROOT, the same base the live editor features use), and
+ * emits one `.txt` (the concatenated Aozora source via `concatBookText`) plus one `.html`
+ * (the paginated render via `renderBook`) per
  * book, returning the artifacts for the CLIENT to write. The output path is derived from
  * the `.jpbook`'s name/location (`jpbookOutRel`, mirroring the tree under the folder root);
  * two distinct book files that derive the same path are a build error and neither is emitted.
@@ -65,8 +66,6 @@ interface DiscoveredJpbook {
   readonly fileRel: string;
   /** Absolute URI of the `.jpbook` file (diagnostics target). */
   readonly uri: string;
-  /** Absolute URI of the directory holding it (the base for resolving its entries). */
-  readonly dirUri: string;
 }
 
 /** One targeted root: its normalized URI plus the RESOLVED output dir URI. */
@@ -125,7 +124,6 @@ async function discoverJpbooks(rootUri: string, outDirUri: string): Promise<Disc
         found.push({
           fileRel: joinRel(dirRel, dirent.name),
           uri: childUri(dirUri, dirent.name),
-          dirUri,
         });
       } else if (dirent.isDirectory()) {
         if (dirent.name.startsWith('.') || dirent.name === 'node_modules') {
@@ -147,18 +145,18 @@ async function discoverJpbooks(rootUri: string, outDirUri: string): Promise<Disc
 
 /**
  * Reads the `ok` entries of one parsed `.jpbook` in order (skipping blank/front-matter/
- * duplicate/error lines), each resolved relative to the book file's directory and decoded
+ * duplicate/error lines), each resolved relative to the WORKSPACE FOLDER ROOT and decoded
  * UTF-8, into the shape {@link renderBook} consumes. Throws on the first escaping/
  * unreadable/missing entry so the caller can convert it into a per-book build error (the
  * diagnostic is published separately).
  */
-async function readBookFiles(fl: DiscoveredJpbook, lines: readonly ParsedLine[]): Promise<BookInput> {
+async function readBookFiles(rootUri: string, lines: readonly ParsedLine[]): Promise<BookInput> {
   const files: { name: string; src: string }[] = [];
   for (const pl of lines) {
     if (pl.kind !== 'ok') {
       continue;
     }
-    const resolved = resolveContained(fl.dirUri, pl.value, 'jpbookEntry');
+    const resolved = resolveContained(rootUri, pl.value, 'jpbookEntry');
     if (!resolved.ok) {
       throw new LocalizedError({ code: resolved.code, args: resolved.args });
     }
@@ -229,7 +227,7 @@ async function buildRoot(
     const parsed = parseJpbook(UTF8.decode(bytes));
 
     // Per-line diagnostics (same path the live editor uses); published on the .jpbook URI.
-    const lineDiags = await diagnoseJpbook(fl.uri, parsed);
+    const lineDiags = await diagnoseJpbook(target.rootUri, parsed);
     const colliding = (byOutRel.get(outRel) ?? []).filter((other) => other !== fl);
 
     if (colliding.length > 0) {
@@ -246,7 +244,7 @@ async function buildRoot(
 
     let input: BookInput;
     try {
-      input = await readBookFiles(fl, parsed.lines);
+      input = await readBookFiles(target.rootUri, parsed.lines);
     } catch (cause) {
       // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
       void ctx.connection.sendDiagnostics({ uri: fl.uri, diagnostics: lineDiags });

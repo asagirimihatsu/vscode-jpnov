@@ -53,6 +53,7 @@ import { buildCodeActions } from './lint/codeActions.ts';
 import { computeLintFindings, LintCancelled } from './lint/kernel.ts';
 import type { LintFinding } from './lint/kernel.ts';
 import { reportError } from './report.ts';
+import { createWorkspaceRoots } from './roots.ts';
 import type { ServerContext } from './roots.ts';
 import { createHighlightStore, handleHighlightChanged } from './highlight/vocabulary.ts';
 import { buildSemanticTokens, SEMANTIC_LEGEND } from './semanticTokens.ts';
@@ -66,6 +67,7 @@ const context: ServerContext = {
   connection,
   lintSelection: selectRules({}), // all rules off until the client's snapshot arrives at initialize
   highlight: createHighlightStore(), // empty until the client's snapshot arrives at initialize
+  roots: createWorkspaceRoots(), // seeded at initialize; live via workspace/didChangeWorkspaceFolders
 };
 
 // Open-document tracker (so semantic-tokens requests have document text to highlight).
@@ -84,12 +86,18 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
   // Vocabulary seed: no refresh here — the client is not `initialized` yet, and the first
   // semanticTokens request naturally lands after this.
   context.highlight.apply(options?.highlight);
+  // Workspace-folder seed: `.jpbook` entries are root-relative, so the live features need
+  // the folder list (change notifications are registered once `initialized`).
+  context.roots.replace((params.workspaceFolders ?? []).map((f) => f.uri));
 
   return {
     capabilities: {
       textDocumentSync: {
         openClose: true,
         change: TextDocumentSyncKind.Incremental,
+      },
+      workspace: {
+        workspaceFolders: { supported: true, changeNotifications: true },
       },
       semanticTokensProvider: {
         legend: SEMANTIC_LEGEND,
@@ -114,6 +122,20 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       experimental: { documentSelector: DOCUMENT_SELECTOR },
     },
   };
+});
+
+// Workspace folders changed: update the root set the live `.jpbook` features resolve
+// against, then refresh the open books (their entries may gain/lose an owning root).
+connection.onInitialized(() => {
+  // Event registration (a Disposable, intentionally kept for the process lifetime).
+  connection.workspace.onDidChangeWorkspaceFolders((e) => {
+    context.roots.change(e.added.map((f) => f.uri), e.removed.map((f) => f.uri));
+    for (const doc of documents.all()) {
+      if (doc.languageId === 'novel-jp-book') {
+        scheduleJpbookDiagnostics(doc);
+      }
+    }
+  });
 });
 
 // Prose-lint settings changed (jpnov.lint.*): re-resolve the enabled-rule selection from the fresh
@@ -204,7 +226,12 @@ connection.onCompletion((params) => {
   if (doc?.languageId !== 'novel-jp-book') {
     return [];
   }
-  return completeJpbook(doc.uri, parseJpbook(doc.getText()), lineAt(doc, params.position.line), params.position);
+  return completeJpbook(
+    context.roots.rootOf(doc.uri),
+    parseJpbook(doc.getText()),
+    lineAt(doc, params.position.line),
+    params.position,
+  );
 });
 
 // Cmd+click targets: one link per valid chapter line pointing at the resolved file URI.
@@ -213,7 +240,7 @@ connection.onDocumentLinks((params) => {
   if (doc?.languageId !== 'novel-jp-book') {
     return [];
   }
-  return documentLinksForJpbook(doc.uri, parseJpbook(doc.getText()));
+  return documentLinksForJpbook(context.roots.rootOf(doc.uri), parseJpbook(doc.getText()));
 });
 
 // Live per-line diagnostics for an open .jpbook (missing/escaping/duplicate paths, metadata
@@ -236,7 +263,7 @@ function scheduleJpbookDiagnostics(doc: TextDocument): void {
       }
       void (async () => {
         try {
-          const diagnostics = await diagnoseJpbook(uri, parseJpbook(current.getText()));
+          const diagnostics = await diagnoseJpbook(context.roots.rootOf(uri), parseJpbook(current.getText()));
           // Re-check after the async fs work: a newer edit (with its own schedule) wins.
           if (documents.get(uri)?.version === scheduledVersion) {
             // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.

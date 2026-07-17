@@ -6,10 +6,13 @@
  * computed by exactly one code path. Callers parse once (`parseJpbook`) and hand the result
  * in, so an event never parses the same text twice.
  *
- * Filesystem access is `file:`-scheme only (the server never touches `vscode.fs`), matching
- * the build's existing posture: on a non-`file:` scheme, existence cannot be verified, so
- * diagnostics fall back to syntax-only and path completion returns nothing (front-matter
- * completion is fs-free and still works).
+ * Entries are relative to the book's OWNING WORKSPACE FOLDER root (`rootUri`), which every
+ * function takes explicitly — the live handlers look it up via `context.roots.rootOf`, the
+ * build passes its target root. A null root (a `.jpbook` outside every workspace folder)
+ * degrades to syntax/metadata-only: no containment or existence checks, no links, no path
+ * completion. Filesystem access is `file:`-scheme only (the server never touches
+ * `vscode.fs`); a non-`file:` root degrades the same way existence-wise, and front-matter
+ * completion (fs-free) works everywhere.
  *
  * vscode-free: only `import type`/value-imports of the language-SERVER package (never the
  * `vscode` module) are used here.
@@ -32,12 +35,6 @@ import { resolveContained } from '#/shared/config/validate.ts';
 
 import { diagnostic } from './diagnostics.ts';
 import { isFileScheme } from './fsUri.ts';
-
-/** The directory URI containing `fileUri` (no trailing slash). */
-function dirUriOf(fileUri: string): string {
-  const slash = fileUri.lastIndexOf('/');
-  return slash <= 0 ? fileUri : fileUri.slice(0, slash);
-}
 
 /** The on-line span of a parsed line as an LSP {@link Range}. */
 function lineRange(pl: ParsedLine): Range {
@@ -68,14 +65,13 @@ async function readDirEntries(dirUri: string): Promise<{ name: string; isDir: bo
 
 /**
  * Per-line diagnostics for one parsed `.jpbook`: syntax/metadata errors and warnings (from
- * {@link parseJpbook}'s line kinds), containment/escape rejections (via
- * {@link resolveContained}), duplicate warnings, and — on `file:` only — existence (a
- * missing path or one resolving to a directory is an Error). Used by both the live editor
- * handler and the build, so the two never disagree.
+ * {@link parseJpbook}'s line kinds), then — root permitting — containment/escape rejections
+ * (via {@link resolveContained}) and, on a `file:` root, existence (a missing path or one
+ * resolving to a directory is an Error). Used by both the live editor handler and the
+ * build, so the two never disagree.
  */
-export async function diagnoseJpbook(jpbookUri: string, parsed: ParsedJpbook): Promise<Diagnostic[]> {
-  const dir = dirUriOf(jpbookUri);
-  const canCheckFs = isFileScheme(jpbookUri);
+export async function diagnoseJpbook(rootUri: string | null, parsed: ParsedJpbook): Promise<Diagnostic[]> {
+  const canCheckFs = rootUri !== null && isFileScheme(rootUri);
   const diagnostics: Diagnostic[] = [];
 
   for (const pl of parsed.lines) {
@@ -97,7 +93,10 @@ export async function diagnoseJpbook(jpbookUri: string, parsed: ParsedJpbook): P
       );
       continue;
     }
-    const resolved = resolveContained(dir, pl.value, 'jpbookEntry');
+    if (rootUri === null) {
+      continue; // no owning workspace folder — containment/existence unverifiable
+    }
+    const resolved = resolveContained(rootUri, pl.value, 'jpbookEntry');
     if (!resolved.ok) {
       diagnostics.push(diagnostic(range, { code: resolved.code, args: resolved.args }, DiagnosticSeverity.Error));
       continue;
@@ -119,19 +118,21 @@ export async function diagnoseJpbook(jpbookUri: string, parsed: ParsedJpbook): P
 
 /**
  * Cmd+click targets: one {@link DocumentLink} per syntactically-valid, contained chapter
- * line (`ok`/`duplicate`), pointing at the resolved file URI. Blank, front-matter, and
- * error/warning lines get no link (the diagnostic already flags the latter). No fs access —
- * links resolve as URIs and are cheap, so a not-yet-existing target still links (its
- * squiggle says so).
+ * line (`ok`/`duplicate`), pointing at the root-resolved file URI. Blank, front-matter,
+ * error/warning lines — and every line when no root owns the book — get no link. No fs
+ * access: links resolve as URIs and are cheap, so a not-yet-existing target still links
+ * (its squiggle says so).
  */
-export function documentLinksForJpbook(jpbookUri: string, parsed: ParsedJpbook): DocumentLink[] {
-  const dir = dirUriOf(jpbookUri);
+export function documentLinksForJpbook(rootUri: string | null, parsed: ParsedJpbook): DocumentLink[] {
+  if (rootUri === null) {
+    return [];
+  }
   const links: DocumentLink[] = [];
   for (const pl of parsed.lines) {
     if (pl.kind !== 'ok' && pl.kind !== 'duplicate') {
       continue;
     }
-    const resolved = resolveContained(dir, pl.value, 'jpbookEntry');
+    const resolved = resolveContained(rootUri, pl.value, 'jpbookEntry');
     if (resolved.ok) {
       links.push({ range: lineRange(pl), target: resolved.abs });
     }
@@ -169,14 +170,15 @@ function toCompletionItem(c: JpbookCompletion, line: number): CompletionItem {
 /**
  * Completions for the cursor on `lineText` at `position`. Inside the front-matter region
  * (strictly between the fences) it offers metadata keys / enum values — pure, fs-free, so
- * it works on any scheme. On chapter lines it lists the directory the current path prefix
- * points into (relative to the `.jpbook`'s own dir) and hands it to the pure
- * {@link completeEntryLine}; that path returns nothing off `file:`, or when the whole line
- * already names an existing file with the cursor at its end (per the "no more suggestions
- * once the line matches" rule). Folder items re-trigger suggestions so the user keeps drilling.
+ * it works with or without a root. On chapter lines it lists the directory the current
+ * path prefix points into (relative to the OWNING ROOT) and hands it to the pure
+ * {@link completeEntryLine}; that path returns nothing without a `file:` root, or when the
+ * whole line already names an existing file with the cursor at its end (per the "no more
+ * suggestions once the line matches" rule). Folder items re-trigger suggestions so the
+ * user keeps drilling.
  */
 export async function completeJpbook(
-  jpbookUri: string,
+  rootUri: string | null,
   parsed: ParsedJpbook,
   lineText: string,
   position: { line: number; character: number },
@@ -194,15 +196,14 @@ export async function completeJpbook(
     }
   }
 
-  if (!isFileScheme(jpbookUri)) {
+  if (rootUri === null || !isFileScheme(rootUri)) {
     return [];
   }
-  const dir = dirUriOf(jpbookUri);
 
   // Suppress when nothing meaningful follows the cursor and the line already names a file.
   const whole = lineText.trim();
   if (whole !== '' && prefix.trim() === whole) {
-    const resolvedWhole = resolveContained(dir, whole, 'jpbookEntry');
+    const resolvedWhole = resolveContained(rootUri, whole, 'jpbookEntry');
     if (resolvedWhole.ok && (await statEntry(resolvedWhole.abs)) === 'file') {
       return [];
     }
@@ -211,7 +212,7 @@ export async function completeJpbook(
   const pathSoFar = prefix.replace(/^\s+/, '');
 
   // A leading "/" is an absolute path — never a valid entry — so offer nothing rather than
-  // misleadingly listing the `.jpbook`'s own directory.
+  // misleadingly listing the workspace folder root.
   if (pathSoFar.startsWith('/')) {
     return [];
   }
@@ -221,11 +222,11 @@ export async function completeJpbook(
 
   let listDirUri: string;
   if (dirPortion === '' || dirPortion === '.') {
-    // No directory part, or an explicit "./" — list the `.jpbook`'s own directory.
-    listDirUri = dir;
+    // No directory part, or an explicit "./" — list the workspace folder root itself.
+    listDirUri = rootUri;
   } else {
     // The label is irrelevant here — a containment failure just yields no completions.
-    const resolvedDir = resolveContained(dir, dirPortion, 'jpbookEntry');
+    const resolvedDir = resolveContained(rootUri, dirPortion, 'jpbookEntry');
     if (!resolvedDir.ok) {
       return [];
     }
