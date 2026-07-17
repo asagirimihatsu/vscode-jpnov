@@ -1,31 +1,32 @@
 # Client integration tests
 
 These exercise the host-side client modules (`src/client/**`) against an in-memory
-`vscode` mock (`_vscodeMock.ts`). They are **authored but intentionally NOT wired into
-`npm test`** — its globs cover the vscode-free `test/shared/**` plus the
-`test/server/{highlight,lint}/**` suites; everything client-side runs via the recipe below.
-
-## Running
-
-The client modules `import * as vscode from 'vscode'`, but `vscode` has no installable
-npm package (the extension host injects it at runtime; esbuild marks it `external`). So
-the bare specifier needs to *resolve* to something before `node:test`'s `mock.module`
-can layer the real mock on top.
-
-Provide a one-file resolution shim at the project root, then run the suite:
+`vscode` mock (`_vscodeMock.ts`). They run in CI and locally via:
 
 ```sh
-# 1. Resolution shim (build- and runtime-irrelevant; esbuild keeps vscode external).
-mkdir -p node_modules/vscode
-printf '{"name":"vscode","version":"0.0.0-test-shim","type":"module","main":"index.js","exports":{".":"./index.js"}}\n' > node_modules/vscode/package.json
-printf 'export {};\n' > node_modules/vscode/index.js
-
-# 2. Run the client suite (Node >= 22 for --experimental-test-module-mocks).
-node --test --experimental-test-module-mocks "test/client/**/*.test.ts"
+npm run test:integration
 ```
 
-`mock.module('vscode', { namedExports: buildVscode(state) })` overrides the shim with a
-behavioral mock per test; the shim only satisfies module resolution.
+(together with the fs-fixture server suites `test/server/build.test.ts` /
+`test/server/jpbook.test.ts`). The vscode-free client suites (`browser`, `bookRename`,
+`bookTree`) live in plain `npm test` instead.
 
-> The shim lives under `node_modules/` and is recreated by `npm install`-clobbering, so
-> it is deliberately not committed. Re-run step 1 if `vscode` fails to resolve.
+## How resolution works
+
+Every test script passes `--import ./test/register.mjs`, which registers
+`test/resolve-hooks.mjs`:
+
+- `#/…` — Node's ESM loader rejects the `#/` prefix of the package.json `imports` map
+  (`#/*` → `./src/*`), so the hook resolves those specifiers against `src/` itself.
+- bare `vscode` — there is no installable `vscode` package (the extension host injects it
+  at runtime; esbuild marks it `external`), so the hook resolves it to the inert
+  `_vscodeShim.mjs`. The shim only satisfies resolution;
+  `mock.module('vscode', { namedExports: buildVscode(state) })` layers the behavioral
+  mock on top per test.
+
+No `node_modules/` shim and no esbuild pre-bundling are needed; any suite can be run
+directly as long as the register flag rides along:
+
+```sh
+node --import ./test/register.mjs --test --experimental-test-module-mocks "test/client/preview.test.ts"
+```

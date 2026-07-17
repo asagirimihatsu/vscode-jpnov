@@ -1,10 +1,7 @@
 /**
  * Integration tests for the `jpnov/build` + `jpnov/listBooks` handlers against real `file:`
- * fixtures. NOT wired into `npm test` (the default glob is `test/shared/**` +
- * `test/server/highlight/**`): these import a server module whose `#/*` VALUE imports Node's ESM
- * loader rejects, so run them by bundling through esbuild first (which resolves `#/*`):
- *   npx esbuild test/server/build.test.ts --bundle --platform=node --format=esm \
- *     --packages=external --outfile=.jpnov-test-tmp.mjs && node --test .jpnov-test-tmp.mjs
+ * fixtures. Runs via `npm run test:integration` (not plain `npm test`): it imports server
+ * modules whose `#/*` VALUE imports need the resolve hook in `test/resolve-hooks.mjs`.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

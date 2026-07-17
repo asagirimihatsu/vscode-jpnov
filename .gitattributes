@@ -1,0 +1,5 @@
+# LF everywhere, including Windows checkouts: suites compare committed text byte-for-byte
+# (.vscodeignore parsing, styles.generated.ts codegen drift), so autocrlf must never rewrite.
+* text=auto eol=lf
+*.png binary
+*.vsix binary

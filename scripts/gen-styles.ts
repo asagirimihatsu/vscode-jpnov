@@ -13,7 +13,7 @@
  * with a pointer to `npm run gen:styles` when the committed module is stale).
  */
 import { readdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const STYLES_DIR = fileURLToPath(new URL('../src/shared/compiler/styles/', import.meta.url));
@@ -53,7 +53,7 @@ export async function generateStylesModule(): Promise<string> {
   const paths = await styleSourcePaths();
   const styles = await Promise.all(paths.map(async (path) => [path, normalize(await readFile(path, 'utf8'))] as const));
   const exports = styles.map(([path, css]) => {
-    const file = path.slice(path.lastIndexOf('/') + 1);
+    const file = basename(path);
     return `export const ${exportName(file)} = '${css.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}';\n`;
   });
   return HEADER + exports.join('');

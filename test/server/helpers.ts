@@ -2,7 +2,7 @@
  * Test scaffolding for the server tests: a fake LSP `Connection` that records outgoing
  * notifications/diagnostics (plus semanticTokens.refresh calls), plus tmp workspace
  * helpers. Suites under `test/server/highlight/**` run inside plain `npm test`; the
- * fs-heavy build suite still runs with the loader documented in test/client/README.md.
+ * fs-heavy build + jpbook suites run in `npm run test:integration`.
  */
 import { rm, mkdir, writeFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

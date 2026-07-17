@@ -1,0 +1,48 @@
+name: Publish
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Test, package, publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Tag must match package.json version
+        run: |
+          node -e '
+            const { version } = JSON.parse(require("node:fs").readFileSync("package.json", "utf8"));
+            const tag = process.env.GITHUB_REF_NAME;
+            if (tag !== `v${version}`) {
+              console.error(`tag ${tag} does not match package.json version v${version}`);
+              process.exit(1);
+            }
+          '
+      - name: Unit tests
+        run: npm test
+      - name: Integration suites
+        run: npm run test:integration
+      - name: E2E smoke
+        run: npm run test:e2e
+        env:
+          JPNOV_E2E_REQUIRE_BROWSER: '1'
+      - name: Package
+        run: npm run package
+      - name: Publish to Visual Studio Marketplace
+        run: npx vsce publish --packagePath "jpnov-${GITHUB_REF_NAME#v}.vsix"
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      - name: GitHub release with the VSIX attached
+        run: gh release create "$GITHUB_REF_NAME" "jpnov-${GITHUB_REF_NAME#v}.vsix" --title "$GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
