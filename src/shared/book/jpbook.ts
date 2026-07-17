@@ -5,8 +5,9 @@
  * A `.jpbook` is plain text in two parts. An OPTIONAL front-matter block — opened by a
  * `---` on the first non-blank line and closed by a second `---` — holds `key: value`
  * metadata (the book's OWN properties: title and page furniture). Everything after it (or
- * the whole file when no block opens) is the chapter list: one relative `.jpnov` source
- * path per line, in reading order.
+ * the whole file when no block opens) is the chapter list: one `.jpnov` source path per
+ * line, in reading order, relative to the book's OWNING WORKSPACE FOLDER root (so moving
+ * the `.jpbook` itself never invalidates them).
  *
  * The `.jpbook`'s OWN name and location imply the output path (mirroring the source
  * tree) — JS-module style: `volume01/index.jpbook` and `volume01.jpbook` both build
@@ -15,9 +16,9 @@
  *
  * Split of concerns: this module does syntax/grammar, naming, and completion *decisions*
  * only. It never touches the filesystem — path containment and existence are resolved by the
- * server (`src/server/jpbook.ts`) where the manifest's directory URI and `node:fs` are
- * available. An `'ok'` line here means "a backslash-free relative `.jpnov` path"; the server
- * still resolves it through {@link resolveContained} and stats it before trusting it.
+ * server (`src/server/jpbook.ts`) where the root URI and `node:fs` are available. An `'ok'`
+ * line here means "a backslash-free relative `.jpnov` path"; the server still resolves it
+ * through {@link resolveContained} and stats it before trusting it.
  */
 import type { BuildChrome, PageNumberPosition } from '../compiler/chrome.ts';
 import { PAGE_NUMBER_POSITIONS } from '../compiler/chrome.ts';

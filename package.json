@@ -411,6 +411,32 @@
             "markdownDescription": "%jpnov.highlight.keywords.description%"
           }
         }
+      },
+      {
+        "title": "%jpnov.book.title%",
+        "order": 8,
+        "properties": {
+          "jpnov.book.updateReferencesOnFileMove": {
+            "type": "string",
+            "enum": [
+              "prompt",
+              "always",
+              "never"
+            ],
+            "default": "prompt",
+            "enumItemLabels": [
+              "%jpnov.book.updateReferencesOnFileMove.prompt.label%",
+              "%jpnov.book.updateReferencesOnFileMove.always.label%",
+              "%jpnov.book.updateReferencesOnFileMove.never.label%"
+            ],
+            "enumDescriptions": [
+              "%jpnov.book.updateReferencesOnFileMove.prompt.description%",
+              "%jpnov.book.updateReferencesOnFileMove.always.description%",
+              "%jpnov.book.updateReferencesOnFileMove.never.description%"
+            ],
+            "markdownDescription": "%jpnov.book.updateReferencesOnFileMove.description%"
+          }
+        }
       }
     ],
     "commands": [
@@ -451,6 +477,11 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "jpnov.openGuide",
+        "category": "%command.category%",
+        "title": "%command.openGuide.title%"
+      },
+      {
         "command": "jpnov.preview",
         "category": "%command.category%",
         "title": "%command.preview.title%"
@@ -476,7 +507,13 @@
     "viewsWelcome": [
       {
         "view": "jpnov.books",
-        "contents": "%viewsWelcome.books.content%"
+        "contents": "%viewsWelcome.books.content%",
+        "when": "workspaceFolderCount != 0"
+      },
+      {
+        "view": "jpnov.books",
+        "contents": "%viewsWelcome.books.noFolder.content%",
+        "when": "workspaceFolderCount == 0"
       }
     ],
     "menus": {
@@ -643,7 +680,7 @@
     "watch:tsc": "tsc --noEmit --watch",
     "watch": "npm run watch:tsc & npm run watch:esbuild & wait",
     "pretest": "npm run type-check",
-    "test": "node --test --experimental-test-module-mocks \"test/shared/**/*.test.ts\" \"test/server/highlight/**/*.test.ts\" \"test/server/lint/**/*.test.ts\" \"test/client/browser.test.ts\"",
+    "test": "node --test --experimental-test-module-mocks \"test/shared/**/*.test.ts\" \"test/server/highlight/**/*.test.ts\" \"test/server/lint/**/*.test.ts\" \"test/client/browser.test.ts\" \"test/client/bookRename.test.ts\"",
     "vscode:prepublish": "npm run type-check && npm run lint && npm run build",
     "package": "vsce package"
   },

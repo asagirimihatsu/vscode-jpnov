@@ -47,6 +47,7 @@ import { buildLintSnapshot } from './lintConfig.ts';
 import { folderIsNovelProject } from './probe.ts';
 import { isLocalizableMessage, renderMessage } from './messages.ts';
 import { Preview } from './preview.ts';
+import { registerRenameTracking } from './renameTracking.ts';
 
 let client: LanguageClient | undefined;
 let preview: Preview | undefined;
@@ -173,7 +174,8 @@ function ensureStarted(): void {
   booksView = new BooksView(client);
 
   // Dispose UI singletons on deactivate (order: stop the client separately in deactivate()).
-  context.subscriptions.push(preview, booksView);
+  // Rename tracking registers here too — novel workspaces only, like everything phase-2.
+  context.subscriptions.push(preview, booksView, registerRenameTracking());
 
   // Push jpnov.lint.* changes so the server re-lints open files live; re-render the preview
   // when its layout/preview settings change; re-enumerate books when a project dir moves.
@@ -286,6 +288,15 @@ export function activate(context: vscode.ExtensionContext): void {
     serverCommand('jpnov.books.refresh', () => booksView?.refresh()),
     serverCommand('jpnov.preview', () => preview?.open(false)),
     serverCommand('jpnov.previewToSide', () => preview?.open(true)),
+    // Plain command (no server needed): the Books panel's welcome views link here. The id
+    // is resolved at runtime so the walkthrough opens under any publisher, including the
+    // Extension Development Host's `undefined_publisher`.
+    command('jpnov.openGuide', () => {
+      void vscode.commands.executeCommand(
+        'workbench.action.openWalkthrough',
+        `${context.extension.id}#jpnov.gettingStarted`,
+      );
+    }),
   );
 
   // Lazy-start triggers. The listener covers documents opened AFTER activation; the

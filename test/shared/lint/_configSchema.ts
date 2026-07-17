@@ -238,6 +238,34 @@ function highlightSection(): unknown {
   };
 }
 
+const UPDATE_REFERENCES_MODES = ['prompt', 'always', 'never'] as const;
+
+/**
+ * The Book Files section: rename tracking for `.jpbook` references — the
+ * `updateImportsOnFileMove` triad. Client-only (never sent to the resolver), so the
+ * default and members are bare literals here, mirrored in `renameTracking.ts`.
+ */
+function bookSection(): unknown {
+  return {
+    title: '%jpnov.book.title%',
+    order: 8,
+    properties: {
+      'jpnov.book.updateReferencesOnFileMove': {
+        type: 'string',
+        enum: [...UPDATE_REFERENCES_MODES],
+        default: 'prompt',
+        enumItemLabels: UPDATE_REFERENCES_MODES.map(
+          (v) => `%jpnov.book.updateReferencesOnFileMove.${v}.label%`,
+        ),
+        enumDescriptions: UPDATE_REFERENCES_MODES.map(
+          (v) => `%jpnov.book.updateReferencesOnFileMove.${v}.description%`,
+        ),
+        markdownDescription: '%jpnov.book.updateReferencesOnFileMove.description%',
+      },
+    },
+  };
+}
+
 /** The `.label` + `.description` key pair for one enum choice. */
 function enumChoiceKeys(choiceKey: string): string[] {
   return [`${choiceKey}.label`, `${choiceKey}.description`];
@@ -268,6 +296,11 @@ function renderNlsKeys(): string[] {
     'jpnov.highlight.title',
     'jpnov.highlight.characters.description',
     'jpnov.highlight.keywords.description',
+    'jpnov.book.title',
+    'jpnov.book.updateReferencesOnFileMove.description',
+    ...UPDATE_REFERENCES_MODES.flatMap((v) =>
+      enumChoiceKeys(`jpnov.book.updateReferencesOnFileMove.${v}`),
+    ),
   ];
 }
 
@@ -276,7 +309,14 @@ function renderNlsKeys(): string[] {
  * section, then Project, Build, Highlighting (array position mirrors the `order` fields).
  */
 export function expectedConfiguration(): unknown[] {
-  return [...renderSections(), lintSection(), projectSection(), buildSection(), highlightSection()];
+  return [
+    ...renderSections(),
+    lintSection(),
+    projectSection(),
+    buildSection(),
+    highlightSection(),
+    bookSection(),
+  ];
 }
 
 /** Every nls key the configuration block references (section titles + descriptions + enum labels). */

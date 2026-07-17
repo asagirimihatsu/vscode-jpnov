@@ -13,6 +13,7 @@ import type { Connection } from 'vscode-languageserver/node';
 
 import { selectRules } from '../../src/shared/lint/select.ts';
 import { createHighlightStore } from '../../src/server/highlight/vocabulary.ts';
+import { createWorkspaceRoots } from '../../src/server/roots.ts';
 import type { ServerContext } from '../../src/server/roots.ts';
 
 export interface RecordedNotification {
@@ -78,6 +79,7 @@ export function makeContext(conn: FakeConnection): ServerContext {
     connection: conn.asConnection(),
     lintSelection: selectRules({}),
     highlight: createHighlightStore(),
+    roots: createWorkspaceRoots(),
   };
 }
 

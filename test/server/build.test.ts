@@ -49,8 +49,8 @@ function boot(): { ctx: ServerContext; conn: FakeConnection } {
 test('build emits a .txt and an .html artifact per jpbook containing both files', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  // index.jpbook in vol1/ -> dist/vol1.{txt,html}; entries resolve in vol1/.
-  await writeUnder(ws.dir, 'vol1/index.jpbook', 'a.jpnov\nb.jpnov');
+  // index.jpbook in vol1/ -> dist/vol1.{txt,html}; entries are root-relative.
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'vol1/a.jpnov\nvol1/b.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', 'あいう');
   await writeUnder(ws.dir, 'vol1/b.jpnov', 'かきく');
 
@@ -84,7 +84,7 @@ test('build stays lenient on an unclosed ［＃: ok, artifacts emitted, tail vis
   // swallowed tail must appear verbatim in the HTML (same shared buildRows arm the preview uses).
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'vol1/index.jpbook', 'a.jpnov');
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'vol1/a.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', '本文［＃閉じない注記\n次の行');
 
   const result: BuildResult = await handleBuild(ctx, {
@@ -109,7 +109,7 @@ test('build stays lenient on an unclosed ［＃: ok, artifacts emitted, tail vis
 test('nested jpbook mirrors the folder tree in the output path', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'part1/vol2/index.jpbook', 'c.jpnov');
+  await writeUnder(ws.dir, 'part1/vol2/index.jpbook', 'part1/vol2/c.jpnov');
   await writeUnder(ws.dir, 'part1/vol2/c.jpnov', 'テスト');
 
   const result = await handleBuild(ctx, {
@@ -131,7 +131,7 @@ test('nested jpbook mirrors the folder tree in the output path', async () => {
 test('deeply nested jpbook writes a mirrored nested output path', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'a/b/c/index.jpbook', 'd.jpnov');
+  await writeUnder(ws.dir, 'a/b/c/index.jpbook', 'a/b/c/d.jpnov');
   await writeUnder(ws.dir, 'a/b/c/d.jpnov', 'ふかい');
 
   const result = await handleBuild(ctx, {
@@ -150,12 +150,13 @@ test('deeply nested jpbook writes a mirrored nested output path', async () => {
   assert.equal(txt.content, 'ふかい');
 });
 
-test('flat name.jpbook resolves entries relative to its OWN dir, not a stem dir', async () => {
+test('entries resolve against the workspace folder root, wherever the book sits', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  // volume01.jpbook lives at the root, so its entries resolve there — here volume01/ch1.jpnov.
-  await writeUnder(ws.dir, 'volume01.jpbook', 'volume01/ch1.jpnov');
-  await writeUnder(ws.dir, 'volume01/ch1.jpnov', 'ほん');
+  // The book lives in books/, its chapter in chapters/ — a sibling ABOVE the book's own dir.
+  // Root-relative entries make that trivially expressible (and moving the book is a no-op).
+  await writeUnder(ws.dir, 'books/volume01.jpbook', 'chapters/ch1.jpnov');
+  await writeUnder(ws.dir, 'chapters/ch1.jpnov', 'ほん');
 
   const result = await handleBuild(ctx, {
     settings: SETTINGS,
@@ -166,18 +167,18 @@ test('flat name.jpbook resolves entries relative to its OWN dir, not a stem dir'
   assert.ok(result.artifacts);
   const html = result.artifacts.find((a) => a.path.endsWith('.html'));
   assert.ok(html);
-  assert.equal(html.path, `${ws.uri}/dist/volume01.html`);
+  assert.equal(html.path, `${ws.uri}/dist/books/volume01.html`);
   assert.ok(html.content.includes('ほん'));
   const txt = result.artifacts.find((a) => a.path.endsWith('.txt'));
   assert.ok(txt);
-  assert.equal(txt.path, `${ws.uri}/dist/volume01.txt`);
+  assert.equal(txt.path, `${ws.uri}/dist/books/volume01.txt`);
   assert.equal(txt.content, 'ほん');
 });
 
 test('projectDirs overrides outDir per root', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'vol1/index.jpbook', 'a.jpnov');
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'vol1/a.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', 'ほんぶん');
 
   const result = await handleBuild(ctx, {
@@ -195,7 +196,7 @@ test('projectDirs overrides outDir per root', async () => {
 test('an invalid outDir silently falls back to dist — and the FALLBACK dir is what discovery skips', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'vol1/index.jpbook', 'a.jpnov');
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'vol1/a.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', 'あ');
   // Lives inside the FALLBACK output dir: it must be excluded even though the
   // configured outDir string ('/abs') never resolved.
@@ -217,9 +218,9 @@ test('an invalid outDir silently falls back to dist — and the FALLBACK dir is 
 test('a missing referenced .jpnov is a per-book error + diagnostic; other books still build', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx, conn } = boot();
-  await writeUnder(ws.dir, 'bad/index.jpbook', 'present.jpnov\ngone.jpnov');
+  await writeUnder(ws.dir, 'bad/index.jpbook', 'bad/present.jpnov\nbad/gone.jpnov');
   await writeUnder(ws.dir, 'bad/present.jpnov', 'ある');
-  await writeUnder(ws.dir, 'good/index.jpbook', 'y.jpnov');
+  await writeUnder(ws.dir, 'good/index.jpbook', 'good/y.jpnov');
   await writeUnder(ws.dir, 'good/y.jpnov', 'よい');
 
   const result = await handleBuild(ctx, {
@@ -249,7 +250,7 @@ test('two book files colliding on the output path error BOTH and emit neither', 
   await using ws = await makeTmpWorkspace();
   const { ctx, conn } = boot();
   // volume01/index.jpbook and volume01.jpbook both derive base "volume01".
-  await writeUnder(ws.dir, 'volume01/index.jpbook', 'a.jpnov');
+  await writeUnder(ws.dir, 'volume01/index.jpbook', 'volume01/a.jpnov');
   await writeUnder(ws.dir, 'volume01/a.jpnov', 'A');
   await writeUnder(ws.dir, 'volume01.jpbook', 'volume01/a.jpnov');
 
@@ -283,7 +284,7 @@ test('build honors the kinsoku mode from the settings snapshot (禁則)', async 
   // (The folio is suppressed through the book's OWN front matter, not settings.)
   const { ctx } = boot();
   const head = 'あ'.repeat(15);
-  await writeUnder(ws.dir, 'vol1/index.jpbook', '---\npageNumber: none\n---\na.jpnov');
+  await writeUnder(ws.dir, 'vol1/index.jpbook', '---\npageNumber: none\n---\nvol1/a.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', `${head}「い」`);
 
   const result = await handleBuild(ctx, {
@@ -310,9 +311,9 @@ test('build targeting a specific root only builds that root', async () => {
   await using wsA = await makeTmpWorkspace();
   await using wsB = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(wsA.dir, 'va/index.jpbook', 'x.jpnov');
+  await writeUnder(wsA.dir, 'va/index.jpbook', 'va/x.jpnov');
   await writeUnder(wsA.dir, 'va/x.jpnov', 'A');
-  await writeUnder(wsB.dir, 'vb/index.jpbook', 'y.jpnov');
+  await writeUnder(wsB.dir, 'vb/index.jpbook', 'vb/y.jpnov');
   await writeUnder(wsB.dir, 'vb/y.jpnov', 'B');
 
   const result = await handleBuild(ctx, {
@@ -329,9 +330,9 @@ test('build targeting a specific root only builds that root', async () => {
 
 test('listBooks enumerates every jpbook, carrying its front-matter title when present', async () => {
   await using ws = await makeTmpWorkspace();
-  await writeUnder(ws.dir, 'vol1/index.jpbook', 'a.jpnov');
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'vol1/a.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', 'あ');
-  await writeUnder(ws.dir, 'part1/vol2/index.jpbook', '---\ntitle: 第二巻\n---\nc.jpnov');
+  await writeUnder(ws.dir, 'part1/vol2/index.jpbook', '---\ntitle: 第二巻\n---\npart1/vol2/c.jpnov');
   await writeUnder(ws.dir, 'part1/vol2/c.jpnov', 'て');
 
   // Enumeration reads each file only for its title: handleListBooks has no connection to
@@ -355,7 +356,7 @@ test('listBooks enumerates every jpbook, carrying its front-matter title when pr
 test('build format "html" emits only the .html artifact', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'vol1/index.jpbook', 'a.jpnov');
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'vol1/a.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', 'あ');
 
   const result = await handleBuild(ctx, {
@@ -373,7 +374,7 @@ test('build format "html" emits only the .html artifact', async () => {
 test('build format "txt" emits only the .txt artifact', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'vol1/index.jpbook', 'a.jpnov');
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'vol1/a.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', 'あ');
 
   const result = await handleBuild(ctx, {
@@ -394,9 +395,9 @@ test('build format "txt" emits only the .txt artifact', async () => {
 test('build restricts to the selected books (by jpbook uri)', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'a/index.jpbook', 'x.jpnov');
+  await writeUnder(ws.dir, 'a/index.jpbook', 'a/x.jpnov');
   await writeUnder(ws.dir, 'a/x.jpnov', 'A');
-  await writeUnder(ws.dir, 'b/index.jpbook', 'y.jpnov');
+  await writeUnder(ws.dir, 'b/index.jpbook', 'b/y.jpnov');
   await writeUnder(ws.dir, 'b/y.jpnov', 'B');
 
   const onlyA = `${ws.uri}/a/index.jpbook`;
@@ -414,7 +415,7 @@ test('build restricts to the selected books (by jpbook uri)', async () => {
 test('build with an empty books selection builds nothing (distinct from omitting it)', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'a/index.jpbook', 'x.jpnov');
+  await writeUnder(ws.dir, 'a/index.jpbook', 'a/x.jpnov');
   await writeUnder(ws.dir, 'a/x.jpnov', 'A');
 
   const result = await handleBuild(ctx, {
@@ -432,7 +433,7 @@ test('a selected book still errors when it collides with an UNSELECTED one', asy
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
   // Both derive base "volume01"; select only the flat one.
-  await writeUnder(ws.dir, 'volume01/index.jpbook', 'a.jpnov');
+  await writeUnder(ws.dir, 'volume01/index.jpbook', 'volume01/a.jpnov');
   await writeUnder(ws.dir, 'volume01/a.jpnov', 'A');
   await writeUnder(ws.dir, 'volume01.jpbook', 'volume01/a.jpnov');
 
@@ -453,7 +454,7 @@ test('a selected book still errors when it collides with an UNSELECTED one', asy
 test('a txt-only build still reports a missing .jpnov as a per-book error + diagnostic', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx, conn } = boot();
-  await writeUnder(ws.dir, 'bad/index.jpbook', 'present.jpnov\ngone.jpnov');
+  await writeUnder(ws.dir, 'bad/index.jpbook', 'bad/present.jpnov\nbad/gone.jpnov');
   await writeUnder(ws.dir, 'bad/present.jpnov', 'ある');
 
   const result = await handleBuild(ctx, {
@@ -495,7 +496,7 @@ test('a root-level jpbook is discovered (discovery is anchored at the folder roo
 test('a src/ layout mirrors the src layer into the output path', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'src/volume1.jpbook', 'ch1.jpnov');
+  await writeUnder(ws.dir, 'src/volume1.jpbook', 'src/ch1.jpnov');
   await writeUnder(ws.dir, 'src/ch1.jpnov', 'いぬ');
 
   const result = await handleBuild(ctx, {
@@ -511,7 +512,7 @@ test('a src/ layout mirrors the src layer into the output path', async () => {
 
 test('discovery skips dot-folders, node_modules, and the resolved outDir', async () => {
   await using ws = await makeTmpWorkspace();
-  await writeUnder(ws.dir, 'vol1/index.jpbook', 'a.jpnov');
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'vol1/a.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', 'あ');
   await writeUnder(ws.dir, '.hidden/x.jpbook', 'a.jpnov');
   await writeUnder(ws.dir, 'node_modules/pkg/y.jpbook', 'a.jpnov');
@@ -530,7 +531,7 @@ test('a non-ASCII outDir (出力) is still excluded from discovery', async () =>
   // comparison would NEVER match 出力 and books inside the output dir would build again.
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'vol1/index.jpbook', 'a.jpnov');
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'vol1/a.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', 'あ');
   await writeUnder(ws.dir, '出力/old.jpbook', 'a.jpnov');
 
