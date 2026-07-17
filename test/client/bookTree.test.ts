@@ -9,7 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildForest } from '../../src/client/bookTree.ts';
+import { buildForest } from '../../src/client/book/tree.ts';
 import type { BookEntry } from '../../src/shared/protocol.ts';
 
 /** A BookEntry where only `rootUri`/`outRel` matter to `buildForest`. */

@@ -1,7 +1,7 @@
 /**
  * Pure, vscode-free folder-tree shaping for the Books panel: groups the flat {@link BookEntry}
  * list the server enumerates into a per-root directory forest that mirrors each book's output path
- * (`outRel`). Kept separate from `booksView.ts` so it pulls in neither `vscode` nor any runtime
+ * (`outRel`). Kept separate from `view.ts` so it pulls in neither `vscode` nor any runtime
  * `#/` value import (only an erased `import type`), which lets it be unit-tested directly under
  * `node --test` — no vscode mock, no esbuild bundling.
  */

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { normalizeFsPath, planBookEdits, type FileRename } from '../../src/client/bookRename.ts';
+import { normalizeFsPath, planBookEdits, type FileRename } from '../../src/client/book/rename.ts';
 
 const ROOT = '/ws/novel';
 const R = (oldPath: string, newPath: string): FileRename => ({ oldPath, newPath });

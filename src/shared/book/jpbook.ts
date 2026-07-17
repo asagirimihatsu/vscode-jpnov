@@ -71,7 +71,14 @@ export interface ParsedLine {
  * {@link composeBookChrome}; the unknown-key message derives its list from here.
  */
 export const META_KEYS = ['title', 'header', 'pageNumber', 'pageNumberFormat'] as const;
-type MetaKey = (typeof META_KEYS)[number];
+export type MetaKey = (typeof META_KEYS)[number];
+
+/** The key portion of a front-matter line's trimmed content, or null when key-less. */
+export function metaKeyOf(value: string): string | null {
+  const sep = colonIndex(value);
+  const key = sep < 0 ? '' : value.slice(0, sep).trim();
+  return key === '' ? null : key;
+}
 
 /**
  * Parsed front-matter values, field names = file keys. All optional — an absent key falls
@@ -240,7 +247,7 @@ export function metaRegionOf(
 
 /**
  * Composes one book's resolved {@link BuildChrome}: the proofing chrome (line numbers /
- * edge rules) comes from the workspace SETTINGS base, the page furniture (柱/ノンブル)
+ * edge rules) comes from the workspace SETTINGS base, the page furniture (ヘッダー/ノンブル)
  * from the book's OWN front matter, defaults filling any absent key. This is the single
  * seam where "how I proof" (settings) meets "what this book is" (`.jpbook`).
  */

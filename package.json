@@ -482,6 +482,33 @@
         "title": "%command.openGuide.title%"
       },
       {
+        "command": "jpnov.book.addChapters",
+        "category": "%command.category%",
+        "title": "%command.book.addChapters.title%",
+        "icon": "$(add)"
+      },
+      {
+        "command": "jpnov.book.removeChapter",
+        "category": "%command.category%",
+        "title": "%command.book.removeChapter.title%",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "jpnov.book.moveChapterUp",
+        "category": "%command.category%",
+        "title": "%command.book.moveChapterUp.title%"
+      },
+      {
+        "command": "jpnov.book.moveChapterDown",
+        "category": "%command.category%",
+        "title": "%command.book.moveChapterDown.title%"
+      },
+      {
+        "command": "jpnov.book.editMeta",
+        "category": "%command.category%",
+        "title": "%command.book.editMeta.title%"
+      },
+      {
         "command": "jpnov.preview",
         "category": "%command.category%",
         "title": "%command.preview.title%"
@@ -549,6 +576,33 @@
           "when": "view == jpnov.books"
         }
       ],
+      "view/item/context": [
+        {
+          "command": "jpnov.book.addChapters",
+          "group": "inline",
+          "when": "view == jpnov.books && viewItem == jpnovBook"
+        },
+        {
+          "command": "jpnov.book.removeChapter",
+          "group": "inline",
+          "when": "view == jpnov.books && viewItem == jpnovChapter"
+        },
+        {
+          "command": "jpnov.book.moveChapterUp",
+          "group": "1_move@1",
+          "when": "view == jpnov.books && viewItem == jpnovChapter"
+        },
+        {
+          "command": "jpnov.book.moveChapterDown",
+          "group": "1_move@2",
+          "when": "view == jpnov.books && viewItem == jpnovChapter"
+        },
+        {
+          "command": "jpnov.book.removeChapter",
+          "group": "9_remove",
+          "when": "view == jpnov.books && viewItem == jpnovChapter"
+        }
+      ],
       "editor/title": [
         {
           "command": "jpnov.previewToSide",
@@ -587,6 +641,26 @@
         },
         {
           "command": "jpnov.books.refresh",
+          "when": "false"
+        },
+        {
+          "command": "jpnov.book.addChapters",
+          "when": "false"
+        },
+        {
+          "command": "jpnov.book.removeChapter",
+          "when": "false"
+        },
+        {
+          "command": "jpnov.book.moveChapterUp",
+          "when": "false"
+        },
+        {
+          "command": "jpnov.book.moveChapterDown",
+          "when": "false"
+        },
+        {
+          "command": "jpnov.book.editMeta",
           "when": "false"
         }
       ]

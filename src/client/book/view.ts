@@ -32,27 +32,21 @@ import {
   type ListBooksResult,
 } from '#/shared/protocol.ts';
 
-import { buildForest, type TreeDir } from './bookTree.ts';
-import { resolveBrowserExecutable } from './browser.ts';
-import { renderMessage } from './messages.ts';
-import { lastPathSegment } from './paths.ts';
-import { convertHtmlToPdf } from './pdf.ts';
-import { buildProjectDirs } from './projectConfig.ts';
-import { buildHtmlSettings } from './renderConfig.ts';
+import { chapterLines, metaRows, moveChapterTo } from '#/shared/book/edits.ts';
+import { parseJpbook } from '#/shared/book/jpbook.ts';
+
+import { buildForest, type TreeDir } from './tree.ts';
+import { applyBookEdits, metaLabel, metaValueLabel } from './manage.ts';
+import type { BookNode } from './nodes.ts';
+import { resolveBrowserExecutable } from '../browser.ts';
+import { renderMessage } from '../messages.ts';
+import { lastPathSegment } from '../paths.ts';
+import { convertHtmlToPdf } from '../pdf.ts';
+import { buildProjectDirs } from '../projectConfig.ts';
+import { buildHtmlSettings } from '../renderConfig.ts';
 
 /** A Books-panel build action: the two wire formats plus the client-only PDF post-process. */
 type BuildAction = BuildFormat | 'pdf';
-
-/**
- * A tree node: a per-root GROUP header (only when more than one valid root has books), a FOLDER in
- * the output-path hierarchy, or a BOOK leaf. Only leaves carry a checkbox; root/folder headers
- * never do (bulk selection is the title-bar Select-All / Deselect-All instead), which sidesteps
- * parent/child checkbox propagation.
- */
-type BookNode =
-  | { readonly kind: 'root'; readonly rootUri: string; readonly label: string }
-  | { readonly kind: 'folder'; readonly rootUri: string; readonly prefix: string; readonly label: string }
-  | { readonly kind: 'book'; readonly entry: BookEntry };
 
 function compareStr(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -115,6 +109,7 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
     this.treeView = vscode.window.createTreeView<BookNode>('jpnov.books', {
       treeDataProvider: this,
       showCollapseAll: true,
+      dragAndDropController: new ChapterDnD(),
     });
 
     // A `.jpbook` appearing/disappearing changes the book SET, and a SAVE can change its
@@ -160,12 +155,58 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
       return item;
     }
 
+    if (element.kind === 'info') {
+      const item = new vscode.TreeItem(vscode.l10n.t('Book Info'), vscode.TreeItemCollapsibleState.Collapsed);
+      item.id = `info:${element.entry.uri}`;
+      item.contextValue = 'jpnovInfo';
+      item.iconPath = new vscode.ThemeIcon('gear');
+      return item;
+    }
+
+    if (element.kind === 'meta') {
+      // Tree-as-form: the four keys always show in fixed order; an absent one displays its
+      // default. Clicking the row opens the matching editor (InputBox / QuickPick).
+      const item = new vscode.TreeItem(metaLabel(element.metaKey), vscode.TreeItemCollapsibleState.None);
+      item.id = `meta:${element.entry.uri}:${element.metaKey}`;
+      item.contextValue = 'jpnovMeta';
+      item.description = metaValueLabel(element.metaKey, element.value);
+      item.iconPath = new vscode.ThemeIcon('edit');
+      item.command = {
+        command: 'jpnov.book.editMeta',
+        title: metaLabel(element.metaKey),
+        arguments: [element],
+      };
+      return item;
+    }
+
+    if (element.kind === 'chapter') {
+      const slash = element.rel.lastIndexOf('/');
+      const item = new vscode.TreeItem(element.rel.slice(slash + 1), vscode.TreeItemCollapsibleState.None);
+      item.id = `ch:${element.entry.uri}:${String(element.line)}`;
+      item.contextValue = 'jpnovChapter';
+      const target = chapterUri(element.entry.rootUri, element.rel);
+      item.resourceUri = target; // tooltips + problem decorations (icon set explicitly below)
+      if (slash >= 0) {
+        item.description = element.rel.slice(0, slash);
+      }
+      // A ThemeIcon, not the file-icon theme: theme icons share one rendering slot with the
+      // gear/pencil rows, so the chapter column aligns instead of reading a level deeper.
+      if (element.missing) {
+        item.iconPath = new vscode.ThemeIcon('warning');
+        item.tooltip = vscode.l10n.t('file not found: {0}', element.rel);
+      } else {
+        item.iconPath = new vscode.ThemeIcon('file');
+      }
+      item.command = { command: 'vscode.open', title: vscode.l10n.t('Open Chapter'), arguments: [target] };
+      return item;
+    }
+
     const { entry } = element;
     // Label by the front-matter title when the book declares one, else by the book's OUTPUT
     // name's last segment (e.g. `vol2`); ancestor folders carry the prefix. The source
     // manifest path is the description.
     const label = entry.title ?? entry.outRel.slice(entry.outRel.lastIndexOf('/') + 1);
-    const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
+    const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.Collapsed);
     item.id = entry.uri; // stable identity for selection/expansion + checkbox state
     item.resourceUri = vscode.Uri.parse(entry.uri);
     item.description = entry.fileRel;
@@ -207,6 +248,12 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
     if (element.kind === 'folder') {
       const dir = dirAt(this.forest, element.rootUri, element.prefix);
       return dir ? dirChildren(dir, element.rootUri, element.prefix) : [];
+    }
+    if (element.kind === 'book') {
+      return bookChildren(element.entry);
+    }
+    if (element.kind === 'info') {
+      return metaChildren(element.entry);
     }
     return [];
   }
@@ -505,6 +552,91 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
 
     if (pdfs.length > 0) {
       this.reportBuilt(pdfs.length, label);
+    }
+  }
+}
+
+/** A chapter's file URI from its root-relative entry (joinPath handles the encoding). */
+function chapterUri(rootUri: string, rel: string): vscode.Uri {
+  return vscode.Uri.joinPath(vscode.Uri.parse(rootUri), ...rel.split('/'));
+}
+
+/** One book's expansion: the Book Info group, then its chapters in document order. */
+async function bookChildren(entry: BookEntry): Promise<BookNode[]> {
+  let doc: vscode.TextDocument;
+  try {
+    doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(entry.uri));
+  } catch {
+    return [];
+  }
+  const lines = parseJpbook(doc.getText()).lines;
+  const chapters = await Promise.all(
+    chapterLines(lines).map(async (line): Promise<BookNode> => {
+      const pl = lines[line];
+      const rel = pl?.value ?? '';
+      let missing = false;
+      try {
+        const st = await vscode.workspace.fs.stat(chapterUri(entry.rootUri, rel));
+        missing = (st.type & vscode.FileType.File) === 0;
+      } catch {
+        missing = true;
+      }
+      return { kind: 'chapter', entry, line, rel, missing };
+    }),
+  );
+  // Chapters lead (the book's actual content); the Info group closes the block so the
+  // chapter rows hang visually under the book title, not under the group.
+  return [...chapters, { kind: 'info', entry }];
+}
+
+/** The Book Info expansion: all four metadata keys, fixed order, defaults shown when absent. */
+async function metaChildren(entry: BookEntry): Promise<BookNode[]> {
+  let doc: vscode.TextDocument;
+  try {
+    doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(entry.uri));
+  } catch {
+    return [];
+  }
+  return metaRows(doc.getText()).map((row) => ({
+    kind: 'meta',
+    entry,
+    metaKey: row.key,
+    value: row.value,
+  }));
+}
+
+/**
+ * Chapter reorder by drag & drop, WITHIN one book: dropping on a chapter inserts before
+ * it, dropping on the book (or its Info row) moves to the end. Cross-book drops are
+ * ignored (move-vs-copy is ambiguous there — the context menu can grow that later).
+ * The edit goes through the same plan-apply-save path as every other panel action.
+ */
+class ChapterDnD implements vscode.TreeDragAndDropController<BookNode> {
+  private static readonly MIME = 'application/vnd.code.tree.jpnov.books';
+  readonly dragMimeTypes = [ChapterDnD.MIME];
+  readonly dropMimeTypes = [ChapterDnD.MIME];
+
+  handleDrag(source: readonly BookNode[], dataTransfer: vscode.DataTransfer): void {
+    const chapters = source.filter((n) => n.kind === 'chapter');
+    if (chapters.length === 1) {
+      dataTransfer.set(ChapterDnD.MIME, new vscode.DataTransferItem(chapters));
+    }
+  }
+
+  async handleDrop(target: BookNode | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
+    const dragged = dataTransfer.get(ChapterDnD.MIME)?.value as BookNode[] | undefined;
+    const src = dragged?.[0];
+    if (src?.kind !== 'chapter' || target === undefined || target.kind === 'root' || target.kind === 'folder') {
+      return;
+    }
+    if (target.entry.uri !== src.entry.uri) {
+      return; // cross-book drop: out of scope
+    }
+    const before = target.kind === 'chapter' ? target.line : null;
+    const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(src.entry.uri));
+    const edits = moveChapterTo(doc.getText(), src.line, before);
+    if (edits !== null) {
+      await applyBookEdits(doc.uri, edits);
     }
   }
 }
