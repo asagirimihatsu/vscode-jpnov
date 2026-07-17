@@ -114,8 +114,8 @@ const bookOpts = {
   autoTcy: 'punctuationPairs',
 } as const;
 const folio = {
-  pageNumberPosition: 'rightThenLeft',
-  pageNumberTemplate: '{page} / {totalPage}',
+  pageNumber: 'right',
+  pageNumberFormat: '{page} / {totalPage}',
   header: '吾輩は猫である',
 } as const;
 
@@ -321,7 +321,7 @@ Sample project to open (any temp folder):
 novel-sample/
 ├── 第一章.jpnov        ← paste the source below
 ├── 第二章.jpnov        ← a few plain lines are enough
-├── 作品集.filelist     ← two lines: 第一章.jpnov / 第二章.jpnov
+├── 作品集.jpbook      ← two lines: 第一章.jpnov / 第二章.jpnov
 └── .vscode/settings.json
 ```
 

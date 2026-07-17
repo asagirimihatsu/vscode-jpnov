@@ -1,7 +1,9 @@
-/* Page number (folio) — included when pageNumberPosition ≠ 'none' (renderBook also normalizes
-   a blank template to 'none', so the .pn DOM element and these rules always agree). Pinned to
-   the bottom band's outer corner; .r / .l pick the side per page. PHYSICAL bottom/right/left
-   (horizontal-tb inside vertical-rl); ink #444 literal (print, not themed). */
-.pn{position:absolute;bottom:0.5em;writing-mode:horizontal-tb;font-size:0.8em;line-height:1;color:#444;}
-.pn.r{right:0.35em;}
-.pn.l{left:0.35em;}
+/* Page number (folio) — included when pageNumber ≠ 'none' (renderBook also normalizes a
+   blank format to 'none', so the .pn DOM element and these rules always agree). Floated 1em
+   inside the bottom edge (the mirror of .hd's top:1em); .r / .l pick the side per page, each
+   corner at 1.85em = SIDE_PAD 1.5 + 0.35 EDGE_INSET, just inside the frame's side line.
+   PHYSICAL bottom/right/left (horizontal-tb inside vertical-rl); ink #444 literal (print,
+   not themed). */
+.pn{position:absolute;bottom:1em;writing-mode:horizontal-tb;font-size:0.8em;line-height:1;color:#444;}
+.pn.r{right:1.85em;}
+.pn.l{left:1.85em;}

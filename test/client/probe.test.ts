@@ -31,8 +31,8 @@ function folder(): { uri: Uri; name: string; index: number } {
   return { uri: Uri.parse(FOLDER_URI), name: 'a', index: 0 };
 }
 
-test('a root-level *.filelist marks the folder as a novel project', async () => {
-  state.readDirectoryResults.set(FOLDER_URI, [['volume1.filelist', 1]]);
+test('a root-level *.jpbook marks the folder as a novel project', async () => {
+  state.readDirectoryResults.set(FOLDER_URI, [['volume1.jpbook', 1]]);
   assert.equal(await folderIsNovelProject(folder() as never), true);
 });
 
@@ -64,12 +64,12 @@ test('no settings, no matching filenames: not a novel project', async () => {
   assert.equal(await folderIsNovelProject(folder() as never), false);
 });
 
-test('a non-file named *.filelist is no signal (directory or symlink)', async () => {
+test('a non-file named *.jpbook is no signal (directory or symlink)', async () => {
   // Strict FileType.File: matches server-side discovery, where a Dirent that is a
   // directory or a symlink is never a book either.
   state.readDirectoryResults.set(FOLDER_URI, [
-    ['x.filelist', 2], // directory
-    ['link.filelist', 65], // File | SymbolicLink
+    ['x.jpbook', 2], // directory
+    ['link.jpbook', 65], // File | SymbolicLink
   ]);
   assert.equal(await folderIsNovelProject(folder() as never), false);
 });
@@ -79,18 +79,18 @@ test('an unreadable root is skipped, not fatal', async () => {
   assert.equal(await folderIsNovelProject(folder() as never), false);
 });
 
-test('a nested *.filelist (subfolders only) is found by the deep search', async () => {
+test('a nested *.jpbook (subfolders only) is found by the deep search', async () => {
   state.readDirectoryResults.set(FOLDER_URI, [['chapters', 2]]);
-  state.findFilesResults.set(FOLDER_URI, [Uri.parse(`${FOLDER_URI}/books/volume1.filelist`)]);
+  state.findFilesResults.set(FOLDER_URI, [Uri.parse(`${FOLDER_URI}/books/volume1.jpbook`)]);
   assert.equal(await folderIsNovelProject(folder() as never), true);
   const call = state.findFilesCalls[0];
   assert.ok(call);
-  assert.equal(call.include.pattern, '**/*.filelist');
+  assert.equal(call.include.pattern, '**/*.jpbook');
   assert.equal(call.maxResults, 1);
 });
 
 test('a root shallow hit answers without the deep search', async () => {
-  state.readDirectoryResults.set(FOLDER_URI, [['volume1.filelist', 1]]);
+  state.readDirectoryResults.set(FOLDER_URI, [['volume1.jpbook', 1]]);
   state.findFilesResults.set(FOLDER_URI, 'error'); // would answer false if consulted
   assert.equal(await folderIsNovelProject(folder() as never), true);
   assert.equal(state.findFilesCalls.length, 0);

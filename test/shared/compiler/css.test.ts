@@ -15,8 +15,8 @@ const PREVIEW_OFF: PreviewChrome = { lineNumbers: false, edgeLine: 'none' };
 const BUILD_OFF: BuildChrome = {
   lineNumbers: false,
   edgeLine: 'none',
-  pageNumberPosition: 'none',
-  pageNumberTemplate: '{page} / {totalPage}',
+  pageNumber: 'none',
+  pageNumberFormat: '{page} / {totalPage}',
   header: '',
 };
 
@@ -63,7 +63,7 @@ test('paginated stylesheet sizes the page + @page by charsPerLine x linesPerPage
   assert.match(css, /\.page\{[^}]*block-size:calc\(var\(--lpp\)\*2\.25em\)/);
   assert.match(css, /:root\{[^}]*--cpl:30/);
   assert.match(css, /:root\{[^}]*--lpp:25/);
-  assert.match(css, /@page\{size:61\.25em 40em;margin:0;\}/); // + reserved header/folio bands + paper margin
+  assert.match(css, /@page\{size:64\.25em 41em;margin:0;\}/); // + reserved header/folio bands + paper margin
 });
 
 test('paginated stylesheet breaks each .page onto its own sheet', () => {
@@ -150,7 +150,7 @@ test('字下げ padding is inline-start, never block-start (axis lock)', () => {
 test('base fill rules stay untouched by decoration/indent classes', () => {
   const p = build({ usedClasses: ['dec-wavy', 'b', 'i', 'indent-5'] });
   assert.match(p, /\.line\{block-size:2\.25em;margin:0;white-space:pre;\}/);
-  assert.match(p, /@page\{size:81\.5em 50em;margin:0;\}/); // 34×2.25em + 40 chars + reserved bands + paper margin
+  assert.match(p, /@page\{size:84\.5em 51em;margin:0;\}/); // 34×2.25em + 40 chars + reserved bands + paper margin
   const v = preview({ usedClasses: ['indent-5'] });
   assert.match(v, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ \(var\(--cpl\) \+ 0\.7\)\)/);
   assert.match(v, /:root\{--cpl:40\}/);
@@ -321,8 +321,8 @@ test('preview: the 改ページ dashed rule overshoots the writing band into the
 const BUILD_ON: BuildChrome = {
   lineNumbers: true,
   edgeLine: 'text',
-  pageNumberPosition: 'rightThenLeft',
-  pageNumberTemplate: '{page} / {totalPage}',
+  pageNumber: 'rightLeft',
+  pageNumberFormat: '{page} / {totalPage}',
   header: '章',
 };
 
@@ -330,15 +330,15 @@ test('build all-on chrome: bands, outset frame, counters, rules, furniture style
   const css = build({ chrome: BUILD_ON });
   // Bands: header 2.5 + line numbers 1 on top (--htop), folio 2.5 at the bottom (static).
   assert.match(css, /\.page\{[^}]*padding-inline-start:calc\(var\(--htop\)\*1em\)/);
-  assert.match(css, /:root\{[^}]*--htop:3\.5/); // header 2.5 + line numbers 1
-  assert.match(css, /\.page\{[^}]*padding-inline-end:2\.5em/);
+  assert.match(css, /:root\{[^}]*--htop:4/); // header 3 + line numbers 1
+  assert.match(css, /\.page\{[^}]*padding-inline-end:3em/);
   assert.match(css, /\.page\{[^}]*position:relative/);
   assert.match(css, /\.page\{[^}]*counter-reset:ln/); // per-page numbering
   // The frame floats EDGE_INSET off the text grid, into the bands (chrome renders
   // OUTSIDE it), and matches the rule colour.
   assert.match(
     css,
-    /\.page::before\{[^}]*top:calc\(var\(--htop\)\*1em - 0\.35em\);right:0;bottom:2\.15em;left:0/,
+    /\.page::before\{[^}]*top:calc\(var\(--htop\)\*1em - 0\.35em\);right:1\.5em;bottom:2\.65em;left:1\.5em/,
   );
   assert.match(css, edgeMixRe(String.raw`\.page::before\{[^}]*border:1px solid `));
   assert.match(css, /:root\{[^}]*--edge:currentColor\}/);
@@ -351,10 +351,11 @@ test('build all-on chrome: bands, outset frame, counters, rules, furniture style
   // The inter-column rule is the preview recipe transplanted: one left rule per boundary
   // (none on the page's last column), stretched 0.35em past both grid ends to meet the
   // outset frame. The old box-shadow recipe (grid-height only — it could no longer reach
-  // the frame) is fully retired.
+  // the frame) is fully retired — the only box-shadow left is the screen sheet's paper
+  // shadow, never anything on a .line.
   assert.match(css, edgeMixRe(String.raw`\.line:not\(:last-child\)::after\{[^}]*border-left:1px solid `));
   assert.match(css, /\.line:not\(:last-child\)::after\{[^}]*top:-0\.35em;bottom:-0\.35em/);
-  assert.doesNotMatch(css, /box-shadow/);
+  assert.doesNotMatch(css, /\.line[^{]*\{[^}]*box-shadow/);
   // Once-merged declarations now arrive as stacking rules (anchor + ln fragments).
   assert.match(css, /\.line\{counter-increment:ln;\}/);
   assert.match(css, /\.line\{position:relative;\}/);
@@ -363,14 +364,15 @@ test('build all-on chrome: bands, outset frame, counters, rules, furniture style
   // it clears the outset frame; line-height:1 keeps it inside the line-number band.
   assert.match(css, /\.line::before\{[^}]*translateY\(calc\(-100% - 0\.35rem\)\)/);
   assert.match(css, /\.line::before\{[^}]*line-height:1;/);
-  assert.match(css, /\.hd\{position:absolute;top:0;left:0;right:0/);
+  // The 柱 floats 1em inside the sheet edge — the mirror of .pn{bottom:1em} below.
+  assert.match(css, /\.hd\{position:absolute;top:1em;left:0;right:0/);
   assert.match(css, /\.hd\{[^}]*line-height:1;/);
-  assert.match(css, /\.pn\{position:absolute;bottom:0\.5em/);
+  assert.match(css, /\.pn\{position:absolute;bottom:1em/);
   assert.match(css, /\.pn\{[^}]*line-height:1;/);
-  assert.match(css, /\.pn\.r\{right:0\.35em;\}/);
-  assert.match(css, /\.pn\.l\{left:0\.35em;\}/);
-  // Sheet grows by the bands: 40 + 3.5 + 2.5 + 2×2.5 = 51em on the inline (char) axis.
-  assert.match(css, /@page\{size:81\.5em 51em;margin:0;\}/);
+  assert.match(css, /\.pn\.r\{right:1\.85em;\}/);
+  assert.match(css, /\.pn\.l\{left:1\.85em;\}/);
+  // Sheet grows by the bands: 40 + 4 + 3 + 2×2.5 = 52em on the inline (char) axis.
+  assert.match(css, /@page\{size:84\.5em 52em;margin:0;\}/);
 });
 
 test('build all-off chrome keeps a plain sheet with the reserved bands, no chrome rules', () => {
@@ -380,15 +382,19 @@ test('build all-off chrome keeps a plain sheet with the reserved bands, no chrom
   assert.doesNotMatch(css, /\.page::before/);
   assert.doesNotMatch(css, /#444/); // the frame's old grey fallback is gone (.pn is off here)
   assert.match(css, /\.page\{[^}]*padding-inline-start:calc\(var\(--htop\)\*1em\)/);
-  assert.match(css, /:root\{[^}]*--htop:2\.5/); // header band only — no line-number band
-  assert.match(css, /\.page\{[^}]*padding-inline-end:2\.5em/);
+  assert.match(css, /:root\{[^}]*--htop:3/); // header band only — no line-number band
+  assert.match(css, /\.page\{[^}]*padding-inline-end:3em/);
   assert.match(css, /\.page\{[^}]*line-height:2\.25/); // the SAME pitch without edge rules
-  assert.match(css, /@page\{size:81\.5em 50em;margin:0;\}/);
+  assert.match(css, /@page\{size:84\.5em 51em;margin:0;\}/);
+  // The screen-only paper look (grey backdrop + sheet shadow + the shared 2.5em surround)
+  // is chrome-independent — present even with every feature off — and print resets it.
+  assert.match(css, /@media screen\{html\{background:#e8e8e8;\}\.page\{box-shadow:0 1px 4px rgba\(0,0,0,0\.25\);\}\}/);
+  assert.match(css, /\.page\{[^}]*margin:2\.5em auto/);
   // Print keeps sheets one-per-page (vertical-rl root — Chromium splits orthogonal-flow
   // sheets onto two papers) with the paper inset on the SHEET; @page margins stay 0 so
   // the browser's own header/footer (its page numbers, URL, date) has nowhere to render.
-  assert.match(css, /@media print\{html\{writing-mode:vertical-rl;\}\.page\{margin:2\.5em;\}\}/);
-  assert.doesNotMatch(css, /box-shadow/);
+  assert.match(css, /@media print\{html\{writing-mode:vertical-rl;background:none;\}\.page\{margin:2\.5em;box-shadow:none;\}\}/);
+  assert.doesNotMatch(css, /\.line[^{]*\{[^}]*box-shadow/);
   assert.doesNotMatch(css, /::after/); // no inter-column rules without edge lines
   assert.doesNotMatch(css, /counter/);
   assert.doesNotMatch(css, /\.hd\{|\.pn\{/);
@@ -398,12 +404,12 @@ test('build red edge lines colour both the frame and the inter-column rules', ()
   const css = build({ chrome: { ...BUILD_OFF, edgeLine: 'red' } });
   assert.match(css, edgeMixRe(String.raw`\.page::before\{[^}]*border:1px solid `));
   assert.match(css, /:root\{[^}]*--edge:#cc0000\}/);
-  // No line-number band here (--htop:2.5), so the frame floats 0.35em off the header band.
+  // No line-number band here (--htop:3), so the frame floats 0.35em off the header band.
   assert.match(
     css,
-    /\.page::before\{[^}]*top:calc\(var\(--htop\)\*1em - 0\.35em\);right:0;bottom:2\.15em;left:0/,
+    /\.page::before\{[^}]*top:calc\(var\(--htop\)\*1em - 0\.35em\);right:1\.5em;bottom:2\.65em;left:1\.5em/,
   );
-  assert.match(css, /:root\{[^}]*--htop:2\.5/);
+  assert.match(css, /:root\{[^}]*--htop:3/);
   assert.match(css, edgeMixRe(String.raw`\.line:not\(:last-child\)::after\{[^}]*border-left:1px solid `));
   assert.match(css, /\.line\{[^}]*position:relative/); // the rule's anchor, even with numbers off
   assert.match(css, /\.line\{[^}]*block-size:2\.25em/); // the constant ruby-safe pitch
@@ -413,19 +419,19 @@ test('build bands: header/folio bands are constant; only line numbers add geomet
   // Folio and header furniture change nothing geometric — those bands are always there.
   for (const chrome of [
     BUILD_OFF,
-    { ...BUILD_OFF, pageNumberPosition: 'alwaysRight' as const },
+    { ...BUILD_OFF, pageNumber: 'right' as const },
     { ...BUILD_OFF, header: 'X' },
   ]) {
     const css = build({ chrome });
-    assert.match(css, /:root\{[^}]*--htop:2\.5/); // the top band is furniture-independent
+    assert.match(css, /:root\{[^}]*--htop:3/); // the top band is furniture-independent
     assert.match(css, /\.page\{[^}]*padding-inline-start:calc\(var\(--htop\)\*1em\)/);
-    assert.match(css, /\.page\{[^}]*padding-inline-end:2\.5em/);
-    assert.match(css, /@page\{size:81\.5em 50em/); // 40 + 2.5 + 2.5 + 2×2.5
+    assert.match(css, /\.page\{[^}]*padding-inline-end:3em/);
+    assert.match(css, /@page\{size:84\.5em 51em/); // 40 + 3 + 3 + 2×2.5
   }
   const lnOnly = build({ chrome: { ...BUILD_OFF, lineNumbers: true } });
-  assert.match(lnOnly, /:root\{[^}]*--htop:3\.5/); // header 2.5 + numbers 1
+  assert.match(lnOnly, /:root\{[^}]*--htop:4/); // header 3 + numbers 1
   assert.match(lnOnly, /\.page\{[^}]*padding-inline-start:calc\(var\(--htop\)\*1em\)/);
-  assert.match(lnOnly, /\.page\{[^}]*padding-inline-end:2\.5em/);
+  assert.match(lnOnly, /\.page\{[^}]*padding-inline-end:3em/);
 });
 
 test('edgeLine none draws no frame in either medium (preview/build cohesion)', () => {

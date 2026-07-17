@@ -16,7 +16,7 @@ export interface TreeDir {
 /**
  * Groups books into a folder forest keyed by root URI, mirroring each book's `outRel` path: a book
  * with `outRel` `part1/vol2` becomes a leaf inside folder `part1`. The `index`-collapse already
- * happened in `filelistOutRel`, so no `index` sentinel ever appears.
+ * happened in `jpbookOutRel`, so no `index` sentinel ever appears.
  */
 export function buildForest(books: readonly BookEntry[]): Map<string, TreeDir> {
   const forest = new Map<string, TreeDir>();

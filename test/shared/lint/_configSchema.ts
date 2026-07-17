@@ -8,7 +8,7 @@
  * Layout(1) > HTML Output(2) > Preview(3) > Lint(4, all scopes merged) > Project(5) >
  * Build(6) > Highlighting(7).
  */
-import { EDGE_LINE_STYLES, PAGE_NUMBER_POSITIONS } from '../../../src/shared/compiler/chrome.ts';
+import { EDGE_LINE_STYLES } from '../../../src/shared/compiler/chrome.ts';
 import {
   BUILD_CHROME_DEFAULT,
   PREVIEW_CHROME_DEFAULT,
@@ -134,34 +134,14 @@ function renderSections(): unknown[] {
       title: '%jpnov.html.title%',
       order: 2,
       properties: {
+        // Page furniture (柱/ノンブル) is deliberately NOT here: it is book identity, carried
+        // by each `.jpbook`'s front matter (parsed in shared/book/jpbook.ts), never a setting.
         'jpnov.html.lineNumbers': {
           type: 'boolean',
           default: BUILD_CHROME_DEFAULT.lineNumbers,
           markdownDescription: '%jpnov.html.lineNumbers.description%',
         },
         'jpnov.html.edgeLine': edgeLineProperty('jpnov.html.edgeLine'),
-        'jpnov.html.pageNumber.position': {
-          type: 'string',
-          enum: [...PAGE_NUMBER_POSITIONS],
-          default: BUILD_CHROME_DEFAULT.pageNumberPosition,
-          enumItemLabels: PAGE_NUMBER_POSITIONS.map(
-            (v) => `%jpnov.html.pageNumber.position.${v}.label%`,
-          ),
-          enumDescriptions: PAGE_NUMBER_POSITIONS.map(
-            (v) => `%jpnov.html.pageNumber.position.${v}.description%`,
-          ),
-          markdownDescription: '%jpnov.html.pageNumber.position.description%',
-        },
-        'jpnov.html.pageNumber.template': {
-          type: 'string',
-          default: BUILD_CHROME_DEFAULT.pageNumberTemplate,
-          markdownDescription: '%jpnov.html.pageNumber.template.description%',
-        },
-        'jpnov.html.header': {
-          type: 'string',
-          default: BUILD_CHROME_DEFAULT.header,
-          markdownDescription: '%jpnov.html.header.description%',
-        },
       },
     },
     {
@@ -281,10 +261,6 @@ function renderNlsKeys(): string[] {
     'jpnov.html.lineNumbers.description',
     'jpnov.html.edgeLine.description',
     ...EDGE_LINE_STYLES.flatMap((v) => enumChoiceKeys(`jpnov.html.edgeLine.${v}`)),
-    'jpnov.html.pageNumber.position.description',
-    ...PAGE_NUMBER_POSITIONS.flatMap((v) => enumChoiceKeys(`jpnov.html.pageNumber.position.${v}`)),
-    'jpnov.html.pageNumber.template.description',
-    'jpnov.html.header.description',
     'jpnov.project.title',
     'jpnov.project.outDir.description',
     'jpnov.build.title',

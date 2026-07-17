@@ -29,7 +29,11 @@ import type {
 } from '../../src/shared/protocol.ts';
 
 /** The product-default settings snapshot every build request carries (settings is required). */
-const SETTINGS: HtmlSettings = { ...LAYOUT_DEFAULT, ...BUILD_CHROME_DEFAULT };
+const SETTINGS: HtmlSettings = {
+  ...LAYOUT_DEFAULT,
+  lineNumbers: BUILD_CHROME_DEFAULT.lineNumbers,
+  edgeLine: BUILD_CHROME_DEFAULT.edgeLine,
+};
 
 /** The per-root `jpnov.project.*` map a request carries; defaults unless overridden. */
 function projectsFor(uri: string, dirs: Partial<ProjectDirs> = {}): ProjectDirsMap {
@@ -42,11 +46,11 @@ function boot(): { ctx: ServerContext; conn: FakeConnection } {
   return { ctx: makeContext(conn), conn };
 }
 
-test('build emits a .txt and an .html artifact per filelist containing both files', async () => {
+test('build emits a .txt and an .html artifact per jpbook containing both files', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  // index.filelist in vol1/ -> dist/vol1.{txt,html}; entries resolve in vol1/.
-  await writeUnder(ws.dir, 'vol1/index.filelist', 'a.jpnov\nb.jpnov');
+  // index.jpbook in vol1/ -> dist/vol1.{txt,html}; entries resolve in vol1/.
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'a.jpnov\nb.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', 'あいう');
   await writeUnder(ws.dir, 'vol1/b.jpnov', 'かきく');
 
@@ -80,7 +84,7 @@ test('build stays lenient on an unclosed ［＃: ok, artifacts emitted, tail vis
   // swallowed tail must appear verbatim in the HTML (same shared buildRows arm the preview uses).
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'vol1/index.filelist', 'a.jpnov');
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'a.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', '本文［＃閉じない注記\n次の行');
 
   const result: BuildResult = await handleBuild(ctx, {
@@ -102,10 +106,10 @@ test('build stays lenient on an unclosed ［＃: ok, artifacts emitted, tail vis
   assert.equal(txt.content, '本文［＃閉じない注記\n次の行'); // .txt is byte-faithful anyway
 });
 
-test('nested filelist mirrors the folder tree in the output path', async () => {
+test('nested jpbook mirrors the folder tree in the output path', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'part1/vol2/index.filelist', 'c.jpnov');
+  await writeUnder(ws.dir, 'part1/vol2/index.jpbook', 'c.jpnov');
   await writeUnder(ws.dir, 'part1/vol2/c.jpnov', 'テスト');
 
   const result = await handleBuild(ctx, {
@@ -124,10 +128,10 @@ test('nested filelist mirrors the folder tree in the output path', async () => {
   assert.equal(txt.content, 'テスト');
 });
 
-test('deeply nested filelist writes a mirrored nested output path', async () => {
+test('deeply nested jpbook writes a mirrored nested output path', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'a/b/c/index.filelist', 'd.jpnov');
+  await writeUnder(ws.dir, 'a/b/c/index.jpbook', 'd.jpnov');
   await writeUnder(ws.dir, 'a/b/c/d.jpnov', 'ふかい');
 
   const result = await handleBuild(ctx, {
@@ -146,11 +150,11 @@ test('deeply nested filelist writes a mirrored nested output path', async () => 
   assert.equal(txt.content, 'ふかい');
 });
 
-test('flat name.filelist resolves entries relative to its OWN dir, not a stem dir', async () => {
+test('flat name.jpbook resolves entries relative to its OWN dir, not a stem dir', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  // volume01.filelist lives at the root, so its entries resolve there — here volume01/ch1.jpnov.
-  await writeUnder(ws.dir, 'volume01.filelist', 'volume01/ch1.jpnov');
+  // volume01.jpbook lives at the root, so its entries resolve there — here volume01/ch1.jpnov.
+  await writeUnder(ws.dir, 'volume01.jpbook', 'volume01/ch1.jpnov');
   await writeUnder(ws.dir, 'volume01/ch1.jpnov', 'ほん');
 
   const result = await handleBuild(ctx, {
@@ -173,7 +177,7 @@ test('flat name.filelist resolves entries relative to its OWN dir, not a stem di
 test('projectDirs overrides outDir per root', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'vol1/index.filelist', 'a.jpnov');
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'a.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', 'ほんぶん');
 
   const result = await handleBuild(ctx, {
@@ -191,11 +195,11 @@ test('projectDirs overrides outDir per root', async () => {
 test('an invalid outDir silently falls back to dist — and the FALLBACK dir is what discovery skips', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'vol1/index.filelist', 'a.jpnov');
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'a.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', 'あ');
   // Lives inside the FALLBACK output dir: it must be excluded even though the
   // configured outDir string ('/abs') never resolved.
-  await writeUnder(ws.dir, 'dist/hidden.filelist', 'a.jpnov');
+  await writeUnder(ws.dir, 'dist/hidden.jpbook', 'a.jpnov');
 
   // An absolute outDir is rejected by containment and silently replaced by the
   // default — the build proceeds as if unset.
@@ -206,16 +210,16 @@ test('an invalid outDir silently falls back to dist — and the FALLBACK dir is 
 
   assert.equal(result.ok, true);
   assert.ok(result.artifacts);
-  assert.equal(result.artifacts.length, 2, 'only vol1 built — dist/hidden.filelist skipped');
+  assert.equal(result.artifacts.length, 2, 'only vol1 built — dist/hidden.jpbook skipped');
   assert.ok(result.artifacts.every((a) => a.path.startsWith(`${ws.uri}/dist/vol1.`)));
 });
 
 test('a missing referenced .jpnov is a per-book error + diagnostic; other books still build', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx, conn } = boot();
-  await writeUnder(ws.dir, 'bad/index.filelist', 'present.jpnov\ngone.jpnov');
+  await writeUnder(ws.dir, 'bad/index.jpbook', 'present.jpnov\ngone.jpnov');
   await writeUnder(ws.dir, 'bad/present.jpnov', 'ある');
-  await writeUnder(ws.dir, 'good/index.filelist', 'y.jpnov');
+  await writeUnder(ws.dir, 'good/index.jpbook', 'y.jpnov');
   await writeUnder(ws.dir, 'good/y.jpnov', 'よい');
 
   const result = await handleBuild(ctx, {
@@ -229,25 +233,25 @@ test('a missing referenced .jpnov is a per-book error + diagnostic; other books 
   assert.equal(result.errors.length, 1);
   const err = result.errors[0];
   assert.ok(err);
-  assert.equal(err.book, 'bad/index.filelist');
+  assert.equal(err.book, 'bad/index.jpbook');
   assert.equal(err.code, 'book.entryFileNotFound');
   assert.ok(String(err.args?.[0]).includes('gone.jpnov'));
   // The good book still produced its two artifacts (.txt + .html).
   assert.equal(result.artifacts.length, 2);
   assert.ok(result.artifacts.every((a) => a.path.startsWith(`${ws.uri}/dist/good.`)));
   assert.ok(result.artifacts.some((a) => a.path === `${ws.uri}/dist/good.html`));
-  // A diagnostic was published on the offending .filelist (line-level).
-  const badUri = `${ws.uri}/bad/index.filelist`;
+  // A diagnostic was published on the offending .jpbook (line-level).
+  const badUri = `${ws.uri}/bad/index.jpbook`;
   assert.ok(conn.diagnostics.some((d) => d.uri === badUri && d.count > 0));
 });
 
-test('two filelists colliding on the output path error BOTH and emit neither', async () => {
+test('two book files colliding on the output path error BOTH and emit neither', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx, conn } = boot();
-  // volume01/index.filelist and volume01.filelist both derive base "volume01".
-  await writeUnder(ws.dir, 'volume01/index.filelist', 'a.jpnov');
+  // volume01/index.jpbook and volume01.jpbook both derive base "volume01".
+  await writeUnder(ws.dir, 'volume01/index.jpbook', 'a.jpnov');
   await writeUnder(ws.dir, 'volume01/a.jpnov', 'A');
-  await writeUnder(ws.dir, 'volume01.filelist', 'volume01/a.jpnov');
+  await writeUnder(ws.dir, 'volume01.jpbook', 'volume01/a.jpnov');
 
   const result = await handleBuild(ctx, {
     settings: SETTINGS,
@@ -257,13 +261,13 @@ test('two filelists colliding on the output path error BOTH and emit neither', a
   assert.equal(result.ok, false);
   assert.ok(result.errors);
   assert.ok(result.artifacts);
-  assert.ok(result.errors.length >= 2, 'both colliding filelists error');
+  assert.ok(result.errors.length >= 2, 'both colliding book files error');
   assert.ok(
     result.errors.every((e) => e.code === 'build.outPathCollision'),
     'collision code present on both',
   );
   assert.equal(result.artifacts.length, 0, 'neither colliding book is emitted');
-  for (const rel of ['volume01/index.filelist', 'volume01.filelist']) {
+  for (const rel of ['volume01/index.jpbook', 'volume01.jpbook']) {
     assert.ok(
       conn.diagnostics.some((d) => d.uri === `${ws.uri}/${rel}` && d.count > 0),
       `diagnostic on ${rel}`,
@@ -276,13 +280,14 @@ test('build honors the kinsoku mode from the settings snapshot (禁則)', async 
   // 禁則 rides the request's settings snapshot (same source as the preview). At width 16 a
   // naive wrap ends column 1 on the opening 「 (cell 16); 追い出し pushes it down →
   // 15×あ | 「い」. Proves settings.kinsoku reaches renderBook alongside charsPerLine.
+  // (The folio is suppressed through the book's OWN front matter, not settings.)
   const { ctx } = boot();
   const head = 'あ'.repeat(15);
-  await writeUnder(ws.dir, 'vol1/index.filelist', 'a.jpnov');
+  await writeUnder(ws.dir, 'vol1/index.jpbook', '---\npageNumber: none\n---\na.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', `${head}「い」`);
 
   const result = await handleBuild(ctx, {
-    settings: { ...SETTINGS, charsPerLine: 16, kinsoku: 'normal', pageNumberPosition: 'none' },
+    settings: { ...SETTINGS, charsPerLine: 16, kinsoku: 'normal' },
     projectDirs: projectsFor(ws.uri),
   });
   const html = result.artifacts?.find((a) => a.path.endsWith('.html'))?.content ?? '';
@@ -305,9 +310,9 @@ test('build targeting a specific root only builds that root', async () => {
   await using wsA = await makeTmpWorkspace();
   await using wsB = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(wsA.dir, 'va/index.filelist', 'x.jpnov');
+  await writeUnder(wsA.dir, 'va/index.jpbook', 'x.jpnov');
   await writeUnder(wsA.dir, 'va/x.jpnov', 'A');
-  await writeUnder(wsB.dir, 'vb/index.filelist', 'y.jpnov');
+  await writeUnder(wsB.dir, 'vb/index.jpbook', 'y.jpnov');
   await writeUnder(wsB.dir, 'vb/y.jpnov', 'B');
 
   const result = await handleBuild(ctx, {
@@ -322,14 +327,15 @@ test('build targeting a specific root only builds that root', async () => {
   assert.ok(result.artifacts.some((a) => a.path === `${wsA.uri}/dist/va.html`));
 });
 
-test('listBooks enumerates every filelist with no reads (pure discovery)', async () => {
+test('listBooks enumerates every jpbook, carrying its front-matter title when present', async () => {
   await using ws = await makeTmpWorkspace();
-  await writeUnder(ws.dir, 'vol1/index.filelist', 'a.jpnov');
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'a.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', 'あ');
-  await writeUnder(ws.dir, 'part1/vol2/index.filelist', 'c.jpnov');
+  await writeUnder(ws.dir, 'part1/vol2/index.jpbook', '---\ntitle: 第二巻\n---\nc.jpnov');
   await writeUnder(ws.dir, 'part1/vol2/c.jpnov', 'て');
 
-  // Pure enumeration by construction: handleListBooks has no connection to publish with.
+  // Enumeration reads each file only for its title: handleListBooks has no connection to
+  // publish diagnostics with, so no diagnosis can happen here by construction.
   const result: ListBooksResult = await handleListBooks({ projectDirs: projectsFor(ws.uri) });
 
   assert.equal(result.books.length, 2);
@@ -338,16 +344,18 @@ test('listBooks enumerates every filelist with no reads (pure discovery)', async
   const vol2 = byOut.get('part1/vol2');
   assert.ok(vol1);
   assert.ok(vol2);
-  assert.equal(vol1.uri, `${ws.uri}/vol1/index.filelist`);
-  assert.equal(vol1.fileRel, 'vol1/index.filelist');
+  assert.equal(vol1.uri, `${ws.uri}/vol1/index.jpbook`);
+  assert.equal(vol1.fileRel, 'vol1/index.jpbook');
   assert.equal(vol1.rootUri, ws.uri);
-  assert.equal(vol2.fileRel, 'part1/vol2/index.filelist');
+  assert.equal(vol1.title, undefined, 'no front matter -> no title');
+  assert.equal(vol2.fileRel, 'part1/vol2/index.jpbook');
+  assert.equal(vol2.title, '第二巻');
 });
 
 test('build format "html" emits only the .html artifact', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'vol1/index.filelist', 'a.jpnov');
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'a.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', 'あ');
 
   const result = await handleBuild(ctx, {
@@ -365,7 +373,7 @@ test('build format "html" emits only the .html artifact', async () => {
 test('build format "txt" emits only the .txt artifact', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'vol1/index.filelist', 'a.jpnov');
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'a.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', 'あ');
 
   const result = await handleBuild(ctx, {
@@ -383,15 +391,15 @@ test('build format "txt" emits only the .txt artifact', async () => {
   assert.equal(only.content, 'あ');
 });
 
-test('build restricts to the selected books (by filelist uri)', async () => {
+test('build restricts to the selected books (by jpbook uri)', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'a/index.filelist', 'x.jpnov');
+  await writeUnder(ws.dir, 'a/index.jpbook', 'x.jpnov');
   await writeUnder(ws.dir, 'a/x.jpnov', 'A');
-  await writeUnder(ws.dir, 'b/index.filelist', 'y.jpnov');
+  await writeUnder(ws.dir, 'b/index.jpbook', 'y.jpnov');
   await writeUnder(ws.dir, 'b/y.jpnov', 'B');
 
-  const onlyA = `${ws.uri}/a/index.filelist`;
+  const onlyA = `${ws.uri}/a/index.jpbook`;
   const result = await handleBuild(ctx, {
     books: [onlyA],
     settings: SETTINGS,
@@ -406,7 +414,7 @@ test('build restricts to the selected books (by filelist uri)', async () => {
 test('build with an empty books selection builds nothing (distinct from omitting it)', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'a/index.filelist', 'x.jpnov');
+  await writeUnder(ws.dir, 'a/index.jpbook', 'x.jpnov');
   await writeUnder(ws.dir, 'a/x.jpnov', 'A');
 
   const result = await handleBuild(ctx, {
@@ -424,11 +432,11 @@ test('a selected book still errors when it collides with an UNSELECTED one', asy
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
   // Both derive base "volume01"; select only the flat one.
-  await writeUnder(ws.dir, 'volume01/index.filelist', 'a.jpnov');
+  await writeUnder(ws.dir, 'volume01/index.jpbook', 'a.jpnov');
   await writeUnder(ws.dir, 'volume01/a.jpnov', 'A');
-  await writeUnder(ws.dir, 'volume01.filelist', 'volume01/a.jpnov');
+  await writeUnder(ws.dir, 'volume01.jpbook', 'volume01/a.jpnov');
 
-  const selected = `${ws.uri}/volume01.filelist`;
+  const selected = `${ws.uri}/volume01.jpbook`;
   const result = await handleBuild(ctx, {
     books: [selected],
     settings: SETTINGS,
@@ -445,7 +453,7 @@ test('a selected book still errors when it collides with an UNSELECTED one', asy
 test('a txt-only build still reports a missing .jpnov as a per-book error + diagnostic', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx, conn } = boot();
-  await writeUnder(ws.dir, 'bad/index.filelist', 'present.jpnov\ngone.jpnov');
+  await writeUnder(ws.dir, 'bad/index.jpbook', 'present.jpnov\ngone.jpnov');
   await writeUnder(ws.dir, 'bad/present.jpnov', 'ある');
 
   const result = await handleBuild(ctx, {
@@ -462,14 +470,14 @@ test('a txt-only build still reports a missing .jpnov as a per-book error + diag
   assert.equal(err.code, 'book.entryFileNotFound');
   assert.ok(String(err.args?.[0]).includes('gone.jpnov'));
   // Format gating only skips artifact emission — diagnosis still runs.
-  const badUri = `${ws.uri}/bad/index.filelist`;
+  const badUri = `${ws.uri}/bad/index.jpbook`;
   assert.ok(conn.diagnostics.some((d) => d.uri === badUri && d.count > 0));
 });
 
-test('a root-level filelist is discovered (discovery is anchored at the folder root)', async () => {
+test('a root-level jpbook is discovered (discovery is anchored at the folder root)', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'volume1.filelist', 'ch1.jpnov');
+  await writeUnder(ws.dir, 'volume1.jpbook', 'ch1.jpnov');
   await writeUnder(ws.dir, 'ch1.jpnov', 'ねこ');
 
   const result = await handleBuild(ctx, {
@@ -487,7 +495,7 @@ test('a root-level filelist is discovered (discovery is anchored at the folder r
 test('a src/ layout mirrors the src layer into the output path', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'src/volume1.filelist', 'ch1.jpnov');
+  await writeUnder(ws.dir, 'src/volume1.jpbook', 'ch1.jpnov');
   await writeUnder(ws.dir, 'src/ch1.jpnov', 'いぬ');
 
   const result = await handleBuild(ctx, {
@@ -503,17 +511,17 @@ test('a src/ layout mirrors the src layer into the output path', async () => {
 
 test('discovery skips dot-folders, node_modules, and the resolved outDir', async () => {
   await using ws = await makeTmpWorkspace();
-  await writeUnder(ws.dir, 'vol1/index.filelist', 'a.jpnov');
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'a.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', 'あ');
-  await writeUnder(ws.dir, '.hidden/x.filelist', 'a.jpnov');
-  await writeUnder(ws.dir, 'node_modules/pkg/y.filelist', 'a.jpnov');
-  await writeUnder(ws.dir, 'deep/node_modules/z.filelist', 'a.jpnov');
-  await writeUnder(ws.dir, 'dist/w.filelist', 'a.jpnov');
+  await writeUnder(ws.dir, '.hidden/x.jpbook', 'a.jpnov');
+  await writeUnder(ws.dir, 'node_modules/pkg/y.jpbook', 'a.jpnov');
+  await writeUnder(ws.dir, 'deep/node_modules/z.jpbook', 'a.jpnov');
+  await writeUnder(ws.dir, 'dist/w.jpbook', 'a.jpnov');
 
   const result: ListBooksResult = await handleListBooks({ projectDirs: projectsFor(ws.uri) });
 
   assert.equal(result.books.length, 1, 'only the real book is discovered');
-  assert.equal(result.books[0]?.fileRel, 'vol1/index.filelist');
+  assert.equal(result.books[0]?.fileRel, 'vol1/index.jpbook');
 });
 
 test('a non-ASCII outDir (出力) is still excluded from discovery', async () => {
@@ -522,9 +530,9 @@ test('a non-ASCII outDir (出力) is still excluded from discovery', async () =>
   // comparison would NEVER match 出力 and books inside the output dir would build again.
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
-  await writeUnder(ws.dir, 'vol1/index.filelist', 'a.jpnov');
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'a.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', 'あ');
-  await writeUnder(ws.dir, '出力/old.filelist', 'a.jpnov');
+  await writeUnder(ws.dir, '出力/old.jpbook', 'a.jpnov');
 
   const result = await handleBuild(ctx, {
     settings: SETTINGS,
@@ -533,7 +541,69 @@ test('a non-ASCII outDir (出力) is still excluded from discovery', async () =>
 
   assert.equal(result.ok, true);
   assert.ok(result.artifacts);
-  assert.equal(result.artifacts.length, 2, '出力/old.filelist is not a book');
+  assert.equal(result.artifacts.length, 2, '出力/old.jpbook is not a book');
   assert.ok(result.artifacts.every((a) => a.path.startsWith(`${ws.uri}/`)));
   assert.ok(result.artifacts.some((a) => a.path.endsWith('/vol1.html')));
+});
+
+test('one batch build renders a DIFFERENT 柱 per volume, each from its own front matter', async () => {
+  await using ws = await makeTmpWorkspace();
+  const { ctx } = boot();
+  await writeUnder(ws.dir, 'vol1.jpbook', '---\nheader: 作品名　一\n---\nch/a.jpnov');
+  await writeUnder(ws.dir, 'vol2.jpbook', '---\nheader: 作品名　二\npageNumber: none\n---\nch/b.jpnov');
+  await writeUnder(ws.dir, 'ch/a.jpnov', 'いち');
+  await writeUnder(ws.dir, 'ch/b.jpnov', 'に');
+
+  const result = await handleBuild(ctx, {
+    format: 'html',
+    settings: SETTINGS,
+    projectDirs: projectsFor(ws.uri),
+  });
+
+  assert.equal(result.ok, true);
+  assert.ok(result.artifacts);
+  const vol1 = result.artifacts.find((a) => a.path.endsWith('/vol1.html'));
+  const vol2 = result.artifacts.find((a) => a.path.endsWith('/vol2.html'));
+  assert.ok(vol1);
+  assert.ok(vol2);
+  assert.ok(vol1.content.includes('<div class="hd">作品名　一</div>'), 'vol1 carries its own 柱');
+  assert.ok(vol2.content.includes('<div class="hd">作品名　二</div>'), 'vol2 carries its own 柱');
+  assert.ok(!vol1.content.includes('作品名　二'), 'no cross-contamination');
+  // The settings snapshot carries no furniture: vol1 gets the default folio, vol2 opted out.
+  assert.match(vol1.content, /<div class="pn [rl]">/);
+  assert.ok(!/<div class="pn [rl]">/.test(vol2.content), 'pageNumber: none suppresses the folio');
+});
+
+test('front matter never leaks into the artifacts: body starts at the first chapter', async () => {
+  await using ws = await makeTmpWorkspace();
+  const { ctx } = boot();
+  await writeUnder(ws.dir, 'vol1.jpbook', '---\ntitle: 題\nheader: 柱\n---\na.jpnov');
+  await writeUnder(ws.dir, 'a.jpnov', 'ほんぶん');
+
+  const result = await handleBuild(ctx, {
+    settings: SETTINGS,
+    projectDirs: projectsFor(ws.uri),
+  });
+
+  assert.equal(result.ok, true);
+  const txt = result.artifacts?.find((a) => a.path.endsWith('.txt'));
+  assert.ok(txt);
+  assert.equal(txt.content, 'ほんぶん', 'the .txt is the chapters only — no metadata lines');
+});
+
+test('a book whose front matter has warnings (unknown key) still builds', async () => {
+  await using ws = await makeTmpWorkspace();
+  const { ctx, conn } = boot();
+  await writeUnder(ws.dir, 'vol1.jpbook', '---\nauthor: 誰か\nheader: 柱\n---\na.jpnov');
+  await writeUnder(ws.dir, 'a.jpnov', 'あ');
+
+  const result = await handleBuild(ctx, {
+    settings: SETTINGS,
+    projectDirs: projectsFor(ws.uri),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.artifacts?.length, 2);
+  // The warning is still published as a diagnostic on the .jpbook.
+  assert.ok(conn.diagnostics.some((d) => d.uri === `${ws.uri}/vol1.jpbook` && d.count > 0));
 });

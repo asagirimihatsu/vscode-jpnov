@@ -37,6 +37,7 @@ import {
   LINENUM_BAND,
   LINE_PITCH,
   PRINT_MARGIN,
+  SIDE_PAD,
 } from './geometry.ts';
 import * as S from './styles/styles.generated.ts';
 
@@ -137,7 +138,7 @@ function rootVars(vars: Record<string, string | number>): string {
  * margin boxes, so zero `@page` margins are what keeps that furniture off the paper.
  */
 function atPage(charsPerLine: number, linesPerPage: number, hTop: number): string {
-  const block = linesPerPage * LINE_PITCH + 2 * PRINT_MARGIN;
+  const block = linesPerPage * LINE_PITCH + 2 * SIDE_PAD + 2 * PRINT_MARGIN;
   const inline = charsPerLine + hTop + FOLIO_BAND + 2 * PRINT_MARGIN;
   return `@page{size:${String(block)}em ${String(inline)}em;margin:0;}`;
 }
@@ -186,7 +187,7 @@ export function stylesheet(opts: StylesheetOptions): string {
       chrome.lineNumbers ? S.buildLn : '',
       edge !== null ? S.buildEdge : '',
       chrome.header !== '' ? S.buildHeader : '',
-      chrome.pageNumberPosition !== 'none' ? S.buildFolio : '',
+      chrome.pageNumber !== 'none' ? S.buildFolio : '',
       rootVars(vars),
       atPage(opts.charsPerLine, opts.linesPerPage, hTop),
       ...tail,

@@ -11,7 +11,11 @@ import { LAYOUT_DEFAULT } from '../../../src/shared/config/types.ts';
 import type { HtmlSettings, PreviewSettings } from '../../../src/shared/protocol.ts';
 
 /** A fully-valid baseline built from the single-source constants. */
-const HTML_BASE: HtmlSettings = { ...LAYOUT_DEFAULT, ...BUILD_CHROME_DEFAULT };
+const HTML_BASE: HtmlSettings = {
+  ...LAYOUT_DEFAULT,
+  lineNumbers: BUILD_CHROME_DEFAULT.lineNumbers,
+  edgeLine: BUILD_CHROME_DEFAULT.edgeLine,
+};
 const PREVIEW_BASE: PreviewSettings = {
   charsPerLine: LAYOUT_DEFAULT.charsPerLine,
   kinsoku: LAYOUT_DEFAULT.kinsoku,
@@ -77,10 +81,6 @@ test('autoTcy rides both snapshots: kept when a known member, defaulted otherwis
 test('bogus enum and boolean values coerce to their defaults', () => {
   assert.equal(resolveHtmlSettings(badHtml({ edgeLine: 'blue' })).edgeLine, 'none');
   assert.equal(
-    resolveHtmlSettings(badHtml({ pageNumberPosition: 'sideways' })).pageNumberPosition,
-    BUILD_CHROME_DEFAULT.pageNumberPosition,
-  );
-  assert.equal(
     resolveHtmlSettings(badHtml({ lineNumbers: 'yes' })).lineNumbers,
     BUILD_CHROME_DEFAULT.lineNumbers,
   );
@@ -90,17 +90,12 @@ test('bogus enum and boolean values coerce to their defaults', () => {
   );
 });
 
-test('template keeps an explicit empty string; a non-string falls back', () => {
-  assert.equal(resolveHtmlSettings({ ...HTML_BASE, pageNumberTemplate: '' }).pageNumberTemplate, '');
-  assert.equal(
-    resolveHtmlSettings(badHtml({ pageNumberTemplate: 7 })).pageNumberTemplate,
-    BUILD_CHROME_DEFAULT.pageNumberTemplate,
+test('the wire settings carry NO page furniture — that is jpbook front-matter territory', () => {
+  // Junk furniture fields on the payload must be dropped, not forwarded: the resolver's
+  // output is EXACTLY the six wire fields, whatever a stale or hostile sender ships.
+  const resolved = resolveHtmlSettings(badHtml({ header: '柱', pageNumber: 'none' }));
+  assert.deepEqual(
+    Object.keys(resolved).sort(),
+    ['autoTcy', 'charsPerLine', 'edgeLine', 'kinsoku', 'lineNumbers', 'linesPerPage'],
   );
-});
-
-test('header folds newlines to single spaces but keeps literal spaces', () => {
-  assert.equal(resolveHtmlSettings({ ...HTML_BASE, header: 'a\nb' }).header, 'a b');
-  assert.equal(resolveHtmlSettings({ ...HTML_BASE, header: 'a\r\n\r\nb' }).header, 'a b');
-  assert.equal(resolveHtmlSettings({ ...HTML_BASE, header: ' 章 ' }).header, ' 章 ');
-  assert.equal(resolveHtmlSettings({ ...HTML_BASE, header: '' }).header, '');
 });

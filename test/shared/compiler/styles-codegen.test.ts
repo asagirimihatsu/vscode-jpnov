@@ -19,6 +19,7 @@ import {
   FOLIO_BAND,
   LINE_PITCH,
   PRINT_MARGIN,
+  SIDE_PAD,
 } from '../../../src/shared/compiler/geometry.ts';
 
 const STYLES = new URL('../../../src/shared/compiler/styles/', import.meta.url);
@@ -83,8 +84,21 @@ test('the .css geometry literals equal the geometry.ts constants (@page double-h
   // silently leave it behind — guard it here.
   assert.equal(cssValue(read('build.edge.css'), '.page::before', 'bottom'), FOLIO_BAND - 0.35);
 
-  // PRINT_MARGIN: the sheet's paper inset under @media print.
+  // PRINT_MARGIN: the sheet's paper inset under @media print…
   assert.equal(cssValue(buildBase, '.page', 'margin', '@media print'), PRINT_MARGIN);
+  // …and the screen sheet's vertical surround, deliberately the SAME value (the on-screen
+  // proof breathes like the paper one; the base rule is the first `.page{` in the file).
+  assert.equal(cssValue(buildBase, '.page', 'margin'), PRINT_MARGIN);
+
+  // SIDE_PAD: the sheet's physical left/right padding (@page grows by 2×SIDE_PAD), the
+  // outset frame's side insets (flush with the grid's side columns), and its one derived
+  // literal — the folio corners at SIDE_PAD + 0.35 EDGE_INSET (0.35em inside the frame line).
+  assert.equal(cssValue(buildBase, '.page', 'padding-block-start'), SIDE_PAD);
+  assert.equal(cssValue(buildBase, '.page', 'padding-block-end'), SIDE_PAD);
+  assert.equal(cssValue(read('build.edge.css'), '.page::before', 'left'), SIDE_PAD);
+  assert.equal(cssValue(read('build.edge.css'), '.page::before', 'right'), SIDE_PAD);
+  assert.equal(cssValue(read('build.folio.css'), '.pn.r', 'right'), SIDE_PAD + 0.35);
+  assert.equal(cssValue(read('build.folio.css'), '.pn.l', 'left'), SIDE_PAD + 0.35);
 });
 
 test('the base fragments carry NO ruby rules (the css.ts classRule lanes own rt sizing)', () => {

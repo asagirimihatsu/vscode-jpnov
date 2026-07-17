@@ -26,18 +26,26 @@ export const LINE_PITCH = 2.25;
 // Build-only chrome bands, in em (the same unit system as the charsPerLine-em grid).
 // The header and folio bands are ALWAYS allocated — the sheet keeps stable top/bottom
 // margins no matter which furniture is enabled — while the line-number band is on demand.
-// Both are deliberately as wide as PRINT_MARGIN: the furniture pins to the sheet's outer
-// edge, leaving ≥1em of air to the text frame (the look of a print-margin header/footer).
+// The furniture floats 1em inside the sheet edge (.hd top / .pn bottom, kept symmetric),
+// leaving ~0.75em of air to the outset frame (the look of a print-margin header/footer).
 /** Header band at the physical top of a sheet (reserved even with no header text). */
-export const HEADER_BAND = 2.5;
+export const HEADER_BAND = 3;
 /** Line-number band between the header band and the column heads. */
 export const LINENUM_BAND = 1;
 /** Page-number (folio) band at the physical bottom of a sheet (reserved even without one). */
-export const FOLIO_BAND = 2.5;
+export const FOLIO_BAND = 3;
 /**
- * Uniform paper margin around the printed sheet (@page only — the screen sheet is
- * untouched): ~10.6mm at the default 16px em, clear of typical printer dead zones, so a
- * direct print never puts the frame or the chrome at the paper edge.
+ * Sheet padding on the physical left/right (the vertical-rl block axis): the text grid and
+ * the outset frame never touch the paper's side cut. Doubly homed as fragment literals
+ * (padding-block, frame sides, folio corners at SIDE_PAD + 0.35 EDGE_INSET) —
+ * styles-codegen.test.ts guards the set.
+ */
+export const SIDE_PAD = 1.5;
+/**
+ * Uniform paper margin around the printed sheet: ~10.6mm at the default 16px em, clear of
+ * typical printer dead zones, so a direct print never puts the frame or the chrome at the
+ * paper edge. The screen sheet mirrors the same 2.5em surround (build.base.css) so the
+ * on-screen proof breathes like the paper one — styles-codegen.test.ts guards the pair.
  */
 export const PRINT_MARGIN = 2.5;
 

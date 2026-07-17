@@ -15,8 +15,8 @@ import { tokenize } from '../../../src/shared/compiler/tokenizer.ts';
 const OFF: BuildChrome = {
   lineNumbers: false,
   edgeLine: 'none',
-  pageNumberPosition: 'none',
-  pageNumberTemplate: '{page} / {totalPage}',
+  pageNumber: 'none',
+  pageNumberFormat: '{page} / {totalPage}',
   header: '',
 };
 

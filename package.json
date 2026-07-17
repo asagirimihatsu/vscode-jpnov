@@ -45,14 +45,14 @@
         "configuration": "./jpnov.language-configuration.json"
       },
       {
-        "id": "novel-jp-filelist",
+        "id": "novel-jp-book",
         "aliases": [
-          "%language.novelJpFilelist.alias%"
+          "%language.novelJpBook.alias%"
         ],
         "extensions": [
-          ".filelist"
+          ".jpbook"
         ],
-        "configuration": "./filelist.language-configuration.json"
+        "configuration": "./jpbook.language-configuration.json"
       }
     ],
     "grammars": [
@@ -62,13 +62,14 @@
         "path": "./syntaxes/novel-jp.tmLanguage.json"
       },
       {
-        "language": "novel-jp-filelist",
-        "scopeName": "text.novel-jp-filelist",
-        "path": "./syntaxes/filelist.tmLanguage.json"
+        "language": "novel-jp-book",
+        "scopeName": "text.novel-jp-book",
+        "path": "./syntaxes/jpbook.tmLanguage.json"
       }
     ],
     "configurationDefaults": {
       "[novel-jp]": {
+        "editor.wordBasedSuggestions": "off",
         "editor.semanticHighlighting.enabled": true,
         "editor.unicodeHighlight.nonBasicASCII": false,
         "editor.unicodeHighlight.allowedCharacters": {
@@ -90,7 +91,8 @@
           "〜": true
         }
       },
-      "[novel-jp-filelist]": {
+      "[novel-jp-book]": {
+        "editor.wordBasedSuggestions": "off",
         "editor.unicodeHighlight.nonBasicASCII": false,
         "editor.unicodeHighlight.allowedCharacters": {
           "　": true,
@@ -113,7 +115,7 @@
       },
       "github.copilot.enable": {
         "novel-jp": false,
-        "novel-jp-filelist": false
+        "novel-jp-book": false
       }
     },
     "configuration": [
@@ -202,42 +204,6 @@
               "%jpnov.html.edgeLine.red.description%"
             ],
             "markdownDescription": "%jpnov.html.edgeLine.description%"
-          },
-          "jpnov.html.pageNumber.position": {
-            "type": "string",
-            "enum": [
-              "rightThenLeft",
-              "leftThenRight",
-              "alwaysRight",
-              "alwaysLeft",
-              "none"
-            ],
-            "default": "rightThenLeft",
-            "enumItemLabels": [
-              "%jpnov.html.pageNumber.position.rightThenLeft.label%",
-              "%jpnov.html.pageNumber.position.leftThenRight.label%",
-              "%jpnov.html.pageNumber.position.alwaysRight.label%",
-              "%jpnov.html.pageNumber.position.alwaysLeft.label%",
-              "%jpnov.html.pageNumber.position.none.label%"
-            ],
-            "enumDescriptions": [
-              "%jpnov.html.pageNumber.position.rightThenLeft.description%",
-              "%jpnov.html.pageNumber.position.leftThenRight.description%",
-              "%jpnov.html.pageNumber.position.alwaysRight.description%",
-              "%jpnov.html.pageNumber.position.alwaysLeft.description%",
-              "%jpnov.html.pageNumber.position.none.description%"
-            ],
-            "markdownDescription": "%jpnov.html.pageNumber.position.description%"
-          },
-          "jpnov.html.pageNumber.template": {
-            "type": "string",
-            "default": "{page} / {totalPage}",
-            "markdownDescription": "%jpnov.html.pageNumber.template.description%"
-          },
-          "jpnov.html.header": {
-            "type": "string",
-            "default": "",
-            "markdownDescription": "%jpnov.html.header.description%"
           }
         }
       },
@@ -604,7 +570,7 @@
         "description": "%walkthrough.description%",
         "featuredFor": [
           "**/*.jpnov",
-          "**/*.filelist"
+          "**/*.jpbook"
         ],
         "steps": [
           {

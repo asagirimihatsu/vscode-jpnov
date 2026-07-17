@@ -45,13 +45,13 @@ export function renderBook(opts: {
   const pages = paginate(rows, opts.charsPerLine, opts.linesPerPage, opts.kinsoku);
 
   // Blank-template normalization (single source): a template that is blank after trim
-  // means "no folio", folded into the one `pageNumberPosition === 'none'` gate so the
+  // means "no folio", folded into the one `pageNumber === 'none'` gate so the
   // `.pn` DOM element and its CSS rule always agree. Only the suppression check trims —
   // a rendered non-blank template keeps the author's literal spaces.
   const chrome: BuildChrome = {
     ...opts.chrome,
-    pageNumberPosition:
-      opts.chrome.pageNumberTemplate.trim() === '' ? 'none' : opts.chrome.pageNumberPosition,
+    pageNumber:
+      opts.chrome.pageNumberFormat.trim() === '' ? 'none' : opts.chrome.pageNumber,
   };
 
   // Emit the body first so the CSS carries ONLY the classes used (on-demand).
