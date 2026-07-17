@@ -55,6 +55,9 @@ let extCtx: vscode.ExtensionContext | undefined;
 /** Phase-2 latch: `ensureStarted()` is single-flight and never un-runs until deactivate. */
 let started = false;
 
+/** Pre-start `*.filelist` creation watcher; retired by the first ensureStarted(). */
+let coldStartWatcher: vscode.FileSystemWatcher | undefined;
+
 /** Documents that justify starting the language server. */
 function isNovelDoc(doc: vscode.TextDocument): boolean {
   return doc.languageId === 'novel-jp' || doc.languageId === 'novel-jp-filelist';
@@ -91,6 +94,10 @@ function ensureStarted(): void {
     return;
   }
   started = true;
+  // Retire the pre-start watcher (BooksView's own takes over); its second dispose via
+  // context.subscriptions at deactivate is a no-op.
+  coldStartWatcher?.dispose();
+  coldStartWatcher = undefined;
   // Reveal the Books panel (gated on `jpnov.active`); its empty state shows the welcome guide.
   // Never un-set for the session, like the `started` latch above.
   void vscode.commands.executeCommand('setContext', 'jpnov.active', true);
@@ -300,6 +307,16 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // Pre-start self-heal: a `*.filelist` created while we are dormant (git checkout, OS
+  // copy, terminal) opens no document, so the listeners above never fire. The watcher
+  // cannot tell files from directories — a folder named `x.filelist` causes a benign
+  // start; server-side discovery stays the arbiter.
+  coldStartWatcher = vscode.workspace.createFileSystemWatcher('**/*.filelist');
+  context.subscriptions.push(
+    coldStartWatcher,
+    coldStartWatcher.onDidCreate(() => { ensureStarted(); }),
+  );
+
   if (vscode.workspace.textDocuments.some(isNovelDoc)) {
     ensureStarted();
   } else {
@@ -319,6 +336,7 @@ export function deactivate(): Thenable<void> | undefined {
   client = undefined;
   preview = undefined;
   booksView = undefined;
+  coldStartWatcher = undefined;
   extCtx = undefined;
   started = false;
   return stopping;

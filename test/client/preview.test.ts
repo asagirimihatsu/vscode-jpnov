@@ -449,7 +449,7 @@ test('renderDocument ships the settings snapshot on the renderFile request', asy
   assert.deepEqual(params.settings, {
     charsPerLine: 24,
     kinsoku: 'normal',
-    autoTcy: 'none',
+    autoTcy: 'punctuationPairs',
     lineNumbers: true,
     edgeLine: 'red',
   });

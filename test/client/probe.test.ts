@@ -1,6 +1,6 @@
 /**
- * The startup probe: settings-presence (workspace/folder level only — NEVER user level)
- * and root-level filename matching, per workspace folder.
+ * The startup probe: settings-presence (workspace/folder level only — NEVER user level),
+ * root-level filename matching, and a capped deep search, per workspace folder.
  *
  * NOT wired into `npm test` (test/client is authored-only). Run with a `vscode`
  * resolution shim present (see test/client/README.md):
@@ -76,5 +76,35 @@ test('a non-file named *.filelist is no signal (directory or symlink)', async ()
 
 test('an unreadable root is skipped, not fatal', async () => {
   state.readDirectoryResults.set(FOLDER_URI, 'error');
+  assert.equal(await folderIsNovelProject(folder() as never), false);
+});
+
+test('a nested *.filelist (subfolders only) is found by the deep search', async () => {
+  state.readDirectoryResults.set(FOLDER_URI, [['chapters', 2]]);
+  state.findFilesResults.set(FOLDER_URI, [Uri.parse(`${FOLDER_URI}/books/volume1.filelist`)]);
+  assert.equal(await folderIsNovelProject(folder() as never), true);
+  const call = state.findFilesCalls[0];
+  assert.ok(call);
+  assert.equal(call.include.pattern, '**/*.filelist');
+  assert.equal(call.maxResults, 1);
+});
+
+test('a root shallow hit answers without the deep search', async () => {
+  state.readDirectoryResults.set(FOLDER_URI, [['volume1.filelist', 1]]);
+  state.findFilesResults.set(FOLDER_URI, 'error'); // would answer false if consulted
+  assert.equal(await folderIsNovelProject(folder() as never), true);
+  assert.equal(state.findFilesCalls.length, 0);
+});
+
+test('an empty deep search is no signal', async () => {
+  state.readDirectoryResults.set(FOLDER_URI, []);
+  state.findFilesResults.set(FOLDER_URI, []);
+  assert.equal(await folderIsNovelProject(folder() as never), false);
+  assert.equal(state.findFilesCalls.length, 1);
+});
+
+test('a failing deep search (no search provider) is not fatal', async () => {
+  state.readDirectoryResults.set(FOLDER_URI, []);
+  state.findFilesResults.set(FOLDER_URI, 'error');
   assert.equal(await folderIsNovelProject(folder() as never), false);
 });
