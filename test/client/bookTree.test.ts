@@ -14,9 +14,9 @@ import type { BookEntry } from '../../src/shared/protocol.ts';
 
 /** A BookEntry where only `rootUri`/`outRel` matter to `buildForest`. */
 const entry = (rootUri: string, outRel: string): BookEntry => ({
-  uri: `${rootUri}/src/${outRel}.filelist`,
+  uri: `${rootUri}/src/${outRel}.jpbook`,
   rootUri,
-  fileRel: `${outRel}.filelist`,
+  fileRel: `${outRel}.jpbook`,
   outRel,
 });
 

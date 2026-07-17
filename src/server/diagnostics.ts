@@ -1,6 +1,6 @@
 /**
  * The server's single source for LSP `Diagnostic` construction. Collapses the previously
- * re-implemented factories (filelist's `diagnostic`, build's `fileLevelError`) into one
+ * re-implemented factories (jpbook's `diagnostic`, build's `fileLevelError`) into one
  * `source: 'jpnov'` constructor plus a file-level (zero-width, doc-start) error helper,
  * so every diagnostic carries an identical `source` and shape.
  *

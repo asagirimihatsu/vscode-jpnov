@@ -1,5 +1,9 @@
 ```text
-# volume1.filelist ＝ 1 冊（読む順に 1 行 1 ファイル）
+# volume1.jpbook ＝ 1 冊（メタデータ＋読む順に 1 行 1 章）
+---
+title: 作品名　第一巻
+header: 作品名　一
+---
 first-chapter.jpnov
 final-chapter.jpnov
         │  「小説」パネルでチェック → 出力

@@ -11,11 +11,11 @@ import * as vscode from 'vscode';
 import type { LabelId, LocalizableMessage } from '#/shared/protocol.ts';
 
 /**
- * Localized text for a label id. `filelistEntry` (the only remaining label) is prose and is
+ * Localized text for a label id. `jpbookEntry` (the only remaining label) is prose and is
  * translated. Built per-call — `vscode.l10n` is ready by the time anything renders.
  */
 function labelText(label: LabelId): string {
-  const texts: Record<LabelId, string> = { filelistEntry: vscode.l10n.t('filelist entry') };
+  const texts: Record<LabelId, string> = { jpbookEntry: vscode.l10n.t('book entry') };
   return texts[label];
 }
 
@@ -40,19 +40,29 @@ export function renderMessage(msg: LocalizableMessage): string {
     case 'book.entryReadFailed':
       return vscode.l10n.t('cannot read "{0}": {1}', s(0), s(1));
     case 'build.outPathCollision':
-      return vscode.l10n.t('output path "{0}" is claimed by multiple filelists: {1}', s(0), s(1));
+      return vscode.l10n.t('output path "{0}" is claimed by multiple book files: {1}', s(0), s(1));
     case 'build.failed':
       return vscode.l10n.t('build failed: {0}', s(0));
-    case 'filelist.backslashSeparator':
+    case 'jpbook.backslashSeparator':
       return vscode.l10n.t('use "/" as the path separator, not "\\": {0}', s(0));
-    case 'filelist.notJpnov':
-      return vscode.l10n.t('filelist entries must be .jpnov files: {0}', s(0));
-    case 'filelist.duplicateEntry':
+    case 'jpbook.notJpnov':
+      return vscode.l10n.t('book entries must be .jpnov files: {0}', s(0));
+    case 'jpbook.duplicateEntry':
       return vscode.l10n.t('duplicate entry "{0}" (already listed above)', s(0));
-    case 'filelist.entryIsDirectory':
+    case 'jpbook.entryIsDirectory':
       return vscode.l10n.t('"{0}" is a directory, not a .jpnov file', s(0));
-    case 'filelist.fileNotFound':
+    case 'jpbook.fileNotFound':
       return vscode.l10n.t('file not found: {0}', s(0));
+    case 'jpbook.metaNotKeyValue':
+      return vscode.l10n.t('metadata lines must be "key: value": {0}', s(0));
+    case 'jpbook.metaUnknownKey':
+      return vscode.l10n.t('unknown metadata key "{0}" (known keys: {1})', s(0), s(1));
+    case 'jpbook.metaDuplicateKey':
+      return vscode.l10n.t('duplicate metadata key "{0}" (the first value wins)', s(0));
+    case 'jpbook.metaBadEnum':
+      return vscode.l10n.t('invalid value "{1}" for {0} (allowed: {2})', s(0), s(1), s(2));
+    case 'jpbook.metaUnterminated':
+      return vscode.l10n.t('unterminated metadata block (missing a closing ---)');
     case 'path.empty':
       return vscode.l10n.t('{0} must not be empty', labelText(a[0] as LabelId));
     case 'path.rootDot':

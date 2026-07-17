@@ -57,7 +57,8 @@ import type { ServerContext } from './roots.ts';
 import { createHighlightStore, handleHighlightChanged } from './highlight/vocabulary.ts';
 import { buildSemanticTokens, SEMANTIC_LEGEND } from './semanticTokens.ts';
 import { annotationDiagnostics } from './syntax.ts';
-import { completeFilelist, diagnoseFilelist, documentLinksForFilelist } from './filelist.ts';
+import { completeJpbook, diagnoseJpbook, documentLinksForJpbook } from './jpbook.ts';
+import { parseJpbook } from '#/shared/book/jpbook.ts';
 
 const connection = createConnection(ProposedFeatures.all);
 
@@ -74,7 +75,7 @@ documents.listen(connection);
 /** The document selector the client uses to route docs/requests to this server. */
 const DOCUMENT_SELECTOR = [
   { language: 'novel-jp' },
-  { language: 'novel-jp-filelist' },
+  { language: 'novel-jp-book' },
 ] as const;
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
@@ -94,7 +95,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         legend: SEMANTIC_LEGEND,
         full: true,
       },
-      // *.filelist editor features (routed for `novel-jp-filelist` via the document selector).
+      // *.jpbook editor features (routed for `novel-jp-book` via the document selector).
       // Trigger on "/" (descend a subdir) AND on every digit: VS Code's quick-suggest does not
       // auto-fire on a leading digit (it reads it as a number literal), so digit-led filenames
       // (e.g. 0001-chapter.jpnov) would otherwise need a manual Ctrl+Space.
@@ -148,7 +149,7 @@ connection.onRequest(
   ): Promise<BuildResult> => handleBuild(context, params, workDone),
 );
 
-// List books: enumerate every `.filelist` of every root in the request's projectDirs map.
+// List books: enumerate every `.jpbook` of every root in the request's projectDirs map.
 // PURE enumeration (no reads/diagnostics); the wire may omit params, so accept the nullable form.
 connection.onRequest(
   ListBooksRequest,
@@ -178,14 +179,14 @@ connection.onRequest(
 // the owning root declares any. Fully synchronous — markup and colours emit on the first request.
 connection.languages.semanticTokens.on((params) => {
   const doc = documents.get(params.textDocument.uri);
-  // Only novel-jp documents are highlighted (filelists share the selector but stay plain).
+  // Only novel-jp documents are highlighted (book files share the selector but stay plain).
   if (doc?.languageId !== 'novel-jp') {
     return { data: [] };
   }
   return buildSemanticTokens(doc, context.highlight.recognizerFor(params.textDocument.uri));
 });
 
-// --- *.filelist editor features (novel-jp-filelist) -------------------------
+// --- *.jpbook editor features (novel-jp-book) -------------------------------
 
 /** Returns line `n`'s text (no terminator); `position.character` indexes into this. */
 function lineAt(doc: TextDocument, line: number): string {
@@ -196,44 +197,46 @@ function lineAt(doc: TextDocument, line: number): string {
   return text.replace(/\r$/, '');
 }
 
-// File-path autocompletion: only for filelists, delegated to the fs-backed resolver.
+// Autocompletion: metadata keys/values in the front matter, file paths on chapter lines —
+// only for book files, delegated to the fs-backed resolver.
 connection.onCompletion((params) => {
   const doc = documents.get(params.textDocument.uri);
-  if (doc?.languageId !== 'novel-jp-filelist') {
+  if (doc?.languageId !== 'novel-jp-book') {
     return [];
   }
-  return completeFilelist(doc.uri, lineAt(doc, params.position.line), params.position);
+  return completeJpbook(doc.uri, parseJpbook(doc.getText()), lineAt(doc, params.position.line), params.position);
 });
 
-// Cmd+click targets: one link per valid line pointing at the resolved file URI.
+// Cmd+click targets: one link per valid chapter line pointing at the resolved file URI.
 connection.onDocumentLinks((params) => {
   const doc = documents.get(params.textDocument.uri);
-  if (doc?.languageId !== 'novel-jp-filelist') {
+  if (doc?.languageId !== 'novel-jp-book') {
     return [];
   }
-  return documentLinksForFilelist(doc.uri, doc.getText());
+  return documentLinksForJpbook(doc.uri, parseJpbook(doc.getText()));
 });
 
-// Live per-line diagnostics for an open .filelist (missing/escaping/duplicate paths). Debounced
-// per URI and version-guarded so async fs existence checks never publish results for stale text.
-const filelistDebounce = new Map<string, ReturnType<typeof setTimeout>>();
-const FILELIST_DEBOUNCE_MS = 250;
+// Live per-line diagnostics for an open .jpbook (missing/escaping/duplicate paths, metadata
+// problems). Debounced per URI and version-guarded so async fs existence checks never publish
+// results for stale text.
+const jpbookDebounce = new Map<string, ReturnType<typeof setTimeout>>();
+const JPBOOK_DEBOUNCE_MS = 250;
 
-function scheduleFilelistDiagnostics(doc: TextDocument): void {
+function scheduleJpbookDiagnostics(doc: TextDocument): void {
   const uri = doc.uri;
   const scheduledVersion = doc.version;
-  clearTimeout(filelistDebounce.get(uri));
-  filelistDebounce.set(
+  clearTimeout(jpbookDebounce.get(uri));
+  jpbookDebounce.set(
     uri,
     setTimeout(() => {
-      filelistDebounce.delete(uri);
+      jpbookDebounce.delete(uri);
       const current = documents.get(uri);
-      if (current?.languageId !== 'novel-jp-filelist' || current.version !== scheduledVersion) {
+      if (current?.languageId !== 'novel-jp-book' || current.version !== scheduledVersion) {
         return;
       }
       void (async () => {
         try {
-          const diagnostics = await diagnoseFilelist(uri, current.getText());
+          const diagnostics = await diagnoseJpbook(uri, parseJpbook(current.getText()));
           // Re-check after the async fs work: a newer edit (with its own schedule) wins.
           if (documents.get(uri)?.version === scheduledVersion) {
             // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
@@ -243,12 +246,12 @@ function scheduleFilelistDiagnostics(doc: TextDocument): void {
           reportError(context, err);
         }
       })();
-    }, FILELIST_DEBOUNCE_MS),
+    }, JPBOOK_DEBOUNCE_MS),
   );
 }
 
 // Live prose-lint Warnings for an open .jpnov. The enabled rules run through the textlint kernel
-// (see lint/kernel.ts), which is async once any rule is on — so, like the filelist path, a version
+// (see lint/kernel.ts), which is async once any rule is on — so, like the jpbook path, a version
 // recheck AFTER the await guards against publishing results for stale text. With no rule enabled the
 // driver returns synchronously (a plain []), so the common case still publishes at once. The short
 // debounce keeps typing snappy on long chapters.
@@ -364,21 +367,21 @@ function revalidateOpenNovels(): void {
 
 // onDidChangeContent fires on open AND on every edit, so it covers initial validation too.
 documents.onDidChangeContent((e) => {
-  if (e.document.languageId === 'novel-jp-filelist') {
-    scheduleFilelistDiagnostics(e.document);
+  if (e.document.languageId === 'novel-jp-book') {
+    scheduleJpbookDiagnostics(e.document);
   } else if (e.document.languageId === 'novel-jp') {
     scheduleProseDiagnostics(e.document);
   }
 });
 
-// Closing a filelist drops its (buffer-scoped) diagnostics; a later build republishes if needed.
+// Closing a book file drops its (buffer-scoped) diagnostics; a later build republishes if needed.
 documents.onDidClose((e) => {
-  clearTimeout(filelistDebounce.get(e.document.uri));
-  filelistDebounce.delete(e.document.uri);
+  clearTimeout(jpbookDebounce.get(e.document.uri));
+  jpbookDebounce.delete(e.document.uri);
   clearTimeout(proseDebounce.get(e.document.uri));
   proseDebounce.delete(e.document.uri);
   findingsCache.delete(e.document.uri);
-  if (e.document.languageId === 'novel-jp-filelist' || e.document.languageId === 'novel-jp') {
+  if (e.document.languageId === 'novel-jp-book' || e.document.languageId === 'novel-jp') {
     // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
     void connection.sendDiagnostics({ uri: e.document.uri, diagnostics: [] });
   }

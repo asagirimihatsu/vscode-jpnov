@@ -9,8 +9,8 @@ const book = (over: Pick<BookInput, 'files'>): BookInput => ({ ...over });
 const OFF: BuildChrome = {
   lineNumbers: false,
   edgeLine: 'none',
-  pageNumberPosition: 'none',
-  pageNumberTemplate: '{page} / {totalPage}',
+  pageNumber: 'none',
+  pageNumberFormat: '{page} / {totalPage}',
   header: '',
 };
 
@@ -148,11 +148,11 @@ test('renderBook: a 字下げ column carries the indent class + its .indent-N ru
 /** Three one-line pages: display pages 1, 2, 3. */
 const THREE_PAGES = '一\n二\n三';
 
-test('folio parity: rightThenLeft puts odd pages bottom-right, even bottom-left', () => {
+test('folio parity: rightLeft puts odd pages bottom-right, even bottom-left', () => {
   const body = bodyOf(
     render(THREE_PAGES, {
       linesPerPage: 1,
-      chrome: { pageNumberPosition: 'rightThenLeft' },
+      chrome: { pageNumber: 'rightLeft' },
     }),
   );
   assert.match(body, /data-page="0">[^]*?<div class="pn r">1 \/ 3<\/div>/);
@@ -163,29 +163,29 @@ test('folio parity: rightThenLeft puts odd pages bottom-right, even bottom-left'
 });
 
 test('folio positions: all five enum values place (or omit) the number correctly', () => {
-  const sides = (pos: BuildChrome['pageNumberPosition']): (string | null)[] => {
+  const sides = (pos: BuildChrome['pageNumber']): (string | null)[] => {
     const body = bodyOf(
-      render('一\n二', { linesPerPage: 1, chrome: { pageNumberPosition: pos } }),
+      render('一\n二', { linesPerPage: 1, chrome: { pageNumber: pos } }),
     );
     return [0, 1].map((i) => {
       const m = new RegExp(`data-page="${String(i)}">[^]*?<div class="pn (r|l)">`).exec(body);
       return m?.[1] ?? null;
     });
   };
-  assert.deepEqual(sides('rightThenLeft'), ['r', 'l']);
-  assert.deepEqual(sides('leftThenRight'), ['l', 'r']);
-  assert.deepEqual(sides('alwaysRight'), ['r', 'r']);
-  assert.deepEqual(sides('alwaysLeft'), ['l', 'l']);
+  assert.deepEqual(sides('rightLeft'), ['r', 'l']);
+  assert.deepEqual(sides('leftRight'), ['l', 'r']);
+  assert.deepEqual(sides('right'), ['r', 'r']);
+  assert.deepEqual(sides('left'), ['l', 'l']);
   assert.deepEqual(sides('none'), [null, null]);
 });
 
 test('folio template: escaped before substitution; unknown variables stay literal', () => {
   const escaped = render('本文', {
-    chrome: { pageNumberPosition: 'alwaysRight', pageNumberTemplate: '<b>{page}</b>' },
+    chrome: { pageNumber: 'right', pageNumberFormat: '<b>{page}</b>' },
   });
   assert.match(escaped, /<div class="pn r">&lt;b&gt;1&lt;\/b&gt;<\/div>/);
   const unknown = render('本文', {
-    chrome: { pageNumberPosition: 'alwaysRight', pageNumberTemplate: 'p{page}/{foo}' },
+    chrome: { pageNumber: 'right', pageNumberFormat: 'p{page}/{foo}' },
   });
   assert.match(unknown, /<div class="pn r">p1\/\{foo\}<\/div>/);
 });
@@ -193,14 +193,14 @@ test('folio template: escaped before substitution; unknown variables stay litera
 test('folio blank-template suppression: a blank template drops the folio, keeps its band', () => {
   for (const tpl of ['', '   ']) {
     const html = render('本文', {
-      chrome: { pageNumberPosition: 'rightThenLeft', pageNumberTemplate: tpl },
+      chrome: { pageNumber: 'rightLeft', pageNumberFormat: tpl },
     });
     assert.doesNotMatch(html, /class="pn/);
-    assert.match(html, /\.page\{[^}]*padding-inline-end:2\.5em/); // element goes, band stays reserved
+    assert.match(html, /\.page\{[^}]*padding-inline-end:3em/); // element goes, band stays reserved
   }
   // "{page}" renders non-blank, so it is NOT suppressed; literal spaces are kept as-is.
   const kept = render('本文', {
-    chrome: { pageNumberPosition: 'alwaysLeft', pageNumberTemplate: ' {page} ' },
+    chrome: { pageNumber: 'left', pageNumberFormat: ' {page} ' },
   });
   assert.match(kept, /<div class="pn l"> 1 <\/div>/);
 });
@@ -208,13 +208,13 @@ test('folio blank-template suppression: a blank template drops the folio, keeps 
 test('header: centered furniture div, escaped, absent (with its band) when empty', () => {
   const on = render('本文', { chrome: { header: '第一章' } });
   assert.match(on, /<div class="hd">第一章<\/div>/);
-  assert.match(on, /:root\{[^}]*--htop:2\.5/);
+  assert.match(on, /:root\{[^}]*--htop:3/);
   const escaped = render('本文', { chrome: { header: 'a<b' } });
   assert.match(escaped, /<div class="hd">a&lt;b<\/div>/);
   const off = render('本文');
   assert.doesNotMatch(off, /class="hd"/);
   // No element, but the band stays reserved — sheet geometry is header-independent.
-  assert.match(off, /:root\{[^}]*--htop:2\.5/);
+  assert.match(off, /:root\{[^}]*--htop:3/);
   assert.match(off, /\.page\{[^}]*padding-inline-start:calc\(var\(--htop\)\*1em\)/);
 });
 

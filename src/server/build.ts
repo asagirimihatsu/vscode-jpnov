@@ -1,23 +1,26 @@
 /**
  * The `jpnov/build` request handler. The request's `projectDirs` map (the client's per-folder
  * `jpnov.project.*` snapshot) defines the targeted roots; for each one it enumerates every
- * `*.filelist` anywhere under the workspace folder root (skipping dot-folders, `node_modules`,
+ * `*.jpbook` anywhere under the workspace folder root (skipping dot-folders, `node_modules`,
  * and the resolved output folder), reads the `.jpnov` files each one lists (in order, resolved
- * relative to the filelist's OWN directory), and emits one `.txt` (the concatenated Aozora
+ * relative to the `.jpbook`'s OWN directory), and emits one `.txt` (the concatenated Aozora
  * source via `concatBookText`) plus one `.html` (the paginated render via `renderBook`) per
- * filelist, returning the artifacts for the CLIENT to write. The output path is derived from
- * the filelist's name/location (`filelistOutRel`, mirroring the tree under the folder root);
- * two distinct filelists that derive the same path are a build error and neither is emitted.
+ * book, returning the artifacts for the CLIENT to write. The output path is derived from
+ * the `.jpbook`'s name/location (`jpbookOutRel`, mirroring the tree under the folder root);
+ * two distinct book files that derive the same path are a build error and neither is emitted.
+ * Page furniture (柱/ノンブル) comes from each book's OWN front matter (`composeBookChrome`),
+ * so one build renders per-volume headers; the settings snapshot carries only the shared
+ * layout + proofing chrome.
  *
- * A build may be narrowed by {@link BuildParams.books} (a subset of `.filelist` URIs) and/or
+ * A build may be narrowed by {@link BuildParams.books} (a subset of `.jpbook` URIs) and/or
  * {@link BuildParams.format} (only `.txt` or only `.html`). The companion {@link handleListBooks}
- * enumerates those same filelists as {@link BookEntry}s WITHOUT building, to populate the client's
- * Books selection panel.
+ * enumerates those same book files as {@link BookEntry}s WITHOUT building, to populate the
+ * client's Books selection panel.
  *
- * Filelist enumeration / file reads use `node:fs` on the `file:` scheme only (the server never
+ * Book enumeration / file reads use `node:fs` on the `file:` scheme only (the server never
  * touches `vscode.fs`); the client owns artifact writes. Per-line diagnostics are computed by
- * the shared {@link diagnoseFilelist} (the same path the live editor uses) and published on each
- * `.filelist` URI, plus a file-level collision diagnostic when one applies.
+ * the shared {@link diagnoseJpbook} (the same path the live editor uses) and published on each
+ * `.jpbook` URI, plus a file-level collision diagnostic when one applies.
  *
  * vscode-free: the runtime `Connection` is reached only through {@link ServerContext}.
  */
@@ -27,7 +30,8 @@ import { fileURLToPath } from 'node:url';
 
 import type { WorkDoneProgressReporter } from 'vscode-languageserver/node';
 
-import { filelistOutRel, parseFilelist } from '#/shared/book/filelist.ts';
+import { composeBookChrome, jpbookOutRel, parseJpbook } from '#/shared/book/jpbook.ts';
+import type { ParsedLine } from '#/shared/book/jpbook.ts';
 import { concatBookText, renderBook } from '#/shared/compiler/document.ts';
 import type { BookInput } from '#/shared/compiler/document.ts';
 import { LocalizedError } from '#/shared/messages.ts';
@@ -49,17 +53,17 @@ import type {
 } from '#/shared/protocol.ts';
 
 import { fileLevelError } from './diagnostics.ts';
-import { diagnoseFilelist } from './filelist.ts';
+import { diagnoseJpbook } from './jpbook.ts';
 import { childUri, isFileScheme, normalizeRootUri } from './fsUri.ts';
 import type { ServerContext } from './roots.ts';
 
 const UTF8 = new TextDecoder('utf-8');
 
-/** A `*.filelist` discovered under a workspace folder root. */
-interface DiscoveredFilelist {
-  /** Path relative to the workspace folder root (POSIX separators), e.g. `"part1/vol2.filelist"`. */
+/** A `*.jpbook` discovered under a workspace folder root. */
+interface DiscoveredJpbook {
+  /** Path relative to the workspace folder root (POSIX separators), e.g. `"part1/vol2.jpbook"`. */
   readonly fileRel: string;
-  /** Absolute URI of the `.filelist` file (diagnostics target). */
+  /** Absolute URI of the `.jpbook` file (diagnostics target). */
   readonly uri: string;
   /** Absolute URI of the directory holding it (the base for resolving its entries). */
   readonly dirUri: string;
@@ -77,11 +81,11 @@ interface ProjectRoot {
  * `BuildFormat | undefined`) straight through without an omit-when-undefined dance.
  */
 interface BuildSelection {
-  /** When set, only filelists whose URI is in the set are built; `undefined` = every book. */
+  /** When set, only book files whose URI is in the set are built; `undefined` = every book. */
   readonly books: ReadonlySet<string> | undefined;
   /** When set, emit only that kind; `undefined` = BOTH `.txt` and `.html`. */
   readonly format: BuildFormat | undefined;
-  /** The re-resolved render settings the `.html` artifacts use (grid geometry + chrome). */
+  /** The re-resolved render settings the `.html` artifacts use (grid geometry + proofing chrome). */
   readonly settings: HtmlSettings;
 }
 
@@ -90,7 +94,7 @@ function joinRel(parent: string, name: string): string {
 }
 
 /**
- * Recursively walks the workspace folder root collecting every `*.filelist` file. `file:`
+ * Recursively walks the workspace folder root collecting every `*.jpbook` file. `file:`
  * scheme only — virtual-fs trees cannot be enumerated, so such roots simply yield no books.
  * Three fixed exclusions, deliberately NOT configurable ("your output folder, dot-folders,
  * and node_modules are never scanned"): dot-DIRECTORIES (dot-files still match), any
@@ -102,12 +106,12 @@ function joinRel(parent: string, name: string): string {
  * directory under `withFileTypes`, so links are never followed (no cycle risk). Results are
  * sorted by `fileRel` for deterministic output and stable collision reporting.
  */
-async function discoverFilelists(rootUri: string, outDirUri: string): Promise<DiscoveredFilelist[]> {
+async function discoverJpbooks(rootUri: string, outDirUri: string): Promise<DiscoveredJpbook[]> {
   if (!isFileScheme(rootUri)) {
     return [];
   }
   const outDirPath = fileURLToPath(outDirUri);
-  const found: DiscoveredFilelist[] = [];
+  const found: DiscoveredJpbook[] = [];
 
   async function walk(dirUri: string, dirPath: string, dirRel: string): Promise<void> {
     let dirents;
@@ -117,7 +121,7 @@ async function discoverFilelists(rootUri: string, outDirUri: string): Promise<Di
       return;
     }
     for (const dirent of dirents) {
-      if (dirent.isFile() && dirent.name.toLowerCase().endsWith('.filelist')) {
+      if (dirent.isFile() && dirent.name.toLowerCase().endsWith('.jpbook')) {
         found.push({
           fileRel: joinRel(dirRel, dirent.name),
           uri: childUri(dirUri, dirent.name),
@@ -142,18 +146,19 @@ async function discoverFilelists(rootUri: string, outDirUri: string): Promise<Di
 }
 
 /**
- * Reads the `ok` entries of one `.filelist` in order (skipping blank/duplicate/error lines),
- * each resolved relative to the filelist's directory and decoded UTF-8, into the shape
- * {@link renderBook} consumes. Throws on the first escaping/unreadable/missing entry so the
- * caller can convert it into a per-book build error (the diagnostic is published separately).
+ * Reads the `ok` entries of one parsed `.jpbook` in order (skipping blank/front-matter/
+ * duplicate/error lines), each resolved relative to the book file's directory and decoded
+ * UTF-8, into the shape {@link renderBook} consumes. Throws on the first escaping/
+ * unreadable/missing entry so the caller can convert it into a per-book build error (the
+ * diagnostic is published separately).
  */
-async function readFilelistFiles(fl: DiscoveredFilelist, text: string): Promise<BookInput> {
+async function readBookFiles(fl: DiscoveredJpbook, lines: readonly ParsedLine[]): Promise<BookInput> {
   const files: { name: string; src: string }[] = [];
-  for (const pl of parseFilelist(text)) {
+  for (const pl of lines) {
     if (pl.kind !== 'ok') {
       continue;
     }
-    const resolved = resolveContained(fl.dirUri, pl.value, 'filelistEntry');
+    const resolved = resolveContained(fl.dirUri, pl.value, 'jpbookEntry');
     if (!resolved.ok) {
       throw new LocalizedError({ code: resolved.code, args: resolved.args });
     }
@@ -184,8 +189,8 @@ function toBuildMessage(cause: unknown): LocalizableMessage {
 }
 
 /**
- * Builds the filelists under one targeted root, accumulating artifacts + per-book errors.
- * `selection.books` (when set) restricts WHICH filelists are built, but the output-path
+ * Builds the book files under one targeted root, accumulating artifacts + per-book errors.
+ * `selection.books` (when set) restricts WHICH books are built, but the output-path
  * collision map is still computed over ALL of them — a selected book that collides with an
  * UNSELECTED one still errors, so a later full build can never silently clobber it.
  */
@@ -196,12 +201,12 @@ async function buildRoot(
   artifacts: BuildArtifact[],
   errors: BuildError[],
 ): Promise<void> {
-  const filelists = await discoverFilelists(target.rootUri, target.outDirUri);
+  const jpbooks = await discoverJpbooks(target.rootUri, target.outDirUri);
 
-  // Derive each filelist's output path ONCE, then group by it to detect collisions across the
+  // Derive each book's output path ONCE, then group by it to detect collisions across the
   // whole root up front.
-  const derived = filelists.map((fl) => ({ fl, outRel: filelistOutRel(fl.fileRel) }));
-  const byOutRel = new Map<string, DiscoveredFilelist[]>();
+  const derived = jpbooks.map((fl) => ({ fl, outRel: jpbookOutRel(fl.fileRel) }));
+  const byOutRel = new Map<string, DiscoveredJpbook[]>();
   for (const { fl, outRel } of derived) {
     const group = byOutRel.get(outRel);
     if (group) {
@@ -212,7 +217,7 @@ async function buildRoot(
   }
 
   for (const { fl, outRel } of derived) {
-    // Subset build: skip filelists outside the requested set entirely (no read, no diagnostics).
+    // Subset build: skip books outside the requested set entirely (no read, no diagnostics).
     if (selection.books && !selection.books.has(fl.uri)) {
       continue;
     }
@@ -221,10 +226,10 @@ async function buildRoot(
       // Disappeared mid-build; skip silently rather than error on a non-existent file.
       continue;
     }
-    const text = UTF8.decode(bytes);
+    const parsed = parseJpbook(UTF8.decode(bytes));
 
-    // Per-line diagnostics (same path the live editor uses); published on the .filelist URI.
-    const lineDiags = await diagnoseFilelist(fl.uri, text);
+    // Per-line diagnostics (same path the live editor uses); published on the .jpbook URI.
+    const lineDiags = await diagnoseJpbook(fl.uri, parsed);
     const colliding = (byOutRel.get(outRel) ?? []).filter((other) => other !== fl);
 
     if (colliding.length > 0) {
@@ -241,7 +246,7 @@ async function buildRoot(
 
     let input: BookInput;
     try {
-      input = await readFilelistFiles(fl, text);
+      input = await readBookFiles(fl, parsed.lines);
     } catch (cause) {
       // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
       void ctx.connection.sendDiagnostics({ uri: fl.uri, diagnostics: lineDiags });
@@ -261,16 +266,16 @@ async function buildRoot(
       });
     }
     if (selection.format !== 'txt') {
-      // Grid geometry, 禁則, 自動縦中横, and chrome all come from the request's settings
-      // snapshot (HtmlSettings is a structural superset of BuildChrome, so it passes straight
-      // through).
+      // Grid geometry, 禁則, and 自動縦中横 come from the request's settings snapshot; the
+      // page furniture is composed per book from its own front matter (this is what lets
+      // one batch build carry a different 柱 per volume).
       const html = renderBook({
         books: [input],
         charsPerLine: selection.settings.charsPerLine,
         linesPerPage: selection.settings.linesPerPage,
         kinsoku: selection.settings.kinsoku,
         autoTcy: selection.settings.autoTcy,
-        chrome: selection.settings,
+        chrome: composeBookChrome(selection.settings, parsed.meta),
       });
       artifacts.push({ path: childUri(target.outDirUri, `${outRel}.html`), content: html });
     }
@@ -280,11 +285,11 @@ async function buildRoot(
 /**
  * Resolves one configured project dir against its root: a contained relative path becomes
  * its absolute URI; anything invalid (empty / absolute / escaping / `.` …) silently falls
- * back to the default. The `'filelistEntry'` label is a placeholder — a failed resolution
+ * back to the default. The `'jpbookEntry'` label is a placeholder — a failed resolution
  * is discarded here, never rendered.
  */
 function resolveProjectDir(rootUri: string, value: string, fallback: string): string {
-  const resolved = resolveContained(rootUri, value, 'filelistEntry');
+  const resolved = resolveContained(rootUri, value, 'jpbookEntry');
   // The defaults are single-segment relative paths, so this join cannot escape the root.
   return resolved.ok ? resolved.abs : childUri(rootUri, fallback.replace(/^\.\//, ''));
 }
@@ -313,7 +318,7 @@ function targetRoots(projectDirs: ProjectDirsMap, root?: string): ProjectRoot[] 
  * Handles `jpnov/build`. Omitting `root` builds every root in `projectDirs`. Reports coarse
  * `$/progress` via the supplied work-done reporter (one tick per root). The result is
  * `ok` when no build-level errors were collected; per-book errors are surfaced in
- * `errors[]` and as diagnostics on each offending `.filelist`.
+ * `errors[]` and as diagnostics on each offending `.jpbook`.
  */
 export async function handleBuild(
   ctx: ServerContext,
@@ -358,19 +363,23 @@ export async function handleBuild(
 }
 
 /**
- * Handles `jpnov/listBooks`: enumerates every `*.filelist` under each targeted root as a
- * {@link BookEntry} for the client's Books panel. PURE discovery — no file reads, no diagnostics,
- * and no output-path collision check (those belong to an actual build).
+ * Handles `jpnov/listBooks`: enumerates every `*.jpbook` under each targeted root as a
+ * {@link BookEntry} for the client's Books panel. Each file is read ONCE for its
+ * front-matter `title` (display metadata; an unreadable file simply lists untitled) — but
+ * no diagnostics and no output-path collision check (those belong to an actual build).
  */
 export async function handleListBooks(params: ListBooksParams): Promise<ListBooksResult> {
   const books: BookEntry[] = [];
   for (const target of targetRoots(params.projectDirs, params.root)) {
-    for (const fl of await discoverFilelists(target.rootUri, target.outDirUri)) {
+    for (const fl of await discoverJpbooks(target.rootUri, target.outDirUri)) {
+      const bytes = await readFile(fileURLToPath(fl.uri)).catch(() => null as Buffer | null);
+      const title = bytes === null ? undefined : parseJpbook(UTF8.decode(bytes)).meta.title;
       books.push({
         uri: fl.uri,
         rootUri: target.rootUri,
         fileRel: fl.fileRel,
-        outRel: filelistOutRel(fl.fileRel),
+        outRel: jpbookOutRel(fl.fileRel),
+        ...(title !== undefined && title !== '' ? { title } : {}),
       });
     }
   }

@@ -8,22 +8,30 @@ body{margin:0;}
 /* One sheet: linesPerPage columns (block axis, LINE_PITCH 2.25em each) × charsPerLine chars
    (inline axis, 1em each). The bands are padding OUTSIDE the content box, so the grid keeps its
    exact size and the sheet grows instead; overflow's clip box is the padding box, so band
-   content stays visible while anything past it is cut. --htop = header band 2.5 + on-demand
-   line-number band 1 (em); the 2.5em end pad = FOLIO_BAND (see geometry.ts — @page consumes
-   the same numbers, guarded by styles-codegen.test.ts). The sheet's own band padding stays
-   LOGICAL: .page is vertical-rl itself, so padding-inline-start/end = physical top/bottom. */
-.page{writing-mode:vertical-rl;line-height:2.25;inline-size:calc(var(--cpl)*1em);block-size:calc(var(--lpp)*2.25em);padding-inline-start:calc(var(--htop)*1em);padding-inline-end:2.5em;position:relative;margin:0 auto 1em;background:#fff;box-sizing:content-box;overflow:hidden;break-after:page;page-break-after:always;}
+   content stays visible while anything past it is cut. --htop = header band 3 + on-demand
+   line-number band 1 (em); the 3em end pad = FOLIO_BAND and the 1.5em block pads = SIDE_PAD
+   (see geometry.ts — @page consumes the same numbers, guarded by styles-codegen.test.ts).
+   The sheet's own band padding stays LOGICAL: .page is vertical-rl itself, so
+   padding-inline-start/end = physical top/bottom and padding-block-start/end = physical
+   right/left — the side pads keep the grid and the outset frame off the paper's side cut. */
+.page{writing-mode:vertical-rl;line-height:2.25;inline-size:calc(var(--cpl)*1em);block-size:calc(var(--lpp)*2.25em);padding-inline-start:calc(var(--htop)*1em);padding-inline-end:3em;padding-block-start:1.5em;padding-block-end:1.5em;position:relative;margin:2.5em auto;background:#fff;box-sizing:content-box;overflow:hidden;break-after:page;page-break-after:always;}
 
 /* Each line is one fixed-thickness column (2.25em = LINE_PITCH, ruby-safe). */
 .line{block-size:2.25em;margin:0;white-space:pre;}
 /* No ruby rules here: every <rt> lives inside a classed ruby (rr/lr/br), whose on-demand
    classRule (css.ts) owns the lane layout INCLUDING the 0.5em rt size — the single home. */
 
+/* Screen-only paper look: grey backdrop + sheet shadow make the white sheet's edges visible,
+   and the sheet's 2.5em surround above matches the printed paper inset (vertical margins
+   collapse, so the inter-sheet gap is 2.5em too). Nothing here exists under @media print. */
+@media screen{html{background:#e8e8e8;}.page{box-shadow:0 1px 4px rgba(0,0,0,0.25);}}
+
 /* Print fixes, verified against headless Chromium:
    - root goes vertical-rl so the sheets are ordinary in-flow blocks — as ORTHOGONAL flows
      (vertical sheets in a horizontal root) Chromium splits every near-page-size sheet onto two
      papers regardless of fit;
-   - the sheet's own margin (2.5em = PRINT_MARGIN) replaces both the screen 1em gap and the
-     paper inset. The @page rule itself (0 margin — keeps the browser's own header/footer off
-     the paper) is injected by css.ts: @page cannot read var() portably. */
-@media print{html{writing-mode:vertical-rl;}.page{margin:2.5em;}}
+   - the sheet's margin must pin ALL FOUR sides to 2.5em (= PRINT_MARGIN): the base rule's
+     horizontal `auto` resolves to 0 in the vertical-rl root's block direction, which would
+     glue the sheet to the paper edge. The @page rule itself (0 margin — keeps the browser's
+     own header/footer off the paper) is injected by css.ts: @page cannot read var() portably. */
+@media print{html{writing-mode:vertical-rl;background:none;}.page{margin:2.5em;box-shadow:none;}}

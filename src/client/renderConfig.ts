@@ -7,7 +7,7 @@
  */
 import * as vscode from 'vscode';
 
-import type { EdgeLineStyle, PageNumberPosition } from '#/shared/compiler/chrome.ts';
+import type { EdgeLineStyle } from '#/shared/compiler/chrome.ts';
 import { BUILD_CHROME_DEFAULT, PREVIEW_CHROME_DEFAULT } from '#/shared/config/settings.ts';
 import type { AutoTcyMode, KinsokuMode } from '#/shared/config/types.ts';
 import { LAYOUT_DEFAULT } from '#/shared/config/types.ts';
@@ -33,14 +33,5 @@ export function buildHtmlSettings(): HtmlSettings {
     autoTcy: c.get<AutoTcyMode>('jpnov.layout.autoTateChuYoko', LAYOUT_DEFAULT.autoTcy),
     lineNumbers: c.get<boolean>('jpnov.html.lineNumbers', BUILD_CHROME_DEFAULT.lineNumbers),
     edgeLine: c.get<EdgeLineStyle>('jpnov.html.edgeLine', BUILD_CHROME_DEFAULT.edgeLine),
-    pageNumberPosition: c.get<PageNumberPosition>(
-      'jpnov.html.pageNumber.position',
-      BUILD_CHROME_DEFAULT.pageNumberPosition,
-    ),
-    pageNumberTemplate: c.get<string>(
-      'jpnov.html.pageNumber.template',
-      BUILD_CHROME_DEFAULT.pageNumberTemplate,
-    ),
-    header: c.get<string>('jpnov.html.header', BUILD_CHROME_DEFAULT.header),
   };
 }

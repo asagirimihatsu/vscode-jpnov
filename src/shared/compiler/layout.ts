@@ -1000,13 +1000,13 @@ function folioSide(pos: PageNumberPosition, pi: number): 'r' | 'l' | null {
   }
   const odd = pi % 2 === 0; // display page = pi + 1, so an even index is an odd page
   switch (pos) {
-    case 'rightThenLeft':
+    case 'rightLeft':
       return odd ? 'r' : 'l';
-    case 'leftThenRight':
+    case 'leftRight':
       return odd ? 'l' : 'r';
-    case 'alwaysRight':
+    case 'right':
       return 'r';
-    case 'alwaysLeft':
+    case 'left':
       return 'l';
   }
 }
@@ -1017,13 +1017,13 @@ function pageFurniture(chrome: BuildChrome, pi: number, totalPage: number): stri
   if (chrome.header !== '') {
     out += `<div class="hd">${escapeHtml(chrome.header)}</div>`;
   }
-  const side = folioSide(chrome.pageNumberPosition, pi);
+  const side = folioSide(chrome.pageNumber, pi);
   if (side !== null) {
     // Escape the author's template FIRST, then substitute the plain-integer counts —
     // `{`/`}` survive escaping, so the placeholders live through it, while any markup in
     // the template is neutralized. Unknown `{foo}` stays literal. A blank template never
-    // reaches here (renderBook normalizes it to pageNumberPosition 'none').
-    const text = escapeHtml(chrome.pageNumberTemplate)
+    // reaches here (renderBook normalizes it to pageNumber 'none').
+    const text = escapeHtml(chrome.pageNumberFormat)
       .replaceAll('{page}', String(pi + 1))
       .replaceAll('{totalPage}', String(totalPage));
     out += `<div class="pn ${side}">${text}</div>`;

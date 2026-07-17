@@ -1,7 +1,7 @@
 /**
  * The "Books" panel: a client-owned tree view in the extension's own Activity Bar container
  * (`contributes.viewsContainers.activitybar` + `views.jpnov`, see package.json). It lists every
- * buildable book — one `*.filelist` discovered under each workspace folder root — with
+ * buildable book — one `*.jpbook` discovered under each workspace folder root — with
  * a checkbox each, and drives the two build actions from the view title bar: "Build to HTML" and
  * "Build to Text" each render ONLY the checked books, in ONLY that one format.
  *
@@ -117,9 +117,10 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
       showCollapseAll: true,
     });
 
-    // A `.filelist` appearing/disappearing changes the book SET (the output name is derived from
-    // the path, not the contents), so only create/delete need a re-list — not content edits.
-    const watcher = vscode.workspace.createFileSystemWatcher('**/*.filelist');
+    // A `.jpbook` appearing/disappearing changes the book SET, and a SAVE can change its
+    // front-matter title (shown as the leaf label), so create/delete/change all re-list.
+    // The watcher only fires onDidChange for on-disk writes — not per keystroke.
+    const watcher = vscode.workspace.createFileSystemWatcher('**/*.jpbook');
 
     this.disposables.push(
       this.treeView,
@@ -128,10 +129,11 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
         this.onCheckboxChanged(e);
       }),
       watcher,
-      // Fire-and-forget re-list on a .filelist appearing/disappearing: refresh() self-catches its
-      // sendRequest (returns on failure) and is sequenced by refreshSeq, so a dropped result is safe.
+      // Fire-and-forget re-list on a .jpbook appearing/disappearing/saving: refresh() self-catches
+      // its sendRequest (returns on failure) and is sequenced by refreshSeq, so a dropped result is safe.
       watcher.onDidCreate(() => void this.refresh()),
       watcher.onDidDelete(() => void this.refresh()),
+      watcher.onDidChange(() => void this.refresh()),
     );
   }
 
@@ -159,9 +161,10 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
     }
 
     const { entry } = element;
-    // Label by the book's OUTPUT name's last segment (e.g. `vol2`); ancestor folders carry the
-    // prefix. The source manifest path is the description.
-    const label = entry.outRel.slice(entry.outRel.lastIndexOf('/') + 1);
+    // Label by the front-matter title when the book declares one, else by the book's OUTPUT
+    // name's last segment (e.g. `vol2`); ancestor folders carry the prefix. The source
+    // manifest path is the description.
+    const label = entry.title ?? entry.outRel.slice(entry.outRel.lastIndexOf('/') + 1);
     const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
     item.id = entry.uri; // stable identity for selection/expansion + checkbox state
     item.resourceUri = vscode.Uri.parse(entry.uri);
@@ -171,10 +174,10 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
     item.checkboxState = this.checked.has(entry.uri)
       ? vscode.TreeItemCheckboxState.Checked
       : vscode.TreeItemCheckboxState.Unchecked;
-    // Clicking the label (not the checkbox) opens the underlying `.filelist`.
+    // Clicking the label (not the checkbox) opens the underlying `.jpbook`.
     item.command = {
       command: 'vscode.open',
-      title: vscode.l10n.t('Open Filelist'),
+      title: vscode.l10n.t('Open Book File'),
       arguments: [vscode.Uri.parse(entry.uri)],
     };
     return item;
@@ -242,7 +245,7 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
   /**
    * `jpnov.books.refresh` (and the file watcher / folder changes): re-enumerate books and reconcile
    * the checkbox set — drop ticks for books that vanished, and default any newly-discovered book to
-   * CHECKED (so "all-checked" holds on first load and when a `.filelist` is added). Leaves the
+   * CHECKED (so "all-checked" holds on first load and when a `.jpbook` is added). Leaves the
    * current list in place if the request fails (e.g. server not yet started).
    */
   async refresh(): Promise<void> {

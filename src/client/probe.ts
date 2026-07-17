@@ -7,11 +7,11 @@
  *     the user level: a personal cast list in user settings must not auto-start every
  *     window). Synchronous, zero I/O — one section-level `inspect('jpnov')`.
  *  2. Filenames — one shallow `readDirectory` of the folder root matching a root-level
- *     `*.filelist` that is a PLAIN FILE (strict FileType.File: a directory named
- *     `x.filelist` is no book, and symlinks match the server's discovery, which never
+ *     `*.jpbook` that is a PLAIN FILE (strict FileType.File: a directory named
+ *     `x.jpbook` is no book, and symlinks match the server's discovery, which never
  *     follows them). A single round-trip; also the only file signal on virtual
  *     filesystems without a search provider (signal 3 needs one).
- *  3. Deep search — one `findFiles` capped at a single match, for filelists that live
+ *  3. Deep search — one `findFiles` capped at a single match, for book files that live
  *     only in subfolders. Excludes node_modules and dot-directories like the server's
  *     discovery; its deltas (symlinked matches, no outDir exclusion, glob case rules)
  *     can only cause a benign start — the server stays the arbiter of what is a book.
@@ -37,14 +37,14 @@ export async function folderIsNovelProject(
     return false; // unreadable root (gone, permission, exotic scheme) -> not a novel root
   }
   if (entries.some(
-    ([name, type]) => type === vscode.FileType.File && name.toLowerCase().endsWith('.filelist'),
+    ([name, type]) => type === vscode.FileType.File && name.toLowerCase().endsWith('.jpbook'),
   )) {
     return true;
   }
 
   try {
     const nested = await vscode.workspace.findFiles(
-      new vscode.RelativePattern(folder, '**/*.filelist'),
+      new vscode.RelativePattern(folder, '**/*.jpbook'),
       '**/{node_modules,.*}/**',
       1,
     );

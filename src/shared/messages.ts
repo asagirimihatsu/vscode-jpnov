@@ -11,8 +11,8 @@
  */
 import type { LabelId, LocalizableMessage, MsgCode } from './protocol.ts';
 
-/** English text per label id (`filelistEntry`, the only remaining label, is prose). */
-const LABEL_EN: Record<LabelId, string> = { filelistEntry: 'filelist entry' };
+/** English text per label id (`jpbookEntry`, the only remaining label, is prose). */
+const LABEL_EN: Record<LabelId, string> = { jpbookEntry: 'book entry' };
 
 function englishLabel(label: LabelId): string {
   return LABEL_EN[label];
@@ -29,19 +29,29 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
     case 'book.entryReadFailed':
       return `cannot read "${a(0)}": ${a(1)}`;
     case 'build.outPathCollision':
-      return `output path "${a(0)}" is claimed by multiple filelists: ${a(1)}`;
+      return `output path "${a(0)}" is claimed by multiple book files: ${a(1)}`;
     case 'build.failed':
       return `build failed: ${a(0)}`;
-    case 'filelist.backslashSeparator':
+    case 'jpbook.backslashSeparator':
       return `use "/" as the path separator, not "\\": ${a(0)}`;
-    case 'filelist.notJpnov':
-      return `filelist entries must be .jpnov files: ${a(0)}`;
-    case 'filelist.duplicateEntry':
+    case 'jpbook.notJpnov':
+      return `book entries must be .jpnov files: ${a(0)}`;
+    case 'jpbook.duplicateEntry':
       return `duplicate entry "${a(0)}" (already listed above)`;
-    case 'filelist.entryIsDirectory':
+    case 'jpbook.entryIsDirectory':
       return `"${a(0)}" is a directory, not a .jpnov file`;
-    case 'filelist.fileNotFound':
+    case 'jpbook.fileNotFound':
       return `file not found: ${a(0)}`;
+    case 'jpbook.metaNotKeyValue':
+      return `metadata lines must be "key: value": ${a(0)}`;
+    case 'jpbook.metaUnknownKey':
+      return `unknown metadata key "${a(0)}" (known keys: ${a(1)})`;
+    case 'jpbook.metaDuplicateKey':
+      return `duplicate metadata key "${a(0)}" (the first value wins)`;
+    case 'jpbook.metaBadEnum':
+      return `invalid value "${a(1)}" for ${a(0)} (allowed: ${a(2)})`;
+    case 'jpbook.metaUnterminated':
+      return 'unterminated metadata block (missing a closing ---)';
     case 'path.empty':
       return `${englishLabel(args[0] as LabelId)} must not be empty`;
     case 'path.rootDot':

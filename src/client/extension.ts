@@ -16,7 +16,7 @@
  *     root readDirectory per workspace folder. Instant `.jpnov` colorization does not
  *     depend on any of this — the TextMate grammar is applied by VS Code core.
  *   Phase 2 `ensureStarted()` — single-flight; constructs the client + UI singletons
- *     and forks the server on the FIRST real demand: a novel-jp/filelist document, a
+ *     and forks the server on the FIRST real demand: a novel-jp/jpbook document, a
  *     jpnov command, a restored preview panel, or a probe hit on a workspace folder
  *     (so a novel workspace still self-populates its Books view shortly after
  *     startup, just off the window-open critical path).
@@ -55,12 +55,12 @@ let extCtx: vscode.ExtensionContext | undefined;
 /** Phase-2 latch: `ensureStarted()` is single-flight and never un-runs until deactivate. */
 let started = false;
 
-/** Pre-start `*.filelist` creation watcher; retired by the first ensureStarted(). */
+/** Pre-start `*.jpbook` creation watcher; retired by the first ensureStarted(). */
 let coldStartWatcher: vscode.FileSystemWatcher | undefined;
 
 /** Documents that justify starting the language server. */
 function isNovelDoc(doc: vscode.TextDocument): boolean {
-  return doc.languageId === 'novel-jp' || doc.languageId === 'novel-jp-filelist';
+  return doc.languageId === 'novel-jp' || doc.languageId === 'novel-jp-book';
 }
 
 /**
@@ -117,7 +117,7 @@ function ensureStarted(): void {
   const clientOptions: LanguageClientOptions = {
     documentSelector: [
       { language: 'novel-jp' },
-      { language: 'novel-jp-filelist' },
+      { language: 'novel-jp-book' },
     ],
     initializationOptions: {
       lintConfig: buildLintSnapshot(),
@@ -230,7 +230,7 @@ function ensureStarted(): void {
 
   // Start the client (and the server process). start() is called exactly once (single-flight
   // latch above), so a hard startup failure surfaces exactly one popup. On success, kick the
-  // first Books enumeration — nothing else fills the panel on a cold start (the filelist
+  // first Books enumeration — nothing else fills the panel on a cold start (the jpbook
   // watcher only reacts to create/delete).
   client.start().then(
     () => void booksView?.refresh(),
@@ -307,11 +307,11 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  // Pre-start self-heal: a `*.filelist` created while we are dormant (git checkout, OS
+  // Pre-start self-heal: a `*.jpbook` created while we are dormant (git checkout, OS
   // copy, terminal) opens no document, so the listeners above never fire. The watcher
-  // cannot tell files from directories — a folder named `x.filelist` causes a benign
+  // cannot tell files from directories — a folder named `x.jpbook` causes a benign
   // start; server-side discovery stays the arbiter.
-  coldStartWatcher = vscode.workspace.createFileSystemWatcher('**/*.filelist');
+  coldStartWatcher = vscode.workspace.createFileSystemWatcher('**/*.jpbook');
   context.subscriptions.push(
     coldStartWatcher,
     coldStartWatcher.onDidCreate(() => { ensureStarted(); }),

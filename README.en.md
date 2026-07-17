@@ -32,20 +32,23 @@ one-command HTML / PDF / text builds. No AI anywhere in the writing path
    and start writing. Aozora Bunko annotations are highlighted as you type;
    click the preview icon in the editor title bar (**Japanese Novel: Open
    Preview to the Side**) to see the vertical layout.
-2. **Make a book.** Create a `.filelist` (e.g. `volume1.filelist`) and list your
-   chapter files, one per line, in reading order. One `.filelist` is one book.
+2. **Make a book.** Create a `.jpbook` (e.g. `volume1.jpbook`) and list your
+   chapter files, one per line, in reading order. One `.jpbook` is one book.
+   An optional `---`-fenced front-matter block at the top carries the book's
+   own metadata (title, running head, page-number style — see
+   [Per-book metadata](#per-book-metadata-front-matter)).
 3. **Build it.** Save everything (builds read from disk), open the **Japanese
    Novel** view in the Activity Bar (the book icon), tick the books you want,
    and use **Build to HTML**, **Build to PDF**, or **Build to Text** from the
    view's title bar.
 
-Chapters and filelists can live anywhere in the workspace folder; subfolders are
-mirrored into the output (`src/volume1.filelist` builds to
+Chapters and book files can live anywhere in the workspace folder; subfolders are
+mirrored into the output (`src/volume1.jpbook` builds to
 `dist/src/volume1.html`). The output folder (`jpnov.project.outDir`, default
 `dist`), dot-folders, and `node_modules` are never scanned. The extension
-activates when you open a `.jpnov`/`.filelist`, when a workspace folder
-contains a `*.filelist`, or when any `jpnov.*` setting is saved at workspace
-or folder level — preview and filelist editing need no configuration at all. A
+activates when you open a `.jpnov`/`.jpbook`, when a workspace folder
+contains a `*.jpbook`, or when any `jpnov.*` setting is saved at workspace
+or folder level — preview and book editing need no configuration at all. A
 **Get started with Japanese Novel** walkthrough covers the same steps.
 
 ## A 60-second Japanese typography primer
@@ -152,8 +155,9 @@ are toggled under **Japanese Novel — Preview**.
 
 ## Building books
 
-The **Japanese Novel** Activity Bar view lists every discovered `.filelist` as
-a book with a checkbox. The view's title bar builds the checked books:
+The **Japanese Novel** Activity Bar view lists every discovered `.jpbook` as
+a book with a checkbox (labelled by its front-matter `title` when it declares
+one). The view's title bar builds the checked books:
 
 - **Build to HTML** — one standalone, paginated vertical `.html` per book
   (inline CSS, no external assets).
@@ -166,15 +170,43 @@ a book with a checkbox. The view's title bar builds the checked books:
   (auto-tate-chū-yoko is materialised as explicit annotations, so the text
   round-trips).
 
-Outputs land in `<outDir>/<filelist path>.{html,pdf,txt}` with `outDir`
-defaulting to `dist`. Two filelists that resolve to the same output path fail
+Outputs land in `<outDir>/<book path>.{html,pdf,txt}` with `outDir`
+defaulting to `dist`. Two book files that resolve to the same output path fail
 the build with a diagnostic instead of overwriting each other.
 
 ![The Books view with a checked book and the build buttons](docs/images/vscode-books-panel.png)
 
-On `.filelist` files the editor offers path completion, diagnostics (missing
-files, duplicates, escaping the workspace…), and document links — Cmd/Ctrl-click
-an entry to open the chapter.
+On `.jpbook` files the editor offers completion (chapter paths, metadata keys
+and enum values), diagnostics (missing files, duplicates, escaping the
+workspace, unknown metadata keys…), and document links — Cmd/Ctrl-click an
+entry to open the chapter.
+
+### Per-book metadata (front matter)
+
+Page furniture is a property of the book, not of the workspace — two volumes
+in one workspace can carry different running heads. A `.jpbook` therefore
+starts with an optional `---`-fenced block of `key: value` lines:
+
+```text
+---
+title: 夜霧の姫　第一巻
+header: 夜霧の姫　一
+pageNumber: right
+pageNumberFormat: {page} / {totalPage}
+---
+01_prologue.jpnov
+02_chapter1.jpnov
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `title` | — | Display name in the Books view (the output path still derives from the file name) |
+| `header` | `""` | Running head centered at the top of every page; omit for none |
+| `pageNumber` | `right` | Folio placement: pinned (`right`, `left`) or alternating per page (`rightLeft`, `leftRight`), or `none` |
+| `pageNumberFormat` | `{page} / {totalPage}` | Folio text; blank suppresses it |
+
+Every key is optional; unknown keys warn and are ignored, so future keys stay
+forward-compatible.
 
 ## Character & keyword highlighting
 
@@ -254,9 +286,10 @@ per machine.
 | --- | --- | --- |
 | `jpnov.html.lineNumbers` | `false` | Line numbers in built pages, restarting per page |
 | `jpnov.html.edgeLine` | `none` | Column rules + page frame: `none` / `text` / `red` |
-| `jpnov.html.pageNumber.position` | `rightThenLeft` | Folio placement (`…`, `alwaysRight`, `alwaysLeft`, `none`) |
-| `jpnov.html.pageNumber.template` | `{page} / {totalPage}` | Folio text; blank suppresses it |
-| `jpnov.html.header` | `""` | Running head centered at the top of every page |
+
+The running head and page number are **per-book** properties and live in each
+`.jpbook`'s front matter, not in settings — see
+[Per-book metadata](#per-book-metadata-front-matter).
 
 ### Japanese Novel — Preview
 
@@ -314,8 +347,8 @@ There are no default keybindings.
 
 Publishing a novel is a serious matter, and many editors explicitly forbid the
 use of **any AI**. This extension introduces **no AI tools for writing**, and
-disables the Copilot extension by default for `*.jpnov` / `*.filelist`. All
-completion (filelist paths, etc.) relies entirely on non-AI programs.
+disables the Copilot extension by default for `*.jpnov` / `*.jpbook`. All
+completion (chapter paths, metadata keys, etc.) relies entirely on non-AI programs.
 
 **Writing must be done entirely by the human author, from beginning to end.**
 
@@ -329,7 +362,7 @@ npm install
 ```
 
 Press <kbd>F5</kbd> to launch an Extension Development Host. Open a `.jpnov`
-file (or a folder containing a `*.filelist`) to trigger activation.
+file (or a folder containing a `*.jpbook`) to trigger activation.
 
 Other commands:
 

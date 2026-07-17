@@ -16,7 +16,7 @@
  * the webview state API, and extension.ts registers a WebviewPanelSerializer that hands
  * the workbench-restored panel back to `adopt()` to re-wire listeners and re-render.
  *
- * Scope (per spec): a SINGLE current file, no filelist assembly, no pagination; lines wrap at
+ * Scope (per spec): a SINGLE current file, no book assembly, no pagination; lines wrap at
  * the `jpnov.layout.charsPerLine` setting; ［＃改ページ］ appears as a labelled
  * `<div class="pagebreak">` marker.
  */

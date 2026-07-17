@@ -11,7 +11,7 @@
  * Pure + vscode-free.
  */
 import type { EdgeLineStyle, PageNumberPosition } from '../compiler/chrome.ts';
-import { EDGE_LINE_STYLES, PAGE_NUMBER_POSITIONS } from '../compiler/chrome.ts';
+import { EDGE_LINE_STYLES } from '../compiler/chrome.ts';
 import type { HtmlSettings, PreviewSettings } from '../protocol.ts';
 import type { AutoTcyMode, KinsokuMode } from './types.ts';
 import { AUTO_TCY_MODES, CHARS_MAX, CHARS_MIN, KINSOKU_MODES, LAYOUT_DEFAULT } from './types.ts';
@@ -21,17 +21,22 @@ export const PREVIEW_CHROME_DEFAULT = {
   edgeLine: 'none',
 } as const satisfies { lineNumbers: boolean; edgeLine: EdgeLineStyle };
 
+/**
+ * `lineNumbers`/`edgeLine` default the `jpnov.html.*` settings; the page-furniture fields
+ * (`pageNumber`/`pageNumberFormat`/`header`) are NOT settings — they default a
+ * `.jpbook`'s front matter when it omits the key (see `composeBookChrome`).
+ */
 export const BUILD_CHROME_DEFAULT = {
   lineNumbers: false,
   edgeLine: 'none',
-  pageNumberPosition: 'rightThenLeft',
-  pageNumberTemplate: '{page} / {totalPage}',
+  pageNumber: 'right',
+  pageNumberFormat: '{page} / {totalPage}',
   header: '',
 } as const satisfies {
   lineNumbers: boolean;
   edgeLine: EdgeLineStyle;
-  pageNumberPosition: PageNumberPosition;
-  pageNumberTemplate: string;
+  pageNumber: PageNumberPosition;
+  pageNumberFormat: string;
   header: string;
 };
 
@@ -50,12 +55,6 @@ function edgeLine(value: unknown): EdgeLineStyle {
     : 'none';
 }
 
-function pageNumberPosition(value: unknown): PageNumberPosition {
-  return typeof value === 'string' && (PAGE_NUMBER_POSITIONS as readonly string[]).includes(value)
-    ? (value as PageNumberPosition)
-    : BUILD_CHROME_DEFAULT.pageNumberPosition;
-}
-
 function boolOr(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
@@ -70,11 +69,6 @@ function kinsokuMode(value: unknown): KinsokuMode {
   return typeof value === 'string' && (KINSOKU_MODES as readonly string[]).includes(value)
     ? (value as KinsokuMode)
     : LAYOUT_DEFAULT.kinsoku;
-}
-
-/** Folds the header to a single line (newline runs → one space); the literal spaces stay. */
-function singleLine(value: unknown, fallback: string): string {
-  return typeof value === 'string' ? value.replace(/[\r\n]+/g, ' ') : fallback;
 }
 
 export function resolvePreviewSettings(s: PreviewSettings): PreviewSettings {
@@ -95,13 +89,5 @@ export function resolveHtmlSettings(s: HtmlSettings): HtmlSettings {
     autoTcy: autoTcyMode(s.autoTcy),
     lineNumbers: boolOr(s.lineNumbers, BUILD_CHROME_DEFAULT.lineNumbers),
     edgeLine: edgeLine(s.edgeLine),
-    pageNumberPosition: pageNumberPosition(s.pageNumberPosition),
-    // '' is a legitimate value (suppresses the folio via renderBook's blank-template
-    // normalization), so only a non-string falls back.
-    pageNumberTemplate:
-      typeof s.pageNumberTemplate === 'string'
-        ? s.pageNumberTemplate
-        : BUILD_CHROME_DEFAULT.pageNumberTemplate,
-    header: singleLine(s.header, BUILD_CHROME_DEFAULT.header),
   };
 }

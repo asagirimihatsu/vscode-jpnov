@@ -1,5 +1,5 @@
 /**
- * Tiny URI string helpers shared across the server's filesystem seams (build / filelist).
+ * Tiny URI string helpers shared across the server's filesystem seams (build / jpbook).
  * PURE string ops: no `node:fs`, no `vscode-languageserver` imports — a true leaf,
  * so any server module can pull it in without dragging dependencies along.
  *
