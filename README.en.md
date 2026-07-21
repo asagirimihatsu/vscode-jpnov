@@ -109,6 +109,7 @@ an HTML comment (never an error), so unusual markup degrades quietly.
 | Side line 傍線 (5 styles) | `［＃「対象」に傍線］` (傍線/二重傍線/鎖線/破線/波線) | — |
 | Bold 太字 | `［＃「対象」は太字］`, `［＃太字］…［＃太字終わり］` | `［＃ここから太字］…［＃ここで太字終わり］` |
 | Italic 斜体 | `［＃「対象」は斜体］`, `［＃斜体］…［＃斜体終わり］` | `［＃ここから斜体］…［＃ここで斜体終わり］` |
+| Heading 見出し | `第一章［＃「第一章」は大見出し］` (大見出し / 中見出し / 小見出し) | — |
 | Indent 字下げ | `［＃○字下げ］` (line head) | `［＃ここから○字下げ］…［＃ここで字下げ終わり］` |
 | Page break | — | `［＃改ページ］` |
 
@@ -200,8 +201,9 @@ can't be tracked; the missing path is flagged in the editor instead.
 ### Per-book metadata (front matter)
 
 Page furniture is a property of the book, not of the workspace — two volumes
-in one workspace can carry different running heads. A `.jpbook` therefore
-starts with an optional `---`-fenced block of `key: value` lines:
+in one workspace can carry different running heads; the chapter divider is
+book identity for the same reason. A `.jpbook` therefore starts with an
+optional `---`-fenced block of `key: value` lines:
 
 ```text
 ---
@@ -209,6 +211,7 @@ title: 夜霧の姫　第一巻
 header: 夜霧の姫　一
 pageNumber: right
 pageNumberFormat: {page} / {totalPage}
+divider: ＊　＊　＊
 ---
 01_prologue.jpnov
 02_chapter1.jpnov
@@ -220,9 +223,10 @@ pageNumberFormat: {page} / {totalPage}
 | `header` | `""` | Running head centered at the top of every page; omit for none |
 | `pageNumber` | `right` | Folio placement: pinned (`right`, `left`) or alternating per page (`rightLeft`, `leftRight`), or `none` |
 | `pageNumberFormat` | `{page} / {totalPage}` | Folio text; blank suppresses it |
+| `divider` | — | Chapter divider inserted between chapters that do not open with a heading (e.g. `＊　＊　＊`); a bare mark is centred along the line at build time, a `［＃３字下げ］` prefix indents it instead; omit for a single blank line |
 
 Every key is optional; unknown keys warn and are ignored, so future keys stay
-forward-compatible. The same four keys are also editable from the Books
+forward-compatible. The same five keys are also editable from the Books
 panel's Book Info rows.
 
 ## Character & keyword highlighting

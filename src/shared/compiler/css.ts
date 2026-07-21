@@ -43,10 +43,11 @@ import * as S from './styles/styles.generated.ts';
 
 /**
  * The CSS rule for one used class name, or '' for an unknown one (keeps the "no stray rules"
- * invariant). `indent-N` (字下げ) and `tcy` (縦中横) are generated here — they are layout
- * geometry, not style-table entries; the indent suffix check is defence in depth (emitLine only
- * ever emits positive N_eff). Every other class (emph-* / dec-* / b / i) is forwarded to
- * emphasis.ts's {@link styleRule}, the single home of the style CSS values.
+ * invariant). `indent-N` (字下げ), `tcy` (縦中横) and `midashi` (見出し) are generated here —
+ * they are layout geometry / line furniture, not style-table entries; the indent suffix check
+ * is defence in depth (emitLine only ever emits positive N_eff). Every other class
+ * (emph-* / dec-* / b / i) is forwarded to emphasis.ts's {@link styleRule}, the single home of
+ * the style CSS values.
  */
 function classRule(name: string): string {
   if (name.startsWith('indent-')) {
@@ -63,6 +64,13 @@ function classRule(name: string): string {
     // 縦中横: combine the cell's chars upright in one square. Media-independent (pure text
     // combination, no geometry), so the one rule serves preview and build alike.
     return '.tcy{text-combine-upright:all}';
+  }
+  if (name === 'midashi') {
+    // 通常の見出し: same-size gothic bold (明朝 body + ゴシック heading, the 文庫 convention).
+    // Generic sans-serif keeps CJK glyphs full-width, so the 1字=1マス grid is untouched. The
+    // preview's `.line{font-family:serif}` has EQUAL specificity — this wins by source order
+    // only (used-class rules are appended after the fragments in stylesheet()).
+    return '.midashi{font-family:sans-serif;font-weight:bold}';
   }
   if (name === 'hang') {
     // ぶら下げ: negative letter-spacing cancels the hung 句読点's own advance, so only its

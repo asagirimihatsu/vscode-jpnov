@@ -244,7 +244,9 @@ async function buildRoot(
 
     let input: BookInput;
     try {
-      input = await readBookFiles(target.rootUri, parsed.lines);
+      // The divider is book identity like the page furniture, but BODY content — it rides the
+      // BookInput into the assembly seams instead of composeBookChrome.
+      input = { ...(await readBookFiles(target.rootUri, parsed.lines)), divider: parsed.meta.divider };
     } catch (cause) {
       // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
       void ctx.connection.sendDiagnostics({ uri: fl.uri, diagnostics: lineDiags });
@@ -260,7 +262,7 @@ async function buildRoot(
     if (selection.format !== 'html') {
       artifacts.push({
         path: childUri(target.outDirUri, `${outRel}.txt`),
-        content: concatBookText(input, selection.settings.autoTcy),
+        content: concatBookText(input, selection.settings.autoTcy, selection.settings.charsPerLine),
       });
     }
     if (selection.format !== 'txt') {

@@ -4,7 +4,7 @@
  *
  * A `.jpbook` is plain text in two parts. An OPTIONAL front-matter block — opened by a
  * `---` on the first non-blank line and closed by a second `---` — holds `key: value`
- * metadata (the book's OWN properties: title and page furniture). Everything after it (or
+ * metadata (the book's OWN properties: title, page furniture, chapter divider). Everything after it (or
  * the whole file when no block opens) is the chapter list: one `.jpnov` source path per
  * line, in reading order, relative to the book's OWNING WORKSPACE FOLDER root (so moving
  * the `.jpbook` itself never invalidates them).
@@ -22,6 +22,7 @@
  */
 import type { BuildChrome, PageNumberPosition } from '../compiler/chrome.ts';
 import { PAGE_NUMBER_POSITIONS } from '../compiler/chrome.ts';
+import { indentAnnotation, tokenize } from '../compiler/tokenizer.ts';
 import { BUILD_CHROME_DEFAULT } from '../config/settings.ts';
 import type { LocalizableMessage } from '../protocol.ts';
 
@@ -65,12 +66,14 @@ export interface ParsedLine {
 }
 
 /**
- * The recognized front-matter keys, in completion order, shared VERBATIM with
- * {@link BuildChrome}'s furniture field names. Adding a key: extend {@link JpbookMeta},
- * handle it in the parser's key switch and (when it feeds the render) in
- * {@link composeBookChrome}; the unknown-key message derives its list from here.
+ * The recognized front-matter keys, in completion order; the page-furniture keys are shared
+ * VERBATIM with {@link BuildChrome}'s field names. Adding a key: extend {@link JpbookMeta},
+ * handle it in the parser's key switch and — when it feeds the render — in
+ * {@link composeBookChrome} for page furniture, or at the assembly seam
+ * (`renderBook`/`concatBookText`) for BODY content like `divider`, which is never chrome;
+ * the unknown-key message derives its list from here.
  */
-export const META_KEYS = ['title', 'header', 'pageNumber', 'pageNumberFormat'] as const;
+export const META_KEYS = ['title', 'header', 'pageNumber', 'pageNumberFormat', 'divider'] as const;
 export type MetaKey = (typeof META_KEYS)[number];
 
 /** The key portion of a front-matter line's trimmed content, or null when key-less. */
@@ -90,6 +93,12 @@ export interface JpbookMeta {
   readonly header?: string;
   readonly pageNumber?: PageNumberPosition;
   readonly pageNumberFormat?: string;
+  /**
+   * Chapter-divider line inserted between chapters that do not open with a 見出し. A line of
+   * `.jpnov` notation: a bare mark is centred at build time; a ［＃○字下げ］ prefix positions
+   * it instead ({@link parseDividerValue}). Absent/empty = no divider.
+   */
+  readonly divider?: string;
 }
 
 export interface ParsedJpbook {
@@ -264,6 +273,34 @@ export function composeBookChrome(
   };
 }
 
+/** Suggested divider marks — the GUI QuickPick and the value completion share this list. */
+export const DIVIDER_PRESETS = ['＊', '＊　＊　＊', '◇'] as const;
+
+/** A `divider` VALUE split into its mark and position (`indent: null` = 天地中央揃え). */
+export interface DividerValue {
+  readonly mark: string;
+  readonly indent: number | null;
+}
+
+/**
+ * Splits a `divider` front-matter value into mark + position: a leading ［＃○字下げ］ (the
+ * tokenizer's own classification, so the GUI and the render can never disagree) yields its
+ * amount, a bare value yields `indent: null` = centred at build time. Flush-head is
+ * deliberately not expressible — it exists in neither the print nor the web convention.
+ */
+export function parseDividerValue(value: string): DividerValue {
+  const first = tokenize(value)[0];
+  if (first?.kind === 'indent') {
+    return { mark: value.slice(first.raw.length), indent: first.amount };
+  }
+  return { mark: value, indent: null };
+}
+
+/** The inverse of {@link parseDividerValue}; the 字下げ spelling comes from the tokenizer. */
+export function composeDividerValue(mark: string, indent: number | null): string {
+  return indent === null ? mark : indentAnnotation(indent) + mark;
+}
+
 /**
  * Derives the output RELATIVE PATH (stem, no extension) for a `.jpbook`, mirroring the
  * tree under the workspace folder root (POSIX `/`; backslashes tolerated as separators). The build appends
@@ -350,9 +387,9 @@ export function completeEntryLine(
 
 /**
  * Computes completions for a FRONT-MATTER line: metadata keys while the cursor is before
- * any colon (inserted as `key: `), and the enum members when the line's key is
- * `pageNumber` and the cursor sits after the colon. Both filter by case-insensitive
- * prefix. Pure and fs-free.
+ * any colon (inserted as `key: `), and value proposals after it — the enum members for
+ * `pageNumber`, the preset marks for `divider`. Both filter by case-insensitive prefix.
+ * Pure and fs-free.
  */
 export function completeMetaLine(linePrefix: string): JpbookCompletion[] {
   let keyStart = 0;
@@ -373,7 +410,9 @@ export function completeMetaLine(linePrefix: string): JpbookCompletion[] {
   }
 
   const key = linePrefix.slice(keyStart, sep).trim();
-  if (key !== 'pageNumber') {
+  const values: readonly string[] | null =
+    key === 'pageNumber' ? PAGE_NUMBER_POSITIONS : key === 'divider' ? DIVIDER_PRESETS : null;
+  if (values === null) {
     return [];
   }
   let valStart = sep + 1;
@@ -382,7 +421,7 @@ export function completeMetaLine(linePrefix: string): JpbookCompletion[] {
   }
   const typed = linePrefix.slice(valStart).toLowerCase();
   const replace = { startChar: valStart, endChar: linePrefix.length };
-  return PAGE_NUMBER_POSITIONS.filter((v) => v.toLowerCase().startsWith(typed)).map((v) => ({
+  return values.filter((v) => v.toLowerCase().startsWith(typed)).map((v) => ({
     label: v,
     insertText: v,
     kind: 'value',

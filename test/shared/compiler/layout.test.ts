@@ -766,6 +766,60 @@ test('unclosed block 字下げ leniently continues to EOF', () => {
   );
 });
 
+// --------------------------------------------------------------- 見出し (heading)
+
+test('見出し line: the whole column carries .midashi; the annotation is consumed', () => {
+  assert.equal(
+    html('第一章　出会い［＃「第一章　出会い」は大見出し］\n本文'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line midashi" data-line="0">第一章　出会い</div>' +
+      '<div class="line" data-line="1">本文</div></div></div>',
+  );
+});
+
+test('見出し: every wrapped continuation keeps .midashi (like indent)', () => {
+  assert.equal(
+    html('一二三［＃「一二三」は中見出し］', 2),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line midashi" data-line="0">一二</div>' +
+      '<div class="line midashi" data-line="0">三</div></div></div>',
+  );
+});
+
+test('見出し composes with 字下げ; a ruby-bearing heading matches its BASE text', () => {
+  assert.equal(
+    html('［＃２字下げ］序［＃「序」は小見出し］'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line indent-2 midashi" data-line="0">序</div></div></div>',
+  );
+  // Aozora: the heading target EXCLUDES ruby readings — base-text matching resolves it.
+  assert.match(
+    html('独《ひと》り寝《ね》の別《わか》れ［＃「独り寝の別れ」は大見出し］'),
+    /<div class="line midashi" data-line="0">/,
+  );
+});
+
+test('見出し with an unresolved target degrades to a comment and reports the miss', () => {
+  assert.equal(
+    html('本文［＃「別文」は大見出し］'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line" data-line="0">本文<!--「別文」は大見出し--></div></div></div>',
+  );
+  assert.deepEqual(
+    findPostfixTargetIssues('本文［＃「別文」は大見出し］').map((i) => i.target),
+    ['別文'],
+  );
+});
+
+test('見出し is line-local: the next source line renders plain', () => {
+  assert.equal(
+    flow('章［＃「章」は大見出し］\n本文'),
+    '<div class="book"><div class="segment">' +
+      '<div class="line midashi" data-line="0">章</div>' +
+      '<div class="line" data-line="1">本文</div></div></div>',
+  );
+});
+
 // --------------------------------------------------------------- empty-column suppression
 
 test('a block-directive-only line paints no column; the next line is indented', () => {

@@ -186,7 +186,7 @@ test('CRLF: the \\r of a \\r\\n terminator is never swallowed into the broken ra
 });
 
 test('a closed ［＃…］ on the same line still parses normally (no regression)', () => {
-  assert.deepEqual(kinds(tokenize('前［＃見出し］後')), ['text', 'comment', 'text']);
+  assert.deepEqual(kinds(tokenize('前［＃メモ］後')), ['text', 'comment', 'text']);
 });
 
 test('a standalone ］ with no opener is ordinary text (no error, no token split)', () => {
@@ -422,6 +422,39 @@ test('縦中横 postfix requires the は connector (like 太字/斜体)', () => 
   // 縦中横 has no block (ここから/ここで) form.
   assert.deepEqual(kinds(tokenize('［＃ここから縦中横］')), ['comment']);
   assert.deepEqual(kinds(tokenize('［＃ここで縦中横終わり］')), ['comment']);
+});
+
+// --------------------------------------------------------------- 見出し
+
+test('見出し postfix carries its level (大=1) and requires the は connector', () => {
+  assert.deepEqual(tokenize('第一章［＃「第一章」は大見出し］')[1], {
+    kind: 'headingPostfix',
+    raw: '［＃「第一章」は大見出し］',
+    target: '第一章',
+    level: 1,
+  });
+  assert.deepEqual(tokenize('一［＃「一」は中見出し］')[1], {
+    kind: 'headingPostfix',
+    raw: '［＃「一」は中見出し］',
+    target: '一',
+    level: 2,
+  });
+  assert.deepEqual(tokenize('一［＃「一」は小見出し］')[1], {
+    kind: 'headingPostfix',
+    raw: '［＃「一」は小見出し］',
+    target: '一',
+    level: 3,
+  });
+  assert.deepEqual(kinds(tokenize('一［＃「一」に大見出し］')), ['text', 'comment']); // に connector
+  assert.deepEqual(kinds(tokenize('一［＃「一」大見出し］')), ['text', 'comment']); // bare (no は)
+  assert.deepEqual(kinds(tokenize('［＃「」は大見出し］')), ['comment']); // empty target
+});
+
+test('見出し block forms stay unrecognized comments (前方参照型 only)', () => {
+  assert.deepEqual(kinds(tokenize('［＃大見出し］')), ['comment']);
+  assert.deepEqual(kinds(tokenize('［＃大見出し終わり］')), ['comment']);
+  assert.deepEqual(kinds(tokenize('［＃ここから中見出し］')), ['comment']);
+  assert.deepEqual(kinds(tokenize('［＃ここで小見出し終わり］')), ['comment']);
 });
 
 // --------------------------------------------------------------- findTcyIssues

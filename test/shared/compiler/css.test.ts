@@ -183,6 +183,14 @@ test('縦中横 .tcy rule is on-demand and identical in both media', () => {
   assert.doesNotMatch(build(), /\.tcy\b/);
 });
 
+test('見出し .midashi rule is on-demand and identical in both media', () => {
+  const rule = '.midashi{font-family:sans-serif;font-weight:bold}';
+  assert.ok(preview({ usedClasses: ['midashi'] }).includes(rule));
+  assert.ok(build({ usedClasses: ['midashi'] }).includes(rule));
+  assert.doesNotMatch(preview(), /\.midashi\b/); // zero dead rules
+  assert.doesNotMatch(build(), /\.midashi\b/);
+});
+
 test('ruby rr/lr/br rule sets are on-demand, self-contained and media-identical', () => {
   for (const make of [preview, build]) {
     // rr: the right-only lane every plain ruby now uses (native ruby layout is retired).

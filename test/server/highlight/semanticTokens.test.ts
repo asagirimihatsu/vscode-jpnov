@@ -234,6 +234,14 @@ test('縦中横 postfix: は is a marker, 縦中横 a directive, the target unco
   assert.ok(!toks.some((t) => t.char <= 5 && t.char + t.len > 5)); // 29 uncovered
 });
 
+test('見出し postfix: は is a marker, the level literal a directive, the target uncovered', () => {
+  // 序章(0,1) ［＃(2,3) 「(4) 序章(5,6) 」(7) は(8) 大見出し(9..12) ］(13)
+  const toks = decode(buildSemanticTokens(doc('序章［＃「序章」は大見出し］'), rec).data);
+  assert.deepEqual(at(toks, 0, 8), { line: 0, char: 8, len: 1, type: MARKER }); // は
+  assert.deepEqual(at(toks, 0, 9), { line: 0, char: 9, len: 4, type: tokenTypeIndex('directive') }); // 大見出し
+  assert.ok(!toks.some((t) => t.char <= 5 && t.char + t.len > 5)); // 序章 target uncovered
+});
+
 test('左ルビ postfix: 対象 default, の左に direction, reading greyed whole, のルビ directive', () => {
   // 字(0) ［＃(1,2) 「(3) 字(4) 」(5) の左に(6..8) 「(9) よみ(10,11) 」(12) のルビ(13..15) ］(16)
   const toks = decode(buildSemanticTokens(doc('字［＃「字」の左に「よみ」のルビ］'), rec).data);
