@@ -161,6 +161,23 @@ test('chapterGlue suppression: a 見出し-opening next chapter takes the plain 
   assert.equal(chapterGlue('前章', '二［＃「別」は中見出し］', '＊', 8), '\n［＃３字下げ］＊\n\n');
 });
 
+test('chapterGlue suppression covers the 見出し span/block openers too', () => {
+  // Block form: the first non-blank line paints nothing — the opener token decides.
+  assert.equal(
+    chapterGlue('前章', '［＃ここから大見出し］\n第二章\n［＃ここで大見出し終わり］', '＊', 8),
+    '\n',
+  );
+  // Inline pair on the first line resolves through the normal heading-row probe.
+  assert.equal(chapterGlue('前章', '［＃大見出し］第二章［＃大見出し終わり］\n本文', '＊', 8), '\n');
+  // A lone inline opener line (the title follows on the next line) suppresses too.
+  assert.equal(chapterGlue('前章', '［＃大見出し］\n第二章\n［＃大見出し終わり］', '＊', 8), '\n');
+  // A non-見出し directive first line still takes the divider (first painted line is prose).
+  assert.equal(
+    chapterGlue('前章', '［＃ここから２字下げ］\n本文', '＊', 8),
+    '\n［＃３字下げ］＊\n\n',
+  );
+});
+
 test('chapterGlue suppression at ［＃改ページ］ junctions keeps the blank line', () => {
   assert.equal(chapterGlue('あ\n［＃改ページ］', 'か', '＊', 8), '\n'); // prev ends on a break
   assert.equal(chapterGlue('あ', '［＃改ページ］\nか', '＊', 8), '\n'); // next opens on a break

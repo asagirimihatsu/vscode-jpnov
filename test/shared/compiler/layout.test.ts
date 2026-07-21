@@ -811,12 +811,79 @@ test('見出し with an unresolved target degrades to a comment and reports the 
   );
 });
 
-test('見出し is line-local: the next source line renders plain', () => {
+test('見出し postfix is line-local: the next source line renders plain', () => {
   assert.equal(
     flow('章［＃「章」は大見出し］\n本文'),
     '<div class="book"><div class="segment">' +
       '<div class="line midashi" data-line="0">章</div>' +
       '<div class="line" data-line="1">本文</div></div></div>',
+  );
+});
+
+test('見出し inline span: same-line pair marks its line; the annotations are consumed', () => {
+  assert.equal(
+    html('［＃大見出し］第一章　出会い［＃大見出し終わり］\n本文'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line midashi" data-line="0">第一章　出会い</div>' +
+      '<div class="line" data-line="1">本文</div></div></div>',
+  );
+});
+
+test('見出し inline span carries ACROSS lines until the end annotation (like 太字)', () => {
+  assert.equal(
+    html('［＃大見出し］美味しいです。\n焼き肉は。［＃大見出し終わり］\n本文'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line midashi" data-line="0">美味しいです。</div>' +
+      '<div class="line midashi" data-line="1">焼き肉は。</div>' +
+      '<div class="line" data-line="2">本文</div></div></div>',
+  );
+});
+
+test('見出し block: the directive lines vanish and the body lines carry .midashi', () => {
+  assert.equal(
+    html('［＃ここから大見出し］\n第一章\n出会い\n［＃ここで大見出し終わり］\n本文'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line midashi" data-line="1">第一章</div>' +
+      '<div class="line midashi" data-line="2">出会い</div>' +
+      '<div class="line" data-line="4">本文</div></div></div>',
+  );
+});
+
+test('ここから見出し on a text line: that line keeps its pre-block state (like indent)', () => {
+  assert.equal(
+    html('前文［＃ここから中見出し］\n題'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line" data-line="0">前文</div>' +
+      '<div class="line midashi" data-line="1">題</div></div></div>',
+  );
+});
+
+test('見出し levels share one slot: any 終わり closes; dangling is a no-op; EOF auto-closes', () => {
+  // A mismatched-level end still closes the open heading (one parameterized channel).
+  assert.equal(
+    html('［＃ここから大見出し］\n題\n［＃ここで中見出し終わり］\n後'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line midashi" data-line="1">題</div>' +
+      '<div class="line" data-line="3">後</div></div></div>',
+  );
+  assert.equal(
+    html('あ［＃大見出し終わり］\nい'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line" data-line="0">あ</div><div class="line" data-line="1">い</div></div></div>',
+  );
+  assert.equal(
+    html('［＃中見出し］題\n続'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line midashi" data-line="0">題</div>' +
+      '<div class="line midashi" data-line="1">続</div></div></div>',
+  );
+});
+
+test('見出し block composes with a 字下げ block: both classes on the body line', () => {
+  assert.equal(
+    html('［＃ここから２字下げ］\n［＃ここから小見出し］\n章\n［＃ここで小見出し終わり］\n［＃ここで字下げ終わり］'),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line indent-2 midashi" data-line="2">章</div></div></div>',
   );
 });
 

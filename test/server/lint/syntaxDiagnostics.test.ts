@@ -94,6 +94,22 @@ test('a balanced block pair yields no diagnostics', () => {
   );
 });
 
+test('見出し blocks ride the same pairing Warnings; inline 見出し spans stay silent', () => {
+  const un = annotationDiagnostics(doc('［＃ここから大見出し］\n題'));
+  assert.equal(un.length, 1);
+  assert.deepEqual(un[0]?.data, { code: 'syntax.unterminatedBlock' });
+  const dg = annotationDiagnostics(doc('題\n［＃ここで中見出し終わり］'));
+  assert.equal(dg.length, 1);
+  assert.deepEqual(dg[0]?.data, { code: 'syntax.danglingBlockEnd' });
+  assert.deepEqual(
+    annotationDiagnostics(doc('［＃ここから大見出し］\n題\n［＃ここで大見出し終わり］')),
+    [],
+  );
+  // The inline pair — even an unterminated opener — never warns, exactly like ［＃太字］.
+  assert.deepEqual(annotationDiagnostics(doc('［＃大見出し］題［＃大見出し終わり］')), []);
+  assert.deepEqual(annotationDiagnostics(doc('［＃大見出し］題')), []);
+});
+
 test('a same-channel re-open replaces the slot (last-wins) — balanced, no Warning', () => {
   // ２字下げ → ４字下げ is a legal amount change (render is last-wins); one ここで clears it.
   // A stack model would wrongly flag the first ここから as unterminated (diagnostic ≠ render).

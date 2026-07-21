@@ -185,10 +185,10 @@ export function extractStreams(src: string): Streams {
       case 'indentBlockEnd': // the current line keeps its head snapshot
         blockIndent = 0;
         break;
-      // pageBreak / emphasis* / comment / brokenAnnotation contribute no prose; they only advance
-      // `offset` (malformed markup is deliberately not linted). The indent family contributes no
-      // prose either — only the synthetic 　 via pushNarr — so a chunk seam can never bisect a
-      // ここから/ここで pair.
+      // pageBreak / emphasis* / tcy* / heading* / rubyLeftPostfix / comment / brokenAnnotation
+      // contribute no prose; they only advance `offset` (malformed markup is deliberately not
+      // linted). The indent family contributes no prose either — only the synthetic 　 via
+      // pushNarr — so a chunk seam can never bisect a ここから/ここで pair.
     }
     offset += token.raw.length;
   }

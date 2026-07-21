@@ -340,7 +340,8 @@ export function buildRows(tokens: readonly Token[], issues?: number[]): Row[] {
   // Mirrored by the lint stream extractor (server/lint/streams.ts); lockstep guarded by streams.test.ts.
   let activeIndent = 0; // block 字下げ in effect, carried ACROSS lines
   let curIndent = 0; // indent for the line under construction (line start = activeIndent)
-  let curHeading: HeadingLevel | undefined; // 見出し of the line under construction (line-local)
+  let activeHeading: HeadingLevel | undefined; // 見出し span/block in effect, carried ACROSS lines
+  let curHeading: HeadingLevel | undefined; // 見出し of the line under construction (line start = activeHeading)
   let lineSuppressed = false; // a block directive token appeared on THIS line
 
   // Snapshot the four active channels onto a new unit — one stable hidden class for all real units.
@@ -424,7 +425,7 @@ export function buildRows(tokens: readonly Token[], issues?: number[]): Row[] {
     isPageBreak = false;
     lineSuppressed = false;
     curIndent = activeIndent; // next line inherits the block indent (0 if none)
-    curHeading = undefined; // 見出し never carries across lines
+    curHeading = activeHeading; // next line inherits an open 見出し span/block (postfix stays line-local)
   };
 
   for (let ti = 0; ti < tokens.length; ti += 1) {
@@ -502,6 +503,25 @@ export function buildRows(tokens: readonly Token[], issues?: number[]): Row[] {
         } else {
           issues?.push(ti);
           cur.push(commentUnit(token.raw));
+        }
+        break;
+      case 'headingSpanStart':
+        // The three levels share ONE slot (they cannot compose on a line): a re-open is a level
+        // change. Inline ［＃大見出し］ marks THIS line too; the block form affects SUBSEQUENT
+        // lines only (same-line text keeps its pre-block state, like the indent block).
+        activeHeading = token.level;
+        if (token.block === true) {
+          lineSuppressed = true;
+        } else {
+          curHeading = token.level;
+        }
+        break;
+      case 'headingSpanEnd':
+        // Closes whatever heading is open regardless of the level literal (one slot; dangling is
+        // a no-op: already undefined). The line carrying the end stays a heading (curHeading keeps).
+        activeHeading = undefined;
+        if (token.block === true) {
+          lineSuppressed = true;
         }
         break;
       case 'tcySpanStart':

@@ -356,6 +356,31 @@ export function buildSemanticTokens(
         mark(last, ONE, 'marker'); // ］
         break;
       }
+      case 'headingSpanStart': {
+        if (token.block !== true) {
+          markDirective(); // ［＃大見出し］ — a lone command word, like 縦中横
+          break;
+        }
+        flushRun();
+        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
+        const ds = offset + ANNOT_OPEN;
+        const from = 'ここから'.length;
+        mark(ds, from, 'marker'); // ここから (demoted, like the indent/emphasis blocks)
+        mark(ds + from, raw - ANNOT_OPEN - from - ONE, 'directive'); // level literal (length from raw)
+        mark(last, ONE, 'marker'); // ］
+        break;
+      }
+      case 'headingSpanEnd': {
+        flushRun();
+        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
+        const to = token.block === true ? 'ここで'.length : 0;
+        const lit = raw - ANNOT_OPEN - to - '終わり'.length - ONE; // level literal (length from raw)
+        mark(offset + ANNOT_OPEN, to, 'marker'); // ここで (block form only; len 0 marks nothing)
+        mark(offset + ANNOT_OPEN + to, lit, 'directive'); // 大見出し / 中見出し / 小見出し
+        mark(offset + ANNOT_OPEN + to + lit, '終わり'.length, 'marker'); // 終わり (demoted)
+        mark(last, ONE, 'marker'); // ］
+        break;
+      }
       case 'comment': {
         flushRun();
         mark(offset, raw, 'marker'); // whole ［＃ … ］ greyed

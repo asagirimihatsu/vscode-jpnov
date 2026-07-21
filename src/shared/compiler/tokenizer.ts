@@ -33,6 +33,8 @@ export type TokenKind =
   | 'tcySpanStart'
   | 'tcySpanEnd'
   | 'headingPostfix'
+  | 'headingSpanStart'
+  | 'headingSpanEnd'
   | 'comment'
   | 'brokenAnnotation'
   | 'pageBreak'
@@ -128,13 +130,39 @@ export interface TcySpanEndToken extends TokenBase {
  * 通常の見出し postfix ○○［＃「○○」は大見出し］ — marks its own logical line as a heading
  * (https://www.aozora.gr.jp/annotation/heading.html#tsujyo_midashi). The connector は is
  * REQUIRED, exactly like 縦中横; per the spec the target excludes ruby readings, which the
- * layout's base-text matching satisfies. Only this 前方参照 form is recognized — the
- * 開始／終了 and ここから block forms stay comments.
+ * layout's base-text matching satisfies. Line-local, unlike the span/block forms below.
  */
 export interface HeadingPostfixToken extends TokenBase {
   readonly kind: 'headingPostfix';
   readonly target: string;
   readonly level: HeadingLevel;
+}
+
+/**
+ * 見出し span opener ［＃大見出し］ — marks every line it touches as a heading (line-level, so
+ * the whole column goes gothic) until the matching {@link HeadingSpanEndToken}; like the
+ * emphasis spans the state carries ACROSS lines. The three level literals share ONE slot
+ * (levels cannot compose on a line), so a re-open is a level change, never nesting.
+ */
+export interface HeadingSpanStartToken extends TokenBase {
+  readonly kind: 'headingSpanStart';
+  readonly level: HeadingLevel;
+  /**
+   * True iff this came from the BLOCK form ［＃ここから大見出し］ (own-line). The inline form
+   * ［＃大見出し］ leaves it undefined. Drives empty-column suppression, the block-form split
+   * colouring, block pairing ({@link findUnpairedBlocks}), and the subsequent-lines-only
+   * onset (same-line text keeps its pre-block state, like the indent block).
+   */
+  readonly block?: true;
+}
+
+/** 見出し span closer ［＃大見出し終わり］ — closes the open heading regardless of its level
+ *  literal (one slot); dangling (no open span) is a layout no-op. See
+ *  {@link HeadingSpanStartToken.block} for the ここで block flavour. */
+export interface HeadingSpanEndToken extends TokenBase {
+  readonly kind: 'headingSpanEnd';
+  readonly level: HeadingLevel;
+  readonly block?: true;
 }
 
 export interface CommentToken extends TokenBase {
@@ -197,6 +225,8 @@ export type Token =
   | TcySpanStartToken
   | TcySpanEndToken
   | HeadingPostfixToken
+  | HeadingSpanStartToken
+  | HeadingSpanEndToken
   | CommentToken
   | BrokenAnnotationToken
   | PageBreakToken
@@ -230,6 +260,12 @@ const LEFT_RUBY_CLOSE = '」のルビ';
  * tmLanguage heading rule via the grammar-sync test. */
 export const HEADING_LITERALS = ['大見出し', '中見出し', '小見出し'] as const;
 export type HeadingLevel = 1 | 2 | 3;
+
+/** The heading level `s` names, or null when `s` is not one of {@link HEADING_LITERALS}. */
+function headingLevelOf(s: string): HeadingLevel | null {
+  const idx = (HEADING_LITERALS as readonly string[]).indexOf(s);
+  return idx === -1 ? null : ((idx + 1) as HeadingLevel);
+}
 
 /**
  * The indent count in `s` = 「<digits>字下げ」, or null. Aozora writes it as FULL-WIDTH digits
@@ -314,6 +350,10 @@ function classifyAnnotation(inner: string, raw: string, atLineStart: boolean): T
     if (mid === BOLD || mid === ITALIC) {
       return { kind: 'emphasisSpanEnd', raw, variant: mid, block: true };
     }
+    const headingEnd = headingLevelOf(mid);
+    if (headingEnd !== null) {
+      return { kind: 'headingSpanEnd', raw, level: headingEnd, block: true };
+    }
     return { kind: 'comment', raw, inner }; // ここで傍点終わり etc. (傍点/傍線 have no block form)
   }
 
@@ -326,6 +366,10 @@ function classifyAnnotation(inner: string, raw: string, atLineStart: boolean): T
     }
     if (body === BOLD || body === ITALIC) {
       return { kind: 'emphasisSpanStart', raw, variant: body, block: true };
+    }
+    const headingStart = headingLevelOf(body);
+    if (headingStart !== null) {
+      return { kind: 'headingSpanStart', raw, level: headingStart, block: true };
     }
     return { kind: 'comment', raw, inner }; // ここから傍点 / ここから…折り返して… → grey
   }
@@ -340,6 +384,10 @@ function classifyAnnotation(inner: string, raw: string, atLineStart: boolean): T
     }
     if (resolveStyle(variant, 'span') !== null) {
       return { kind: 'emphasisSpanEnd', raw, variant };
+    }
+    const headingEnd = headingLevelOf(variant);
+    if (headingEnd !== null) {
+      return { kind: 'headingSpanEnd', raw, level: headingEnd };
     }
     return { kind: 'comment', raw, inner };
   }
@@ -360,6 +408,12 @@ function classifyAnnotation(inner: string, raw: string, atLineStart: boolean): T
   // Short (inline) span START ［＃傍点／左に傍線／太字］ — the span form's left prefix is bare 左に only.
   if (resolveStyle(inner, 'span') !== null) {
     return { kind: 'emphasisSpanStart', raw, variant: inner };
+  }
+
+  // 見出し span START ［＃大見出し］ — exact level literals only.
+  const headingStart = headingLevelOf(inner);
+  if (headingStart !== null) {
+    return { kind: 'headingSpanStart', raw, level: headingStart };
   }
 
   return { kind: 'comment', raw, inner };
@@ -412,10 +466,10 @@ function classifyPostfix(inner: string, raw: string): Token {
     return { kind: 'comment', raw, inner };
   }
   // 見出し postfix ［＃「対象」は大見出し］ — same は-required contract as 縦中横.
-  const headingIdx = (HEADING_LITERALS as readonly string[]).indexOf(rest);
-  if (headingIdx !== -1) {
+  const headingLevel = headingLevelOf(rest);
+  if (headingLevel !== null) {
     if (family === 'ha' && target !== '') {
-      return { kind: 'headingPostfix', raw, target, level: (headingIdx + 1) as HeadingLevel };
+      return { kind: 'headingPostfix', raw, target, level: headingLevel };
     }
     return { kind: 'comment', raw, inner };
   }
@@ -607,7 +661,7 @@ export interface UnpairedBlock {
   readonly kind: 'unterminated' | 'dangling';
 }
 
-type BlockChannel = 'indent' | 'weight' | 'style';
+type BlockChannel = 'indent' | 'weight' | 'style' | 'heading';
 
 /** The block channel a token opens/closes, or null if it is not a block directive. */
 function blockChannelOf(token: Token): BlockChannel | null {
@@ -620,6 +674,12 @@ function blockChannelOf(token: Token): BlockChannel | null {
   ) {
     const c = resolveStyle(token.variant)?.channel;
     return c === 'weight' || c === 'style' ? c : null;
+  }
+  if (
+    (token.kind === 'headingSpanStart' || token.kind === 'headingSpanEnd') &&
+    token.block === true
+  ) {
+    return 'heading'; // one channel for all three levels (they share one render slot)
   }
   return null;
 }
@@ -643,13 +703,17 @@ export function findUnpairedBlocks(src: string): UnpairedBlock[] {
     indent: undefined,
     weight: undefined,
     style: undefined,
+    heading: undefined,
   };
   let offset = 0;
   for (const token of tokenize(src)) {
     const ch = blockChannelOf(token);
     if (ch !== null) {
       const span = { start: offset, end: offset + token.raw.length };
-      const isStart = token.kind === 'indentBlockStart' || token.kind === 'emphasisSpanStart';
+      const isStart =
+        token.kind === 'indentBlockStart' ||
+        token.kind === 'emphasisSpanStart' ||
+        token.kind === 'headingSpanStart';
       if (isStart) {
         open[ch] = span; // replace: a still-open same-channel start is superseded (render is last-wins)
       } else if (open[ch] !== undefined) {
@@ -660,7 +724,7 @@ export function findUnpairedBlocks(src: string): UnpairedBlock[] {
     }
     offset += token.raw.length;
   }
-  for (const ch of ['indent', 'weight', 'style'] as const) {
+  for (const ch of ['indent', 'weight', 'style', 'heading'] as const) {
     const s = open[ch];
     if (s !== undefined) {
       spans.push({ start: s.start, end: s.end, kind: 'unterminated' });
