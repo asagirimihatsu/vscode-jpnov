@@ -7,6 +7,12 @@
  * process alive well past the write — so success is detected by the output file appearing and its
  * size settling, NOT by the process exiting; the browser is killed once the PDF is ready. A
  * missing/empty file by the deadline (or the browser dying first) is a failure.
+ *
+ * Browser lifetime: the spawn is `detached` (own process group) so the kill can take the whole
+ * tree — killing only the main pid leaves helpers behind. A `process.on('exit')` hook kills any
+ * in-flight browser when the extension host shuts down normally; an orphan survives ONLY a hard
+ * kill of the host, and a lingering `--print-to-pdf` Chrome then hijacks LaunchServices .html
+ * opens on macOS (no window appears; the opened page is silently printed to PDF).
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
@@ -18,6 +24,40 @@ import { printToPdfArgs } from './browser.ts';
 
 const POLL_MS = 200;
 
+/**
+ * Kills the browser's whole process GROUP (the spawn is detached, so the child is its group
+ * leader and `-pid` reaches every helper); falls back to the main pid when the group is gone.
+ */
+function killBrowser(child: ChildProcess): void {
+  const pid = child.pid;
+  if (pid === undefined) {
+    return; // never spawned
+  }
+  try {
+    process.kill(-pid, 'SIGKILL');
+  } catch {
+    child.kill('SIGKILL'); // group already gone; false on an already-dead child, never throws
+  }
+}
+
+// In-flight conversions, killed from a single process-exit hook so a normal extension-host
+// shutdown mid-conversion cannot orphan a print-to-pdf browser (conversions are serial, so
+// this holds at most one child in practice).
+const inFlight = new Set<ChildProcess>();
+let exitHookInstalled = false;
+
+function trackInFlight(child: ChildProcess): void {
+  if (!exitHookInstalled) {
+    exitHookInstalled = true;
+    process.on('exit', () => {
+      for (const c of inFlight) {
+        killBrowser(c);
+      }
+    });
+  }
+  inFlight.add(child);
+}
+
 export async function convertHtmlToPdf(
   browserExe: string,
   htmlPath: string,
@@ -28,12 +68,16 @@ export async function convertHtmlToPdf(
   const userDataDir = await mkdtemp(join(tmpdir(), 'jpnov-pdf-'));
   // Drop any stale output so a settled non-empty file unambiguously means "freshly written".
   await rm(pdfPath, { force: true }).catch(() => undefined);
-  using child = spawn(browserExe, printToPdfArgs(pathToFileURL(htmlPath).href, pdfPath, userDataDir), {
+  const child = spawn(browserExe, printToPdfArgs(pathToFileURL(htmlPath).href, pdfPath, userDataDir), {
     stdio: 'ignore',
+    detached: true,
   });
+  trackInFlight(child);
   try {
     await waitForOutput(pdfPath, child, timeoutMs, signal);
   } finally {
+    killBrowser(child);
+    inFlight.delete(child);
     await rm(userDataDir, { recursive: true, force: true }).catch(() => undefined);
   }
 }

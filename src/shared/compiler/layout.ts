@@ -17,7 +17,7 @@ import type { KinsokuMode } from '../config/types.ts';
 import type { BuildChrome, PageNumberPosition } from './chrome.ts';
 import { resolveStyle } from './emphasis.ts';
 import { escapeComment, escapeHtml } from './escape.ts';
-import { tokenize, type Token } from './tokenizer.ts';
+import { tokenize, type HeadingLevel, type Token } from './tokenizer.ts';
 
 /**
  * One laid-out glyph group: a char (1 cell), a ruby unit (base char count, atomic), or a
@@ -52,13 +52,14 @@ interface Unit {
   style?: string | undefined;
 }
 
-/** A source row: a line of units (+ optional 字下げ), or a forced page break. */
+/** A source row: a line of units (+ optional 字下げ / 見出し), or a forced page break. */
 export type Row =
   | {
     readonly kind: 'line';
     readonly srcLine: number;
     readonly units: Unit[];
     readonly indent?: number;
+    readonly heading?: HeadingLevel;
   }
   | { readonly kind: 'pagebreak' };
 
@@ -67,6 +68,8 @@ export interface DisplayLine {
   readonly srcLine: number;
   readonly units: readonly Unit[];
   readonly indent?: number;
+  /** 見出し level (大=1) — stamped on every wrapped continuation, like `indent`. */
+  readonly heading?: HeadingLevel;
   /** ぶら下げ: a hung 句読点 rendered as a zero-cell virtual square past the last cell. */
   readonly hang?: Unit;
 }
@@ -336,6 +339,7 @@ export function buildRows(tokens: readonly Token[], issues?: number[]): Row[] {
   } = {};
   let activeIndent = 0; // block 字下げ in effect, carried ACROSS lines
   let curIndent = 0; // indent for the line under construction (line start = activeIndent)
+  let curHeading: HeadingLevel | undefined; // 見出し of the line under construction (line-local)
   let lineSuppressed = false; // a block directive token appeared on THIS line
 
   // Snapshot the four active channels onto a new unit — one stable hidden class for all real units.
@@ -396,9 +400,15 @@ export function buildRows(tokens: readonly Token[], issues?: number[]): Row[] {
   const endLine = (isFlush: boolean): void => {
     settleRubyOverhang();
     const hasReal = cur.some((u) => u.cells > 0);
+    // `heading` is CONDITIONAL: row snapshots deepEqual whole objects, so an absent heading
+    // must be an absent KEY, never an explicit undefined.
+    const line = (): Row =>
+      curHeading === undefined
+        ? { kind: 'line', srcLine, units: cur, indent: curIndent }
+        : { kind: 'line', srcLine, units: cur, indent: curIndent, heading: curHeading };
     if (isPageBreak) {
       if (cur.length > 0) {
-        rows.push({ kind: 'line', srcLine, units: cur, indent: curIndent });
+        rows.push(line());
       }
       rows.push({ kind: 'pagebreak' });
     } else if (lineSuppressed && !hasReal) {
@@ -407,12 +417,13 @@ export function buildRows(tokens: readonly Token[], issues?: number[]): Row[] {
     } else if (cur.length > 0 || !isFlush) {
       // On a real '\n' an empty line is a genuine blank column (kept); at end-of-input
       // a trailing empty line is just the final newline artifact (dropped).
-      rows.push({ kind: 'line', srcLine, units: cur, indent: curIndent });
+      rows.push(line());
     }
     cur = [];
     isPageBreak = false;
     lineSuppressed = false;
     curIndent = activeIndent; // next line inherits the block indent (0 if none)
+    curHeading = undefined; // 見出し never carries across lines
   };
 
   for (let ti = 0; ti < tokens.length; ti += 1) {
@@ -480,6 +491,17 @@ export function buildRows(tokens: readonly Token[], issues?: number[]): Row[] {
           token.raw,
           issues === undefined ? undefined : () => issues.push(ti),
         );
+        break;
+      case 'headingPostfix':
+        // Line-level effect: a resolved target marks THIS logical line as a heading. Binding
+        // shares {@link matchTarget} so postfix semantics/diagnostics never diverge; a miss
+        // degrades + reports exactly like the unit-level appliers.
+        if (matchTarget(cur, token.target) !== null) {
+          curHeading = token.level;
+        } else {
+          issues?.push(ti);
+          cur.push(commentUnit(token.raw));
+        }
         break;
       case 'tcySpanStart':
         // A redundant start inside an open span is a no-op (already combining).
@@ -578,7 +600,10 @@ export function findPostfixTargetIssues(src: string): PostfixTargetIssue[] {
     if (t !== undefined) {
       if (
         failed.has(i) &&
-        (t.kind === 'emphasisPostfix' || t.kind === 'tcyPostfix' || t.kind === 'rubyLeftPostfix')
+        (t.kind === 'emphasisPostfix' ||
+          t.kind === 'tcyPostfix' ||
+          t.kind === 'rubyLeftPostfix' ||
+          t.kind === 'headingPostfix')
       ) {
         out.push({ start: offset, end: offset + t.raw.length, target: t.target });
       }
@@ -813,8 +838,12 @@ function wrapRow(
   const units = mode === 'none' ? row.units : separate(row.units, mode);
   const indent = Math.min(row.indent ?? 0, charsPerLine - 1); // N_eff: keep >=1 content cell
   const budget = charsPerLine - indent;
+  // 見出し propagates to every display line (wrapped continuations stay gothic, like indent);
+  // conditional for the same absent-key contract the row snapshots rely on.
+  const hs: { heading?: HeadingLevel } =
+    row.heading === undefined ? {} : { heading: row.heading };
   if (units.length === 0) {
-    return [{ srcLine, units: [], indent }];
+    return [{ srcLine, units: [], indent, ...hs }];
   }
   const lines: DisplayLine[] = [];
   let start = 0; // first unit index of the line being built
@@ -836,7 +865,7 @@ function wrapRow(
             ns += 1;
           }
           const kept = [...units.slice(start, i), ...units.slice(i + 1, ns)];
-          lines.push({ srcLine, units: kept, indent, hang: makeHangUnit(u) });
+          lines.push({ srcLine, units: kept, indent, hang: makeHangUnit(u), ...hs });
           start = ns;
           cells = 0;
           continue; // u is consumed as the hang — it must not count into the next column
@@ -850,7 +879,7 @@ function wrapRow(
           brk -= 1;
         }
       }
-      lines.push({ srcLine, units: units.slice(start, brk), indent });
+      lines.push({ srcLine, units: units.slice(start, brk), indent, ...hs });
       start = brk;
       cells = 0;
       for (let j = brk; j < i; j += 1) {
@@ -861,7 +890,7 @@ function wrapRow(
   }
   if (start < units.length) {
     // A hang can consume the row's very last unit; only a non-empty tail becomes a column.
-    lines.push({ srcLine, units: units.slice(start), indent });
+    lines.push({ srcLine, units: units.slice(start), indent, ...hs });
   }
   return lines;
 }
@@ -984,13 +1013,17 @@ function emitLine(line: DisplayLine, used?: Set<string>, anchor = true, head = '
   if (used && ind > 0) {
     used.add(`indent-${String(ind)}`);
   }
+  const headingClass = line.heading === undefined ? '' : ' midashi';
+  if (used && line.heading !== undefined) {
+    used.add('midashi');
+  }
   // `anchor` lets the continuous preview suppress data-line on a source line's wrapped
   // continuation columns (first-display-line-only); the paginated build keeps the default
   // (anchor=true → every line), so its output is unchanged. `head` is out-of-flow line
   // furniture (the preview's number span) emitted before the column content.
   const dataLine =
     anchor && line.srcLine >= 0 ? ` data-line="${String(line.srcLine)}"` : '';
-  return `<div class="line${indentClass}"${dataLine}>${head}${html}</div>`;
+  return `<div class="line${indentClass}${headingClass}"${dataLine}>${head}${html}</div>`;
 }
 
 /** The folio's physical side on page `pi` (0-based), or null for no folio. */

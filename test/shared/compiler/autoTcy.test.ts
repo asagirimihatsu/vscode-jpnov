@@ -81,10 +81,10 @@ test('concatBookText materializes per file under punctuationPairs and round-trip
       { name: 'b.jpnov', src: '次!?\n' },
     ],
   };
-  const txt = concatBookText(book, 'punctuationPairs');
-  assert.equal(txt, '驚き!!［＃「!!」は縦中横］だ\n次!?［＃「!?」は縦中横］');
+  const txt = concatBookText(book, 'punctuationPairs', 40);
+  assert.equal(txt, '驚き!!［＃「!!」は縦中横］だ\n\n次!?［＃「!?」は縦中横］');
   // Feeding the materialized txt back through the pass changes nothing (idempotent).
   assert.equal(materializeAutoTcy(txt), txt);
-  // none keeps the historical byte-faithful concat.
-  assert.equal(concatBookText(book, 'none'), '驚き!!だ\n次!?');
+  // none keeps the byte-faithful concat (chapters separated by the one blank glue line).
+  assert.equal(concatBookText(book, 'none', 40), '驚き!!だ\n\n次!?');
 });

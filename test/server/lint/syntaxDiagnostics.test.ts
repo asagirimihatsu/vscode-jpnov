@@ -17,7 +17,7 @@ const doc = (text: string): TextDocument =>
   TextDocument.create('mem://x.jpnov', 'novel-jp', 1, text);
 
 test('a clean document yields no syntax diagnostics', () => {
-  assert.deepEqual(annotationDiagnostics(doc('本文［＃見出し］と《るび》。')), []);
+  assert.deepEqual(annotationDiagnostics(doc('本文［＃メモ］と《るび》。')), []);
 });
 
 test('an unclosed ［＃ yields one Error covering ［＃…-to-line-end', () => {
@@ -154,4 +154,11 @@ test('a boundary-unaligned target warns; whole-unit and plain-text matches stay 
   // Whole-unit coverage and plain-prose substrings are aligned → clean.
   assert.deepEqual(annotationDiagnostics(doc('漢字《かんじ》［＃「漢字」に傍点］')), []);
   assert.deepEqual(annotationDiagnostics(doc('文字［＃「字」に傍点］')), []);
+});
+
+test('a 見出し postfix rides the same target Warning; a resolved one is clean', () => {
+  const diags = annotationDiagnostics(doc('本文［＃「別文」は大見出し］'));
+  assert.equal(diags.length, 1);
+  assert.deepEqual(diags[0]?.data, { code: 'syntax.postfixTargetMissing', args: ['別文'] });
+  assert.deepEqual(annotationDiagnostics(doc('第一章［＃「第一章」は大見出し］')), []);
 });

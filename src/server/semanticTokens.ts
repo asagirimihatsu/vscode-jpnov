@@ -340,6 +340,22 @@ export function buildSemanticTokens(
         mark(last, ONE, 'marker'); // ］
         break;
       }
+      case 'headingPostfix': {
+        // ［＃「対象」は大見出し］ — mirrors tcyPostfix: corners + the は connector demote to
+        // marker, the 対象 keeps its default colour, the 見出し literal is the directive
+        // (its length derived from the span so no literal is hardcoded here).
+        flushRun();
+        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
+        const openCorner = offset + ANNOT_OPEN;
+        mark(openCorner, ONE, 'marker'); // 「
+        const closeCorner = openCorner + ONE + token.target.length; // ( 対象 kept default )
+        mark(closeCorner, ONE, 'marker'); // 」
+        mark(closeCorner + ONE, ONE, 'marker'); // は (connector, demoted like に)
+        const litStart = closeCorner + ONE + ONE;
+        mark(litStart, raw - (litStart - offset) - ONE, 'directive'); // 大見出し / 中見出し / 小見出し
+        mark(last, ONE, 'marker'); // ］
+        break;
+      }
       case 'comment': {
         flushRun();
         mark(offset, raw, 'marker'); // whole ［＃ … ］ greyed

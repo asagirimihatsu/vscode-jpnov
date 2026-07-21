@@ -72,8 +72,43 @@ test('build emits a .txt and an .html artifact per jpbook containing both files'
   const txt = result.artifacts.find((a) => a.path.endsWith('.txt'));
   assert.ok(txt);
   assert.equal(txt.path, `${ws.uri}/dist/vol1.txt`);
-  // The .txt is the concatenated source: one \n between files, no trailing newline.
-  assert.equal(txt.content, 'あいう\nかきく');
+  // The .txt is the concatenated source: one blank glue line between chapters, no trailing newline.
+  assert.equal(txt.content, 'あいう\n\nかきく');
+});
+
+test('a front-matter divider lands between heading-less chapters in BOTH artifacts', async () => {
+  await using ws = await makeTmpWorkspace();
+  const { ctx } = boot();
+  await writeUnder(
+    ws.dir,
+    'vol1/index.jpbook',
+    '---\ndivider: ＊\n---\nvol1/a.jpnov\nvol1/b.jpnov\nvol1/c.jpnov',
+  );
+  await writeUnder(ws.dir, 'vol1/a.jpnov', 'あいう');
+  await writeUnder(ws.dir, 'vol1/b.jpnov', 'かきく');
+  await writeUnder(ws.dir, 'vol1/c.jpnov', '終章［＃「終章」は大見出し］\nすえ');
+
+  const result: BuildResult = await handleBuild(ctx, {
+    settings: SETTINGS,
+    projectDirs: projectsFor(ws.uri),
+  });
+  assert.equal(result.ok, true);
+
+  // a→b: no heading → blank + centred ＊ (cpl 40 → ［＃１９字下げ］) + one more blank.
+  // b→c: c opens with a 見出し → the heading is the separator, blank line only.
+  const txt = result.artifacts?.find((a) => a.path.endsWith('.txt'));
+  assert.ok(txt);
+  assert.equal(
+    txt.content,
+    'あいう\n\n［＃１９字下げ］＊\n\nかきく\n\n終章［＃「終章」は大見出し］\nすえ',
+  );
+
+  const html = result.artifacts?.find((a) => a.path.endsWith('.html'));
+  assert.ok(html);
+  assert.ok(html.content.includes('<div class="line indent-19">＊</div>'), 'centred divider row');
+  assert.match(html.content, /\.indent-19\{padding-inline-start:19em\}/);
+  assert.match(html.content, /<div class="line midashi" data-line="0">終章<\/div>/);
+  assert.match(html.content, /\.midashi\{font-family:sans-serif;font-weight:bold\}/);
 });
 
 test('build stays lenient on an unclosed ［＃: ok, artifacts emitted, tail visible as literal text', async () => {

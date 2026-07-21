@@ -162,5 +162,6 @@ test('chapterLines and metaRows project the panel model in fixed order', () => {
     { key: 'header', value: '柱' },
     { key: 'pageNumber', value: undefined },
     { key: 'pageNumberFormat', value: undefined },
+    { key: 'divider', value: undefined },
   ]);
 });

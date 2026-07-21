@@ -3,7 +3,7 @@
  * Every action plans precise range edits via the pure `#/shared/book/edits.ts`, applies
  * them as one `WorkspaceEdit`, and SAVES immediately (settings-UI semantics: a panel
  * action persists on the spot; the saved file then re-enters through the panel's own
- * watcher, so no manual refresh plumbing exists here). Metadata is upsert-only: the four
+ * watcher, so no manual refresh plumbing exists here). Metadata is upsert-only: the five
  * keys are always shown and never deleted or reordered — layout-conscious authors use
  * code mode.
  */
@@ -11,7 +11,7 @@ import * as vscode from 'vscode';
 
 import { appendChapters, chapterLines, moveChapterTo, removeChapter, upsertMeta } from '#/shared/book/edits.ts';
 import type { TextReplace } from '#/shared/book/edits.ts';
-import { parseJpbook, type MetaKey } from '#/shared/book/jpbook.ts';
+import { composeDividerValue, DIVIDER_PRESETS, parseDividerValue, parseJpbook, type MetaKey } from '#/shared/book/jpbook.ts';
 import { PAGE_NUMBER_POSITIONS, type PageNumberPosition } from '#/shared/compiler/chrome.ts';
 import { BUILD_CHROME_DEFAULT } from '#/shared/config/settings.ts';
 import type { BookEntry } from '#/shared/protocol.ts';
@@ -31,6 +31,8 @@ export function metaLabel(key: MetaKey): string {
       return vscode.l10n.t('Page Number');
     case 'pageNumberFormat':
       return vscode.l10n.t('Page Number Format');
+    case 'divider':
+      return vscode.l10n.t('Chapter Divider');
   }
 }
 
@@ -56,8 +58,8 @@ export function metaValueLabel(key: MetaKey, value: string | undefined): string 
   if (value !== undefined) {
     return display(value);
   }
-  if (key === 'title') {
-    return vscode.l10n.t('(not set)');
+  if (key === 'title' || key === 'divider') {
+    return vscode.l10n.t('(not set)'); // no default: absent = no divider / no title
   }
   const fallback =
     key === 'header'
@@ -180,6 +182,74 @@ async function moveChapter(arg: unknown, direction: -1 | 1): Promise<void> {
   }
 }
 
+/**
+ * Two-step divider flow: pick the mark (presets / custom input), then its position — a bare
+ * value is centred at build time, a ［＃○字下げ］ prefix indents (the value grammar lives in
+ * parseDividerValue/composeDividerValue). Any step dismissed = whole edit dismissed.
+ */
+async function pickDivider(current: string | undefined): Promise<string | undefined> {
+  const parsed = current !== undefined && current !== '' ? parseDividerValue(current) : null;
+
+  type MarkItem = vscode.QuickPickItem & { pick: 'none' | 'preset' | 'custom' };
+  const markItems: MarkItem[] = [
+    { label: vscode.l10n.t('(none)'), pick: 'none' },
+    ...DIVIDER_PRESETS.map((m): MarkItem => ({ label: m, pick: 'preset' })),
+    { label: vscode.l10n.t('Custom mark…'), pick: 'custom' },
+  ];
+  const markPick = await vscode.window.showQuickPick(markItems, {
+    placeHolder: vscode.l10n.t('Divider between chapters without a heading'),
+  });
+  if (markPick === undefined) {
+    return undefined;
+  }
+  if (markPick.pick === 'none') {
+    return ''; // upsert-only: the row stays, with an empty value
+  }
+  let mark = markPick.label;
+  if (markPick.pick === 'custom') {
+    const typed = await vscode.window.showInputBox({
+      prompt: vscode.l10n.t('Divider mark'),
+      value: parsed?.mark ?? '',
+      validateInput: (v) => (v.trim() === '' ? vscode.l10n.t('Enter a divider mark') : null),
+    });
+    if (typed === undefined) {
+      return undefined;
+    }
+    mark = typed.trim();
+  }
+
+  type PosItem = vscode.QuickPickItem & { indented: boolean };
+  const posItems: PosItem[] = [
+    {
+      label: vscode.l10n.t('Centred'),
+      description: vscode.l10n.t('A ［＃○字下げ］ computed from the line length at build time'),
+      indented: false,
+    },
+    { label: vscode.l10n.t('Indented'), description: '［＃○字下げ］', indented: true },
+  ];
+  const posPick = await vscode.window.showQuickPick(posItems, {
+    placeHolder: vscode.l10n.t('Position of the divider in its line'),
+  });
+  if (posPick === undefined) {
+    return undefined;
+  }
+  if (!posPick.indented) {
+    return mark;
+  }
+  const amount = await vscode.window.showInputBox({
+    prompt: vscode.l10n.t('Indent (full-width cells)'),
+    value: String(parsed?.indent ?? 3),
+    validateInput: (v) => (/^[0-9０-９]{1,2}$/.test(v.trim()) ? null : vscode.l10n.t('Enter a number (0-99)')),
+  });
+  if (amount === undefined) {
+    return undefined;
+  }
+  // IME-friendly: full-width digits are accepted here and normalized — the composed
+  // annotation is written in full-width either way.
+  const digits = amount.trim().replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0));
+  return composeDividerValue(mark, Number(digits));
+}
+
 async function editMeta(arg: unknown): Promise<void> {
   const node = nodeOf(arg);
   if (node?.kind !== 'meta') {
@@ -187,7 +257,9 @@ async function editMeta(arg: unknown): Promise<void> {
   }
 
   let value: string | undefined;
-  if (node.metaKey === 'pageNumber') {
+  if (node.metaKey === 'divider') {
+    value = await pickDivider(node.value);
+  } else if (node.metaKey === 'pageNumber') {
     const picked = await vscode.window.showQuickPick(
       PAGE_NUMBER_POSITIONS.map((v) => ({ label: positionLabel(v), description: v, value: v })),
       { placeHolder: vscode.l10n.t('Where the page number goes') },

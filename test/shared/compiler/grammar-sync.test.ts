@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import { styleVariantsByChannel } from '../../../src/shared/compiler/emphasis.ts';
+import { HEADING_LITERALS } from '../../../src/shared/compiler/tokenizer.ts';
 
 const canonical = (vs: readonly string[]): string =>
   [...new Set(vs)].sort((a, b) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0)).join('|');
@@ -81,6 +82,17 @@ test('縦中横 / 左ルビ fixed-literal rules exist, ordered, form-bound', () 
   const lr = matches[leftRuby];
   assert.ok(lr?.includes('(の左に)') === true && !lr.includes('|左に'), 'left ruby takes の左に only (#11)');
   assert.ok(lr.includes('(「)([^」]+)(」)(のルビ)'), 'left ruby reading is a non-empty corner pair + のルビ tail');
+});
+
+test('見出し postfix fixed-literal rule exists before the generic rule (canonical order)', () => {
+  // The three level literals live in tokenizer.ts HEADING_LITERALS; the alternation is
+  // derived, never hand-edited (same contract as the emphasis variants).
+  const needle = canonical([...HEADING_LITERALS]);
+  const rule = `(［＃)(「)([^」]+)(」)(は)(${needle})(］)`;
+  const heading = matches.findIndex((m) => m === rule);
+  const generic = matches.findIndex((m) => m === '(［＃)([^］]*)(］)');
+  assert.ok(generic >= 0, 'generic comment rule not found');
+  assert.ok(heading >= 0 && heading < generic, `見出し postfix rule missing/stale/after-generic. PASTE:\n${rule}`);
 });
 
 test('the single-line 字下げ rule is line-head anchored and full-width-only', () => {

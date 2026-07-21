@@ -32,6 +32,7 @@ export type TokenKind =
   | 'tcyPostfix'
   | 'tcySpanStart'
   | 'tcySpanEnd'
+  | 'headingPostfix'
   | 'comment'
   | 'brokenAnnotation'
   | 'pageBreak'
@@ -123,6 +124,19 @@ export interface TcySpanEndToken extends TokenBase {
   readonly kind: 'tcySpanEnd';
 }
 
+/**
+ * 通常の見出し postfix ○○［＃「○○」は大見出し］ — marks its own logical line as a heading
+ * (https://www.aozora.gr.jp/annotation/heading.html#tsujyo_midashi). The connector は is
+ * REQUIRED, exactly like 縦中横; per the spec the target excludes ruby readings, which the
+ * layout's base-text matching satisfies. Only this 前方参照 form is recognized — the
+ * 開始／終了 and ここから block forms stay comments.
+ */
+export interface HeadingPostfixToken extends TokenBase {
+  readonly kind: 'headingPostfix';
+  readonly target: string;
+  readonly level: HeadingLevel;
+}
+
 export interface CommentToken extends TokenBase {
   readonly kind: 'comment';
   /** Inner text of ［＃ ... ］, emitted verbatim into an HTML comment by the renderer. */
@@ -182,6 +196,7 @@ export type Token =
   | TcyPostfixToken
   | TcySpanStartToken
   | TcySpanEndToken
+  | HeadingPostfixToken
   | CommentToken
   | BrokenAnnotationToken
   | PageBreakToken
@@ -211,6 +226,11 @@ const TCY = '縦中横';
 const LEFT_RUBY_OPEN = 'の左に「';
 const LEFT_RUBY_CLOSE = '」のルビ';
 
+/** The three 通常の見出し literals; `level` = index + 1 (大=1, 中=2, 小=3). Shared with the
+ * tmLanguage heading rule via the grammar-sync test. */
+export const HEADING_LITERALS = ['大見出し', '中見出し', '小見出し'] as const;
+export type HeadingLevel = 1 | 2 | 3;
+
 /**
  * The indent count in `s` = 「<digits>字下げ」, or null. Aozora writes it as FULL-WIDTH digits
  * ０-９ ONLY (locked spec). The count is UNBOUNDED here: the layout clamps N to the line width
@@ -219,6 +239,17 @@ const LEFT_RUBY_CLOSE = '」のルビ';
  * a missing 字下げ suffix yields null → the caller degrades to a comment. Leading zeros parse
  * numerically (００→0, ００３→3); 0 is a valid amount the layout renders as no indent.
  */
+/**
+ * The inverse spelling of {@link indentAmount}: composes ［＃N字下げ］ with FULL-WIDTH digits —
+ * the only form this parser and the tmLanguage rule accept.
+ */
+export function indentAnnotation(amount: number): string {
+  const digits = String(amount).replace(/[0-9]/g, (d) =>
+    String.fromCharCode(0xff10 + d.charCodeAt(0) - 0x30),
+  );
+  return `［＃${digits}字下げ］`;
+}
+
 function indentAmount(s: string): number | null {
   if (!s.endsWith(INDENT_SUFFIX)) {
     return null;
@@ -377,6 +408,14 @@ function classifyPostfix(inner: string, raw: string): Token {
   if (rest === TCY) {
     if (family === 'ha' && target !== '') {
       return { kind: 'tcyPostfix', raw, target };
+    }
+    return { kind: 'comment', raw, inner };
+  }
+  // 見出し postfix ［＃「対象」は大見出し］ — same は-required contract as 縦中横.
+  const headingIdx = (HEADING_LITERALS as readonly string[]).indexOf(rest);
+  if (headingIdx !== -1) {
+    if (family === 'ha' && target !== '') {
+      return { kind: 'headingPostfix', raw, target, level: (headingIdx + 1) as HeadingLevel };
     }
     return { kind: 'comment', raw, inner };
   }

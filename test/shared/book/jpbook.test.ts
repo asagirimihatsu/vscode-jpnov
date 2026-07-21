@@ -4,8 +4,10 @@ import {
   completeEntryLine,
   completeMetaLine,
   composeBookChrome,
+  composeDividerValue,
   jpbookOutRel,
   metaRegionOf,
+  parseDividerValue,
   parseJpbook,
   type CompletionEntry,
   type JpbookLineKind,
@@ -125,7 +127,7 @@ test('parseJpbook warns on an unknown key (with the known-key list) and ignores 
   assert.deepEqual(got.lines[1]?.kind, {
     warning: {
       code: 'jpbook.metaUnknownKey',
-      args: ['author', 'title, header, pageNumber, pageNumberFormat'],
+      args: ['author', 'title, header, pageNumber, pageNumberFormat, divider'],
     },
   });
 });
@@ -134,6 +136,19 @@ test('parseJpbook warns on a duplicate key; the first value wins', () => {
   const got = parseJpbook('---\ntitle: 一\ntitle: 二\n---\n');
   assert.deepEqual(got.meta, { title: '一' });
   assert.deepEqual(got.lines[2]?.kind, { warning: { code: 'jpbook.metaDuplicateKey', args: ['title'] } });
+});
+
+test('divider is a free-string key; parse/composeDividerValue split mark and 字下げ', () => {
+  assert.deepEqual(parseJpbook('---\ndivider: ＊　＊　＊\n---\na.jpnov\n').meta, {
+    divider: '＊　＊　＊',
+  });
+  assert.deepEqual(parseDividerValue('＊　＊　＊'), { mark: '＊　＊　＊', indent: null });
+  assert.deepEqual(parseDividerValue('［＃２字下げ］◇'), { mark: '◇', indent: 2 });
+  // The 字下げ must LEAD the value (the tokenizer's own line-head contract).
+  assert.deepEqual(parseDividerValue('＊［＃２字下げ］'), { mark: '＊［＃２字下げ］', indent: null });
+  assert.equal(composeDividerValue('＊', null), '＊');
+  assert.equal(composeDividerValue('＊', 15), '［＃１５字下げ］＊');
+  assert.deepEqual(parseDividerValue(composeDividerValue('†', 3)), { mark: '†', indent: 3 });
 });
 
 test('parseJpbook warns on an invalid pageNumber value and leaves it unset', () => {
@@ -292,7 +307,7 @@ test('completeEntryLine respects the cap', () => {
 
 test('completeMetaLine offers every key on an empty line, inserted as "key: "', () => {
   const got = completeMetaLine('');
-  assert.deepEqual(got.map((c) => c.label), ['title', 'header', 'pageNumber', 'pageNumberFormat']);
+  assert.deepEqual(got.map((c) => c.label), ['title', 'header', 'pageNumber', 'pageNumberFormat', 'divider']);
   const first = got[0];
   assert.ok(first);
   assert.equal(first.insertText, 'title: ');
@@ -318,4 +333,11 @@ test('completeMetaLine offers enum members after "pageNumber:"', () => {
 test('completeMetaLine offers nothing after the colon of a free-text key', () => {
   assert.deepEqual(completeMetaLine('title: 夜'), []);
   assert.deepEqual(completeMetaLine('header: '), []);
+});
+
+test('completeMetaLine offers the preset marks after "divider:"', () => {
+  assert.deepEqual(completeMetaLine('divider: ').map((c) => c.label), ['＊', '＊　＊　＊', '◇']);
+  const first = completeMetaLine('divider: ')[0];
+  assert.ok(first);
+  assert.equal(first.kind, 'value');
 });

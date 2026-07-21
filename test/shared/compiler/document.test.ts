@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { BuildChrome } from '../../../src/shared/compiler/chrome.ts';
-import { concatBookText, renderBook, type BookInput } from '../../../src/shared/compiler/document.ts';
+import { chapterGlue, concatBookText, renderBook, type BookInput } from '../../../src/shared/compiler/document.ts';
 
-const book = (over: Pick<BookInput, 'files'>): BookInput => ({ ...over });
+const book = (over: Pick<BookInput, 'files' | 'divider'>): BookInput => ({ ...over });
 
 /** All-off chrome: renderBook emits the bare page/line skeleton with no furniture. */
 const OFF: BuildChrome = {
@@ -41,7 +41,7 @@ test('renderBook emits a paginated page/line skeleton document', () => {
   );
 });
 
-test('renderBook concatenates files[] in order', () => {
+test('renderBook joins files[] in order with one blank separator line', () => {
   const html = renderBook({
     books: [
       book({
@@ -57,10 +57,12 @@ test('renderBook concatenates files[] in order', () => {
     autoTcy: 'none',
     chrome: OFF,
   });
+  // The glue's blank column is synthetic (srcLine −1): no data-line anchor.
   assert.equal(
     bodyOf(html),
     '<div class="book"><div class="page" data-page="0">' +
       '<div class="line" data-line="0">第一</div>' +
+      '<div class="line"></div>' +
       '<div class="line" data-line="0">第二</div></div></div>',
   );
 });
@@ -109,26 +111,122 @@ test('renderBook renders ruby + emphasis inside the page lines', () => {
   assert.match(html, /ruby\.rr>rt\{transform:translate\(-50%,-50%\) translateX\(1\.5em\)\}/);
 });
 
-test('concatBookText strips one trailing newline per file and joins with a single \\n', () => {
-  // no trailing newline: exactly one separator inserted between files
+test('concatBookText strips one trailing newline per file and joins with one blank line', () => {
+  // no trailing newline: exactly one blank separator line between files
   assert.equal(
-    concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あいう' }, { name: 'b.jpnov', src: 'かきく' }] }), 'none'),
-    'あいう\nかきく',
+    concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あいう' }, { name: 'b.jpnov', src: 'かきく' }] }), 'none', 40),
+    'あいう\n\nかきく',
   );
-  // one trailing newline per file: NOT doubled at the seam
+  // one trailing newline per file: the artifact is stripped, never doubling the seam
   assert.equal(
-    concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あ\n' }, { name: 'b.jpnov', src: 'か\n' }] }), 'none'),
-    'あ\nか',
-  );
-  // a genuine blank line (\n\n) is preserved: only the final newline artifact is stripped
-  assert.equal(
-    concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あ\n\n' }, { name: 'b.jpnov', src: 'か' }] }), 'none'),
+    concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あ\n' }, { name: 'b.jpnov', src: 'か\n' }] }), 'none', 40),
     'あ\n\nか',
   );
+  // a genuine author blank line (\n\n) is preserved LITERALLY and stacks with the glue
+  assert.equal(
+    concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あ\n\n' }, { name: 'b.jpnov', src: 'か' }] }), 'none', 40),
+    'あ\n\n\nか',
+  );
   // CRLF trailing is stripped as one EOL too
-  assert.equal(concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あ\r\n' }] }), 'none'), 'あ');
+  assert.equal(concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あ\r\n' }] }), 'none', 40), 'あ');
   // empty book -> ""
-  assert.equal(concatBookText(book({ files: [] }), 'none'), '');
+  assert.equal(concatBookText(book({ files: [] }), 'none', 40), '');
+});
+
+// --- chapter divider (章区切り) --------------------------------------------------------
+
+const two = (a: string, b: string, divider?: string): BookInput =>
+  book({ files: [{ name: 'a.jpnov', src: a }, { name: 'b.jpnov', src: b }], divider });
+
+test('chapterGlue: one blank line always; divider centred by CELLS + one blank after', () => {
+  assert.equal(chapterGlue('前章', '次章', '', 40), '\n');
+  // ＊ = 1 cell at cpl 8 → floor((8−1)/2) = 3, spelled as the Aozora annotation.
+  assert.equal(chapterGlue('前章', '次章', '＊', 8), '\n［＃３字下げ］＊\n\n');
+  // A 縦中横 mark is ONE cell however many chars it combines (cells ≠ chars).
+  assert.equal(
+    chapterGlue('前章', '次章', '!?［＃「!?」は縦中横］', 9),
+    '\n［＃４字下げ］!?［＃「!?」は縦中横］\n\n',
+  );
+  // A value already ［＃○字下げ］-prefixed passes through verbatim (author's own position).
+  assert.equal(chapterGlue('前章', '次章', '［＃２字下げ］＊', 40), '\n［＃２字下げ］＊\n\n');
+  // A mark as wide as the line centres to 0 → bare, no ［＃０字下げ］ noise, never negative.
+  assert.equal(chapterGlue('前章', '次章', '＊　＊　＊', 3), '\n＊　＊　＊\n\n');
+});
+
+test('chapterGlue suppression: a 見出し-opening next chapter takes the plain blank seam', () => {
+  assert.equal(chapterGlue('前章', '第二章［＃「第二章」は大見出し］\n本文', '＊', 8), '\n');
+  // Leading blank lines are skipped when probing for the heading.
+  assert.equal(chapterGlue('前章', '\n\n二［＃「二」は中見出し］', '＊', 8), '\n');
+  // A broken-target 見出し renders plain, so it does NOT suppress the divider.
+  assert.equal(chapterGlue('前章', '二［＃「別」は中見出し］', '＊', 8), '\n［＃３字下げ］＊\n\n');
+});
+
+test('chapterGlue suppression at ［＃改ページ］ junctions keeps the blank line', () => {
+  assert.equal(chapterGlue('あ\n［＃改ページ］', 'か', '＊', 8), '\n'); // prev ends on a break
+  assert.equal(chapterGlue('あ', '［＃改ページ］\nか', '＊', 8), '\n'); // next opens on a break
+  assert.equal(chapterGlue('あ', 'か', '＊', 8), '\n［＃３字下げ］＊\n\n'); // no break → divider
+});
+
+test('concatBookText interleaves the divider; author edge blanks stack literally', () => {
+  assert.equal(concatBookText(two('あ', 'か', '＊'), 'none', 8), 'あ\n\n［＃３字下げ］＊\n\nか');
+  assert.equal(
+    concatBookText(two('あ\n\n', '\nか', '＊'), 'none', 8),
+    'あ\n\n\n［＃３字下げ］＊\n\n\nか', // one author blank each side, kept verbatim around the glue
+  );
+  assert.equal(
+    concatBookText(two('あ', '第二章［＃「第二章」は大見出し］\n本文', '＊'), 'none', 8),
+    'あ\n\n第二章［＃「第二章」は大見出し］\n本文',
+  );
+});
+
+test('renderBook inserts the divider line + one blank as synthetic (anchor-less) rows', () => {
+  const html = renderBook({
+    books: [two('第一', '第二', '＊')],
+    charsPerLine: 4,
+    linesPerPage: 34,
+    kinsoku: 'none',
+    autoTcy: 'none',
+    chrome: OFF,
+  });
+  // cpl 4 → the centring annotation is ［＃１字下げ］: the glue line carries indent-1.
+  assert.equal(
+    bodyOf(html),
+    '<div class="book"><div class="page" data-page="0">' +
+      '<div class="line" data-line="0">第一</div>' +
+      '<div class="line"></div>' +
+      '<div class="line indent-1">＊</div>' +
+      '<div class="line"></div>' +
+      '<div class="line" data-line="0">第二</div></div></div>',
+  );
+  assert.match(html, /\.indent-1\{padding-inline-start:1em\}/); // its rule emits on demand
+});
+
+test('dual invariant: per-file render + glue == rendering the concatenated .txt', () => {
+  const opts = {
+    charsPerLine: 8,
+    linesPerPage: 5,
+    kinsoku: 'none',
+    autoTcy: 'none',
+    chrome: OFF,
+  } as const;
+  const matrix: BookInput[] = [
+    two('あ\n\nい', 'か', '＊'), // divider + author blanks
+    two('あ', '第二章［＃「第二章」は大見出し］\n本文', '＊'), // heading suppression
+    two('あ\n［＃改ページ］', '\nか', '＊'), // page-break suppression
+    two('あ', 'か'), // no divider configured
+    two('あ', 'か', '［＃３字下げ］◇'), // indented divider
+  ];
+  const strip = (h: string): string => bodyOf(h).replace(/ data-line="\d+"/g, '');
+  for (const b of matrix) {
+    const perFile = renderBook({ books: [b], ...opts });
+    const combined = renderBook({
+      books: [book({ files: [{ name: 'all.jpnov', src: concatBookText(b, 'none', opts.charsPerLine) }] })],
+      ...opts,
+    });
+    // data-line is the only legitimate delta: per-file numbering restarts (and glue rows have
+    // no anchor at all) while the combined source numbers continuously.
+    assert.equal(strip(perFile), strip(combined));
+  }
 });
 
 test('renderBook: a 太字 span emits <span class="b"> and the .b rule on demand', () => {

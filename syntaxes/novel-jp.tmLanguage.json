@@ -160,7 +160,19 @@
           }
         },
         {
-          "comment": "Any other ［＃…］ (block layout, 見出し, the 折り返して indent form, a mid-line 字下げ, a half-width digit, a mis-paired connector, unknown) — whole annotation greyed, matching the server's `comment` classification. Single-line, so an unclosed ［＃ never runs away.",
+          "comment": "見出し postfix ［＃「対象」は(大|中|小)見出し］ — the connector は is REQUIRED (like 縦中横; a bare or に-paired 見出し falls through to the generic comment rule, exactly like the tokenizer). The target (group 3) is deliberately UNSCOPED so it keeps the default foreground.",
+          "match": "(［＃)(「)([^」]+)(」)(は)(中見出し|大見出し|小見出し)(］)",
+          "captures": {
+            "1": { "name": "comment.block.annotation.novel-jp" },
+            "2": { "name": "comment.other.dialogue.novel-jp" },
+            "4": { "name": "comment.other.dialogue.novel-jp" },
+            "5": { "name": "comment.other.annotation.novel-jp" },
+            "6": { "name": "keyword.other.directive.novel-jp" },
+            "7": { "name": "comment.block.annotation.novel-jp" }
+          }
+        },
+        {
+          "comment": "Any other ［＃…］ (block layout, the 見出し block forms, the 折り返して indent form, a mid-line 字下げ, a half-width digit, a mis-paired connector, unknown) — whole annotation greyed, matching the server's `comment` classification. Single-line, so an unclosed ［＃ never runs away.",
           "match": "(［＃)([^］]*)(］)",
           "name": "comment.block.annotation.novel-jp"
         },
