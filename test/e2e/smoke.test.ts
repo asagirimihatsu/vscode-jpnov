@@ -9,6 +9,7 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { existsSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -91,7 +92,9 @@ after(async () => {
   if (client) {
     await client.dispose();
   }
-  await Promise.all(cleanups.map((dir) => rm(dir, { recursive: true, force: true })));
+  await Promise.all(
+    cleanups.map((dir) => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })),
+  );
 });
 
 test('jpnov/renderFile renders ruby, 縦中横, and the pagebreak marker over the wire', async () => {
@@ -209,7 +212,7 @@ async function dumpMarker(browserPath: string, pageUrl: string, profileDir: stri
     '--timeout=3000',
     '--dump-dom',
     pageUrl,
-  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+  ], { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
   let out = '';
@@ -235,7 +238,16 @@ async function dumpMarker(browserPath: string, pageUrl: string, profileDir: stri
       await delay(100);
     }
   } finally {
-    child.kill('SIGKILL');
+    if (child.pid !== undefined) {
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+      if (child.exitCode === null) {
+        await once(child, 'exit');
+      }
+    }
   }
   throw new Error(`no ${MARKER} marker in browser output.\nstderr tail: ${err.slice(-2000)}`);
 }
