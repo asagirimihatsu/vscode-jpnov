@@ -1,11 +1,13 @@
 name: Publish
 
 on:
-  push:
-    tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: publish
 
 jobs:
   publish:
@@ -18,16 +20,24 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - name: Tag must match package.json version
+      - name: Resolve version, guard collisions
+        id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          node -e '
-            const { version } = JSON.parse(require("node:fs").readFileSync("package.json", "utf8"));
-            const tag = process.env.GITHUB_REF_NAME;
-            if (tag !== `v${version}`) {
-              console.error(`tag ${tag} does not match package.json version v${version}`);
-              process.exit(1);
-            }
-          '
+          if [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "publish must be dispatched from main (got $GITHUB_REF_NAME)"; exit 1
+          fi
+          VERSION="$(node -p 'require("./package.json").version')"
+          TAG="v$VERSION"
+          if git ls-remote --exit-code origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "tag $TAG already exists — bump the version in package.json first"; exit 1
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG already exists — bump the version in package.json first"; exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - name: Unit tests
         run: npm test
       - name: Integration suites
@@ -39,10 +49,10 @@ jobs:
       - name: Package
         run: npm run package
       - name: Publish to Visual Studio Marketplace
-        run: npx vsce publish --packagePath "jpnov-${GITHUB_REF_NAME#v}.vsix"
+        run: npx vsce publish --packagePath "jpnov-${{ steps.meta.outputs.version }}.vsix"
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-      - name: GitHub release with the VSIX attached
-        run: gh release create "$GITHUB_REF_NAME" "jpnov-${GITHUB_REF_NAME#v}.vsix" --title "$GITHUB_REF_NAME" --generate-notes
+      - name: Release with the VSIX attached
         env:
           GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ steps.meta.outputs.tag }}" "jpnov-${{ steps.meta.outputs.version }}.vsix" --target "$GITHUB_SHA" --title "${{ steps.meta.outputs.tag }}" --generate-notes
