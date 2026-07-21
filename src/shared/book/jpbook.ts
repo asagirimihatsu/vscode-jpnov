@@ -142,9 +142,8 @@ export function parseJpbook(text: string): ParsedJpbook {
   let openFence = -1;
 
   const metaKind = (value: string): JpbookLineKind => {
-    const sep = colonIndex(value);
-    const key = sep < 0 ? '' : value.slice(0, sep).trim();
-    if (key === '') {
+    const key = metaKeyOf(value);
+    if (key === null) {
       return { error: { code: 'jpbook.metaNotKeyValue', args: [value] } };
     }
     if (!(META_KEYS as readonly string[]).includes(key)) {
@@ -154,7 +153,8 @@ export function parseJpbook(text: string): ParsedJpbook {
     if (meta[metaKey] !== undefined) {
       return { warning: { code: 'jpbook.metaDuplicateKey', args: [key] } };
     }
-    const val = value.slice(sep + 1).trim();
+    // metaKeyOf returned a key, so the line has a colon: colonIndex is non-negative here.
+    const val = value.slice(colonIndex(value) + 1).trim();
     if (metaKey === 'pageNumber') {
       if (!(PAGE_NUMBER_POSITIONS as readonly string[]).includes(val)) {
         return {

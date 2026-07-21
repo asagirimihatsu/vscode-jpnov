@@ -12,9 +12,6 @@ import type { RawLintConfigWire } from '../protocol.ts';
 import { RULES, diagCode, settingKey } from './catalog.ts';
 import type { CatalogId, LintCode, Stream } from './catalog.ts';
 
-/** The flat, IPC-safe settings snapshot the client ships (setting key -> primitive). */
-export type RawLintConfig = RawLintConfigWire;
-
 /**
  * One enabled rule, ready for the driver. `options` is normalized: booleans -> `true`; thresholds
  * -> `{ max }` (already clamped); enums -> `{ mode }` (the chosen non-off value). Every threshold
@@ -45,7 +42,7 @@ function clamp(n: number, min: number, max: number): number {
  * Absent / `null` / wrong-typed values leave a rule OFF; this reads only `raw`, so the shipped
  * on/off split lives entirely in the package.json defaults (the four data-hygiene booleans ship on).
  */
-export function selectRules(raw: RawLintConfig): RuleSelection {
+export function selectRules(raw: RawLintConfigWire): RuleSelection {
   const narration: ActiveRule[] = [];
   const dialogue: ActiveRule[] = [];
   const ruby: ActiveRule[] = [];

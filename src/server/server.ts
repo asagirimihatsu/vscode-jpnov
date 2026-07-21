@@ -292,7 +292,6 @@ function publishFindings(uri: string, version: number, findings: LintFinding[]):
   // this call) and kept OUT of findingsCache: they carry no fix, so code actions never see them.
   const doc = documents.get(uri);
   const syntax = doc === undefined ? [] : annotationDiagnostics(doc);
-  // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
   void connection.sendDiagnostics({
     uri,
     diagnostics: [...syntax, ...findings.map((f) => f.diagnostic)],
@@ -404,7 +403,6 @@ documents.onDidClose((e) => {
   proseDebounce.delete(e.document.uri);
   findingsCache.delete(e.document.uri);
   if (e.document.languageId === 'novel-jp-book' || e.document.languageId === 'novel-jp') {
-    // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
     void connection.sendDiagnostics({ uri: e.document.uri, diagnostics: [] });
   }
 });

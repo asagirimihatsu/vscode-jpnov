@@ -390,7 +390,7 @@ test('build all-off chrome keeps a plain sheet with the reserved bands, no chrom
   // Header and folio bands are reserved even with no furniture; edgeLine 'none' draws NO
   // frame at all (same semantics as the preview) — and the sheet lays out identically.
   assert.doesNotMatch(css, /\.page::before/);
-  assert.doesNotMatch(css, /#444/); // the frame's old grey fallback is gone (.pn is off here)
+  assert.doesNotMatch(css, /#444/); // no hard-coded grey — rule colours derive from the edge base (.pn is off here)
   assert.match(css, /\.page\{[^}]*padding-inline-start:calc\(var\(--htop\)\*1em\)/);
   assert.match(css, /:root\{[^}]*--htop:3/); // header band only — no line-number band
   assert.match(css, /\.page\{[^}]*padding-inline-end:3em/);

@@ -2,9 +2,9 @@
  * Maps an Aozora style-annotation variant name DIRECTLY to its CSS class name + presentation
  * channel, and supplies each class's CSS rule for the stylesheet. The compiler emits
  * `<span class="…">`, never an inline `style=` attribute: class rules live inside the webview's
- * nonce-able `<style>`, which inline style attributes cannot (the CSP strips them — that was the
- * original preview 傍点 bug). There is no intermediate CSS-value representation — a variant is
- * translated to a class in one step. Pure + vscode-free.
+ * nonce-able `<style>`, which inline style attributes cannot (the CSP strips them). There is no
+ * intermediate CSS-value representation — a variant is translated to a class in one step.
+ * Pure + vscode-free.
  *
  * FOUR ORTHOGONAL presentation channels — one CSS property family each, so all four can sit on
  * one `<span>` together:
@@ -21,9 +21,8 @@
  * have no side, so 左に太字 → null. In vertical-rl the default side is the RIGHT of the column;
  * `-l` moves the mark to the left:
  *   - emph `-l` uses `text-emphasis-position:under left`. A bare `left` is INVALID CSS (the
- *     grammar is `[ over | under ] && [ right | left ]?`), so the whole declaration was dropped
- *     and the dots fell back to the right — that was the 左に傍点 bug. `under` is the horizontal
- *     fallback (below the text), matching JP convention.
+ *     grammar is `[ over | under ] && [ right | left ]?` — the browser drops the whole
+ *     declaration); `under` is the horizontal fallback (below the text), matching JP convention.
  *   - line rules pin `text-underline-position:right` explicitly (Chromium draws vertical-rl
  *     underlines on the LEFT by default — verified in headless Chromium); `-l` uses `left`.
  *   - `i` relies on the browser synthesising an oblique for JP fonts; never set

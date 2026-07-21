@@ -248,13 +248,11 @@ async function buildRoot(
       // BookInput into the assembly seams instead of composeBookChrome.
       input = { ...(await readBookFiles(target.rootUri, parsed.lines)), divider: parsed.meta.divider };
     } catch (cause) {
-      // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
       void ctx.connection.sendDiagnostics({ uri: fl.uri, diagnostics: lineDiags });
       errors.push({ book: fl.fileRel, ...toBuildMessage(cause) });
       continue;
     }
 
-    // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
     void ctx.connection.sendDiagnostics({ uri: fl.uri, diagnostics: lineDiags });
 
     // Emit only the requested kind(s); `format` absent => BOTH. renderBook (the paginator) is
@@ -358,8 +356,7 @@ export async function handleBuild(
 
   progress?.done();
 
-  const result: BuildResult = { ok: errors.length === 0, artifacts, errors };
-  return result;
+  return { ok: errors.length === 0, artifacts, errors };
 }
 
 /**

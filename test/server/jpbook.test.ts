@@ -149,7 +149,7 @@ test('completeJpbook handles "./", absolute "/", and digit-leading names', async
   await writeUnder(ws.dir, 'chapter1.jpnov', 'x');
   await writeUnder(ws.dir, 'sub/inner.jpnov', 'x'); // makes sub a directory
 
-  // "./" lists the workspace folder root (previously returned nothing).
+  // "./" must list the workspace folder root, like the empty prefix.
   const dot = await completeLine(ws.uri, './', 2);
   assert.deepEqual(dot.map((i) => i.label).sort(), ['01-intro.jpnov', 'chapter1.jpnov', 'sub']);
 
@@ -161,7 +161,7 @@ test('completeJpbook handles "./", absolute "/", and digit-leading names', async
   const digit = await completeLine(ws.uri, '0', 1);
   assert.deepEqual(digit.map((i) => i.label), ['01-intro.jpnov']);
 
-  // Absolute paths offer nothing (previously wrongly listed the current dir).
+  // An absolute path is never a valid entry, so it must offer nothing — not the current dir.
   assert.equal((await completeLine(ws.uri, '/', 1)).length, 0);
   assert.equal((await completeLine(ws.uri, '/etc', 4)).length, 0);
 });

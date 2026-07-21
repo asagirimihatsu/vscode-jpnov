@@ -10,7 +10,7 @@
  * Before assigning it to `webview.html` we harden it with a strict CSP `<meta>` + a
  * per-render nonce on the inline `<style>`, and inject a small nonce'd script that scrolls
  * the paragraph for the active cursor line into view — on load and on `reveal` messages —
- * so an edit no longer snaps the view back to the start.
+ * so an edit keeps the view anchored at the cursor instead of snapping to the start.
  *
  * The panel survives window reloads: the injected script persists `{uri, line}` through
  * the webview state API, and extension.ts registers a WebviewPanelSerializer that hands
@@ -33,6 +33,7 @@ import {
   type RenderFileResult,
 } from '#/shared/protocol.ts';
 
+import { lastPathSegment } from './paths.ts';
 import { buildPreviewSettings } from './renderConfig.ts';
 
 /**
@@ -107,8 +108,6 @@ export class Preview {
     }
 
     if (editor !== undefined && this.isPreviewable(editor.document)) {
-      // Fire-and-forget initial render: renderDocument() self-catches its sendRequest (shows a
-      // placeholder on failure) and is renderSeq-serialized, so a dropped result is safe.
       void this.renderDocument(editor.document);
     } else {
       panel.webview.html = this.emptyShell(panel.webview);
@@ -146,7 +145,6 @@ export class Preview {
       // blank would present exactly like the missing-serializer bug this path fixes.
       panel.webview.html = this.loadingShell(panel.webview);
       const fallbackLine = editor.document.uri.toString() === uri ? line : undefined;
-      // Fire-and-forget render: self-catching + renderSeq-serialized, as in open().
       void this.renderDocument(editor.document, fallbackLine);
     } else if (uri !== undefined) {
       panel.webview.html = this.loadingShell(panel.webview);
@@ -169,8 +167,6 @@ export class Preview {
     }
     const doc = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri);
     if (doc !== undefined && this.isPreviewable(doc)) {
-      // Fire-and-forget: renderDocument self-catches its sendRequest and is
-      // renderSeq-serialized, as everywhere else.
       void this.renderDocument(doc);
     }
   }
@@ -212,8 +208,6 @@ export class Preview {
       // Re-render when the user switches which file is active...
       vscode.window.onDidChangeActiveTextEditor((next) => {
         if (next !== undefined && this.isPreviewable(next.document)) {
-          // Fire-and-forget re-render: renderDocument() self-catches its sendRequest (shows a
-          // placeholder on failure) and is renderSeq-serialized, so a dropped result is safe.
           void this.renderDocument(next.document);
         }
       }),
@@ -227,8 +221,6 @@ export class Preview {
           this.renderDebounce = setTimeout(() => {
             this.renderDebounce = undefined;
             if (e.document.uri.toString() === this.currentDocUri) {
-              // Fire-and-forget re-render: renderDocument() self-catches its sendRequest (shows a
-              // placeholder on failure) and is renderSeq-serialized, so a dropped result is safe.
               void this.renderDocument(e.document);
             }
           }, RENDER_DEBOUNCE_MS);
@@ -265,13 +257,18 @@ export class Preview {
     panel.webview.html = this.emptyShell(panel.webview);
   }
 
+  /**
+   * Renders `doc` into the panel. Self-catching (a failed request paints a placeholder) and
+   * renderSeq-serialized (a stale response never lands), so every call site may fire-and-forget
+   * with `void`.
+   */
   private async renderDocument(doc: vscode.TextDocument, fallbackLine?: number): Promise<void> {
     const panel = this.panel;
     if (panel === undefined) {
       return;
     }
     this.currentDocUri = doc.uri.toString();
-    panel.title = vscode.l10n.t('{0} — Preview', this.basename(doc.uri));
+    panel.title = vscode.l10n.t('{0} — Preview', lastPathSegment(doc.uri.toString()));
 
     // The line to scroll to after (re)render — keeps an edit from snapping to the start.
     // `fallbackLine` (a revived panel's persisted cursor line) applies only while the
@@ -416,11 +413,6 @@ export class Preview {
     this.panelDisposables.length = 0;
     this.panel = undefined;
     this.currentDocUri = undefined;
-  }
-
-  private basename(uri: vscode.Uri): string {
-    const path = uri.path.replace(/\/+$/, '');
-    return path.slice(path.lastIndexOf('/') + 1) || path;
   }
 }
 

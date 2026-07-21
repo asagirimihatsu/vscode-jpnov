@@ -13,7 +13,7 @@
 import type { EdgeLineStyle, PageNumberPosition } from '../compiler/chrome.ts';
 import { EDGE_LINE_STYLES } from '../compiler/chrome.ts';
 import type { HtmlSettings, PreviewSettings } from '../protocol.ts';
-import type { AutoTcyMode, KinsokuMode, LayoutSettings } from './types.ts';
+import type { LayoutSettings } from './types.ts';
 import { AUTO_TCY_MODES, CHARS_MAX, CHARS_MIN, KINSOKU_MODES, LAYOUT_DEFAULT } from './types.ts';
 
 export const PREVIEW_CHROME_DEFAULT = {
@@ -49,26 +49,15 @@ function clampChars(value: unknown, fallback: number): number {
   return n < CHARS_MIN ? CHARS_MIN : n > CHARS_MAX ? CHARS_MAX : n;
 }
 
-function edgeLine(value: unknown): EdgeLineStyle {
-  return typeof value === 'string' && (EDGE_LINE_STYLES as readonly string[]).includes(value)
-    ? (value as EdgeLineStyle)
-    : 'none';
-}
-
 function boolOr(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
 
-function autoTcyMode(value: unknown): AutoTcyMode {
-  return typeof value === 'string' && (AUTO_TCY_MODES as readonly string[]).includes(value)
-    ? (value as AutoTcyMode)
-    : LAYOUT_DEFAULT.autoTcy;
-}
-
-function kinsokuMode(value: unknown): KinsokuMode {
-  return typeof value === 'string' && (KINSOKU_MODES as readonly string[]).includes(value)
-    ? (value as KinsokuMode)
-    : LAYOUT_DEFAULT.kinsoku;
+/** `value` when it is a member of `allowed`, else `fallback`. */
+function enumOr<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return typeof value === 'string' && (allowed as readonly string[]).includes(value)
+    ? (value as T)
+    : fallback;
 }
 
 /** The shared `jpnov.layout.*` slice, resolved once for both wire snapshots. */
@@ -76,8 +65,8 @@ function resolveLayout(s: LayoutSettings): LayoutSettings {
   return {
     charsPerLine: clampChars(s.charsPerLine, LAYOUT_DEFAULT.charsPerLine),
     linesPerPage: clampChars(s.linesPerPage, LAYOUT_DEFAULT.linesPerPage),
-    kinsoku: kinsokuMode(s.kinsoku),
-    autoTcy: autoTcyMode(s.autoTcy),
+    kinsoku: enumOr(s.kinsoku, KINSOKU_MODES, LAYOUT_DEFAULT.kinsoku),
+    autoTcy: enumOr(s.autoTcy, AUTO_TCY_MODES, LAYOUT_DEFAULT.autoTcy),
   };
 }
 
@@ -85,7 +74,7 @@ export function resolvePreviewSettings(s: PreviewSettings): PreviewSettings {
   return {
     ...resolveLayout(s),
     lineNumbers: boolOr(s.lineNumbers, PREVIEW_CHROME_DEFAULT.lineNumbers),
-    edgeLine: edgeLine(s.edgeLine),
+    edgeLine: enumOr(s.edgeLine, EDGE_LINE_STYLES, PREVIEW_CHROME_DEFAULT.edgeLine),
   };
 }
 
@@ -93,6 +82,6 @@ export function resolveHtmlSettings(s: HtmlSettings): HtmlSettings {
   return {
     ...resolveLayout(s),
     lineNumbers: boolOr(s.lineNumbers, BUILD_CHROME_DEFAULT.lineNumbers),
-    edgeLine: edgeLine(s.edgeLine),
+    edgeLine: enumOr(s.edgeLine, EDGE_LINE_STYLES, BUILD_CHROME_DEFAULT.edgeLine),
   };
 }

@@ -81,9 +81,9 @@ export type MsgCode =
   | 'server.unexpected'; // args: [detail]  (detail = raw unexpected server error, untranslatable)
 
 /**
- * Config-field labels carried by the `path.*` codes. Only `jpbookEntry` remains (the
- * migrated `jpnov.project.*` paths fail silently to their defaults instead of diagnosing);
- * it is prose and is localized client-side.
+ * Config-field labels carried by the `path.*` codes. Only `jpbookEntry` exists (the
+ * `jpnov.project.*` paths fail silently to their defaults instead of diagnosing); it is
+ * prose and is localized client-side.
  */
 export type LabelId = 'jpbookEntry';
 

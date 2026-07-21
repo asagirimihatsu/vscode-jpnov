@@ -11,14 +11,14 @@
  */
 import type { LabelId, LocalizableMessage, MsgCode } from './protocol.ts';
 
-/** English text per label id (`jpbookEntry`, the only remaining label, is prose). */
+/** English text per label id (`jpbookEntry`, the only label, is prose). */
 const LABEL_EN: Record<LabelId, string> = { jpbookEntry: 'book entry' };
 
 function englishLabel(label: LabelId): string {
   return LABEL_EN[label];
 }
 
-/** Render a code + positional args to its English string (byte-identical to the pre-l10n source). */
+/** Render a code + positional args to its English string. */
 export function renderEnglish(code: MsgCode, args: readonly (string | number)[] = []): string {
   const a = (i: number): string => String(args[i] ?? '');
   switch (code) {
@@ -120,10 +120,10 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
 }
 
 /**
- * An Error that carries a {@link LocalizableMessage}. Server code throws it where it used to
- * `throw new Error(text)`; the catch site reads `.localized` to push a code (diagnostic / build
- * error / config-state) instead of a raw string. The `Error.message` is the English render, so
- * stack traces and logs stay readable.
+ * An Error that carries a {@link LocalizableMessage}. Server code throws it instead of a plain
+ * `Error(text)`; the catch site reads `.localized` to push a code (diagnostic / build error /
+ * config-state) instead of a raw string. The `Error.message` is the English render, so stack
+ * traces and logs stay readable.
  */
 export class LocalizedError extends Error {
   readonly localized: LocalizableMessage;

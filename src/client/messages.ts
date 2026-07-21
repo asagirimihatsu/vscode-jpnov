@@ -11,7 +11,7 @@ import * as vscode from 'vscode';
 import type { LabelId, LocalizableMessage } from '#/shared/protocol.ts';
 
 /**
- * Localized text for a label id. `jpbookEntry` (the only remaining label) is prose and is
+ * Localized text for a label id. `jpbookEntry` (the only label) is prose and is
  * translated. Built per-call — `vscode.l10n` is ready by the time anything renders.
  */
 function labelText(label: LabelId): string {

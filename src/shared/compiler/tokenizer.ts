@@ -268,14 +268,6 @@ function headingLevelOf(s: string): HeadingLevel | null {
 }
 
 /**
- * The indent count in `s` = 「<digits>字下げ」, or null. Aozora writes it as FULL-WIDTH digits
- * ０-９ ONLY (locked spec). The count is UNBOUNDED here: the layout clamps N to the line width
- * (N_eff = min(N, charsPerLine−1)), so there is NO N-too-big degrade branch and hence no span
- * the grammar (`[０-９]+`) and this lexer could ever disagree on. A half-width digit, 漢数字, or
- * a missing 字下げ suffix yields null → the caller degrades to a comment. Leading zeros parse
- * numerically (００→0, ００３→3); 0 is a valid amount the layout renders as no indent.
- */
-/**
  * The inverse spelling of {@link indentAmount}: composes ［＃N字下げ］ with FULL-WIDTH digits —
  * the only form this parser and the tmLanguage rule accept.
  */
@@ -286,6 +278,12 @@ export function indentAnnotation(amount: number): string {
   return `［＃${digits}字下げ］`;
 }
 
+/**
+ * The indent count in `s` = 「<digits>字下げ」 — FULL-WIDTH digits ０-９ only (locked spec);
+ * anything else yields null → the caller degrades to a comment. The count is unbounded here
+ * (the layout clamps to the line width, so the grammar's `[０-９]+` can never disagree);
+ * leading zeros parse numerically and 0 is a valid amount the layout renders as no indent.
+ */
 function indentAmount(s: string): number | null {
   if (!s.endsWith(INDENT_SUFFIX)) {
     return null;
@@ -892,7 +890,12 @@ function isAlnum(cp: number): boolean {
   );
 }
 
-function classify(cp: number): CharClass {
+/** Class of a single code-point string (`''` and non-base chars => null). */
+function classOf(ch: string | undefined): CharClass {
+  const cp = ch?.codePointAt(0);
+  if (cp === undefined) {
+    return null;
+  }
   if (isKanji(cp)) {
     return 'kanji';
   }
@@ -906,18 +909,6 @@ function classify(cp: number): CharClass {
     return 'alnum';
   }
   return null;
-}
-
-/** Class of a single code-point string (`''` and multi-cp inputs => null). */
-function classOf(ch: string | undefined): CharClass {
-  if (ch === undefined) {
-    return null;
-  }
-  const cp = ch.codePointAt(0);
-  if (cp === undefined) {
-    return null;
-  }
-  return classify(cp);
 }
 
 export function detectImplicitBase(textBefore: string): { base: string; rest: string } {

@@ -202,14 +202,14 @@ test('太字 postfix: は is a marker, 太字 a directive, the target uncovered'
   assert.ok(!toks.some((t) => t.char <= 3 && t.char + t.len > 3)); // 本 uncovered
 });
 
-test('傍線 postfix with の左に: direction prefix + 傍線 directive (#11 form-bound)', () => {
+test('傍線 postfix with の左に: direction prefix + 傍線 directive (form-bound)', () => {
   // 語(0) ［＃(1,2) 「(3) 語(4) 」(5) の左に(6..8) 傍線(9,10) ］(11)
   const toks = decode(buildSemanticTokens(doc('語［＃「語」の左に傍線］'), rec).data);
   assert.deepEqual(at(toks, 0, 6), { line: 0, char: 6, len: 3, type: tokenTypeIndex('direction') });
   assert.deepEqual(at(toks, 0, 9), { line: 0, char: 9, len: 2, type: tokenTypeIndex('directive') });
 });
 
-test('a の左に SPAN greys whole (#11: the span form takes bare 左に only)', () => {
+test('a の左に SPAN greys whole (the span form takes bare 左に only)', () => {
   // The wrong-form spelling is a comment token in both layers: ONE whole-annotation marker span,
   // no directive keyword inside. (direction shares the marker colour, so length pins it.)
   const toks = decode(buildSemanticTokens(doc('［＃の左に傍線］'), rec).data);

@@ -11,13 +11,13 @@ import { fileURLToPath } from 'node:url';
 
 import { RULES, settingKey } from '../../../src/shared/lint/catalog.ts';
 import { selectRules } from '../../../src/shared/lint/select.ts';
-import type { RawLintConfig } from '../../../src/shared/lint/select.ts';
+import type { RawLintConfigWire } from '../../../src/shared/protocol.ts';
 
 const ROOT = new URL('../../../', import.meta.url); // repo root, from test/shared/lint/
 
 /** Every jpnov.lint.* setting mapped to its shipped package.json `default`. null/false/'off' are kept
  *  in: `selectRules` treats them as off, the same outcome the client's snapshot filter produces. */
-function shippedLintDefaults(): RawLintConfig {
+function shippedLintDefaults(): RawLintConfigWire {
   const pkg = JSON.parse(
     readFileSync(fileURLToPath(new URL('package.json', ROOT)), 'utf8'),
   ) as { contributes: { configuration: { properties?: Record<string, { default: unknown }> }[] } };

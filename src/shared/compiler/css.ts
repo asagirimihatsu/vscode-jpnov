@@ -11,8 +11,7 @@
  * - the on-demand `indent-N` (字下げ — unbounded N) and emphasis class rules (usedClasses).
  *
  * Mode and chrome conditionality is FRAGMENT INCLUSION — zero dead rules: a disabled
- * feature's selectors are entirely absent from the output, exactly like the old
- * string-conditional behaviour:
+ * feature's selectors are entirely absent from the output:
  * - paginate=true (BUILD): buildBase (+anchor +ln +edge +header +folio) — the explicit
  *   `.book > .page > .line` skeleton the layout engine emits, one printed sheet per `.page`;
  * - paginate=false (PREVIEW): previewBase (+anchor +ln +edge) — a single continuous flow of

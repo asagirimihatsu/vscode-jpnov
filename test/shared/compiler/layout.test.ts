@@ -685,11 +685,11 @@ test('findPostfixTargetIssues covers 縦中横 postfix misses too', () => {
   ]);
 });
 
-// --------------------------------------------------------------- postfix boundary alignment (#12)
+// --------------------------------------------------------------- postfix boundary alignment
 
-test('#12: a postfix cutting into an atomic ruby unit does not apply (boundary alignment)', () => {
-  // 字 sits INSIDE the atomic ruby unit 漢字 — the old overlap rule dotted the whole unit;
-  // the aligned rule refuses and degrades to a comment (plus the editor Warning, below).
+test('a postfix cutting into an atomic ruby unit does not apply (boundary alignment)', () => {
+  // 字 sits INSIDE the atomic ruby unit 漢字 — a match cutting into an atomic unit must
+  // refuse and degrade to a comment (plus the editor Warning, below), never dot the unit.
   assert.equal(
     html('漢字《かんじ》［＃「字」に傍点］'),
     '<div class="book"><div class="page" data-page="0">' +
@@ -698,7 +698,7 @@ test('#12: a postfix cutting into an atomic ruby unit does not apply (boundary a
   );
 });
 
-test('#12: whole-unit coverage of a ruby unit still applies (aligned)', () => {
+test('whole-unit coverage of a ruby unit still applies (aligned)', () => {
   assert.match(
     html('漢字《かんじ》［＃「漢字」に傍点］'),
     /<span class="emph-fs"><ruby class="rr"><span>漢<\/span><span>字<\/span><rt><span>か<\/span><span>ん<\/span><span>じ<\/span><\/rt><\/ruby><\/span>/,

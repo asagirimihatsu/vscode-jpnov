@@ -41,7 +41,7 @@ test('tmLanguage 太字|斜体 alternation == emphasis.ts variants', () => {
   }
 });
 
-test('direction prefixes are form-bound: postfix (に|の左に)?, spans (左に)? (#11)', () => {
+test('direction prefixes are form-bound: postfix (に|の左に)?, spans (左に)?', () => {
   // The Aozora spec fixes the left-prefix spelling BY FORM (postfix = の左に, span = bare 左に),
   // and a postfix connector excludes the direction prefix (single alternation). The literals
   // repeat across the grammar, emphasis.ts resolveStyle (form param) and semanticTokens
@@ -80,7 +80,7 @@ test('縦中横 / 左ルビ fixed-literal rules exist, ordered, form-bound', () 
   }
   assert.ok(tcyEnd < tcyStart, 'tcy span END must precede START (終わり suffix)');
   const lr = matches[leftRuby];
-  assert.ok(lr?.includes('(の左に)') === true && !lr.includes('|左に'), 'left ruby takes の左に only (#11)');
+  assert.ok(lr?.includes('(の左に)') === true && !lr.includes('|左に'), 'left ruby takes の左に only');
   assert.ok(lr.includes('(「)([^」]+)(」)(のルビ)'), 'left ruby reading is a non-empty corner pair + のルビ tail');
 });
 

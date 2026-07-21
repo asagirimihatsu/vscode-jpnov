@@ -1,8 +1,7 @@
 /**
- * The server's single source for LSP `Diagnostic` construction. Collapses the previously
- * re-implemented factories (jpbook's `diagnostic`, build's `fileLevelError`) into one
- * `source: 'jpnov'` constructor plus a file-level (zero-width, doc-start) error helper,
- * so every diagnostic carries an identical `source` and shape.
+ * The server's single source for LSP `Diagnostic` construction: one `source: 'jpnov'`
+ * constructor plus a file-level (zero-width, doc-start) error helper, so every diagnostic
+ * carries an identical `source` and shape.
  *
  * Imports only `vscode-languageserver/node` (already a dependency of every consumer); owns no
  * state and imports no other server module, so it stays a dependency-free leaf (no cycle risk).

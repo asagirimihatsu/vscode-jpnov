@@ -35,7 +35,7 @@ test('prefix matching is segment-exact: renaming ch never touches chx/', () => {
 });
 
 test('moving the .jpbook itself never touches its entries (root-relative by design)', () => {
-  // The reported regression: a book moved into books/ used to invalidate every path.
+  // Moving the .jpbook itself must not invalidate entries — they are root-relative, not book-relative.
   const plan = planBookEdits(ROOT, 'ch/01.jpnov\nch/02.jpnov', [
     R('/ws/novel/vol1.jpbook', '/ws/novel/books/vol1.jpbook'),
   ]);
