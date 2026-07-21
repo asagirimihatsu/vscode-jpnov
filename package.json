@@ -2,7 +2,7 @@
   "name": "jpnov",
   "displayName": "Japanese Novel",
   "publisher": "asagirimihatsu",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "A plugin for Visual Studio Code for formatting, previewing, and generating ebooks of Japanese novels annotated by Aozora Bunko",
   "keywords": [
     "plugin",
