@@ -242,6 +242,28 @@ test('見出し postfix: は is a marker, the level literal a directive, the tar
   assert.ok(!toks.some((t) => t.char <= 5 && t.char + t.len > 5)); // 序章 target uncovered
 });
 
+test('見出し span START/END: the level literal is a directive, 終わり demotes to a marker', () => {
+  // ［＃(0,1) 大見出し(2..5) ］(6)
+  const start = decode(buildSemanticTokens(doc('［＃大見出し］'), rec).data);
+  assert.deepEqual(at(start, 0, 2), { line: 0, char: 2, len: 4, type: tokenTypeIndex('directive') });
+  // ［＃(0,1) 大見出し(2..5) 終わり(6..8) ］(9)
+  const end = decode(buildSemanticTokens(doc('［＃大見出し終わり］'), rec).data);
+  assert.deepEqual(at(end, 0, 2), { line: 0, char: 2, len: 4, type: tokenTypeIndex('directive') });
+  assert.deepEqual(at(end, 0, 6), { line: 0, char: 6, len: 3, type: MARKER }); // 終わり
+});
+
+test('見出し block START/END: ここから/ここで/終わり are markers, the level literal a directive', () => {
+  // ［＃(0,1) ここから(2..5) 中見出し(6..9) ］(10)
+  const start = decode(buildSemanticTokens(doc('［＃ここから中見出し］'), rec).data);
+  assert.deepEqual(at(start, 0, 2), { line: 0, char: 2, len: 4, type: MARKER }); // ここから
+  assert.deepEqual(at(start, 0, 6), { line: 0, char: 6, len: 4, type: tokenTypeIndex('directive') });
+  // ［＃(0,1) ここで(2..4) 小見出し(5..8) 終わり(9..11) ］(12)
+  const end = decode(buildSemanticTokens(doc('［＃ここで小見出し終わり］'), rec).data);
+  assert.deepEqual(at(end, 0, 2), { line: 0, char: 2, len: 3, type: MARKER }); // ここで
+  assert.deepEqual(at(end, 0, 5), { line: 0, char: 5, len: 4, type: tokenTypeIndex('directive') });
+  assert.deepEqual(at(end, 0, 9), { line: 0, char: 9, len: 3, type: MARKER }); // 終わり
+});
+
 test('左ルビ postfix: 対象 default, の左に direction, reading greyed whole, のルビ directive', () => {
   // 字(0) ［＃(1,2) 「(3) 字(4) 」(5) の左に(6..8) 「(9) よみ(10,11) 」(12) のルビ(13..15) ］(16)
   const toks = decode(buildSemanticTokens(doc('字［＃「字」の左に「よみ」のルビ］'), rec).data);

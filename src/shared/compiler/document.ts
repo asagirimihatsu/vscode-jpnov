@@ -32,15 +32,21 @@ function edgeLine(src: string, edge: 'first' | 'last'): string | null {
  * True iff the chapter OPENS with a 見出し: its first non-blank line resolves to a heading
  * row — match-validated by the layout itself, so a broken-target 見出し (which renders as
  * plain text) never suppresses the divider. One line suffices: postfix targets bind
- * same-line only.
+ * same-line only, and a span/block opener on that line makes the first PAINTED line a
+ * heading — when the line itself paints nothing (a suppressed ここから directive, or a lone
+ * inline opener dropped as the end-of-input artifact), the opener token decides.
  */
 function opensWithHeading(src: string): boolean {
   const line = edgeLine(src, 'first');
   if (line === null) {
     return false;
   }
-  const first = buildRows(tokenize(line))[0];
-  return first?.kind === 'line' && first.heading !== undefined;
+  const tokens = tokenize(line);
+  const first = buildRows(tokens)[0];
+  if (first !== undefined) {
+    return first.kind === 'line' && first.heading !== undefined;
+  }
+  return tokens.some((t) => t.kind === 'headingSpanStart');
 }
 
 /** True iff `src`'s junction side reaches a ［＃改ページ］ before (first) / after (last) content. */

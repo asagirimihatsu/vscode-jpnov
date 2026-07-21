@@ -450,11 +450,43 @@ test('見出し postfix carries its level (大=1) and requires the は connector
   assert.deepEqual(kinds(tokenize('［＃「」は大見出し］')), ['comment']); // empty target
 });
 
-test('見出し block forms stay unrecognized comments (前方参照型 only)', () => {
-  assert.deepEqual(kinds(tokenize('［＃大見出し］')), ['comment']);
-  assert.deepEqual(kinds(tokenize('［＃大見出し終わり］')), ['comment']);
-  assert.deepEqual(kinds(tokenize('［＃ここから中見出し］')), ['comment']);
-  assert.deepEqual(kinds(tokenize('［＃ここで小見出し終わり］')), ['comment']);
+test('見出し inline span pair carries its level; no block flag', () => {
+  assert.deepEqual(tokenize('［＃大見出し］')[0], {
+    kind: 'headingSpanStart',
+    raw: '［＃大見出し］',
+    level: 1,
+  });
+  assert.deepEqual(tokenize('［＃中見出し終わり］')[0], {
+    kind: 'headingSpanEnd',
+    raw: '［＃中見出し終わり］',
+    level: 2,
+  });
+  assert.deepEqual(kinds(tokenize('［＃小見出し］第三節［＃小見出し終わり］')), [
+    'headingSpanStart',
+    'text',
+    'headingSpanEnd',
+  ]);
+});
+
+test('見出し block pair carries its level and the block flag', () => {
+  assert.deepEqual(tokenize('［＃ここから中見出し］')[0], {
+    kind: 'headingSpanStart',
+    raw: '［＃ここから中見出し］',
+    level: 2,
+    block: true,
+  });
+  assert.deepEqual(tokenize('［＃ここで小見出し終わり］')[0], {
+    kind: 'headingSpanEnd',
+    raw: '［＃ここで小見出し終わり］',
+    level: 3,
+    block: true,
+  });
+});
+
+test('見出し near-miss spellings stay comments', () => {
+  assert.deepEqual(kinds(tokenize('［＃見出し］')), ['comment']); // no bare 見出し literal
+  assert.deepEqual(kinds(tokenize('［＃大見出し終り］')), ['comment']); // wrong okurigana
+  assert.deepEqual(kinds(tokenize('［＃ここから大見出し終わり］')), ['comment']); // mixed scaffolding
 });
 
 // --------------------------------------------------------------- findTcyIssues
@@ -536,4 +568,30 @@ test('findUnpairedBlocks: inline spans never participate in block pairing', () =
   assert.deepEqual(findUnpairedBlocks('［＃太字］A［＃ここで太字終わり］'), [
     { start: 6, end: 17, kind: 'dangling' },
   ]);
+  assert.deepEqual(findUnpairedBlocks('［＃大見出し］A'), []);
+});
+
+test('findUnpairedBlocks: 見出し blocks ride their own channel', () => {
+  assert.deepEqual(findUnpairedBlocks('［＃ここから大見出し］\nA'), [
+    { start: 0, end: 11, kind: 'unterminated' },
+  ]);
+  assert.deepEqual(findUnpairedBlocks('A\n［＃ここで大見出し終わり］'), [
+    { start: 2, end: 15, kind: 'dangling' },
+  ]);
+  assert.deepEqual(
+    findUnpairedBlocks('［＃ここから大見出し］\nA\n［＃ここで大見出し終わり］'),
+    [],
+  );
+  // Cross-channel overlap with 字下げ is clean; all three levels share the ONE heading
+  // channel, so a re-open is a level change and a mismatched-level end still pairs.
+  assert.deepEqual(
+    findUnpairedBlocks(
+      '［＃ここから２字下げ］\n［＃ここから大見出し］\nA\n［＃ここで大見出し終わり］\n［＃ここで字下げ終わり］',
+    ),
+    [],
+  );
+  assert.deepEqual(
+    findUnpairedBlocks('［＃ここから大見出し］\n［＃ここから中見出し］\nA\n［＃ここで小見出し終わり］'),
+    [],
+  );
 });

@@ -172,7 +172,47 @@
           }
         },
         {
-          "comment": "Any other ［＃…］ (block layout, the 見出し block forms, the 折り返して indent form, a mid-line 字下げ, a half-width digit, a mis-paired connector, unknown) — whole annotation greyed, matching the server's `comment` classification. Single-line, so an unclosed ［＃ never runs away.",
+          "comment": "見出し block END ［＃ここで(大|中|小)見出し終わり］ — only the level literal is a directive; the structural ここで and 終わり are demoted to comment (mirrors the semantic layer). BEFORE block START (終わり suffix), exactly like the 字下げ/太字 block pair.",
+          "match": "(［＃)(ここで)(中見出し|大見出し|小見出し)(終わり)(］)",
+          "captures": {
+            "1": { "name": "comment.block.annotation.novel-jp" },
+            "2": { "name": "comment.other.annotation.novel-jp" },
+            "3": { "name": "keyword.other.directive.novel-jp" },
+            "4": { "name": "comment.other.annotation.novel-jp" },
+            "5": { "name": "comment.block.annotation.novel-jp" }
+          }
+        },
+        {
+          "comment": "見出し block START ［＃ここから(大|中|小)見出し］ — the structural ここから is demoted to comment, the level literal is the directive (mirrors the semantic layer).",
+          "match": "(［＃)(ここから)(中見出し|大見出し|小見出し)(］)",
+          "captures": {
+            "1": { "name": "comment.block.annotation.novel-jp" },
+            "2": { "name": "comment.other.annotation.novel-jp" },
+            "3": { "name": "keyword.other.directive.novel-jp" },
+            "4": { "name": "comment.block.annotation.novel-jp" }
+          }
+        },
+        {
+          "comment": "見出し inline span END ［＃(大|中|小)見出し終わり］ — the level literal is the directive, the structural 終わり demotes to comment. BEFORE the span START (終わり suffix), exactly like the emphasis/縦中横 span pairs.",
+          "match": "(［＃)(中見出し|大見出し|小見出し)(終わり)(］)",
+          "captures": {
+            "1": { "name": "comment.block.annotation.novel-jp" },
+            "2": { "name": "keyword.other.directive.novel-jp" },
+            "3": { "name": "comment.other.annotation.novel-jp" },
+            "4": { "name": "comment.block.annotation.novel-jp" }
+          }
+        },
+        {
+          "comment": "見出し inline span START ［＃(大|中|小)見出し］ — a lone command word, like 縦中横.",
+          "match": "(［＃)(中見出し|大見出し|小見出し)(］)",
+          "captures": {
+            "1": { "name": "comment.block.annotation.novel-jp" },
+            "2": { "name": "keyword.other.directive.novel-jp" },
+            "3": { "name": "comment.block.annotation.novel-jp" }
+          }
+        },
+        {
+          "comment": "Any other ［＃…］ (block layout, the 折り返して indent form, a mid-line 字下げ, a half-width digit, a mis-paired connector, unknown) — whole annotation greyed, matching the server's `comment` classification. Single-line, so an unclosed ［＃ never runs away.",
           "match": "(［＃)([^］]*)(］)",
           "name": "comment.block.annotation.novel-jp"
         },

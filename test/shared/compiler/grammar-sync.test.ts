@@ -95,6 +95,25 @@ test('見出し postfix fixed-literal rule exists before the generic rule (canon
   assert.ok(heading >= 0 && heading < generic, `見出し postfix rule missing/stale/after-generic. PASTE:\n${rule}`);
 });
 
+test('見出し span/block fixed-literal rules exist, ordered (END before START), before generic', () => {
+  const needle = canonical([...HEADING_LITERALS]);
+  const generic = matches.findIndex((m) => m === '(［＃)([^］]*)(］)');
+  assert.ok(generic >= 0, 'generic comment rule not found');
+  const rules: [string, string][] = [
+    ['見出し block END', `(［＃)(ここで)(${needle})(終わり)(］)`],
+    ['見出し block START', `(［＃)(ここから)(${needle})(］)`],
+    ['見出し span END', `(［＃)(${needle})(終わり)(］)`],
+    ['見出し span START', `(［＃)(${needle})(］)`],
+  ];
+  const at = rules.map(([label, rule]) => {
+    const i = matches.findIndex((m) => m === rule);
+    assert.ok(i >= 0 && i < generic, `${label} rule missing/stale/after-generic. PASTE:\n${rule}`);
+    return i;
+  });
+  assert.ok((at[0] ?? 0) < (at[1] ?? 0), '見出し block END must precede START (終わり suffix)');
+  assert.ok((at[2] ?? 0) < (at[3] ?? 0), '見出し span END must precede START (終わり suffix)');
+});
+
 test('the single-line 字下げ rule is line-head anchored and full-width-only', () => {
   const m = matches.find((x) => x.includes('字下げ') && !x.includes('ここ')); // the non-block indent rule
   assert.ok(m, 'single-line 字下げ rule not found');

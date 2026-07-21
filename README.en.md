@@ -100,18 +100,20 @@ Novel sources use [Aozora Bunko annotations](https://www.aozora.gr.jp/annotation
 Recognised forms are highlighted and rendered; anything else passes through as
 an HTML comment (never an error), so unusual markup degrades quietly.
 
-| Effect | Inline / postfix | Block (each on its own line) |
-| --- | --- | --- |
-| Ruby | `漢字《かんじ》`, `｜親文字《ルビ》` | — |
-| Left ruby 左ルビ | `［＃「対象」の左に「よみ」のルビ］` | — |
-| Tate-chu-yoko 縦中横 | `対象［＃「対象」は縦中横］`, `［＃縦中横］…［＃縦中横終わり］` | — |
-| Emphasis dots 傍点 | `［＃「対象」に傍点］`, `［＃傍点］…［＃傍点終わり］` | — |
-| Side line 傍線 (5 styles) | `［＃「対象」に傍線］` (傍線/二重傍線/鎖線/破線/波線) | — |
-| Bold 太字 | `［＃「対象」は太字］`, `［＃太字］…［＃太字終わり］` | `［＃ここから太字］…［＃ここで太字終わり］` |
-| Italic 斜体 | `［＃「対象」は斜体］`, `［＃斜体］…［＃斜体終わり］` | `［＃ここから斜体］…［＃ここで斜体終わり］` |
-| Heading 見出し | `第一章［＃「第一章」は大見出し］` (大見出し / 中見出し / 小見出し) | — |
-| Indent 字下げ | `［＃○字下げ］` (line head) | `［＃ここから○字下げ］…［＃ここで字下げ終わり］` |
-| Page break | — | `［＃改ページ］` |
+Most annotations take a **forward-ref** form that points back at the target text. Where the range is easier to bracket, a **start / end** pair wraps it inline; for multi-line ranges a **block** form puts the start and end annotations on their own lines. All spellings render the same.
+
+| Effect | Forward-ref form | Start / end form | Block form |
+| --- | --- | --- | --- |
+| Ruby | `漢字《かんじ》` | `｜親文字《ルビ》` | — |
+| Left ruby 左ルビ | `［＃「対象」の左に「よみ」のルビ］` | — | — |
+| Tate-chu-yoko 縦中横 | `対象［＃「対象」は縦中横］` | `［＃縦中横］…［＃縦中横終わり］` | — |
+| Emphasis dots 傍点 | `［＃「対象」に傍点］` | `［＃傍点］…［＃傍点終わり］` | — |
+| Side line 傍線 (5 styles) | `［＃「対象」に傍線］` (傍線/二重傍線/鎖線/破線/波線) | `［＃傍線］…［＃傍線終わり］` | — |
+| Bold 太字 | `［＃「対象」は太字］` | `［＃太字］…［＃太字終わり］` | `［＃ここから太字］…［＃ここで太字終わり］` |
+| Italic 斜体 | `［＃「対象」は斜体］` | `［＃斜体］…［＃斜体終わり］` | `［＃ここから斜体］…［＃ここで斜体終わり］` |
+| Heading 見出し | `第一章［＃「第一章」は大見出し］` (大見出し / 中見出し / 小見出し) | `［＃大見出し］…［＃大見出し終わり］` | `［＃ここから大見出し］…［＃ここで大見出し終わり］` |
+| Indent 字下げ | `［＃○字下げ］` (line head) | — | `［＃ここから○字下げ］…［＃ここで字下げ終わり］` |
+| Page break | `［＃改ページ］` (on its own line) | — | — |
 
 <img src="docs/images/notation.png" width="800" alt="A rendered specimen showing ruby, both-side ruby, emphasis dots, a wavy side line, bold, and tate-chu-yoko">
 
@@ -127,10 +129,10 @@ The specimen's source — paste it into a `.jpnov` to try:
 「何だと!?」
 ```
 
-Notes: 傍点/傍線 take a left-side variant, fixed by form — the **postfix** form
-uses `の左に` (`［＃「対象」の左に傍点］`), the **span** form uses bare `左に`
-(`［＃左に傍点］…［＃左に傍点終わり］`); bold/italic use the connector **は**, not
-に. Indent counts (`○`) are **full-width digits** (２, １０); the block indent
+Notes: 傍点/傍線 take a left-side variant, fixed by form — the **forward-ref**
+form uses `の左に` (`［＃「対象」の左に傍点］`), the **start / end** form uses bare
+`左に` (`［＃左に傍点］…［＃左に傍点終わり］`); bold/italic use the connector **は**,
+not に. Indent counts (`○`) are **full-width digits** (２, １０); the block indent
 also indents wrapped continuation lines. An unclosed block (`ここから` with no
 `ここで…終わり`) still renders to the end of the file but raises an editor
 **Warning**; an unclosed `［＃` is an **Error**. Italic relies on the browser
