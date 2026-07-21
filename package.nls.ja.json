@@ -57,7 +57,7 @@
   "jpnov.preview.title": "小説 — プレビュー",
   "jpnov.html.title": "小説 — HTML 出力",
   "jpnov.layout.charsPerLine.description": "1 行の文字数。プレビューと HTML 出力のグリッドに使います。既定値: 40（投稿原稿でよく使う字詰め）。",
-  "jpnov.layout.linesPerPage.description": "1 ページの行数。HTML 出力のグリッドに使います（プレビューは連続表示のため無視されます）。既定値: 34（40字×34行は投稿原稿でよく使う書式）。",
+  "jpnov.layout.linesPerPage.description": "1 ページの行数。HTML 出力のグリッドに使います。プレビューは連続表示ですが、罫線を有効にした場合はこの行数を 1 ページ分として枠線を引きます。既定値: 34（40字×34行は投稿原稿でよく使う書式）。",
   "jpnov.layout.kinsoku.description": "禁則処理: 行頭・行末禁則と分離禁止（――・……）を適用し、行末の句読点をぶら下げます。プレビューと出力の両方に適用されます。",
   "jpnov.layout.kinsoku.none.label": "なし",
   "jpnov.layout.kinsoku.none.description": "禁則を行わず、行の幅でそのまま折り返します。",

@@ -21,16 +21,30 @@ export const KINSOKU_MODES = ['none', 'normal', 'strict'] as const;
 export type KinsokuMode = (typeof KINSOKU_MODES)[number];
 
 /**
+ * The `jpnov.layout.*` slice shared verbatim by both wire snapshots — preview and build stay
+ * same-source. `linesPerPage`: the build grid's page depth; the preview edge frame reserves
+ * the same extent per segment while drawn.
+ */
+export interface LayoutSettings {
+  readonly charsPerLine: number;
+  readonly linesPerPage: number;
+  /** 禁則処理 mode. */
+  readonly kinsoku: KinsokuMode;
+  /** 自動縦中横 mode. */
+  readonly autoTcy: AutoTcyMode;
+}
+
+/**
  * `jpnov.layout.*` defaults (投稿書式 40×34, 禁則 normal, 自動縦中横 punctuationPairs) — the single source
  * for the schema defaults and the settings resolver's fallbacks; the config-codegen test locks
  * package.json to these values.
  */
-export const LAYOUT_DEFAULT = {
+export const LAYOUT_DEFAULT: LayoutSettings = {
   charsPerLine: 40,
   linesPerPage: 34,
-  kinsoku: 'normal' as KinsokuMode,
-  autoTcy: 'punctuationPairs' as AutoTcyMode,
-} as const;
+  kinsoku: 'normal',
+  autoTcy: 'punctuationPairs',
+};
 
 /**
  * `jpnov.project.*` defaults — the single source for the schema defaults and the server's

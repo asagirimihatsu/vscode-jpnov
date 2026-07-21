@@ -19,9 +19,10 @@
  *   the SAME `.line` columns grouped into per-break `.segment` blocks, fit-to-viewport, with
  *   ［＃改ページ］ as a labelled marker between segments.
  *
- * In BOTH modes the edge rules are pure paint: the EDGE_INSET gap is reserved and the pitch
- * is LINE_PITCH whether edgeLine is on or off, so toggling it never moves a glyph, a line
- * number, or a page boundary. Chrome sub-elements (`.pn` / `.hd` / `.ln` / `.line::before`)
+ * In BOTH modes the EDGE_INSET gap is reserved and the pitch is LINE_PITCH whether edgeLine
+ * is on or off, so toggling it never moves a glyph within its segment/page; the preview frame
+ * look reserves a full --lpp page extent for short segments (preview.edge.css).
+ * Chrome sub-elements (`.pn` / `.hd` / `.ln` / `.line::before`)
  * are horizontal-tb INSIDE a vertical-rl container and are positioned with PHYSICAL
  * properties only — the per-rule rationale lives as comments on the owning fragment.
  *
@@ -162,6 +163,8 @@ type StylesheetOptions =
   | {
     readonly paginate: false;
     readonly charsPerLine: number;
+    /** Page extent (columns) for the edge frame; injected as --lpp only while edge is on. */
+    readonly linesPerPage: number;
     readonly chrome: PreviewChrome;
     readonly usedClasses?: readonly string[];
   };
@@ -175,7 +178,7 @@ type StylesheetOptions =
  */
 export function stylesheet(opts: StylesheetOptions): string {
   const edge = edgeBase(opts.chrome.edgeLine); // null ⟺ no edge fragment, no --edge
-  const anchor = opts.chrome.lineNumbers || edge !== null; // .line{position:relative} needed?
+  const anchor = opts.chrome.lineNumbers || edge !== null; // .line{position:relative} — rationale in *.anchor.css
   const tail = (opts.usedClasses ?? []).map(classRule);
 
   if (opts.paginate) {
@@ -204,6 +207,7 @@ export function stylesheet(opts: StylesheetOptions): string {
 
   const vars: Record<string, string | number> = { '--cpl': opts.charsPerLine };
   if (edge !== null) {
+    vars['--lpp'] = opts.linesPerPage; // read only by the edge fragment's .segment min-block-size
     vars['--edge'] = edge;
   }
   return [

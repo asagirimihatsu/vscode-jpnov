@@ -57,7 +57,7 @@
   "jpnov.preview.title": "Japanese Novel — Preview",
   "jpnov.html.title": "Japanese Novel — HTML Output",
   "jpnov.layout.charsPerLine.description": "Characters per line for the preview and the HTML build grid. Default: 40 (a standard manuscript-submission width).",
-  "jpnov.layout.linesPerPage.description": "Lines per page for the HTML build grid. The preview is a continuous flow and ignores this. Default: 34 (40×34 is a common novel manuscript-submission format).",
+  "jpnov.layout.linesPerPage.description": "Lines per page for the HTML build grid. The preview is a continuous flow, but with a ruled line enabled it frames each page at this many lines. Default: 34 (40×34 is a common novel manuscript-submission format).",
   "jpnov.layout.kinsoku.description": "Japanese line-breaking rules: keep forbidden characters off line starts and ends, never split ―― or ……, and hang a trailing 、。 into the margin. Applies to both the preview and the built book.",
   "jpnov.layout.kinsoku.none.label": "Off",
   "jpnov.layout.kinsoku.none.description": "No line-breaking rules — bare wrap at the column width.",

@@ -23,6 +23,7 @@ const RULES: RawLintConfig = {
   'jpnov.lint.common.maxTen': 2,
   'jpnov.lint.common.noHankakuKana': true,
   'jpnov.lint.narration.jaNoMixedPeriod': true,
+  'jpnov.lint.narration.generalNovelStyle': true,
 };
 
 const fixture = (name: string): string =>
@@ -85,12 +86,15 @@ test('parity on a generated large corpus (many chunks, violations near seams)', 
 test('parity with block annotations straddling many chunk seams', async () => {
   // Block 字下げ + block 太字 contribute zero prose (they vanish at stream extraction), so a
   // seam can never bisect a ここから/ここで pair — assert it stays true across ~50 forced seams.
+  // The in-block lines carry NO literal 　: their indent comes from the synthetic head 　 that
+  // extractStreams injects, so this also pins the injection across seams (generalNovelStyle on).
   const para =
     '［＃ここから２字下げ］\n' +
-    '　これは長い段落でありまして、読点、が、続いて、句点で終わる。\n' +
+    'これは長い段落でありまして、読点、が、続いて、句点で終わる。\n' +
     '［＃ここから太字］この一節は太字。［＃ここで太字終わり］\n' +
     '「開いた括弧の台詞」\n' +
-    '［＃ここで字下げ終わり］\n\n';
+    '［＃ここで字下げ終わり］\n' +
+    '［＃３字下げ］行頭の指定で字下げされた行。\n\n';
   const src = para.repeat(50);
   const tiny = normalized(await lintWith(src, TINY));
   const whole = normalized(await lintWith(src, UNCHUNKED));

@@ -7,7 +7,9 @@
  *       placeholder — the corners stay IN PLACE and newlines are preserved, so line-head rules and
  *       である/ですます keep working and a quote never shifts the following 地の文 onto a new "line".
  *       Ruby is collapsed to its base (｜巳一《みはつ》 -> 巳一); annotations (［＃…］, 傍点) contribute no
- *       text, so inline-emphasised prose stays contiguous.
+ *       text, so inline-emphasised prose stays contiguous. A line rendered indented by 字下げ
+ *       (line-head ［＃N字下げ］ or an open ここから block, N ≥ 1) gets ONE synthetic 　 at its head,
+ *       so line-head rules see the same shape as a hand-typed full-width space.
  *   - dialogue: every top-level dialogue interior, joined by '\n'. The newline keeps each utterance
  *       independent for sentence-/run-based rules while costing ONE kernel pass for the whole stream.
  *   - ruby: every 《reading》, joined by '\n' (same independence trick).
@@ -93,10 +95,28 @@ export function extractStreams(src: string): Streams {
   const utterance = new Buf();
   let placeheld = false; // has the single 〇 for the current top-level interior been emitted yet?
 
+  // Rendered 字下げ state, in lockstep with layout.ts's `curIndent`/`activeIndent` (guarded by
+  // streams.test.ts): `lineIndent` = `blockIndent` snapshotted at each newline, overridden by a
+  // line-head ［＃N字下げ］ token (N may be 0, cancelling the block for that line).
+  let blockIndent = 0;
+  let lineIndent = 0;
+  let narrAtHead = true; // is the narration stream at a line head?
+
+  /** Push one narration unit; at a line head under an effective 字下げ (≥ 1), prepend one
+   *  synthetic 　 mapped to the same source unit. */
+  const pushNarr = (ch: string, at: number): void => {
+    const isNl = ch === '\n' || ch === '\r';
+    if (!isNl && narrAtHead && lineIndent > 0) {
+      narration.push('　', at);
+    }
+    narration.push(ch, at);
+    narrAtHead = isNl;
+  };
+
   /** Route one interior character to the utterance, emitting narration's single 〇 on the first one. */
   const toUtterance = (ch: string, at: number): void => {
     if (!placeheld) {
-      narration.push(PLACEHOLDER, at);
+      pushNarr(PLACEHOLDER, at);
       placeheld = true;
     }
     utterance.push(ch, at);
@@ -107,11 +127,14 @@ export function extractStreams(src: string): Streams {
     for (let i = 0; i < text.length; i++) {
       const ch = text.charAt(i);
       const at = srcStart + i;
+      if (ch === '\n' || ch === '\r') {
+        lineIndent = blockIndent; // the next source line starts at the block's indent
+      }
       const opener = ch === '「' || ch === '『' ? ch : undefined;
       if (opener !== undefined) {
         const closer = opener === '「' ? '」' : '』';
         if (stack.length === 0) {
-          narration.push(ch, at); // top-level opening corner kept in place
+          pushNarr(ch, at); // top-level opening corner kept in place
           placeheld = false; // a fresh interior begins; its 〇 is emitted lazily
         } else {
           toUtterance(ch, at); // nested corner is part of the utterance
@@ -122,7 +145,7 @@ export function extractStreams(src: string): Streams {
       if (ch === stack[stack.length - 1]) {
         stack.pop();
         if (stack.length === 0) {
-          narration.push(ch, at); // top-level closing corner kept in place
+          pushNarr(ch, at); // top-level closing corner kept in place
           dialogue.joinFrom(utterance); // emit the finished utterance
         } else {
           toUtterance(ch, at); // nested closer is part of the utterance
@@ -130,7 +153,7 @@ export function extractStreams(src: string): Streams {
         continue;
       }
       if (stack.length === 0) {
-        narration.push(ch, at);
+        pushNarr(ch, at);
       } else {
         toUtterance(ch, at);
       }
@@ -153,9 +176,19 @@ export function extractStreams(src: string): Streams {
         appendProse(token.base, offset);
         ruby.joinFrom(readingBuf(token.reading, offset + token.base.length + 1));
         break;
-      // pageBreak / emphasis* / indent* / comment / brokenAnnotation contribute no prose; they
-      // only advance `offset` (malformed markup is deliberately not linted). Block directives
-      // vanishing here is also why a chunk seam can never bisect a ここから/ここで pair.
+      case 'indent': // line-head only (tokenizer-gated); overrides the block for this line, 0 included
+        lineIndent = token.amount;
+        break;
+      case 'indentBlockStart': // affects FOLLOWING lines only; same-line text keeps its head snapshot
+        blockIndent = token.amount;
+        break;
+      case 'indentBlockEnd': // the current line keeps its head snapshot
+        blockIndent = 0;
+        break;
+      // pageBreak / emphasis* / comment / brokenAnnotation contribute no prose; they only advance
+      // `offset` (malformed markup is deliberately not linted). The indent family contributes no
+      // prose either — only the synthetic 　 via pushNarr — so a chunk seam can never bisect a
+      // ここから/ここで pair.
     }
     offset += token.raw.length;
   }

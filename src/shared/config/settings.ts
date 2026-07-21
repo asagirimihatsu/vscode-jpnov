@@ -13,7 +13,7 @@
 import type { EdgeLineStyle, PageNumberPosition } from '../compiler/chrome.ts';
 import { EDGE_LINE_STYLES } from '../compiler/chrome.ts';
 import type { HtmlSettings, PreviewSettings } from '../protocol.ts';
-import type { AutoTcyMode, KinsokuMode } from './types.ts';
+import type { AutoTcyMode, KinsokuMode, LayoutSettings } from './types.ts';
 import { AUTO_TCY_MODES, CHARS_MAX, CHARS_MIN, KINSOKU_MODES, LAYOUT_DEFAULT } from './types.ts';
 
 export const PREVIEW_CHROME_DEFAULT = {
@@ -71,11 +71,19 @@ function kinsokuMode(value: unknown): KinsokuMode {
     : LAYOUT_DEFAULT.kinsoku;
 }
 
-export function resolvePreviewSettings(s: PreviewSettings): PreviewSettings {
+/** The shared `jpnov.layout.*` slice, resolved once for both wire snapshots. */
+function resolveLayout(s: LayoutSettings): LayoutSettings {
   return {
     charsPerLine: clampChars(s.charsPerLine, LAYOUT_DEFAULT.charsPerLine),
+    linesPerPage: clampChars(s.linesPerPage, LAYOUT_DEFAULT.linesPerPage),
     kinsoku: kinsokuMode(s.kinsoku),
     autoTcy: autoTcyMode(s.autoTcy),
+  };
+}
+
+export function resolvePreviewSettings(s: PreviewSettings): PreviewSettings {
+  return {
+    ...resolveLayout(s),
     lineNumbers: boolOr(s.lineNumbers, PREVIEW_CHROME_DEFAULT.lineNumbers),
     edgeLine: edgeLine(s.edgeLine),
   };
@@ -83,10 +91,7 @@ export function resolvePreviewSettings(s: PreviewSettings): PreviewSettings {
 
 export function resolveHtmlSettings(s: HtmlSettings): HtmlSettings {
   return {
-    charsPerLine: clampChars(s.charsPerLine, LAYOUT_DEFAULT.charsPerLine),
-    linesPerPage: clampChars(s.linesPerPage, LAYOUT_DEFAULT.linesPerPage),
-    kinsoku: kinsokuMode(s.kinsoku),
-    autoTcy: autoTcyMode(s.autoTcy),
+    ...resolveLayout(s),
     lineNumbers: boolOr(s.lineNumbers, BUILD_CHROME_DEFAULT.lineNumbers),
     edgeLine: edgeLine(s.edgeLine),
   };

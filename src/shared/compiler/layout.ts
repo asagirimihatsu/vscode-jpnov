@@ -337,6 +337,7 @@ export function buildRows(tokens: readonly Token[], issues?: number[]): Row[] {
     weight?: string | undefined;
     style?: string | undefined;
   } = {};
+  // Mirrored by the lint stream extractor (server/lint/streams.ts); lockstep guarded by streams.test.ts.
   let activeIndent = 0; // block 字下げ in effect, carried ACROSS lines
   let curIndent = 0; // indent for the line under construction (line start = activeIndent)
   let curHeading: HeadingLevel | undefined; // 見出し of the line under construction (line-local)

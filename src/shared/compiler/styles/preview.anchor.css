@@ -1,4 +1,5 @@
-/* Positioning context for the out-of-flow per-line chrome (.ln heads, edge rules) — included
-   when lineNumbers OR edgeLine is on. A separate rule (never folded into the .line base) so an
-   all-off .line stays position:static — exact computed-style parity with a chrome-less sheet. */
+/* Positioning context for the out-of-flow .ln heads, and — with edgeLine on — the lift that
+   paints text ABOVE the .segment::before frame (positioned boxes draw after it in tree order).
+   A separate rule (never folded into the .line base) so an all-off .line stays position:static
+   — exact computed-style parity with a chrome-less sheet. */
 .line{position:relative;}

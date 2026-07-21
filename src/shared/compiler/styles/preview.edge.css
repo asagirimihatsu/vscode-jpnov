@@ -1,21 +1,17 @@
 /* Edge rules (罫線 + 枠) — included when edgeLine ≠ none. --edge carries only the BASE colour
    (#cc0000 or currentColor); the 80%-alpha color-mix recipe lives HERE, once, identical in
-   preview and build — rules sit under the text's weight. Both boxes are out-of-flow paint at
-   the same fixed band height (100vh − 32px = the writing band): blank and short columns rule
-   at full height, a short segment's frame still spans the band, and the column pitch never
-   moves (edgeLine toggling repaints, never reflows). */
+   preview and build — rules sit under the text's weight. Every length is REM on purpose: the
+   webview host injects body{font-size}, so an em on .segment would follow it while the text
+   follows the 1rem-pinned .line — rem is the exact base of the 2.25em column pitch. */
 
-/* Each column but the segment's last draws ONE left rule (a right+left pair per boundary would
-   stack into a fat 2px line; the last column's outer edge is the frame's own border, and the
-   80%-alpha strokes would composite into a visibly darker line). The rule anchors on a .line
-   already inset 0.35rem by the segment padding, so it climbs back the same length — in REM,
-   the exact unit of that padding, so a webview-injected body{font-size} can't desync the two —
-   to meet the frame's top edge exactly. */
-.line:not(:last-child)::after{content:"";position:absolute;top:-0.35rem;left:0;right:0;height:calc(100vh - 32px);border-left:1px solid color-mix(in srgb,var(--edge) 80%,transparent);pointer-events:none;}
+/* With a frame drawn, a segment reserves the full linesPerPage page width — blank columns
+   extend LEFT. In the edge fragment on purpose: edgeLine 'none' keeps the content-hugging flow. */
+.segment{min-block-size:calc(var(--lpp)*2.25rem);}
 
 /* A real frame per .segment closes the outer edges — the build's per-.page 枠 transplanted, so
    the frames on either side of a ［＃改ページ］ close independently and the marker rides
    BETWEEN them, never inside one. Its containing block is the .segment padding box (= the
    band), so it starts at top:0; border-box keeps the frame's own borders inside the band
-   height (the rule above has no block-axis borders, so it needs no box-sizing). */
-.segment::before{content:"";position:absolute;top:0;left:0;right:0;height:calc(100vh - 32px);box-sizing:border-box;border:1px solid color-mix(in srgb,var(--edge) 80%,transparent);pointer-events:none;}
+   height. The 罫線 are build.edge.css's rules-as-background recipe at the rem pitch —
+   mechanics documented there. */
+.segment::before{content:"";position:absolute;top:0;left:0;right:0;height:calc(100vh - 32px);box-sizing:border-box;border:1px solid color-mix(in srgb,var(--edge) 80%,transparent);background-image:repeating-linear-gradient(to left,transparent 0,transparent calc(2.25rem - 1px),color-mix(in srgb,var(--edge) 80%,transparent) calc(2.25rem - 1px),color-mix(in srgb,var(--edge) 80%,transparent) 2.25rem);background-origin:border-box;background-clip:padding-box;pointer-events:none;}
