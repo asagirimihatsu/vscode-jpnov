@@ -147,7 +147,7 @@ test('縦中横 structural issues surface as Warnings with their codes', () => {
   assert.deepEqual(annotationDiagnostics(doc('令和［＃縦中横］12［＃縦中横終わり］年')), []);
 });
 
-// --------------------------------------------------------------- postfix target Warnings (#12)
+// --------------------------------------------------------------- postfix target Warnings
 
 test('an unresolved postfix target yields one Warning over the annotation, carrying the target', () => {
   const diags = annotationDiagnostics(doc('別の文［＃「無」に傍点］'));

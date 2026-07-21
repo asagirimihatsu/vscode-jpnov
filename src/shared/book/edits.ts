@@ -37,6 +37,20 @@ function sanitizeValue(value: string): string {
 }
 
 /**
+ * Appends `text` as new line(s) at the end of the document: onto the trailing blank line when
+ * one exists (empty document, or the '' line a final newline leaves after the split), else
+ * after the last line's content.
+ */
+function appendAtEnd(lines: readonly ParsedLine[], eol: string, text: string): TextReplace {
+  const last = lines[lines.length - 1];
+  if (last === undefined || last.raw === '') {
+    const line = last?.line ?? 0;
+    return { start: at(line, 0), end: at(line, 0), newText: `${text}${eol}` };
+  }
+  return { start: at(last.line, last.raw.length), end: at(last.line, last.raw.length), newText: `${eol}${text}` };
+}
+
+/**
  * Sets `key` to `value` (canonical `key: value` form). The FIRST occurrence of the key —
  * the one the parser lets win — is rewritten in place; an absent key is appended at the
  * end of the front matter, and a missing block is created at the very top. Never deletes:
@@ -65,12 +79,7 @@ export function upsertMeta(text: string, key: MetaKey, value: string): TextRepla
   }
   // Unterminated block (an Error state): everything below the fence is already metadata
   // territory, so appending at the end of the document stays inside it.
-  const last = parsed.lines[parsed.lines.length - 1];
-  if (last === undefined || last.raw === '') {
-    const line = last?.line ?? 0;
-    return { start: at(line, 0), end: at(line, 0), newText: `${entry}${eol}` };
-  }
-  return { start: at(last.line, last.raw.length), end: at(last.line, last.raw.length), newText: `${eol}${entry}` };
+  return appendAtEnd(parsed.lines, eol, entry);
 }
 
 /**
@@ -88,14 +97,7 @@ export function appendChapters(text: string, rels: readonly string[]): TextRepla
     return null;
   }
 
-  const last = parsed.lines[parsed.lines.length - 1];
-  const block = fresh.join(eol);
-  if (last === undefined || last.raw === '') {
-    // Empty document, or one already ending in a newline (the split leaves a '' line).
-    const line = last?.line ?? 0;
-    return { start: at(line, 0), end: at(line, 0), newText: `${block}${eol}` };
-  }
-  return { start: at(last.line, last.raw.length), end: at(last.line, last.raw.length), newText: `${eol}${block}` };
+  return appendAtEnd(parsed.lines, eol, fresh.join(eol));
 }
 
 /** The chapter (`ok`/`duplicate`) line at `line`, or null — the guard every mover uses. */

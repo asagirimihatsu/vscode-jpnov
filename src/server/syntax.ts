@@ -15,7 +15,7 @@
  * Relative imports only (native test loader; see test/server/lint/syntaxDiagnostics.test.ts).
  */
 import { DiagnosticSeverity } from 'vscode-languageserver/node';
-import type { Diagnostic } from 'vscode-languageserver/node';
+import type { Diagnostic, Range } from 'vscode-languageserver/node';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { findPostfixTargetIssues } from '../shared/compiler/layout.ts';
@@ -47,30 +47,22 @@ const TCY_WARNING_CODE = {
  */
 export function annotationDiagnostics(doc: TextDocument): Diagnostic[] {
   const text = doc.getText();
+  const rangeOf = (span: { start: number; end: number }): Range => ({
+    start: doc.positionAt(span.start),
+    end: doc.positionAt(span.end),
+  });
   const errors = findBrokenAnnotations(text).map((span) =>
-    diagnostic(
-      { start: doc.positionAt(span.start), end: doc.positionAt(span.end) },
-      { code: 'syntax.unclosedAnnotation' },
-      DiagnosticSeverity.Error,
-    ),
+    diagnostic(rangeOf(span), { code: 'syntax.unclosedAnnotation' }, DiagnosticSeverity.Error),
   );
   const warnings = findUnpairedBlocks(text).map((span) =>
-    diagnostic(
-      { start: doc.positionAt(span.start), end: doc.positionAt(span.end) },
-      { code: BLOCK_WARNING_CODE[span.kind] },
-      DiagnosticSeverity.Warning,
-    ),
+    diagnostic(rangeOf(span), { code: BLOCK_WARNING_CODE[span.kind] }, DiagnosticSeverity.Warning),
   );
   const tcyWarnings = findTcyIssues(text).map((span) =>
-    diagnostic(
-      { start: doc.positionAt(span.start), end: doc.positionAt(span.end) },
-      { code: TCY_WARNING_CODE[span.kind] },
-      DiagnosticSeverity.Warning,
-    ),
+    diagnostic(rangeOf(span), { code: TCY_WARNING_CODE[span.kind] }, DiagnosticSeverity.Warning),
   );
   const targetWarnings = findPostfixTargetIssues(text).map((span) =>
     diagnostic(
-      { start: doc.positionAt(span.start), end: doc.positionAt(span.end) },
+      rangeOf(span),
       { code: 'syntax.postfixTargetMissing', args: [span.target] },
       DiagnosticSeverity.Warning,
     ),

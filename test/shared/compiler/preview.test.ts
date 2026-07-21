@@ -83,8 +83,8 @@ test('renderPreview compiles ruby + emphasis inside the standalone doc', () => {
 });
 
 test('renderPreview emits the used emphasis rule in the <style>, omits unused (on-demand)', () => {
-  // Goal #2: the 傍点 rule lives in the nonce-able <style>, not an inline attribute, so the
-  // webview CSP can no longer strip it. Goal #3: only the used variant's rule is emitted.
+  // The 傍点 rule lives in the nonce-able <style>, not an inline attribute the webview CSP
+  // would strip; and only the used variant's rule is emitted.
   const html = preview('語［＃「語」に傍点］');
   assert.match(html, /<span class="emph-fs">/);
   assert.match(html, /\.emph-fs\{text-emphasis-style:filled sesame\}/);
@@ -129,7 +129,7 @@ test('renderPreview honors the kinsoku mode (禁則) — the same engine as the 
 
 test('renderPreview renders an unclosed ［＃ as visible literal text on its own line only', () => {
   // Lenient line-bounded recovery: the swallowed tail stays visible (typing feedback), and the
-  // NEXT source line is untouched — the old cross-line swallow must not come back.
+  // NEXT source line is untouched — a broken ［＃ must never swallow past its line break.
   const html = preview('本文［＃こわれ\n次の行');
   assert.match(html, /<div class="line" data-line="0">本文［＃こわれ<\/div>/);
   assert.match(html, /<div class="line" data-line="1">次の行<\/div>/);

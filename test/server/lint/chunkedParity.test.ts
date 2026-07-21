@@ -14,10 +14,10 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { computeLintFindings } from '../../../src/server/lint/kernel.ts';
 import type { LintFinding, LintRunOptions } from '../../../src/server/lint/kernel.ts';
 import { selectRules } from '../../../src/shared/lint/select.ts';
-import type { RawLintConfig } from '../../../src/shared/lint/select.ts';
+import type { RawLintConfigWire } from '../../../src/shared/protocol.ts';
 
 /** Both quadratic rules + a fixable rule + a threshold rule — the seam-sensitive set. */
-const RULES: RawLintConfig = {
+const RULES: RawLintConfigWire = {
   'jpnov.lint.common.sentenceLength': 30,
   'jpnov.lint.common.noUnmatchedPair': true,
   'jpnov.lint.common.maxTen': 2,

@@ -67,7 +67,7 @@ test('kinsoku rides both snapshots: kept when a known member, defaulted otherwis
   assert.equal(resolveHtmlSettings({ ...HTML_BASE, kinsoku: 'strict' }).kinsoku, 'strict');
   assert.equal(resolvePreviewSettings({ ...PREVIEW_BASE, kinsoku: 'none' }).kinsoku, 'none');
   assert.equal(resolveHtmlSettings(badHtml({ kinsoku: 'loose' })).kinsoku, LAYOUT_DEFAULT.kinsoku);
-  // A legacy boolean (the retired pre-enum shape) is just another invalid value.
+  // A boolean coerces to the default like any other invalid value — deliberately no compat shim.
   assert.equal(resolveHtmlSettings(badHtml({ kinsoku: true })).kinsoku, LAYOUT_DEFAULT.kinsoku);
 });
 

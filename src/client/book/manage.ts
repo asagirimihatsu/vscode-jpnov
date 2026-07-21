@@ -135,7 +135,6 @@ async function addChapters(arg: unknown): Promise<void> {
   const { uri, text } = await bookText(node.entry);
   const edit = appendChapters(text, rels);
   if (edit === null) {
-    // showInformationMessage never rejects, so void is safe.
     void vscode.window.showInformationMessage(vscode.l10n.t('Japanese Novel: already in this book.'));
     return;
   }

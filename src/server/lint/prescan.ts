@@ -108,7 +108,7 @@ function isAllKana(reading: string, mode: string): boolean {
 /**
  * Flags each `\n`-delimited ruby reading that is not entirely the kana type chosen in the setting
  * (`{ mode: 'hiragana' | 'katakana' }`). Requiring all-hiragana or all-katakana also rejects
- * half-width kana and decomposed (NFD) characters, so this one drop-down subsumes the old ruby trio.
+ * half-width kana and decomposed (NFD) characters, so one drop-down covers all three checks.
  */
 export const rubyKanaScan: PreScan = (text, options) => {
   const mode = typeof options === 'object' && 'mode' in options ? options.mode : undefined;

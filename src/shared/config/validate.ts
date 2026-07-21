@@ -61,25 +61,23 @@ export function resolveContained(
   }
 
   const baseUrl = new URL(base);
+  // The root path in both spellings (with/without the trailing slash), derived once for the
+  // two checks below. `base` ends with '/', so `pathname` normally does too.
+  const rootDir = baseUrl.pathname.endsWith('/') ? baseUrl.pathname : `${baseUrl.pathname}/`;
+  const rootPath = rootDir.slice(0, -1);
+
   // Containment: same origin/scheme, and the resolved path is at or under the base.
-  const basePath = baseUrl.pathname;
-  const containedPath = basePath.endsWith('/') ? basePath : `${basePath}/`;
   if (
     resolved.protocol !== baseUrl.protocol ||
     resolved.host !== baseUrl.host ||
-    !(
-      resolved.pathname === basePath.replace(/\/$/, '') ||
-      resolved.pathname === basePath ||
-      resolved.pathname.startsWith(containedPath)
-    )
+    !(resolved.pathname === rootPath || resolved.pathname.startsWith(rootDir))
   ) {
     return { ok: false, code: 'path.escapesRoot', args: [label] };
   }
 
   // Equal to the root after collapsing (e.g. "foo/..") is also a rejection: a config
   // field must name a real subpath. (Shares `path.rootDot` with the literal "." case.)
-  const rootNoSlash = basePath.replace(/\/$/, '');
-  if (resolved.pathname === rootNoSlash || resolved.pathname === basePath) {
+  if (resolved.pathname === rootPath || resolved.pathname === rootDir) {
     return { ok: false, code: 'path.rootDot', args: [label] };
   }
 

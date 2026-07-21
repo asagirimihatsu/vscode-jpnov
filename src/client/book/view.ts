@@ -260,21 +260,6 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
 
   // --- commands (wired in extension.ts) ------------------------------------
 
-  /** `jpnov.books.buildHtml`: render the checked books to `.html` only. */
-  buildHtml(): Promise<void> {
-    return this.buildSelected('html');
-  }
-
-  /** `jpnov.books.buildTxt`: render the checked books to `.txt` only. */
-  buildTxt(): Promise<void> {
-    return this.buildSelected('txt');
-  }
-
-  /** `jpnov.books.buildPdf`: render the checked books to `.html`, then convert each to `.pdf`. */
-  buildPdf(): Promise<void> {
-    return this.buildSelected('pdf');
-  }
-
   /** `jpnov.books.selectAll`: tick every book. */
   selectAll(): void {
     for (const b of this.books) {
@@ -362,9 +347,11 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
   }
 
   /**
-   * The build driver behind the panel's title actions: render the CHECKED books to `format`,
-   * write the returned artifacts (the client owns all filesystem writes), and report results.
-   * An empty selection is a no-op with a nudge rather than a silent "built 0".
+   * The build driver behind the panel's title actions (`jpnov.books.buildHtml`/`buildTxt`/
+   * `buildPdf`): render the CHECKED books to `action`'s one format (`pdf` = `.html` on the
+   * wire, converted client-side), write the returned artifacts (the client owns all
+   * filesystem writes), and report results. An empty selection is a no-op with a nudge
+   * rather than a silent "built 0".
    */
   async buildSelected(action: BuildAction): Promise<void> {
     const books = [...this.checked];
@@ -372,7 +359,6 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
     // already-localized into the count templates below.
     const label = action === 'pdf' ? 'PDF' : action === 'html' ? 'HTML' : vscode.l10n.t('text');
     if (books.length === 0) {
-      // UI notification: showInformationMessage never rejects, so void is safe.
       void vscode.window.showInformationMessage(
         vscode.l10n.t('Japanese Novel: no books selected. Check a book in the Books panel, then build.'),
       );
@@ -396,8 +382,6 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          // l10n.t has no plural support, so branch into a singular/plural pair of bundle keys;
-          // Japanese maps both to one (number-invariant) string.
           title: books.length === 1
             ? vscode.l10n.t('Japanese Novel: building 1 book to {0}…', label)
             : vscode.l10n.t('Japanese Novel: building {0} books to {1}…', String(books.length), label),
@@ -415,8 +399,8 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
             result = await c.sendRequest<BuildResult>(BuildRequest, params);
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            // UI notification: showErrorMessage never rejects, so void is safe. This granular popup
-            // means buildSelected returns normally (no rethrow) -> no boundary double-popup.
+            // This granular popup means buildSelected returns normally (no rethrow) -> no
+            // boundary double-popup from the command wrapper.
             void vscode.window.showErrorMessage(vscode.l10n.t('Japanese Novel: build failed. {0}', message));
             return;
           }
@@ -432,7 +416,6 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
               written.push(artifact.path);
             } catch (err) {
               const message = err instanceof Error ? err.message : String(err);
-              // UI notification: showErrorMessage never rejects, so void is safe.
               void vscode.window.showErrorMessage(
                 vscode.l10n.t("Japanese Novel: couldn't write {0}. {1}", artifact.path, message),
               );
@@ -443,7 +426,6 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
           // sends a {code,args}; the client renders it to localized text.
           const errors = result.errors ?? [];
           for (const e of errors) {
-            // UI notification: showErrorMessage never rejects, so void is safe.
             void vscode.window.showErrorMessage(
               vscode.l10n.t('Japanese Novel: build error for {0}. {1}', e.book, renderMessage(e)),
             );
@@ -459,7 +441,6 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
             // One artifact per book now (a single format), so the file count IS the book count.
             this.reportBuilt(written.length, label);
           } else if (errors.length === 0) {
-            // UI notification: showInformationMessage never rejects, so void is safe.
             void vscode.window.showInformationMessage(
               vscode.l10n.t('Japanese Novel: nothing to build.'),
             );
@@ -540,7 +521,6 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
             break;
           }
           const message = err instanceof Error ? err.message : String(err);
-          // UI notification: showErrorMessage never rejects, so void is safe.
           void vscode.window.showErrorMessage(
             vscode.l10n.t("Japanese Novel: couldn't convert {0} to PDF. {1}", lastPathSegment(htmlUri), message),
           );

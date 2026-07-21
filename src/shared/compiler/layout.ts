@@ -187,21 +187,21 @@ function rubyHtml(
 ): string {
   const right = r.right === undefined ? '' : `<rt>${readingSpans(r.right)}</rt>`;
   const left = r.left === undefined ? '' : `<rt class="rt-l">${readingSpans(r.left)}</rt>`;
-  return `<ruby class="${rubyLane(r, cells).cssClass}">${readingSpans(r.base)}${right}${left}</ruby>`;
+  return `<ruby class="${rubyLane(r, cells)}">${readingSpans(r.base)}${right}${left}</ruby>`;
 }
 
 /**
- * The stylesheet face of a ruby at the DECIDED advance: its side class (rr/lr/br) plus `rh-N`
+ * The stylesheet class of a ruby at the DECIDED advance: its side class (rr/lr/br) plus `rh-N`
  * when the box outgrows the base. Shared by {@link rubyHtml}, buildRows and
  * {@link applyLeftRuby} so class attribute, used-sink and cell accounting never drift apart.
  */
 function rubyLane(
   r: { base: string; right?: string | undefined; left?: string | undefined },
   cells: number,
-): { cssClass: string } {
+): string {
   const stretch = cells > Array.from(r.base).length ? ` rh-${String(cells)}` : '';
   const side = r.left === undefined ? 'rr' : r.right === undefined ? 'lr' : 'br';
-  return { cssClass: side + stretch };
+  return side + stretch;
 }
 
 /**
@@ -228,7 +228,7 @@ function applyLeftRuby(
         const cells = rubyCells(single.ruby); // safe; the settle pass may tighten at line end
         single.cells = cells; // a long reading stretches the box — the grid follows
         single.html = rubyHtml(single.ruby, cells);
-        single.cssClass = rubyLane(single.ruby, cells).cssClass;
+        single.cssClass = rubyLane(single.ruby, cells);
         return;
       }
       if (real.every((u) => u.ruby === undefined && u.cssClass === undefined)) {
@@ -243,7 +243,7 @@ function applyLeftRuby(
           line: first?.line,
           weight: first?.weight,
           style: first?.style,
-          cssClass: rubyLane(ruby, cells).cssClass,
+          cssClass: rubyLane(ruby, cells),
           ruby,
         };
         const kept = units.slice(m.first, m.last + 1).filter((u) => u.text === '');
@@ -393,7 +393,7 @@ export function buildRows(tokens: readonly Token[], issues?: number[]): Row[] {
       const tight = rubyCells(u.ruby, RUBY_OVERHANG_QUARTERS);
       if (tight < u.cells && tolerant(i, -1) && tolerant(i, 1)) {
         u.cells = tight;
-        u.cssClass = rubyLane(u.ruby, tight).cssClass;
+        u.cssClass = rubyLane(u.ruby, tight);
         u.html = rubyHtml(u.ruby, tight);
       }
     }
@@ -463,7 +463,7 @@ export function buildRows(tokens: readonly Token[], issues?: number[]): Row[] {
         const cells = rubyCells(ruby); // safe whole-cell advance; the settle pass may tighten
         const u = mk(cells, '', token.base);
         u.ruby = ruby;
-        u.cssClass = rubyLane(ruby, cells).cssClass; // rr (+ rh-N); 左ルビ may upgrade to br
+        u.cssClass = rubyLane(ruby, cells); // rr (+ rh-N); 左ルビ may upgrade to br
         u.html = rubyHtml(u.ruby, cells);
         cur.push(u);
         break;
@@ -565,7 +565,7 @@ export function buildRows(tokens: readonly Token[], issues?: number[]): Row[] {
         lineSuppressed = true;
         break;
       case 'comment':
-        cur.push({ cells: 0, html: `<!--${escapeComment(token.inner)}-->`, text: '' });
+        cur.push(commentUnit(token.raw));
         break;
       case 'brokenAnnotation': {
         // Unclosed ［＃… (swallowed to its line end): visible literal text, so the preview/build
@@ -981,14 +981,19 @@ function unitKey(u: Unit): string {
 }
 
 function emitLine(line: DisplayLine, used?: Set<string>, anchor = true, head = ''): string {
+  // On-demand class sink: cssClass (tcy / rr / lr / br / rh-N, baked inside u.html) and
+  // channel keys both land here so css.ts emits exactly the rules present.
+  const sink = (classes: string | undefined): void => {
+    if (used && classes !== undefined && classes !== '') {
+      for (const c of classes.split(' ')) {
+        used.add(c);
+      }
+    }
+  };
   let html = '';
   let open = ''; // '' sentinel (a real key is never '')
   for (const u of line.units) {
-    if (used && u.cssClass !== undefined) {
-      for (const c of u.cssClass.split(' ')) {
-        used.add(c); // on-demand stylesheet classes baked inside u.html (tcy / rr / lr / br / rh-N)
-      }
-    }
+    sink(u.cssClass);
     const key = unitKey(u);
     if (key !== open) {
       if (open !== '') {
@@ -996,11 +1001,7 @@ function emitLine(line: DisplayLine, used?: Set<string>, anchor = true, head = '
       }
       open = key;
       if (open !== '') {
-        if (used) {
-          for (const c of open.split(' ')) {
-            used.add(c);
-          }
-        }
+        sink(open);
         html += `<span class="${open}">`;
       }
     }
@@ -1012,20 +1013,12 @@ function emitLine(line: DisplayLine, used?: Set<string>, anchor = true, head = '
   if (line.hang !== undefined) {
     // The hung 句読点 lands after the last cell; its channel span cannot join a neighbour's
     // (that span just closed above), so it carries its own.
-    if (used && line.hang.cssClass !== undefined) {
-      for (const c of line.hang.cssClass.split(' ')) {
-        used.add(c);
-      }
-    }
+    sink(line.hang.cssClass);
     const hk = unitKey(line.hang);
     if (hk === '') {
       html += line.hang.html;
     } else {
-      if (used) {
-        for (const c of hk.split(' ')) {
-          used.add(c);
-        }
-      }
+      sink(hk);
       html += `<span class="${hk}">${line.hang.html}</span>`;
     }
   }
@@ -1107,24 +1100,23 @@ export function pagesToHtml(
 }
 
 /**
- * Renders ONE file's rows as a CONTINUOUS line flow for the live preview (no pagination):
- * each line row is hard-wrapped via {@link wrapRow} into `<div class="line">` columns, sharing
- * the exact same line-break + 禁則 + ruby/emphasis/comment engine the book build uses — so the
- * preview agrees with the printed page. When `lineNumbers` is on, every display column opens
- * with an out-of-flow `<span class="ln">N</span>` head-margin number that restarts at 1 after
- * each materialized break marker — computed HERE, not with CSS counters, because a
- * counter-reset on a sibling `.pagebreak` does not reset following siblings in Chromium
- * (the build's per-page reset sits on an ANCESTOR `.page`, which is reliable, so only this
- * continuous flow needs the JS fallback). The columns are grouped into `<div class="segment">`
- * blocks — one per run of lines between breaks, the build page's preview analogue, giving the
- * edge-rule frame a per-segment anchor so the 枠 closes independently on each side of a break.
- * A ［＃改ページ］ becomes a visible, labelled `<div class="pagebreak">` marker emitted
- * BETWEEN segments as a direct `.book` child (outside every frame); segments open lazily on
- * their first line, so a leading, trailing, or doubled break collapses to nothing (mirroring
- * the build's empty-page elision) — no stray marker, no empty segment. Only the FIRST display line of each
- * source line carries a `data-line` anchor (1:1 with source lines, so the cursor-follow scroller
- * lands on the line's head). When a `used` sink is passed, every emphasis class emitted is
- * recorded so the caller can emit only those rules (on-demand CSS). Pure + vscode-free.
+ * Renders ONE file's rows as a CONTINUOUS line flow for the live preview (no pagination),
+ * hard-wrapping each row via {@link wrapRow} — the same line-break + 禁則 + ruby/emphasis
+ * engine the book build uses, so the preview agrees with the printed page. Pure + vscode-free.
+ *
+ * - `lineNumbers` opens every column with an out-of-flow `<span class="ln">N</span>` head,
+ *   numbered in JS and restarting after each break marker: a counter-reset on a sibling
+ *   `.pagebreak` does not reset following siblings in Chromium, so only the build's
+ *   ancestor-`.page` CSS counters are reliable — never unify the two.
+ * - Columns group into `<div class="segment">` blocks (one per run of lines between breaks,
+ *   the build page's preview analogue) so the edge-rule 枠 closes independently on each side
+ *   of a break. Segments open lazily on their first line, so a leading/trailing/doubled
+ *   ［＃改ページ］ collapses to nothing — mirroring the build's empty-page elision.
+ * - The labelled `<div class="pagebreak">` marker lands BETWEEN segments as a direct `.book`
+ *   child, outside every frame.
+ * - Only the FIRST display line of a source line carries `data-line` (1:1 anchors, so the
+ *   cursor-follow scroller lands on the line's head).
+ * - A `used` sink records every emitted class so the caller emits only those rules.
  */
 export function flowToHtml(
   rows: readonly Row[],

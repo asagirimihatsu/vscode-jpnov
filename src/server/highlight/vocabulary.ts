@@ -36,11 +36,8 @@ export interface HighlightStore {
   recognizerFor(docUri: string): Recognizer | undefined;
 }
 
-/**
- * Keeps non-empty strings, dedups first-seen, and drops everything else. The single
- * surviving home of the old config parser's "drop bad items, never reject the whole
- * config" semantics.
- */
+/** Keeps non-empty strings, dedups first-seen, and drops everything else — bad items
+ *  never reject the rest of the config. */
 function normalizeList(value: readonly unknown[] | undefined): string[] {
   if (!Array.isArray(value)) {
     return [];
@@ -100,9 +97,7 @@ export function createHighlightStore(): HighlightStore {
 /**
  * The `jpnov/highlightChanged` handler: swap the snapshot, then ask the client to re-pull
  * semantic tokens for every open editor so the recolour is immediate (no reload, no edit
- * needed) — same move the config-edit path used to make. Kept here (not inlined in
- * server.ts) so the refresh call is unit-testable; forgetting it would be the silent
- * "setting change does nothing until you touch the document" bug.
+ * needed). Kept out of server.ts so the swap+refresh pairing is unit-testable.
  */
 export function handleHighlightChanged(
   connection: Connection,

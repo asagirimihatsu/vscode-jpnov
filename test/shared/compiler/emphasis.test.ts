@@ -48,7 +48,7 @@ test('resolveStyle maps 太字/斜体 to the weight/style channels (b / i)', () 
   assert.deepEqual(resolveStyle('斜体'), { channel: 'style', className: 'i' });
 });
 
-test('resolveStyle adds -l form-bound: bare 左に for spans, の左に for postfixes (#11)', () => {
+test('resolveStyle adds -l form-bound: bare 左に for spans, の左に for postfixes', () => {
   assert.deepEqual(resolveStyle('左に傍点', 'span'), { channel: 'emph', className: 'emph-fs-l' });
   assert.deepEqual(resolveStyle('左に二重丸傍点', 'span'), { channel: 'emph', className: 'emph-fd-l' });
   assert.deepEqual(resolveStyle('左に傍線', 'span'), { channel: 'line', className: 'dec-solid-l' });
@@ -57,7 +57,7 @@ test('resolveStyle adds -l form-bound: bare 左に for spans, の左に for post
   assert.deepEqual(resolveStyle('の左に波線', 'postfix'), { channel: 'line', className: 'dec-wavy-l' });
 });
 
-test('resolveStyle rejects the cross-form left prefixes and any prefix under none (#11)', () => {
+test('resolveStyle rejects the cross-form left prefixes and any prefix under none', () => {
   // The Aozora spec fixes the spelling by form: a span never carries の左に, a postfix never
   // carries bare 左に; both degrade to null (→ comment) instead of resolving to -l.
   assert.equal(resolveStyle('の左に傍点', 'span'), null);
@@ -78,8 +78,8 @@ test('resolveStyle rejects 左に on 太字/斜体 (no side) and unknown / empty
 
 test('styleRule yields the full CSS rule; emph-x uses the real × glyph, not ASCII', () => {
   assert.equal(styleRule('emph-fs'), '.emph-fs{text-emphasis-style:filled sesame}');
-  // The -l position needs the over|under component: a bare `left` is invalid CSS and the whole
-  // declaration used to be dropped (the 左に傍点 bug) — `under left` is the fixed value.
+  // The -l position needs the over|under component: a bare `left` is invalid CSS (the browser
+  // drops the whole declaration) — `under left` is the required value.
   assert.equal(
     styleRule('emph-fs-l'),
     '.emph-fs-l{text-emphasis-style:filled sesame;text-emphasis-position:under left}',

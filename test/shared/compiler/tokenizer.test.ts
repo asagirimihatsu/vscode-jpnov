@@ -355,7 +355,7 @@ test('connector×channel mismatches degrade to comments', () => {
   assert.deepEqual(kinds(tokenize('x［＃「x」傍点］')), ['text', 'emphasisPostfix']);
 });
 
-test('#11: the left prefix is form-bound — postfix takes の左に only, spans take bare 左に only', () => {
+test('the left prefix is form-bound — postfix takes の左に only, spans take bare 左に only', () => {
   // The Aozora spec never writes a postfix with bare 左に nor a span with の左に; the wrong
   // spelling degrades to a comment in BOTH layers (tmLanguage mirrors these exactly).
   assert.deepEqual(kinds(tokenize('対象［＃「対象」左に傍線］')), ['text', 'comment']); // bare 左に postfix
@@ -397,7 +397,7 @@ test('左ルビ degrades to a comment on every malformed shape', () => {
   assert.deepEqual(kinds(tokenize('対象［＃「対象」の左に「」のルビ］')), ['text', 'comment']); // empty reading (silent)
   assert.deepEqual(kinds(tokenize('対象［＃「対象」の左に「よみ」の注記］')), ['text', 'comment']); // 注記 family: out of scope
   assert.deepEqual(kinds(tokenize('対象［＃「対象」の左に「よみ」］')), ['text', 'comment']); // missing のルビ tail
-  assert.deepEqual(kinds(tokenize('対象［＃「対象」左に「よみ」のルビ］')), ['text', 'comment']); // bare 左に (#11: postfix takes の左に)
+  assert.deepEqual(kinds(tokenize('対象［＃「対象」左に「よみ」のルビ］')), ['text', 'comment']); // bare 左に (postfix takes の左に)
   assert.deepEqual(kinds(tokenize('対象［＃「対象」に「よみ」のルビ］')), ['text', 'comment']); // に (no right-side annotation ruby exists)
 });
 

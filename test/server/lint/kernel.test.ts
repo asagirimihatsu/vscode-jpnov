@@ -10,7 +10,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { computeLintFindings } from '../../../src/server/lint/kernel.ts';
 import { selectRules } from '../../../src/shared/lint/select.ts';
-import type { RawLintConfig } from '../../../src/shared/lint/select.ts';
+import type { RawLintConfigWire } from '../../../src/shared/protocol.ts';
 
 interface Hit {
   readonly code: string;
@@ -19,7 +19,7 @@ interface Hit {
 }
 
 /** Run the driver and project each finding to { code, flagged source text, optional fix }. */
-async function lintAll(src: string, raw: RawLintConfig): Promise<Hit[]> {
+async function lintAll(src: string, raw: RawLintConfigWire): Promise<Hit[]> {
   const doc = TextDocument.create('mem://x.jpnov', 'novel-jp', 1, src);
   const result = computeLintFindings(src, selectRules(raw), doc);
   const findings = Array.isArray(result) ? result : await result;
@@ -33,13 +33,13 @@ async function lintAll(src: string, raw: RawLintConfig): Promise<Hit[]> {
 }
 
 /** Just the { code, text } of each finding (fix-agnostic tests). */
-async function lint(src: string, raw: RawLintConfig): Promise<{ code: string; text: string }[]> {
+async function lint(src: string, raw: RawLintConfigWire): Promise<{ code: string; text: string }[]> {
   return (await lintAll(src, raw)).map(({ code, text }) => ({ code, text }));
 }
 
 /** Apply every fix (right-to-left so offsets stay valid) and return the resulting source — the real
  *  "does the fix corrupt the text?" check (no deleted chars, no eaten newlines). */
-async function applied(src: string, raw: RawLintConfig): Promise<string> {
+async function applied(src: string, raw: RawLintConfigWire): Promise<string> {
   const doc = TextDocument.create('mem://x.jpnov', 'novel-jp', 1, src);
   const result = computeLintFindings(src, selectRules(raw), doc);
   const findings = Array.isArray(result) ? result : await result;

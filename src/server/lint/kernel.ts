@@ -126,7 +126,7 @@ async function lintStream(
     // The kernel pass runs per bounded chunk: sentence-splitter (sentence-length /
     // no-unmatched-pair) is quadratic in the text of ONE lintText call, so bounding the call
     // bounds the cost. The awaited gap between chunks yields the event loop (an in-flight lint
-    // no longer starves other LSP traffic) and is the cancellation seam. Message offsets are
+    // cannot starve other LSP traffic) and is the cancellation seam. Message offsets are
     // chunk-relative; `+ a` rebases them onto the parent stream so the ONE existing source
     // mapping (mapRange/mapFixRange over the parent srcMap) applies unchanged.
     const chunks =

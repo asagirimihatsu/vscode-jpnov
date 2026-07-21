@@ -196,6 +196,19 @@ export function buildSemanticTokens(
       mark(last, ONE, 'marker'); // ］
     };
 
+    // Corner-target prelude ［＃「対象」 shared by every postfix: ［＃ and both corners demote
+    // to marker, the 対象 keeps its default colour (annotation-internal — never touches the
+    // dialogue stack). Returns the offset of the closing 」.
+    const markCorners = (target: string): number => {
+      flushRun();
+      mark(offset, ANNOT_OPEN, 'marker'); // ［＃
+      const openCorner = offset + ANNOT_OPEN;
+      mark(openCorner, ONE, 'marker'); // 「
+      const closeCorner = openCorner + ONE + target.length;
+      mark(closeCorner, ONE, 'marker'); // 」
+      return closeCorner;
+    };
+
     switch (token.kind) {
       case 'text': {
         appendBody(token.text, offset);
@@ -280,12 +293,7 @@ export function buildSemanticTokens(
         break;
       }
       case 'emphasisPostfix': {
-        flushRun();
-        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
-        const openCorner = offset + ANNOT_OPEN;
-        mark(openCorner, ONE, 'marker'); // 「 (annotation-internal — never touches the dialogue stack)
-        const closeCorner = openCorner + ONE + token.target.length; // ( 対象 kept default )
-        mark(closeCorner, ONE, 'marker'); // 」
+        const closeCorner = markCorners(token.target);
         const afterCorner = closeCorner + ONE;
         const conn = raw - (afterCorner - offset) - token.variant.length - ONE; // に / は (0 or 1)
         mark(afterCorner, conn, 'marker');
@@ -297,14 +305,9 @@ export function buildSemanticTokens(
         break;
       }
       case 'rubyLeftPostfix': {
-        // ［＃「対象」の左に「よみ」のルビ］ — corners marker, 対象 default, の左に direction,
-        // the reading greyed like a 《》 reading, のルビ the directive.
-        flushRun();
-        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
-        const openCorner = offset + ANNOT_OPEN;
-        mark(openCorner, ONE, 'marker'); // 「
-        const closeCorner = openCorner + ONE + token.target.length; // ( 対象 kept default )
-        mark(closeCorner, ONE, 'marker'); // 」
+        // ［＃「対象」の左に「よみ」のルビ］ — の左に direction, the reading greyed like a
+        // 《》 reading, のルビ the directive.
+        const closeCorner = markCorners(token.target);
         const dirStart = closeCorner + ONE;
         mark(dirStart, 'の左に'.length, 'direction'); // の左に
         const openReading = dirStart + 'の左に'.length;
@@ -314,14 +317,8 @@ export function buildSemanticTokens(
         break;
       }
       case 'tcyPostfix': {
-        // ［＃「対象」は縦中横］ — mirrors emphasisPostfix: corners + the は connector demote to
-        // marker, the 対象 keeps its default colour, 縦中横 is the directive.
-        flushRun();
-        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
-        const openCorner = offset + ANNOT_OPEN;
-        mark(openCorner, ONE, 'marker'); // 「
-        const closeCorner = openCorner + ONE + token.target.length; // ( 対象 kept default )
-        mark(closeCorner, ONE, 'marker'); // 」
+        // ［＃「対象」は縦中横］ — the は connector demotes to marker, 縦中横 is the directive.
+        const closeCorner = markCorners(token.target);
         mark(closeCorner + ONE, ONE, 'marker'); // は (connector, demoted like に)
         mark(closeCorner + ONE + ONE, '縦中横'.length, 'directive'); // 縦中横
         mark(last, ONE, 'marker'); // ］
@@ -341,15 +338,9 @@ export function buildSemanticTokens(
         break;
       }
       case 'headingPostfix': {
-        // ［＃「対象」は大見出し］ — mirrors tcyPostfix: corners + the は connector demote to
-        // marker, the 対象 keeps its default colour, the 見出し literal is the directive
-        // (its length derived from the span so no literal is hardcoded here).
-        flushRun();
-        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
-        const openCorner = offset + ANNOT_OPEN;
-        mark(openCorner, ONE, 'marker'); // 「
-        const closeCorner = openCorner + ONE + token.target.length; // ( 対象 kept default )
-        mark(closeCorner, ONE, 'marker'); // 」
+        // ［＃「対象」は大見出し］ — mirrors tcyPostfix; the 見出し literal's length is derived
+        // from the span so no literal is hardcoded here.
+        const closeCorner = markCorners(token.target);
         mark(closeCorner + ONE, ONE, 'marker'); // は (connector, demoted like に)
         const litStart = closeCorner + ONE + ONE;
         mark(litStart, raw - (litStart - offset) - ONE, 'directive'); // 大見出し / 中見出し / 小見出し

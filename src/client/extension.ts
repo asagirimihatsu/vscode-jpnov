@@ -281,9 +281,9 @@ export function activate(context: vscode.ExtensionContext): void {
   // build entry — a build needs at least one discovered, selected book, so the palette is the
   // wrong home for it.
   context.subscriptions.push(
-    serverCommand('jpnov.books.buildHtml', () => booksView?.buildHtml()),
-    serverCommand('jpnov.books.buildTxt', () => booksView?.buildTxt()),
-    serverCommand('jpnov.books.buildPdf', () => booksView?.buildPdf()),
+    serverCommand('jpnov.books.buildHtml', () => booksView?.buildSelected('html')),
+    serverCommand('jpnov.books.buildTxt', () => booksView?.buildSelected('txt')),
+    serverCommand('jpnov.books.buildPdf', () => booksView?.buildSelected('pdf')),
     serverCommand('jpnov.books.selectAll', () => booksView?.selectAll()),
     serverCommand('jpnov.books.deselectAll', () => booksView?.deselectAll()),
     serverCommand('jpnov.books.refresh', () => booksView?.refresh()),
