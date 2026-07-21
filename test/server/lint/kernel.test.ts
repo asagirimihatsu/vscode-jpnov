@@ -148,6 +148,62 @@ test('narration generalNovelStyle flags a paragraph not starting with indent/ope
   assert.ok(hits.some((h) => h.code === 'lint.narration.generalNovelStyle'));
 });
 
+// --- 字下げ-covered lines read as indented (synthetic 　, streams.ts) ---
+
+test('a line opened by ［＃N字下げ］ (N ≥ 1) is not flagged as un-indented', async () => {
+  assert.deepEqual(await lint('［＃２字下げ］引用の行だ。\n', { 'jpnov.lint.narration.generalNovelStyle': true }), []);
+});
+
+test('［＃０字下げ］ renders un-indented, so the flag (and its insert fix) stays', async () => {
+  assert.equal(
+    await applied('［＃０字下げ］内容だ。\n', { 'jpnov.lint.narration.generalNovelStyle': true }),
+    '［＃０字下げ］　内容だ。\n',
+  );
+});
+
+test('every line inside a ここから…ここで block is covered; lines after the end are not', async () => {
+  const src = '［＃ここから２字下げ］\n引用一だ。\n引用二だ。\n［＃ここで字下げ終わり］\n戻りの行だ。\n';
+  assert.deepEqual(await lint(src, { 'jpnov.lint.narration.generalNovelStyle': true }), [
+    { code: 'lint.narration.generalNovelStyle', text: '戻りの行だ。' },
+  ]);
+});
+
+test('last-wins reopen keeps coverage; the line after the end is flagged', async () => {
+  const src = '［＃ここから２字下げ］\n二字の行だ。\n［＃ここから４字下げ］\n四字の行だ。\n［＃ここで字下げ終わり］\n外の行だ。\n';
+  assert.deepEqual(await lint(src, { 'jpnov.lint.narration.generalNovelStyle': true }), [
+    { code: 'lint.narration.generalNovelStyle', text: '外の行だ。' },
+  ]);
+});
+
+test('an inline ［＃０字下げ］ cancels the block for its line (renders flush)', async () => {
+  const src = '［＃ここから２字下げ］\n［＃０字下げ］素の行だ。\n［＃ここで字下げ終わり］\n';
+  assert.deepEqual(await lint(src, { 'jpnov.lint.narration.generalNovelStyle': true }), [
+    { code: 'lint.narration.generalNovelStyle', text: '素の行だ。' },
+  ]);
+});
+
+test('text on the ここから line keeps its pre-block indent (flagged); following lines are covered', async () => {
+  const src = '［＃ここから２字下げ］同じ行だ。\n次の行だ。\n［＃ここで字下げ終わり］\n';
+  assert.deepEqual(await lint(src, { 'jpnov.lint.narration.generalNovelStyle': true }), [
+    { code: 'lint.narration.generalNovelStyle', text: '同じ行だ。' },
+  ]);
+});
+
+test('ranges and fixes over a synthetic-first stream map back without positional drift', async () => {
+  // The synthetic 　 is narration[0] here; each hit slices back to the exact source text —
+  // never the command bytes, never off by one unit.
+  assert.deepEqual(
+    await lint('［＃３字下げ］あいうえおかきくけこ。\n', { 'jpnov.lint.common.sentenceLength': 5 }),
+    [{ code: 'lint.common.sentenceLength', text: 'あいうえおかきくけこ。' }],
+  );
+  assert.deepEqual(await lint('［＃３字下げ］あ、い、う、え、お。\n', { 'jpnov.lint.common.maxTen': 2 }), [
+    { code: 'lint.common.maxTen', text: '、' },
+  ]);
+  assert.deepEqual(await lintAll('［＃３字下げ］はｱだ。\n', { 'jpnov.lint.common.noHankakuKana': true }), [
+    { code: 'lint.common.noHankakuKana', text: 'ｱ', fix: { text: 'ｱ', newText: 'ア' } },
+  ]);
+});
+
 test('narration jaNoMixedPeriod flags a sentence with no period', async () => {
   const hits = await lint('これは文', { 'jpnov.lint.narration.jaNoMixedPeriod': true });
   assert.ok(hits.some((h) => h.code === 'lint.narration.jaNoMixedPeriod'));

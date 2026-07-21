@@ -10,12 +10,15 @@ import { renderPreview } from '../../../src/shared/compiler/preview.ts';
 const EDGE_MIX = 'color-mix(in srgb,var(--edge) 80%,transparent)';
 /** A match pattern: raw regex source with the escaped recipe for `base` appended. */
 const edgeMixRe = (raw: string): RegExp => new RegExp(raw + EDGE_MIX.replace(/[()]/g, '\\$&'));
+// Full recipe pinned by css.test.ts / styles-codegen.test.ts; here only a shipped-fragment probe.
+const EDGE_GRAD_PROBE = /\.segment::before\{[^}]*repeating-linear-gradient\(to left/;
 
 /** renderPreview with explicit resolved options (the compiler has no defaults); chrome all-off. */
 function preview(
   src: string,
   o: Partial<{
     charsPerLine: number;
+    linesPerPage: number;
     kinsoku: 'none' | 'normal' | 'strict';
     autoTcy: 'none' | 'punctuationPairs';
     chrome: PreviewChrome;
@@ -23,6 +26,7 @@ function preview(
 ): string {
   return renderPreview(src, {
     charsPerLine: 40,
+    linesPerPage: 34,
     kinsoku: 'none',
     autoTcy: 'none',
     chrome: { lineNumbers: false, edgeLine: 'none' },
@@ -196,13 +200,12 @@ test('renderPreview line numbers count wrapped continuation columns as their own
 
 test('renderPreview edge lines ride the stylesheet only: red and text, both at 80% alpha', () => {
   const red = preview('一', { chrome: { lineNumbers: false, edgeLine: 'red' } });
-  assert.match(red, edgeMixRe(String.raw`\.line:not\(:last-child\)::after\{[^}]*border-left:1px solid `));
-  assert.match(red, /:root\{[^}]*--edge:#cc0000\}/);
+  assert.match(red, EDGE_GRAD_PROBE); // full-page rules on the frame's own background
+  assert.match(red, edgeMixRe(String.raw`\.segment::before\{[^}]*border:1px solid `));
+  assert.match(red, /\.segment\{min-block-size:calc\(var\(--lpp\)\*2\.25rem\);\}/);
+  assert.match(red, /:root\{[^}]*--lpp:34;--edge:#cc0000\}/);
   const text = preview('一', { chrome: { lineNumbers: false, edgeLine: 'text' } });
-  assert.match(
-    text,
-    edgeMixRe(String.raw`\.line:not\(:last-child\)::after\{[^}]*border-left:1px solid `),
-  );
+  assert.match(text, EDGE_GRAD_PROBE);
   assert.match(text, /:root\{[^}]*--edge:currentColor\}/);
 });
 
@@ -211,5 +214,6 @@ test('renderPreview all-off chrome emits neither number spans nor edge rules', (
   assert.doesNotMatch(html, /class="ln"/);
   assert.doesNotMatch(html, /\.ln\{/);
   assert.doesNotMatch(html, /::after/);
+  assert.doesNotMatch(html, /--lpp|min-block-size/); // the page extent rides the edge fragment only
   assert.match(html, /\.pb-label\{/); // the page-break label styling is unconditional
 });

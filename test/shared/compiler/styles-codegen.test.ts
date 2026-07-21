@@ -101,6 +101,19 @@ test('the .css geometry literals equal the geometry.ts constants (@page double-h
   assert.equal(cssValue(read('build.folio.css'), '.pn.l', 'left'), SIDE_PAD + 0.35);
 });
 
+test('the edge fragments carry the LINE_PITCH gradient and page-extent literals', () => {
+  // These LINE_PITCH derivations live inside gradient stops / calc(), where cssValue()
+  // deliberately does not read — lock the full strings instead.
+  const edgeGradient = (unit: string): string =>
+    `repeating-linear-gradient(to left,transparent 0,transparent calc(${String(LINE_PITCH)}${unit} - 1px),color-mix(in srgb,var(--edge) 80%,transparent) calc(${String(LINE_PITCH)}${unit} - 1px),color-mix(in srgb,var(--edge) 80%,transparent) ${String(LINE_PITCH)}${unit})`;
+  assert.ok(read('build.edge.css').includes(edgeGradient('em')), 'build.edge.css gradient drifted from LINE_PITCH');
+  assert.ok(read('preview.edge.css').includes(edgeGradient('rem')), 'preview.edge.css gradient drifted from LINE_PITCH');
+  assert.ok(
+    read('preview.edge.css').includes(`min-block-size:calc(var(--lpp)*${String(LINE_PITCH)}rem)`),
+    'preview.edge.css page extent drifted from LINE_PITCH',
+  );
+});
+
 test('the base fragments carry NO ruby rules (the css.ts classRule lanes own rt sizing)', () => {
   // Every <rt> the layout emits sits inside a classed ruby (rr/lr/br) whose on-demand rule
   // set declares font-size:0.5em itself — a fragment-level ruby>rt rule would be a silent

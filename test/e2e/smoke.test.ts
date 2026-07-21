@@ -18,6 +18,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { resolveBrowserExecutable } from '../../src/client/browser.ts';
+import { LINE_PITCH } from '../../src/shared/compiler/geometry.ts';
 import type {
   BuildResult,
   HtmlSettings,
@@ -32,6 +33,7 @@ const SERVER_MODULE = fileURLToPath(new URL('../../dist/server/server.js', impor
 
 const PREVIEW_SETTINGS: PreviewSettings = {
   charsPerLine: 40,
+  linesPerPage: 34,
   kinsoku: 'normal',
   autoTcy: 'punctuationPairs',
   lineNumbers: true,
@@ -63,6 +65,12 @@ const browser = resolveBrowserExecutable({
   exists: existsSync,
 });
 const browserRequired = process.env.JPNOV_E2E_REQUIRE_BROWSER === '1';
+/** Shared options for every browser-rendering leg. */
+const BROWSER_SKIP = {
+  skip: browser === undefined && !browserRequired
+    ? 'no Chromium-family browser on this machine (CI requires one via JPNOV_E2E_REQUIRE_BROWSER=1)'
+    : false,
+};
 
 let client: LspClient | undefined;
 const cleanups: string[] = [];
@@ -252,23 +260,22 @@ async function dumpMarker(browserPath: string, pageUrl: string, profileDir: stri
   throw new Error(`no ${MARKER} marker in browser output.\nstderr tail: ${err.slice(-2000)}`);
 }
 
-test('the built page renders vertically in a headless Chromium', {
-  skip: browser === undefined && !browserRequired
-    ? 'no Chromium-family browser on this machine (CI requires one via JPNOV_E2E_REQUIRE_BROWSER=1)'
-    : false,
-}, async () => {
+/** Injects `script` before </body>, dumps the page headlessly, and returns the marker JSON text. */
+async function measurePage(browserPath: string, html: string, script: string, prefix: string): Promise<string> {
+  const pageDir = await mkdtemp(join(tmpdir(), `jpnov-e2e-${prefix}-`));
+  cleanups.push(pageDir);
+  const pagePath = join(pageDir, `${prefix}.html`);
+  await writeFile(pagePath, html.replace('</body>', `${script}</body>`), 'utf8');
+  const profileDir = await mkdtemp(join(pageDir, 'profile-'));
+  return unescapeAttr(await dumpMarker(browserPath, pathToFileURL(pagePath).href, profileDir));
+}
+
+test('the built page renders vertically in a headless Chromium', BROWSER_SKIP, async () => {
   assert.ok(browser, 'JPNOV_E2E_REQUIRE_BROWSER=1 but no Chromium-family browser was found');
   assert.ok(builtHtml, 'the build leg must have produced an HTML artifact');
   assert.ok(builtHtml.includes('</body>'), 'built HTML must close <body> for script injection');
 
-  const pageDir = await mkdtemp(join(tmpdir(), 'jpnov-e2e-page-'));
-  cleanups.push(pageDir);
-  const pagePath = join(pageDir, 'hon.html');
-  await writeFile(pagePath, builtHtml.replace('</body>', `${MEASURE_SCRIPT}</body>`), 'utf8');
-  const profileDir = await mkdtemp(join(pageDir, 'profile-'));
-
-  const raw = await dumpMarker(browser, pathToFileURL(pagePath).href, profileDir);
-  const metrics = JSON.parse(unescapeAttr(raw)) as VerifyMetrics;
+  const metrics = JSON.parse(await measurePage(browser, builtHtml, MEASURE_SCRIPT, 'hon')) as VerifyMetrics;
 
   assert.equal(metrics.writingMode, 'vertical-rl', 'pages must flow vertical-rl');
   assert.ok(metrics.rootFontSize > 0);
@@ -279,4 +286,54 @@ test('the built page renders vertically in a headless Chromium', {
   );
   assert.ok(metrics.rubyCount >= 1, 'the ruby annotation must reach the DOM');
   assert.ok(metrics.tcyCount >= 2, 'both 縦中横 units must reach the DOM');
+});
+
+/** Same parse-time trick as MEASURE_SCRIPT, for the preview's edge-frame geometry. */
+const EDGE_MEASURE_SCRIPT = `<script>
+(() => {
+  const seg = document.querySelector('.segment');
+  const cs = seg ? getComputedStyle(seg, '::before') : null;
+  document.documentElement.setAttribute('${MARKER}', JSON.stringify({
+    rootFontSize: parseFloat(getComputedStyle(document.documentElement).fontSize),
+    lineCount: seg ? seg.querySelectorAll('.line').length : 0,
+    segWidth: seg ? seg.getBoundingClientRect().width : 0,
+    frameWidth: cs ? parseFloat(cs.width) : 0,
+    ruled: cs ? cs.backgroundImage.includes('repeating-linear-gradient') : false,
+  }));
+})();
+</script>`;
+
+interface EdgeMetrics {
+  readonly rootFontSize: number;
+  readonly lineCount: number;
+  readonly segWidth: number;
+  readonly frameWidth: number;
+  readonly ruled: boolean;
+}
+
+test('a ［＃改ページ］-shortened preview segment still frames and rules a full page', BROWSER_SKIP, async () => {
+  assert.ok(browser, 'JPNOV_E2E_REQUIRE_BROWSER=1 but no Chromium-family browser was found');
+  const { html } = await conn().request<RenderFileResult>('jpnov/renderFile', {
+    uri: 'file:///e2e/edge.jpnov',
+    text: CHAPTER_TEXT,
+    settings: { ...PREVIEW_SETTINGS, edgeLine: 'red' },
+  });
+
+  const m = JSON.parse(await measurePage(browser, html, EDGE_MEASURE_SCRIPT, 'edge')) as EdgeMetrics;
+
+  assert.ok(m.ruled, 'the inter-column rules must ride the frame background');
+  assert.ok(
+    m.lineCount >= 1 && m.lineCount < PREVIEW_SETTINGS.linesPerPage,
+    `the corpus must under-fill the page for this test (saw ${String(m.lineCount)} lines)`,
+  );
+  const fullPage = PREVIEW_SETTINGS.linesPerPage * LINE_PITCH * m.rootFontSize;
+  assert.ok(
+    Math.abs(m.segWidth - fullPage) < 2,
+    `a short segment must reserve the full page width (${String(m.segWidth)}px vs ${String(fullPage)}px)`,
+  );
+  // The frame (whose background carries the rules) must span it (−2px of its own borders).
+  assert.ok(
+    m.frameWidth > 0 && m.segWidth - m.frameWidth < 4,
+    `the frame must span the reserved width (frame ${String(m.frameWidth)}px, segment ${String(m.segWidth)}px)`,
+  );
 });

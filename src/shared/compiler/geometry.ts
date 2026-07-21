@@ -16,7 +16,8 @@
 /**
  * Inter-line (column) pitch as a multiple of 1em; also the CSS line-height. ONE constant,
  * edge rules on or off (the uniform-layout contract: every column is the same width
- * whether the 枠 is drawn or not, so toggling edgeLine reflows nothing). A ruby
+ * whether the 枠 is drawn or not, so toggling edgeLine never moves a glyph within its
+ * segment/page). A ruby
  * annotation (rt at 0.5em) needs pitch ≥ 2em to stay inside its own line box (glyph half
  * 0.5 + rt 0.5 on the over side); 2.25 keeps a 0.125em clearance on each side, so the
  * inter-column rules — when drawn — never strike through the 注音.

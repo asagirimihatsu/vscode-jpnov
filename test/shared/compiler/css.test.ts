@@ -10,6 +10,10 @@ import { stylesheet } from '../../../src/shared/compiler/css.ts';
 const EDGE_MIX = 'color-mix(in srgb,var(--edge) 80%,transparent)';
 /** A match pattern: raw regex source with the escaped recipe appended. */
 const edgeMixRe = (raw: string): RegExp => new RegExp(raw + EDGE_MIX.replace(/[()]/g, '\\$&'));
+/** The inter-column rules: the frame's own repeating background (em in build, rem in preview);
+ *  each pitch period inks its last 1px, independent of the .line count. */
+const EDGE_GRAD = (u: 'em' | 'rem'): string =>
+  `background-image:repeating-linear-gradient(to left,transparent 0,transparent calc(2.25${u} - 1px),${EDGE_MIX} calc(2.25${u} - 1px),${EDGE_MIX} 2.25${u});background-origin:border-box;background-clip:padding-box`;
 
 const PREVIEW_OFF: PreviewChrome = { lineNumbers: false, edgeLine: 'none' };
 const BUILD_OFF: BuildChrome = {
@@ -22,11 +26,17 @@ const BUILD_OFF: BuildChrome = {
 
 /** Preview stylesheet with explicit resolved options (the compiler has no defaults). */
 function preview(
-  o: { charsPerLine?: number; chrome?: PreviewChrome; usedClasses?: readonly string[] } = {},
+  o: {
+    charsPerLine?: number;
+    linesPerPage?: number;
+    chrome?: PreviewChrome;
+    usedClasses?: readonly string[];
+  } = {},
 ): string {
   return stylesheet({
     paginate: false,
     charsPerLine: o.charsPerLine ?? 40,
+    linesPerPage: o.linesPerPage ?? 34,
     chrome: o.chrome ?? PREVIEW_OFF,
     usedClasses: o.usedClasses ?? [],
   });
@@ -266,41 +276,33 @@ test('preview line numbers: fixed-px out-of-flow .ln rule (numbers are JS-emitte
   assert.doesNotMatch(css, /::after/); // no edge rules leak into the lineNumbers-only sheet
 });
 
-test('preview edge lines: full-height single-sided rules on the ruby-safe wider pitch', () => {
+test('preview edge: frame + full-page background rules on the ruby-safe pitch', () => {
   const red = preview({ chrome: { lineNumbers: false, edgeLine: 'red' } });
-  assert.match(red, /\.line\{position:relative;\}/);
-  // One 1px rule per boundary: each column draws its LEFT rule only (left+right pairs
-  // would sit side-by-side and read as 2px); a per-segment frame closes the outer edges,
-  // so the frames on either side of a ［＃改ページ］ close independently.
-  assert.match(red, edgeMixRe(String.raw`\.line:not\(:last-child\)::after\{[^}]*border-left:1px solid `));
-  assert.match(red, /:root\{[^}]*--edge:#cc0000\}/); // the recipe's base colour rides --edge
-  assert.doesNotMatch(red, /border-right/); // no per-column right rules at all
-  // The LAST (leftmost) column draws no rule: at 80% alpha it would stack with the
-  // frame's left border into a darker strip — the frame alone closes the run.
-  assert.doesNotMatch(red, /\.line::after/);
-  assert.match(red, /\.segment\{position:relative;padding-inline:0\.35rem;\}/);
-  // The frame is full-band-high (the same fixed height as the rules), never
-  // content-hugging: a short segment still gets the complete 原稿用紙 枠.
-  assert.match(red, /\.segment::before\{[^}]*top:0;[^}]*height:calc\(100vh - 32px\)/);
+  assert.match(red, /\.line\{position:relative;\}/); // paint order: text above the frame pseudo
+  // The rules ride the frame's own background — independent of the .line count.
+  assert.ok(red.includes(EDGE_GRAD('rem')));
   assert.match(red, edgeMixRe(String.raw`\.segment::before\{[^}]*border:1px solid `));
+  assert.match(red, /:root\{[^}]*--edge:#cc0000\}/); // the recipe's base colour rides --edge
+  assert.doesNotMatch(red, /::after/);
+  assert.doesNotMatch(red, /border-left|border-right/);
+  // While the frame is drawn, a segment reserves the full linesPerPage page width; the
+  // --lpp it reads is gated in WITH the edge variables (none ⇒ neither appears).
+  assert.match(red, /\.segment\{min-block-size:calc\(var\(--lpp\)\*2\.25rem\);\}/);
+  assert.match(red, /:root\{[^}]*--lpp:34;--edge:#cc0000\}/);
+  // The frame is full-band-high and starts at top:0 (containing block = the segment band).
+  assert.match(red, /\.segment::before\{[^}]*top:0;[^}]*height:calc\(100vh - 32px\)/);
+  assert.match(red, /\.segment\{position:relative;padding-inline:0\.35rem;\}/);
   assert.doesNotMatch(red, /\.book/); // the one-frame-around-everything recipe is gone
-  assert.match(red, /\.line:not\(:last-child\)::after\{[^}]*height:calc\(100vh - 32px\)/);
-  // The rule anchors on a .line the segment padding inset by 0.35rem, and climbs back
-  // the same length so it meets the frame's top edge exactly — rem on BOTH sides, so a
-  // webview-injected body{font-size} can't desync the two.
-  assert.match(red, /\.line:not\(:last-child\)::after\{[^}]*top:-0\.35rem/);
   // The pitch is the SAME 2.25em with rules on or off (uniform-layout contract); it is
   // wide enough that the boundary lines clear ruby annotations.
   assert.match(red, /html\{[^}]*line-height:2\.25/);
   assert.match(red, /\.line\{[^}]*block-size:2\.25em/);
   const text = preview({ chrome: { lineNumbers: false, edgeLine: 'text' } });
-  assert.match(
-    text,
-    edgeMixRe(String.raw`\.line:not\(:last-child\)::after\{[^}]*border-left:1px solid `),
-  );
+  assert.ok(text.includes(EDGE_GRAD('rem')));
   assert.match(text, edgeMixRe(String.raw`\.segment::before\{[^}]*border:1px solid `));
   assert.match(text, /:root\{[^}]*--edge:currentColor\}/);
-  // Rules off ⇒ the SAME pitch — toggling edgeLine repaints, never reflows.
+  // Rules off ⇒ the SAME pitch — toggling edgeLine never moves a glyph within its segment
+  // (the frame look also reserves the full page extent for short segments).
   assert.match(preview(), /html\{[^}]*line-height:2\.25/);
 });
 
@@ -311,6 +313,8 @@ test('preview all-off chrome emits no .ln rule, no edge rules, no frame', () => 
   assert.doesNotMatch(css, /\.segment::before/); // no frame is drawn…
   // …but the text inset stays reserved, so turning a frame on moves nothing.
   assert.match(css, /\.segment\{position:relative;padding-inline:0\.35rem;\}/);
+  // Zero dead payload: the frame's page extent (and its --lpp) rides ONLY the edge fragment.
+  assert.doesNotMatch(css, /--lpp|min-block-size|repeating-linear-gradient/);
   assert.doesNotMatch(css, /counter/);
   assert.match(css, /\.pb-label\{/); // the page-break label is unconditional
 });
@@ -356,13 +360,11 @@ test('build all-on chrome: bands, outset frame, counters, rules, furniture style
   assert.match(css, /\.page\{[^}]*block-size:calc\(var\(--lpp\)\*2\.25em\)/);
   assert.match(css, /:root\{[^}]*--lpp:34/);
   assert.match(css, /\.line\{[^}]*block-size:2\.25em/);
-  // The inter-column rule is the preview recipe transplanted: one left rule per boundary
-  // (none on the page's last column), stretched 0.35em past both grid ends to meet the
-  // outset frame. The old box-shadow recipe (grid-height only — it could no longer reach
-  // the frame) is fully retired — the only box-shadow left is the screen sheet's paper
-  // shadow, never anything on a .line.
-  assert.match(css, edgeMixRe(String.raw`\.line:not\(:last-child\)::after\{[^}]*border-left:1px solid `));
-  assert.match(css, /\.line:not\(:last-child\)::after\{[^}]*top:-0\.35em;bottom:-0\.35em/);
+  // 罫線 ride the frame's own background (full page extent, independent of the .line count);
+  // print-color-adjust keeps them in print/PDF (borders print, backgrounds are omitted).
+  assert.ok(css.includes(EDGE_GRAD('em')));
+  assert.match(css, /\.page::before\{[^}]*-webkit-print-color-adjust:exact;print-color-adjust:exact/);
+  assert.doesNotMatch(css, /::after/);
   assert.doesNotMatch(css, /\.line[^{]*\{[^}]*box-shadow/);
   // Once-merged declarations now arrive as stacking rules (anchor + ln fragments).
   assert.match(css, /\.line\{counter-increment:ln;\}/);
@@ -418,8 +420,8 @@ test('build red edge lines colour both the frame and the inter-column rules', ()
     /\.page::before\{[^}]*top:calc\(var\(--htop\)\*1em - 0\.35em\);right:1\.5em;bottom:2\.65em;left:1\.5em/,
   );
   assert.match(css, /:root\{[^}]*--htop:3/);
-  assert.match(css, edgeMixRe(String.raw`\.line:not\(:last-child\)::after\{[^}]*border-left:1px solid `));
-  assert.match(css, /\.line\{[^}]*position:relative/); // the rule's anchor, even with numbers off
+  assert.ok(css.includes(EDGE_GRAD('em')));
+  assert.match(css, /\.line\{[^}]*position:relative/); // paint order: text above the frame pseudo
   assert.match(css, /\.line\{[^}]*block-size:2\.25em/); // the constant ruby-safe pitch
 });
 
@@ -447,7 +449,7 @@ test('edgeLine none draws no frame in either medium (preview/build cohesion)', (
   assert.doesNotMatch(build(), /\.page::before/);
   // …while both keep the text where a frame-bearing sheet puts it: the reserve is
   // unconditional (preview text inset / build grid position), so toggling edgeLine
-  // repaints but never reflows.
+  // never moves a glyph within its segment/page.
   assert.match(preview(), /\.segment\{position:relative;padding-inline:0\.35rem;\}/);
   assert.match(build(), /\.page\{[^}]*padding-inline-start:calc\(var\(--htop\)\*1em\)/);
 });

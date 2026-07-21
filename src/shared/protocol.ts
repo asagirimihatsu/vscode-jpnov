@@ -10,7 +10,7 @@
  * (structured-clone over the forked-process channel) without vscode value types.
  */
 import type { EdgeLineStyle, PreviewChrome } from './compiler/chrome.ts';
-import type { AutoTcyMode, KinsokuMode } from './config/types.ts';
+import type { LayoutSettings } from './config/types.ts';
 import type { LintCode } from './lint/catalog.ts';
 
 // ---------------------------------------------------------------------------
@@ -167,13 +167,7 @@ export interface HighlightChangedParams {
  * set of values, like the lint snapshot. The server re-resolves it (clamp + enum
  * coercion) before rendering; the wire payload is untrusted at runtime.
  */
-export interface PreviewSettings extends PreviewChrome {
-  readonly charsPerLine: number;
-  /** 禁則処理 mode; rides BOTH snapshots so preview and build stay same-source. */
-  readonly kinsoku: KinsokuMode;
-  /** 自動縦中横 mode; rides BOTH snapshots so preview and build stay same-source. */
-  readonly autoTcy: AutoTcyMode;
-}
+export interface PreviewSettings extends LayoutSettings, PreviewChrome {}
 
 /**
  * The `jpnov.layout.*` / `jpnov.html.*` snapshot the client ships on every `jpnov/build`
@@ -181,13 +175,7 @@ export interface PreviewSettings extends PreviewChrome {
  * Page furniture (ヘッダー/ノンブル) is deliberately ABSENT: it is book identity, carried by each
  * `.jpbook`'s own front matter and composed per book via `composeBookChrome`.
  */
-export interface HtmlSettings {
-  readonly charsPerLine: number;
-  readonly linesPerPage: number;
-  /** 禁則処理 mode; rides BOTH snapshots so preview and build stay same-source. */
-  readonly kinsoku: KinsokuMode;
-  /** 自動縦中横 mode; rides BOTH snapshots so preview and build stay same-source. */
-  readonly autoTcy: AutoTcyMode;
+export interface HtmlSettings extends LayoutSettings {
   /** Line-head numbers on built pages (proofing chrome — workspace preference, not book identity). */
   readonly lineNumbers: boolean;
   /** Inter-column rules + page frame (proofing chrome — workspace preference, not book identity). */

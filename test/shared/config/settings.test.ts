@@ -17,9 +17,7 @@ const HTML_BASE: HtmlSettings = {
   edgeLine: BUILD_CHROME_DEFAULT.edgeLine,
 };
 const PREVIEW_BASE: PreviewSettings = {
-  charsPerLine: LAYOUT_DEFAULT.charsPerLine,
-  kinsoku: LAYOUT_DEFAULT.kinsoku,
-  autoTcy: LAYOUT_DEFAULT.autoTcy,
+  ...LAYOUT_DEFAULT,
   ...PREVIEW_CHROME_DEFAULT,
 };
 
@@ -29,6 +27,9 @@ const PREVIEW_BASE: PreviewSettings = {
  */
 function badHtml(patch: Record<string, unknown>): HtmlSettings {
   return { ...HTML_BASE, ...patch };
+}
+function badPreview(patch: Record<string, unknown>): PreviewSettings {
+  return { ...PREVIEW_BASE, ...patch };
 }
 
 test('valid settings pass through unchanged', () => {
@@ -54,6 +55,12 @@ test('grid geometry clamps to [16..64] and falls back on non-integers', () => {
     LAYOUT_DEFAULT.linesPerPage,
   );
   assert.equal(resolvePreviewSettings({ ...PREVIEW_BASE, charsPerLine: 64 }).charsPerLine, 64);
+  // linesPerPage rides the preview snapshot too (the edge frame's page extent) — same clamp.
+  assert.equal(resolvePreviewSettings({ ...PREVIEW_BASE, linesPerPage: 1 }).linesPerPage, 16);
+  assert.equal(
+    resolvePreviewSettings(badPreview({ linesPerPage: 'tall' })).linesPerPage,
+    LAYOUT_DEFAULT.linesPerPage,
+  );
 });
 
 test('kinsoku rides both snapshots: kept when a known member, defaulted otherwise', () => {
@@ -93,9 +100,9 @@ test('bogus enum and boolean values coerce to their defaults', () => {
 test('the wire settings carry NO page furniture — that is jpbook front-matter territory', () => {
   // Junk furniture fields on the payload must be dropped, not forwarded: the resolver's
   // output is EXACTLY the six wire fields, whatever a stale or hostile sender ships.
+  const WIRE_KEYS = ['autoTcy', 'charsPerLine', 'edgeLine', 'kinsoku', 'lineNumbers', 'linesPerPage'];
   const resolved = resolveHtmlSettings(badHtml({ header: '柱', pageNumber: 'none' }));
-  assert.deepEqual(
-    Object.keys(resolved).sort(),
-    ['autoTcy', 'charsPerLine', 'edgeLine', 'kinsoku', 'lineNumbers', 'linesPerPage'],
-  );
+  assert.deepEqual(Object.keys(resolved).sort(), WIRE_KEYS);
+  const resolvedPreview = resolvePreviewSettings(badPreview({ header: '柱', pageNumber: 'none' }));
+  assert.deepEqual(Object.keys(resolvedPreview).sort(), WIRE_KEYS);
 });

@@ -8,11 +8,11 @@
    枠 of 原稿用紙. Insets: top = --htop band − 0.35em; bottom:2.65em = FOLIO_BAND 3 −
    EDGE_INSET 0.35 (a folio-band derivation); left/right:1.5em = SIDE_PAD, hugging the grid's
    side columns flush (no EDGE_INSET sideways — the column pitch already clears the stroke).
-   All guarded against drift by styles-codegen.test.ts. */
-.page::before{content:"";position:absolute;top:calc(var(--htop)*1em - 0.35em);right:1.5em;bottom:2.65em;left:1.5em;border:1px solid color-mix(in srgb,var(--edge) 80%,transparent);pointer-events:none;}
-
-/* The inter-column rule is the preview's recipe transplanted: each column but the page's last
-   draws ONE left rule (out-of-flow paint — the pitch never moves), stretched 0.35em past both
-   grid ends so it meets the outset frame exactly. The last column draws none: its outer edge is
-   the frame's own border, and the 80%-alpha strokes would composite into a darker line. */
-.line:not(:last-child)::after{content:"";position:absolute;top:-0.35em;bottom:-0.35em;left:0;right:0;border-left:1px solid color-mix(in srgb,var(--edge) 80%,transparent);pointer-events:none;}
+   All guarded against drift by styles-codegen.test.ts.
+   The 罫線 are this frame's own BACKGROUND, independent of the .line count: `to left` +
+   background-origin anchor period 0 on the first column's right edge, each 2.25em (LINE_PITCH)
+   period inks its last 1px at a column boundary, and background-clip:padding-box keeps the
+   80%-alpha stripes off the frame's own border. print-color-adjust:exact keeps the background
+   in print/PDF (borders print, backgrounds are omitted). Longhand background-* only: the
+   shorthand resets origin/clip. */
+.page::before{content:"";position:absolute;top:calc(var(--htop)*1em - 0.35em);right:1.5em;bottom:2.65em;left:1.5em;border:1px solid color-mix(in srgb,var(--edge) 80%,transparent);background-image:repeating-linear-gradient(to left,transparent 0,transparent calc(2.25em - 1px),color-mix(in srgb,var(--edge) 80%,transparent) calc(2.25em - 1px),color-mix(in srgb,var(--edge) 80%,transparent) 2.25em);background-origin:border-box;background-clip:padding-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;pointer-events:none;}

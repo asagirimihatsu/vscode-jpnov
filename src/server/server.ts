@@ -187,12 +187,7 @@ connection.onRequest(
   (params: RenderFileParams): RenderFileResult => {
     const settings = resolvePreviewSettings(params.settings);
     return {
-      html: renderPreview(params.text, {
-        charsPerLine: settings.charsPerLine,
-        kinsoku: settings.kinsoku,
-        autoTcy: settings.autoTcy,
-        chrome: settings,
-      }),
+      html: renderPreview(params.text, { ...settings, chrome: settings }),
     };
   },
 );

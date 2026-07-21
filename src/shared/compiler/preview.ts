@@ -1,4 +1,4 @@
-import type { AutoTcyMode, KinsokuMode } from '../config/types.ts';
+import type { LayoutSettings } from '../config/types.ts';
 import { applyAutoTcy } from './autoTcy.ts';
 import type { PreviewChrome } from './chrome.ts';
 import { stylesheet } from './css.ts';
@@ -22,12 +22,7 @@ import { tokenize } from './tokenizer.ts';
  */
 export function renderPreview(
   src: string,
-  opts: {
-    charsPerLine: number;
-    kinsoku: KinsokuMode;
-    autoTcy: AutoTcyMode;
-    chrome: PreviewChrome;
-  },
+  opts: LayoutSettings & { chrome: PreviewChrome },
 ): string {
   // Render the body first so the CSS includes ONLY the classes it used (the sort is
   // lexicographic, deterministic). The 自動縦中横 rewrite runs before tokenizing — the same
@@ -45,6 +40,7 @@ export function renderPreview(
   const css = stylesheet({
     paginate: false,
     charsPerLine: opts.charsPerLine,
+    linesPerPage: opts.linesPerPage,
     chrome: opts.chrome,
     usedClasses: [...used].sort(),
   });
