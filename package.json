@@ -134,6 +134,7 @@
             "default": 40,
             "minimum": 16,
             "maximum": 64,
+            "order": 1,
             "markdownDescription": "%jpnov.layout.charsPerLine.description%"
           },
           "jpnov.layout.linesPerPage": {
@@ -141,6 +142,7 @@
             "default": 34,
             "minimum": 16,
             "maximum": 64,
+            "order": 2,
             "markdownDescription": "%jpnov.layout.linesPerPage.description%"
           },
           "jpnov.layout.kinsoku": {
@@ -161,9 +163,10 @@
               "%jpnov.layout.kinsoku.normal.description%",
               "%jpnov.layout.kinsoku.strict.description%"
             ],
+            "order": 3,
             "markdownDescription": "%jpnov.layout.kinsoku.description%"
           },
-          "jpnov.layout.autoTateChuYoko": {
+          "jpnov.layout.autoTcy": {
             "type": "string",
             "enum": [
               "none",
@@ -171,58 +174,23 @@
             ],
             "default": "punctuationPairs",
             "enumItemLabels": [
-              "%jpnov.layout.autoTateChuYoko.none.label%",
-              "%jpnov.layout.autoTateChuYoko.punctuationPairs.label%"
+              "%jpnov.layout.autoTcy.none.label%",
+              "%jpnov.layout.autoTcy.punctuationPairs.label%"
             ],
             "enumDescriptions": [
-              "%jpnov.layout.autoTateChuYoko.none.description%",
-              "%jpnov.layout.autoTateChuYoko.punctuationPairs.description%"
+              "%jpnov.layout.autoTcy.none.description%",
+              "%jpnov.layout.autoTcy.punctuationPairs.description%"
             ],
-            "markdownDescription": "%jpnov.layout.autoTateChuYoko.description%"
-          }
-        }
-      },
-      {
-        "title": "%jpnov.html.title%",
-        "order": 2,
-        "properties": {
-          "jpnov.html.lineNumbers": {
-            "type": "boolean",
-            "default": false,
-            "markdownDescription": "%jpnov.html.lineNumbers.description%"
+            "order": 4,
+            "markdownDescription": "%jpnov.layout.autoTcy.description%"
           },
-          "jpnov.html.edgeLine": {
-            "type": "string",
-            "enum": [
-              "none",
-              "text",
-              "red"
-            ],
-            "default": "none",
-            "enumItemLabels": [
-              "%jpnov.html.edgeLine.none.label%",
-              "%jpnov.html.edgeLine.text.label%",
-              "%jpnov.html.edgeLine.red.label%"
-            ],
-            "enumDescriptions": [
-              "%jpnov.html.edgeLine.none.description%",
-              "%jpnov.html.edgeLine.text.description%",
-              "%jpnov.html.edgeLine.red.description%"
-            ],
-            "markdownDescription": "%jpnov.html.edgeLine.description%"
-          }
-        }
-      },
-      {
-        "title": "%jpnov.preview.title%",
-        "order": 3,
-        "properties": {
-          "jpnov.preview.lineNumbers": {
+          "jpnov.layout.preview.lineNumbers": {
             "type": "boolean",
             "default": true,
-            "markdownDescription": "%jpnov.preview.lineNumbers.description%"
+            "order": 5,
+            "markdownDescription": "%jpnov.layout.preview.lineNumbers.description%"
           },
-          "jpnov.preview.edgeLine": {
+          "jpnov.layout.preview.edgeLine": {
             "type": "string",
             "enum": [
               "none",
@@ -231,22 +199,64 @@
             ],
             "default": "none",
             "enumItemLabels": [
-              "%jpnov.preview.edgeLine.none.label%",
-              "%jpnov.preview.edgeLine.text.label%",
-              "%jpnov.preview.edgeLine.red.label%"
+              "%jpnov.layout.preview.edgeLine.none.label%",
+              "%jpnov.layout.preview.edgeLine.text.label%",
+              "%jpnov.layout.preview.edgeLine.red.label%"
             ],
             "enumDescriptions": [
-              "%jpnov.preview.edgeLine.none.description%",
-              "%jpnov.preview.edgeLine.text.description%",
-              "%jpnov.preview.edgeLine.red.description%"
+              "%jpnov.layout.preview.edgeLine.none.description%",
+              "%jpnov.layout.preview.edgeLine.text.description%",
+              "%jpnov.layout.preview.edgeLine.red.description%"
             ],
-            "markdownDescription": "%jpnov.preview.edgeLine.description%"
+            "order": 6,
+            "markdownDescription": "%jpnov.layout.preview.edgeLine.description%"
+          },
+          "jpnov.layout.html.lineNumbers": {
+            "type": "boolean",
+            "default": false,
+            "order": 7,
+            "markdownDescription": "%jpnov.layout.html.lineNumbers.description%"
+          },
+          "jpnov.layout.html.edgeLine": {
+            "type": "string",
+            "enum": [
+              "none",
+              "text",
+              "red"
+            ],
+            "default": "none",
+            "enumItemLabels": [
+              "%jpnov.layout.html.edgeLine.none.label%",
+              "%jpnov.layout.html.edgeLine.text.label%",
+              "%jpnov.layout.html.edgeLine.red.label%"
+            ],
+            "enumDescriptions": [
+              "%jpnov.layout.html.edgeLine.none.description%",
+              "%jpnov.layout.html.edgeLine.text.description%",
+              "%jpnov.layout.html.edgeLine.red.description%"
+            ],
+            "order": 8,
+            "markdownDescription": "%jpnov.layout.html.edgeLine.description%"
+          },
+          "jpnov.layout.outDir": {
+            "type": "string",
+            "default": "dist",
+            "scope": "resource",
+            "order": 9,
+            "markdownDescription": "%jpnov.layout.outDir.description%"
+          },
+          "jpnov.layout.browserPath": {
+            "type": "string",
+            "default": "",
+            "scope": "machine-overridable",
+            "order": 10,
+            "markdownDescription": "%jpnov.layout.browserPath.description%"
           }
         }
       },
       {
         "title": "%jpnov.lint.title%",
-        "order": 4,
+        "order": 2,
         "properties": {
           "jpnov.lint.common.sentenceLength": {
             "type": [
@@ -371,58 +381,36 @@
         }
       },
       {
-        "title": "%jpnov.project.title%",
-        "order": 5,
+        "title": "%jpnov.editor.title%",
+        "order": 3,
         "properties": {
-          "jpnov.project.outDir": {
-            "type": "string",
-            "default": "dist",
-            "scope": "resource",
-            "markdownDescription": "%jpnov.project.outDir.description%"
-          }
-        }
-      },
-      {
-        "title": "%jpnov.build.title%",
-        "order": 6,
-        "properties": {
-          "jpnov.build.browserPath": {
-            "type": "string",
-            "default": "",
-            "scope": "machine-overridable",
-            "markdownDescription": "%jpnov.build.browserPath.description%"
-          }
-        }
-      },
-      {
-        "title": "%jpnov.highlight.title%",
-        "order": 7,
-        "properties": {
-          "jpnov.highlight.characters": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "default": [],
-            "scope": "resource",
-            "markdownDescription": "%jpnov.highlight.characters.description%"
+          "jpnov.editor.autoIndent": {
+            "type": "boolean",
+            "default": true,
+            "order": 1,
+            "markdownDescription": "%jpnov.editor.autoIndent.description%"
           },
-          "jpnov.highlight.keywords": {
+          "jpnov.editor.highlight.characters": {
             "type": "array",
             "items": {
               "type": "string"
             },
             "default": [],
             "scope": "resource",
-            "markdownDescription": "%jpnov.highlight.keywords.description%"
-          }
-        }
-      },
-      {
-        "title": "%jpnov.book.title%",
-        "order": 8,
-        "properties": {
-          "jpnov.book.updateReferencesOnFileMove": {
+            "order": 2,
+            "markdownDescription": "%jpnov.editor.highlight.characters.description%"
+          },
+          "jpnov.editor.highlight.keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "scope": "resource",
+            "order": 3,
+            "markdownDescription": "%jpnov.editor.highlight.keywords.description%"
+          },
+          "jpnov.editor.updateRefsOnFileMove": {
             "type": "string",
             "enum": [
               "prompt",
@@ -431,64 +419,54 @@
             ],
             "default": "prompt",
             "enumItemLabels": [
-              "%jpnov.book.updateReferencesOnFileMove.prompt.label%",
-              "%jpnov.book.updateReferencesOnFileMove.always.label%",
-              "%jpnov.book.updateReferencesOnFileMove.never.label%"
+              "%jpnov.editor.updateRefsOnFileMove.prompt.label%",
+              "%jpnov.editor.updateRefsOnFileMove.always.label%",
+              "%jpnov.editor.updateRefsOnFileMove.never.label%"
             ],
             "enumDescriptions": [
-              "%jpnov.book.updateReferencesOnFileMove.prompt.description%",
-              "%jpnov.book.updateReferencesOnFileMove.always.description%",
-              "%jpnov.book.updateReferencesOnFileMove.never.description%"
+              "%jpnov.editor.updateRefsOnFileMove.prompt.description%",
+              "%jpnov.editor.updateRefsOnFileMove.always.description%",
+              "%jpnov.editor.updateRefsOnFileMove.never.description%"
             ],
-            "markdownDescription": "%jpnov.book.updateReferencesOnFileMove.description%"
-          }
-        }
-      },
-      {
-        "title": "%jpnov.editor.title%",
-        "order": 9,
-        "properties": {
-          "jpnov.editor.autoIndent": {
-            "type": "boolean",
-            "default": true,
-            "markdownDescription": "%jpnov.editor.autoIndent.description%"
+            "order": 4,
+            "markdownDescription": "%jpnov.editor.updateRefsOnFileMove.description%"
           }
         }
       }
     ],
     "commands": [
       {
-        "command": "jpnov.books.buildHtml",
+        "command": "jpbook.buildHtml",
         "category": "%command.category%",
         "title": "%command.books.buildHtml.title%",
         "icon": "$(globe)"
       },
       {
-        "command": "jpnov.books.buildTxt",
+        "command": "jpbook.buildTxt",
         "category": "%command.category%",
         "title": "%command.books.buildTxt.title%",
         "icon": "$(file)"
       },
       {
-        "command": "jpnov.books.buildPdf",
+        "command": "jpbook.buildPdf",
         "category": "%command.category%",
         "title": "%command.books.buildPdf.title%",
         "icon": "$(file-pdf)"
       },
       {
-        "command": "jpnov.books.selectAll",
+        "command": "jpbook.selectAll",
         "category": "%command.category%",
         "title": "%command.books.selectAll.title%",
         "icon": "$(check-all)"
       },
       {
-        "command": "jpnov.books.deselectAll",
+        "command": "jpbook.deselectAll",
         "category": "%command.category%",
         "title": "%command.books.deselectAll.title%",
         "icon": "$(clear-all)"
       },
       {
-        "command": "jpnov.books.refresh",
+        "command": "jpbook.refresh",
         "category": "%command.category%",
         "title": "%command.books.refresh.title%",
         "icon": "$(refresh)"
@@ -499,29 +477,29 @@
         "title": "%command.openGuide.title%"
       },
       {
-        "command": "jpnov.book.addChapters",
+        "command": "jpbook.addChapters",
         "category": "%command.category%",
         "title": "%command.book.addChapters.title%",
         "icon": "$(add)"
       },
       {
-        "command": "jpnov.book.removeChapter",
+        "command": "jpbook.removeChapter",
         "category": "%command.category%",
         "title": "%command.book.removeChapter.title%",
         "icon": "$(remove)"
       },
       {
-        "command": "jpnov.book.moveChapterUp",
+        "command": "jpbook.moveChapterUp",
         "category": "%command.category%",
         "title": "%command.book.moveChapterUp.title%"
       },
       {
-        "command": "jpnov.book.moveChapterDown",
+        "command": "jpbook.moveChapterDown",
         "category": "%command.category%",
         "title": "%command.book.moveChapterDown.title%"
       },
       {
-        "command": "jpnov.book.editMeta",
+        "command": "jpbook.editMeta",
         "category": "%command.category%",
         "title": "%command.book.editMeta.title%"
       },
@@ -563,59 +541,59 @@
     "menus": {
       "view/title": [
         {
-          "command": "jpnov.books.buildHtml",
+          "command": "jpbook.buildHtml",
           "group": "navigation@1",
           "when": "view == jpnov.books"
         },
         {
-          "command": "jpnov.books.buildTxt",
+          "command": "jpbook.buildTxt",
           "group": "navigation@2",
           "when": "view == jpnov.books"
         },
         {
-          "command": "jpnov.books.buildPdf",
+          "command": "jpbook.buildPdf",
           "group": "navigation@3",
           "when": "view == jpnov.books"
         },
         {
-          "command": "jpnov.books.selectAll",
+          "command": "jpbook.selectAll",
           "group": "navigation@4",
           "when": "view == jpnov.books"
         },
         {
-          "command": "jpnov.books.deselectAll",
+          "command": "jpbook.deselectAll",
           "group": "navigation@5",
           "when": "view == jpnov.books"
         },
         {
-          "command": "jpnov.books.refresh",
+          "command": "jpbook.refresh",
           "group": "navigation@6",
           "when": "view == jpnov.books"
         }
       ],
       "view/item/context": [
         {
-          "command": "jpnov.book.addChapters",
+          "command": "jpbook.addChapters",
           "group": "inline",
           "when": "view == jpnov.books && viewItem == jpnovBook"
         },
         {
-          "command": "jpnov.book.removeChapter",
+          "command": "jpbook.removeChapter",
           "group": "inline",
           "when": "view == jpnov.books && viewItem == jpnovChapter"
         },
         {
-          "command": "jpnov.book.moveChapterUp",
+          "command": "jpbook.moveChapterUp",
           "group": "1_move@1",
           "when": "view == jpnov.books && viewItem == jpnovChapter"
         },
         {
-          "command": "jpnov.book.moveChapterDown",
+          "command": "jpbook.moveChapterDown",
           "group": "1_move@2",
           "when": "view == jpnov.books && viewItem == jpnovChapter"
         },
         {
-          "command": "jpnov.book.removeChapter",
+          "command": "jpbook.removeChapter",
           "group": "9_remove",
           "when": "view == jpnov.books && viewItem == jpnovChapter"
         }
@@ -637,47 +615,47 @@
           "when": "editorLangId == jpnov"
         },
         {
-          "command": "jpnov.books.buildHtml",
+          "command": "jpbook.buildHtml",
           "when": "false"
         },
         {
-          "command": "jpnov.books.buildTxt",
+          "command": "jpbook.buildTxt",
           "when": "false"
         },
         {
-          "command": "jpnov.books.buildPdf",
+          "command": "jpbook.buildPdf",
           "when": "false"
         },
         {
-          "command": "jpnov.books.selectAll",
+          "command": "jpbook.selectAll",
           "when": "false"
         },
         {
-          "command": "jpnov.books.deselectAll",
+          "command": "jpbook.deselectAll",
           "when": "false"
         },
         {
-          "command": "jpnov.books.refresh",
+          "command": "jpbook.refresh",
           "when": "false"
         },
         {
-          "command": "jpnov.book.addChapters",
+          "command": "jpbook.addChapters",
           "when": "false"
         },
         {
-          "command": "jpnov.book.removeChapter",
+          "command": "jpbook.removeChapter",
           "when": "false"
         },
         {
-          "command": "jpnov.book.moveChapterUp",
+          "command": "jpbook.moveChapterUp",
           "when": "false"
         },
         {
-          "command": "jpnov.book.moveChapterDown",
+          "command": "jpbook.moveChapterDown",
           "when": "false"
         },
         {
-          "command": "jpnov.book.editMeta",
+          "command": "jpbook.editMeta",
           "when": "false"
         }
       ]
@@ -731,9 +709,9 @@
               "markdown": "media/walkthrough/build.md"
             },
             "completionEvents": [
-              "onCommand:jpnov.books.buildHtml",
-              "onCommand:jpnov.books.buildTxt",
-              "onCommand:jpnov.books.buildPdf"
+              "onCommand:jpbook.buildHtml",
+              "onCommand:jpbook.buildTxt",
+              "onCommand:jpbook.buildPdf"
             ]
           },
           {
@@ -744,8 +722,8 @@
               "markdown": "media/walkthrough/highlight.md"
             },
             "completionEvents": [
-              "onSettingChanged:jpnov.highlight.characters",
-              "onSettingChanged:jpnov.highlight.keywords",
+              "onSettingChanged:jpnov.editor.highlight.characters",
+              "onSettingChanged:jpnov.editor.highlight.keywords",
               "onSettingChanged:jpnov.lint.narration.generalNovelStyle"
             ]
           }

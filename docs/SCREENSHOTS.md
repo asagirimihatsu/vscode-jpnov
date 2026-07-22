@@ -352,8 +352,8 @@ novel-sample/
 
 ```json
 {
-  "jpnov.highlight.characters": ["神木　林", "Arill Stains"],
-  "jpnov.highlight.keywords": ["境無"]
+  "jpnov.editor.highlight.characters": ["神木　林", "Arill Stains"],
+  "jpnov.editor.highlight.keywords": ["境無"]
 }
 ```
 

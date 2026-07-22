@@ -492,7 +492,7 @@ test('a render resolving after the panel closed writes nothing and does not thro
 
 test('renderDocument ships the settings snapshot on the renderFile request', async () => {
   state.config['jpnov.layout.charsPerLine'] = 24;
-  state.config['jpnov.preview.edgeLine'] = 'red';
+  state.config['jpnov.layout.preview.edgeLine'] = 'red';
   let captured: unknown;
   const capturing = {
     sendRequest: (_type: unknown, params: unknown) => {

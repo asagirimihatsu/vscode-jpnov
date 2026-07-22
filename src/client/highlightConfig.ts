@@ -1,5 +1,5 @@
 /**
- * Assembles the per-folder `jpnov.highlight.*` snapshot the server's vocabulary store
+ * Assembles the per-folder `jpnov.editor.highlight.*` snapshot the server's vocabulary store
  * consumes — the highlight twin of `projectConfig.ts` (per-folder assembly, NO parsing:
  * values go out verbatim and the server normalizes) and `lintConfig.ts` (seeded at
  * initialize, re-pushed on change).
@@ -15,7 +15,7 @@ import type { HighlightVocabularyMap } from '#/shared/protocol.ts';
 export function buildHighlightSnapshot(): HighlightVocabularyMap {
   const map: Record<string, { characters: string[]; keywords: string[] }> = {};
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
-    const c = vscode.workspace.getConfiguration('jpnov.highlight', folder.uri);
+    const c = vscode.workspace.getConfiguration('jpnov.editor.highlight', folder.uri);
     map[folder.uri.toString()] = {
       characters: c.get<string[]>('characters', []),
       keywords: c.get<string[]>('keywords', []),

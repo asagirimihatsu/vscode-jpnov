@@ -13,7 +13,7 @@
   "Japanese Novel: built {0} {1} files.": "小説: {0} 個の {1} ファイルを出力しました。",
   "Japanese Novel: nothing to build.": "小説: 出力するものがありません。",
   "Japanese Novel: a PDF build is already in progress.": "小説: PDF の出力が既に進行中です。",
-  "Japanese Novel: no Chrome, Edge, or Chromium browser found. Built the HTML instead — open it in a browser and print to PDF, or set jpnov.build.browserPath.": "小説: Chrome・Edge・Chromium が見つかりませんでした。代わりに HTML を出力しました。ブラウザーで開いて PDF に印刷するか、jpnov.build.browserPath を設定してください。",
+  "Japanese Novel: no Chrome, Edge, or Chromium browser found. Built the HTML instead — open it in a browser and print to PDF, or set jpnov.layout.browserPath.": "小説: Chrome・Edge・Chromium が見つかりませんでした。代わりに HTML を出力しました。ブラウザーで開いて PDF に印刷するか、jpnov.layout.browserPath を設定してください。",
   "Open Output Folder": "出力フォルダーを開く",
   "Configure Browser Path": "ブラウザーのパスを設定",
   "converting to PDF… ({0}/{1})": "PDF に変換中… ({0}/{1})",

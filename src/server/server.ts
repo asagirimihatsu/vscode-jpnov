@@ -151,7 +151,7 @@ connection.onNotification(
   },
 );
 
-// Narration vocabulary changed (jpnov.highlight.*): swap the per-root snapshot and refresh
+// Narration vocabulary changed (jpnov.editor.highlight.*): swap the per-root snapshot and refresh
 // semantic tokens so open editors recolour immediately.
 connection.onNotification(
   HighlightChangedNotification,

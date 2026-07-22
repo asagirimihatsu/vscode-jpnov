@@ -34,7 +34,7 @@ function addFolder(uri: string, index: number): void {
 test('every folder lands in the map, empty arrays included', () => {
   addFolder('file:///ws/a', 0);
   addFolder('file:///ws/b', 1);
-  state.scopedConfig.set('file:///ws/a|jpnov.highlight.characters', ['朝霧　巳一']);
+  state.scopedConfig.set('file:///ws/a|jpnov.editor.highlight.characters', ['朝霧　巳一']);
 
   const map = buildHighlightSnapshot();
   assert.deepEqual(Object.keys(map).sort(), ['file:///ws/a', 'file:///ws/b']);
@@ -50,8 +50,8 @@ test('keys are the folder URIs verbatim', () => {
 
 test('values pass through raw — no client-side normalization', () => {
   addFolder('file:///ws/a', 0);
-  state.scopedConfig.set('file:///ws/a|jpnov.highlight.characters', ['', '巳一', '巳一']);
-  state.scopedConfig.set('file:///ws/a|jpnov.highlight.keywords', ['黒剣']);
+  state.scopedConfig.set('file:///ws/a|jpnov.editor.highlight.characters', ['', '巳一', '巳一']);
+  state.scopedConfig.set('file:///ws/a|jpnov.editor.highlight.keywords', ['黒剣']);
 
   const map = buildHighlightSnapshot();
   assert.deepEqual(map['file:///ws/a'], {

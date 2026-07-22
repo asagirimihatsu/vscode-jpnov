@@ -172,7 +172,7 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
       item.description = metaValueLabel(element.metaKey, element.value);
       item.iconPath = new vscode.ThemeIcon('edit');
       item.command = {
-        command: 'jpnov.book.editMeta',
+        command: 'jpbook.editMeta',
         title: metaLabel(element.metaKey),
         arguments: [element],
       };
@@ -260,7 +260,7 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
 
   // --- commands (wired in extension.ts) ------------------------------------
 
-  /** `jpnov.books.selectAll`: tick every book. */
+  /** `jpbook.selectAll`: tick every book. */
   selectAll(): void {
     for (const b of this.books) {
       this.checked.add(b.uri);
@@ -268,14 +268,14 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
     this._onDidChangeTreeData.fire(undefined);
   }
 
-  /** `jpnov.books.deselectAll`: clear every tick. */
+  /** `jpbook.deselectAll`: clear every tick. */
   deselectAll(): void {
     this.checked.clear();
     this._onDidChangeTreeData.fire(undefined);
   }
 
   /**
-   * `jpnov.books.refresh` (and the file watcher / folder changes): re-enumerate books and reconcile
+   * `jpbook.refresh` (and the file watcher / folder changes): re-enumerate books and reconcile
    * the checkbox set — drop ticks for books that vanished, and default any newly-discovered book to
    * CHECKED (so "all-checked" holds on first load and when a `.jpbook` is added). Leaves the
    * current list in place if the request fails (e.g. server not yet started).
@@ -347,7 +347,7 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
   }
 
   /**
-   * The build driver behind the panel's title actions (`jpnov.books.buildHtml`/`buildTxt`/
+   * The build driver behind the panel's title actions (`jpbook.buildHtml`/`buildTxt`/
    * `buildPdf`): render the CHECKED books to `action`'s one format (`pdf` = `.html` on the
    * wire, converted client-side), write the returned artifacts (the client owns all
    * filesystem writes), and report results. An empty selection is a no-op with a nudge
@@ -467,7 +467,7 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
     token: vscode.CancellationToken,
   ): Promise<void> {
     const browserExe = resolveBrowserExecutable({
-      configuredPath: vscode.workspace.getConfiguration().get<string>('jpnov.build.browserPath', ''),
+      configuredPath: vscode.workspace.getConfiguration().get<string>('jpnov.layout.browserPath', ''),
       env: process.env,
       platform: process.platform,
       exists: existsSync,
@@ -479,7 +479,7 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
       void vscode.window
         .showWarningMessage(
           vscode.l10n.t(
-            'Japanese Novel: no Chrome, Edge, or Chromium browser found. Built the HTML instead — open it in a browser and print to PDF, or set jpnov.build.browserPath.',
+            'Japanese Novel: no Chrome, Edge, or Chromium browser found. Built the HTML instead — open it in a browser and print to PDF, or set jpnov.layout.browserPath.',
           ),
           openFolder,
           configure,
@@ -488,7 +488,7 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
           if (pick === openFolder && htmlUris[0] !== undefined) {
             void vscode.commands.executeCommand('revealFileInOS', vscode.Uri.parse(htmlUris[0]));
           } else if (pick === configure) {
-            void vscode.commands.executeCommand('workbench.action.openSettings', 'jpnov.build.browserPath');
+            void vscode.commands.executeCommand('workbench.action.openSettings', 'jpnov.layout.browserPath');
           }
         });
       return;

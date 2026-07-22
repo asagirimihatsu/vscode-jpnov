@@ -282,10 +282,10 @@ async function editMeta(arg: unknown): Promise<void> {
 /** Registers the five panel commands (plain — they only fire from tree nodes). */
 export function registerBookCommands(): vscode.Disposable[] {
   return [
-    command('jpnov.book.addChapters', addChapters),
-    command('jpnov.book.removeChapter', removeChapterCmd),
-    command('jpnov.book.moveChapterUp', (arg?: unknown) => moveChapter(arg, -1)),
-    command('jpnov.book.moveChapterDown', (arg?: unknown) => moveChapter(arg, 1)),
-    command('jpnov.book.editMeta', editMeta),
+    command('jpbook.addChapters', addChapters),
+    command('jpbook.removeChapter', removeChapterCmd),
+    command('jpbook.moveChapterUp', (arg?: unknown) => moveChapter(arg, -1)),
+    command('jpbook.moveChapterDown', (arg?: unknown) => moveChapter(arg, 1)),
+    command('jpbook.editMeta', editMeta),
   ];
 }

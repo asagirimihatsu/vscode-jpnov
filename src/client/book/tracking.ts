@@ -2,7 +2,7 @@
  * The vscode half of rename tracking: listens to `workspace.onDidRenameFiles` (AFTER the
  * rename — `onWillRenameFiles` participants run under a time budget that forbids prompting),
  * plans the reference updates via the pure `rename.ts`, asks per the
- * `jpnov.book.updateReferencesOnFileMove` setting (`prompt`/`always`/`never`, the TS
+ * `jpnov.editor.updateRefsOnFileMove` setting (`prompt`/`always`/`never`, the TS
  * `updateImportsOnFileMove` triad — the toast's Always/Never buttons persist it globally),
  * and applies ONE `WorkspaceEdit` across every affected `.jpbook`. Edited books are left
  * dirty for the author to save, matching the platform convention.
@@ -15,7 +15,7 @@ import * as vscode from 'vscode';
 import { normalizeFsPath, planBookEdits, type BookEditPlan, type FileRename } from './rename.ts';
 import { lastPathSegment } from '../paths.ts';
 
-const SETTING = 'jpnov.book.updateReferencesOnFileMove';
+const SETTING = 'jpnov.editor.updateRefsOnFileMove';
 
 type Mode = 'prompt' | 'always' | 'never';
 

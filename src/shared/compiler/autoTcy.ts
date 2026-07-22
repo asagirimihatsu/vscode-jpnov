@@ -1,5 +1,5 @@
 /**
- * 自動縦中横 (`jpnov.layout.autoTateChuYoko`): a range-aware source→source rewrite wrapping
+ * 自動縦中横 (`jpnov.layout.autoTcy`): a range-aware source→source rewrite wrapping
  * every qualifying half-width pair in the spec's forward-ref postfix — `!?` becomes
  * `!?［＃「!?」は縦中横］` (https://www.aozora.gr.jp/annotation/etc.html#tatechu_yoko). It is
  * the ONE implementation all outputs share (the txt build materializes it, HTML/preview

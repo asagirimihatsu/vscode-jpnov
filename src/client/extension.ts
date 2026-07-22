@@ -180,10 +180,11 @@ function ensureStarted(): void {
   context.subscriptions.push(preview, booksView, registerRenameTracking());
 
   // Push jpnov.lint.* changes so the server re-lints open files live; re-render the preview
-  // when its layout/preview settings change; re-enumerate books when a project dir moves.
-  // Gated on Running: a change during start/stop is dropped (the next start re-seeds lint via
-  // initializationOptions; the preview/books re-read their snapshots on the next request
-  // anyway). jpnov.html.* changes need no push — they only feed on-demand builds.
+  // when any jpnov.layout.* setting changes (the html/outDir/browserPath members only feed
+  // on-demand builds, but the extra refresh is idempotent and settings edits are rare);
+  // re-enumerate books when the out dir moves. Gated on Running: a change during start/stop
+  // is dropped (the next start re-seeds lint via initializationOptions; the preview/books
+  // re-read their snapshots on the next request anyway).
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (client?.state !== State.Running) {
@@ -193,14 +194,14 @@ function ensureStarted(): void {
         const params: LintConfigChangedParams = { lintConfig: buildLintSnapshot() };
         void client.sendNotification(LintConfigChangedNotification, params);
       }
-      if (e.affectsConfiguration('jpnov.highlight')) {
+      if (e.affectsConfiguration('jpnov.editor.highlight')) {
         const params: HighlightChangedParams = { highlight: buildHighlightSnapshot() };
         void client.sendNotification(HighlightChangedNotification, params);
       }
-      if (e.affectsConfiguration('jpnov.layout') || e.affectsConfiguration('jpnov.preview')) {
+      if (e.affectsConfiguration('jpnov.layout')) {
         preview?.refresh();
       }
-      if (e.affectsConfiguration('jpnov.project')) {
+      if (e.affectsConfiguration('jpnov.layout.outDir')) {
         // A moved outDir changes which books exist (it is excluded from discovery) and where
         // output lands: re-list
         // (refresh() self-catches and is refreshSeq-serialized, so the dropped promise is safe).
@@ -282,12 +283,12 @@ export function activate(context: vscode.ExtensionContext): void {
   // build entry — a build needs at least one discovered, selected book, so the palette is the
   // wrong home for it.
   context.subscriptions.push(
-    serverCommand('jpnov.books.buildHtml', () => booksView?.buildSelected('html')),
-    serverCommand('jpnov.books.buildTxt', () => booksView?.buildSelected('txt')),
-    serverCommand('jpnov.books.buildPdf', () => booksView?.buildSelected('pdf')),
-    serverCommand('jpnov.books.selectAll', () => booksView?.selectAll()),
-    serverCommand('jpnov.books.deselectAll', () => booksView?.deselectAll()),
-    serverCommand('jpnov.books.refresh', () => booksView?.refresh()),
+    serverCommand('jpbook.buildHtml', () => booksView?.buildSelected('html')),
+    serverCommand('jpbook.buildTxt', () => booksView?.buildSelected('txt')),
+    serverCommand('jpbook.buildPdf', () => booksView?.buildSelected('pdf')),
+    serverCommand('jpbook.selectAll', () => booksView?.selectAll()),
+    serverCommand('jpbook.deselectAll', () => booksView?.deselectAll()),
+    serverCommand('jpbook.refresh', () => booksView?.refresh()),
     serverCommand('jpnov.preview', () => preview?.open(false)),
     serverCommand('jpnov.previewToSide', () => preview?.open(true)),
     // Plain command (no server needed): the Books panel's welcome views link here. The id

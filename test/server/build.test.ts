@@ -32,7 +32,7 @@ const SETTINGS: HtmlSettings = {
   edgeLine: BUILD_CHROME_DEFAULT.edgeLine,
 };
 
-/** The per-root `jpnov.project.*` map a request carries; defaults unless overridden. */
+/** The per-root `jpnov.layout.outDir` map a request carries; defaults unless overridden. */
 function projectsFor(uri: string, dirs: Partial<ProjectDirs> = {}): ProjectDirsMap {
   return { [uri]: { outDir: dirs.outDir ?? 'dist' } };
 }
