@@ -8,9 +8,10 @@
  *
  * The server HTML carries an inline `<style>` plus per-paragraph `data-line` anchors.
  * Before assigning it to `webview.html` we harden it with a strict CSP `<meta>` + a
- * per-render nonce on the inline `<style>`, and inject a small nonce'd script that scrolls
- * the paragraph for the active cursor line into view — on load and on `reveal` messages —
- * so an edit keeps the view anchored at the cursor instead of snapping to the start.
+ * per-render nonce on the inline `<style>`, and inject a small nonce'd script that parks
+ * the paragraph for the active cursor line at the golden-ratio viewport position — on
+ * load, on `reveal` messages, and on resize — so an edit keeps the view anchored at the
+ * cursor instead of snapping to the start.
  *
  * The panel survives window reloads: the injected script persists `{uri, line}` through
  * the webview state API, and extension.ts registers a WebviewPanelSerializer that hands
@@ -44,6 +45,20 @@ import { buildPreviewSettings } from './renderConfig.ts';
  */
 const RENDER_DEBOUNCE_MS = 120;
 
+/**
+ * Viewport fraction (from the left edge) where reveal() parks the active column's
+ * center; vertical-rl reads right-to-left, so >0.5 keeps the larger share of the pane
+ * ahead (left) of the cursor line.
+ */
+const REVEAL_RATIO = 0.6180339887498949;
+
+/**
+ * Per-frame fraction of the remaining distance the cursor-follow glide covers (~150ms
+ * to settle at 60fps). Only `reveal` messages glide — the parse/load/resize re-asserts
+ * must jump so a swap's first paint is already parked.
+ */
+const REVEAL_EASE = 0.3;
+
 /** Spinner styles for {@link Preview.loadingShell} (nonce'd `<style>`, theme-driven). */
 const LOADING_CSS =
   '.loading{display:flex;align-items:center;gap:.6em;color:var(--vscode-descriptionForeground,#888);}' +
@@ -62,6 +77,12 @@ export class Preview {
   private readonly panelDisposables: vscode.Disposable[] = [];
   /** URI string of the document currently shown, to scope edit/cursor re-renders. */
   private currentDocUri: string | undefined;
+  /**
+   * The last line baked into a render or posted as a reveal — always for currentDocUri,
+   * reset on document switch. A re-render falls back here while the editor is transiently
+   * absent from visibleTextEditors, instead of snapping to line 0.
+   */
+  private lastRevealLine: number | undefined;
   /**
    * Serializes renders so a slow request can't clobber a newer buffer's output.
    * teardown() bumps it, so an in-flight render can never write to a disposed or
@@ -189,6 +210,7 @@ export class Preview {
 
   /** Posts a scroll-to-line message to the live webview (no re-render). */
   private reveal(line: number): void {
+    this.lastRevealLine = line;
     // Posts to the webview; postMessage never rejects (resolves false if the panel is gone), so void is safe.
     void this.panel?.webview.postMessage({ type: 'reveal', line });
   }
@@ -267,16 +289,16 @@ export class Preview {
     if (panel === undefined) {
       return;
     }
-    this.currentDocUri = doc.uri.toString();
-    panel.title = vscode.l10n.t('{0} — Preview', lastPathSegment(doc.uri.toString()));
+    const uri = doc.uri.toString();
+    if (uri !== this.currentDocUri) {
+      this.lastRevealLine = undefined; // the remembered line belongs to the old document
+    }
+    this.currentDocUri = uri;
+    panel.title = vscode.l10n.t('{0} — Preview', lastPathSegment(uri));
 
-    // The line to scroll to after (re)render — keeps an edit from snapping to the start.
-    // `fallbackLine` (a revived panel's persisted cursor line) applies only while the
-    // document's own editor is not visible yet, e.g. right after a window reload.
-    const activeLine = this.topCursorLine(doc.uri.toString()) ?? fallbackLine ?? 0;
     const seq = ++this.renderSeq;
     const params: RenderFileParams = {
-      uri: doc.uri.toString(),
+      uri,
       text: doc.getText(),
       settings: buildPreviewSettings(),
     };
@@ -302,12 +324,12 @@ export class Preview {
     if (seq !== this.renderSeq) {
       return;
     }
-    panel.webview.html = this.harden(
-      result.html,
-      panel.webview,
-      activeLine,
-      doc.uri.toString(),
-    );
+    // Sampled at swap time, after the seq check: pre-await sampling bakes a stale line,
+    // and a dropped response must not write lastRevealLine. `fallbackLine` (revived
+    // panel state) applies only before any live cursor line is known.
+    const activeLine = this.topCursorLine(uri) ?? this.lastRevealLine ?? fallbackLine ?? 0;
+    this.lastRevealLine = activeLine;
+    panel.webview.html = this.harden(result.html, panel.webview, activeLine, uri);
   }
 
   /** The top-most (earliest) cursor line among all selections in an editor for `docUri`. */
@@ -413,6 +435,7 @@ export class Preview {
     this.panelDisposables.length = 0;
     this.panel = undefined;
     this.currentDocUri = undefined;
+    this.lastRevealLine = undefined;
   }
 }
 
@@ -430,9 +453,10 @@ function minCursorLine(selections: readonly vscode.Selection[]): number {
 /**
  * The webview-side script (runs in the panel). Persists `{uri, line}` through the
  * webview state API — the payload the window-reload serializer later hands back to
- * `adopt()` — and scrolls the paragraph whose `data-line` is the greatest value <= the
- * target line into view, on initial load and on every `reveal` message the client posts
- * as the cursor moves.
+ * `adopt()` — and parks the paragraph whose `data-line` is the greatest value <= the
+ * target line at the {@link REVEAL_RATIO} viewport position: synchronously at parse
+ * time, on `reveal` messages (with the {@link REVEAL_EASE} glide), on resize, and
+ * re-asserted after load, with history scroll restoration forced to manual.
  */
 function scrollScript(activeLine: number, docUri: string): string {
   // JSON.stringify yields a valid JS string literal; escaping `<` forecloses a
@@ -441,23 +465,55 @@ function scrollScript(activeLine: number, docUri: string): string {
   return [
     '(function(){',
     'var api=acquireVsCodeApi();',
+    // Each html swap is a same-URL navigation: Chromium may async-replay the previous
+    // document's scroll offset around load unless restoration is manual.
+    "try{history.scrollRestoration='manual';}catch{}",
+    `var cur=${String(activeLine)};`,
     // Persist immediately and OUTSIDE rAF: rAF is suspended in hidden webviews, so a
     // render finishing in a background panel would otherwise never reach setState.
     `function persist(line){api.setState({uri:${uriLiteral},line:line});}`,
-    `persist(${String(activeLine)});`,
-    'function reveal(line){',
+    'persist(cur);',
+    "var rm=matchMedia('(prefers-reduced-motion:reduce)').matches;",
+    'var anim=0;',
+    // Relative deltas sidestep vertical-rl's negative-scrollLeft origin; the dy term
+    // clamps to a no-op while the preview stays exact-fill with no vertical overflow.
+    'function dst(t){var r=t.getBoundingClientRect();',
+    `return[(r.left+r.right)/2-window.innerWidth*${String(REVEAL_RATIO)},r.top+r.height/2-window.innerHeight/2];}`,
+    'function reveal(line,glide){',
+    'cur=line;',
     "var ns=document.querySelectorAll('[data-line]');var t=null;",
     'for(var i=0;i<ns.length;i++){',
     "var l=parseInt(ns[i].getAttribute('data-line'),10);",
     'if(isNaN(l)){continue;}',
     'if(l<=line){t=ns[i];}else{break;}',
     '}',
-    "if(t){t.scrollIntoView({block:'center',inline:'center'});}",
+    'cancelAnimationFrame(anim);',
+    'if(!t){return;}',
+    'if(!glide||rm){var d=dst(t);window.scrollBy(d[0],d[1]);return;}',
+    // Exponential chase: recomputing the remaining delta every frame keeps it drift-free
+    // and retarget-safe; the no-progress check ends the loop when an edge clamps the scroll.
+    '(function step(){',
+    'var d=dst(t);',
+    'if(Math.abs(d[0])<1&&Math.abs(d[1])<1){window.scrollBy(d[0],d[1]);return;}',
+    'var x=window.scrollX,y=window.scrollY;',
+    `window.scrollBy(d[0]*${String(REVEAL_EASE)},d[1]*${String(REVEAL_EASE)});`,
+    'if(window.scrollX===x&&window.scrollY===y){return;}',
+    'anim=requestAnimationFrame(step);',
+    '})();',
     '}',
+    // Synchronous at parse time (DOM complete before </body>, getBoundingClientRect
+    // forces layout): the first paint is already parked, never a frame at the origin.
+    'reveal(cur);',
     "window.addEventListener('message',function(e){",
-    "var m=e.data;if(m&&m.type==='reveal'&&typeof m.line==='number'){reveal(m.line);persist(m.line);}",
+    "var m=e.data;if(m&&m.type==='reveal'&&typeof m.line==='number'){reveal(m.line,1);persist(m.line);}",
     '});',
-    `requestAnimationFrame(function(){reveal(${String(activeLine)});});`,
+    'var raf=0;',
+    "window.addEventListener('resize',function(){",
+    'cancelAnimationFrame(raf);raf=requestAnimationFrame(function(){reveal(cur);});',
+    '});',
+    // Re-assert after load: corrects any load-time scroll mover that slipped past
+    // manual restoration.
+    "window.addEventListener('load',function(){requestAnimationFrame(function(){reveal(cur);});});",
     '})();',
   ].join('');
 }
