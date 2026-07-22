@@ -57,7 +57,7 @@ export interface ServerContext {
   /** Enabled prose-lint rules, resolved from the client's `jpnov.lint.*` settings snapshot. Workspace-
    *  (not root-) scoped, so it lives on the context rather than per root. */
   lintSelection: RuleSelection;
-  /** Per-root narration vocabulary (characters/keywords), fed by the client's `jpnov.highlight.*` pushes. */
+  /** Per-root narration vocabulary (characters/keywords), fed by the client's `jpnov.editor.highlight.*` pushes. */
   readonly highlight: HighlightStore;
   /** Workspace folders (standard LSP), for root-relative `.jpbook` entry resolution. */
   readonly roots: WorkspaceRoots;

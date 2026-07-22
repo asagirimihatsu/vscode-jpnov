@@ -5,7 +5,7 @@ export const CHARS_MIN = 16;
 export const CHARS_MAX = 64;
 
 /**
- * `jpnov.layout.autoTateChuYoko` members: `none` = off, `punctuationPairs` = auto-combine the
+ * `jpnov.layout.autoTcy` members: `none` = off, `punctuationPairs` = auto-combine the
  * half-width pairs !! !? ?! ?? (二連半角約物) into 縦中横 squares. An enum so future members
  * (e.g. digit pairs) extend without a rename; the wire/TS field is the short `autoTcy`.
  */
@@ -47,7 +47,7 @@ export const LAYOUT_DEFAULT: LayoutSettings = {
 };
 
 /**
- * `jpnov.project.*` defaults — the single source for the schema defaults and the server's
+ * `jpnov.layout.outDir` defaults — the single source for the schema defaults and the server's
  * silent fallback when a configured path fails containment; the config-codegen test locks
  * package.json to these values. A single-segment relative path, so resolving it against
  * any root always stays inside it.

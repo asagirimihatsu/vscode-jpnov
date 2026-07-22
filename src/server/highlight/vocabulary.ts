@@ -1,6 +1,6 @@
 /**
  * Per-root narration vocabulary (cast + coined keywords), fed by the client's
- * `jpnov.highlight.*` settings pushes and consumed by the semantic-tokens recognizer.
+ * `jpnov.editor.highlight.*` settings pushes and consumed by the semantic-tokens recognizer.
  *
  * The store is the SINGLE source of per-root vocabulary state: `apply()` swaps the whole
  * snapshot (replacement semantics — a root absent from the pushed map has no vocabulary),

@@ -1,7 +1,7 @@
 /**
  * Narration recognizer: highlights the author's cast and coined keywords in plain body-text runs.
  *
- * Built from a root's `jpnov.highlight.*` settings (characters + keywords) — pure and synchronous,
+ * Built from a root's `jpnov.editor.highlight.*` settings (characters + keywords) — pure and synchronous,
  * with no dictionary and no async load. A character is highlighted ONLY where it reads as a SUBJECT:
  * a name (a surname/given alone is fine, optionally followed by ONE honorific) immediately followed
  * by は or が. The particle marks the subject and is coloured together with the name. Built-in

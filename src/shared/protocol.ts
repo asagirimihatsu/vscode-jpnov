@@ -82,7 +82,7 @@ export type MsgCode =
 
 /**
  * Config-field labels carried by the `path.*` codes. Only `jpbookEntry` exists (the
- * `jpnov.project.*` paths fail silently to their defaults instead of diagnosing); it is
+ * `jpnov.layout.outDir` paths fail silently to their defaults instead of diagnosing); it is
  * prose and is localized client-side.
  */
 export type LabelId = 'jpbookEntry';
@@ -131,7 +131,7 @@ export interface LintConfigChangedParams {
 export const HighlightChangedNotification = 'jpnov/highlightChanged';
 
 /**
- * One workspace folder's narration vocabulary, read from the `jpnov.highlight.*` settings.
+ * One workspace folder's narration vocabulary, read from the `jpnov.editor.highlight.*` settings.
  * Both fields are always present — the client sends the folder's effective values verbatim
  * (empty arrays included); the server normalizes (drops non-strings/empties, dedups) on apply.
  */
@@ -150,7 +150,7 @@ export interface HighlightVocabulary {
 export type HighlightVocabularyMap = Readonly<Record<string, HighlightVocabulary>>;
 
 /**
- * Pushed when the user edits any `jpnov.highlight.*` setting, and re-pushed in full when
+ * Pushed when the user edits any `jpnov.editor.highlight.*` setting, and re-pushed in full when
  * workspace folders change while the client is running (mirrors the lint push).
  */
 export interface HighlightChangedParams {
@@ -162,7 +162,7 @@ export interface HighlightChangedParams {
 // ---------------------------------------------------------------------------
 
 /**
- * The `jpnov.layout.*` / `jpnov.preview.*` snapshot the client ships on every
+ * The layout-core / `jpnov.layout.preview.*` snapshot the client ships on every
  * `jpnov/renderFile` request. Read at default (resource-less) scope — one window-global
  * set of values, like the lint snapshot. The server re-resolves it (clamp + enum
  * coercion) before rendering; the wire payload is untrusted at runtime.
@@ -170,7 +170,7 @@ export interface HighlightChangedParams {
 export interface PreviewSettings extends LayoutSettings, PreviewChrome {}
 
 /**
- * The `jpnov.layout.*` / `jpnov.html.*` snapshot the client ships on every `jpnov/build`
+ * The layout-core / `jpnov.layout.html.*` snapshot the client ships on every `jpnov/build`
  * request. Only the `.html` artifact consumes it (`.txt` is the raw Aozora source).
  * Page furniture (ヘッダー/ノンブル) is deliberately ABSENT: it is book identity, carried by each
  * `.jpbook`'s own front matter and composed per book via `composeBookChrome`.
@@ -192,7 +192,7 @@ export const BuildRequest = 'jpnov/build';
 export type BuildFormat = 'html' | 'txt';
 
 /**
- * The `jpnov.project.*` snapshot for ONE workspace folder: a RAW relative string exactly as
+ * The `jpnov.layout.outDir` snapshot for ONE workspace folder: a RAW relative string exactly as
  * configured (`scope: resource`, read per folder — unlike the window-global render snapshot).
  * The client never resolves it; the server resolves it against its root and silently
  * falls back to the default on any invalid value (empty / absolute / escaping / `.`).
@@ -202,7 +202,7 @@ export interface ProjectDirs {
 }
 
 /**
- * The per-root `jpnov.project.*` snapshot carried on `jpnov/listBooks` and `jpnov/build`:
+ * The per-root `jpnov.layout.outDir` snapshot carried on `jpnov/listBooks` and `jpnov/build`:
  * one entry per workspace folder, keyed by folder URI. The map DEFINES which roots the
  * request targets — a root absent from it contributes no books and builds nothing.
  */

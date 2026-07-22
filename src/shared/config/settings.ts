@@ -22,7 +22,7 @@ export const PREVIEW_CHROME_DEFAULT = {
 } as const satisfies { lineNumbers: boolean; edgeLine: EdgeLineStyle };
 
 /**
- * `lineNumbers`/`edgeLine` default the `jpnov.html.*` settings; the page-furniture fields
+ * `lineNumbers`/`edgeLine` default the `jpnov.layout.html.*` settings; the page-furniture fields
  * (`pageNumber`/`pageNumberFormat`/`header`) are NOT settings — they default a
  * `.jpbook`'s front matter when it omits the key (see `composeBookChrome`).
  */

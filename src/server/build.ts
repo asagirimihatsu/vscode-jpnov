@@ -1,6 +1,6 @@
 /**
  * The `jpnov/build` request handler. The request's `projectDirs` map (the client's per-folder
- * `jpnov.project.*` snapshot) defines the targeted roots; for each one it enumerates every
+ * `jpnov.layout.outDir` snapshot) defines the targeted roots; for each one it enumerates every
  * `*.jpbook` anywhere under the workspace folder root (skipping dot-folders, `node_modules`,
  * and the resolved output folder), reads the `.jpnov` files each one lists (in order, resolved
  * relative to the WORKSPACE FOLDER ROOT, the same base the live editor features use), and

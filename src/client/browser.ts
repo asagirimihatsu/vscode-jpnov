@@ -7,7 +7,7 @@
  */
 
 export interface BrowserResolveOptions {
-  /** The user's `jpnov.build.browserPath`; used verbatim when it points at an existing file. */
+  /** The user's `jpnov.layout.browserPath`; used verbatim when it points at an existing file. */
   readonly configuredPath?: string | undefined;
   readonly env: NodeJS.ProcessEnv;
   readonly platform: NodeJS.Platform;
