@@ -41,9 +41,9 @@
   "contributes": {
     "languages": [
       {
-        "id": "novel-jp",
+        "id": "jpnov",
         "aliases": [
-          "%language.novelJp.alias%"
+          "%language.jpnov.alias%"
         ],
         "extensions": [
           ".jpnov"
@@ -51,9 +51,9 @@
         "configuration": "./jpnov.language-configuration.json"
       },
       {
-        "id": "novel-jp-book",
+        "id": "jpbook",
         "aliases": [
-          "%language.novelJpBook.alias%"
+          "%language.jpbook.alias%"
         ],
         "extensions": [
           ".jpbook"
@@ -63,18 +63,18 @@
     ],
     "grammars": [
       {
-        "language": "novel-jp",
-        "scopeName": "text.novel-jp",
-        "path": "./syntaxes/novel-jp.tmLanguage.json"
+        "language": "jpnov",
+        "scopeName": "text.jpnov",
+        "path": "./syntaxes/jpnov.tmLanguage.json"
       },
       {
-        "language": "novel-jp-book",
-        "scopeName": "text.novel-jp-book",
+        "language": "jpbook",
+        "scopeName": "text.jpbook",
         "path": "./syntaxes/jpbook.tmLanguage.json"
       }
     ],
     "configurationDefaults": {
-      "[novel-jp]": {
+      "[jpnov]": {
         "editor.wordBasedSuggestions": "off",
         "editor.semanticHighlighting.enabled": true,
         "editor.unicodeHighlight.nonBasicASCII": false,
@@ -97,7 +97,7 @@
           "〜": true
         }
       },
-      "[novel-jp-book]": {
+      "[jpbook]": {
         "editor.wordBasedSuggestions": "off",
         "editor.unicodeHighlight.nonBasicASCII": false,
         "editor.unicodeHighlight.allowedCharacters": {
@@ -120,8 +120,8 @@
         }
       },
       "github.copilot.enable": {
-        "novel-jp": false,
-        "novel-jp-book": false
+        "jpnov": false,
+        "jpbook": false
       }
     },
     "configuration": [
@@ -443,6 +443,17 @@
             "markdownDescription": "%jpnov.book.updateReferencesOnFileMove.description%"
           }
         }
+      },
+      {
+        "title": "%jpnov.editor.title%",
+        "order": 9,
+        "properties": {
+          "jpnov.editor.autoIndent": {
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "%jpnov.editor.autoIndent.description%"
+          }
+        }
       }
     ],
     "commands": [
@@ -613,17 +624,17 @@
         {
           "command": "jpnov.previewToSide",
           "group": "navigation",
-          "when": "editorLangId == novel-jp"
+          "when": "editorLangId == jpnov"
         }
       ],
       "commandPalette": [
         {
           "command": "jpnov.preview",
-          "when": "editorLangId == novel-jp"
+          "when": "editorLangId == jpnov"
         },
         {
           "command": "jpnov.previewToSide",
-          "when": "editorLangId == novel-jp"
+          "when": "editorLangId == jpnov"
         },
         {
           "command": "jpnov.books.buildHtml",
@@ -760,7 +771,7 @@
     "watch:tsc": "tsc --noEmit --watch",
     "watch": "npm run watch:tsc & npm run watch:esbuild & wait",
     "pretest": "npm run type-check",
-    "test": "node --import ./test/register.mjs --test --experimental-test-module-mocks \"test/shared/**/*.test.ts\" \"test/server/highlight/**/*.test.ts\" \"test/server/lint/**/*.test.ts\" \"test/client/browser.test.ts\" \"test/client/bookRename.test.ts\" \"test/client/bookTree.test.ts\"",
+    "test": "node --import ./test/register.mjs --test --experimental-test-module-mocks \"test/shared/**/*.test.ts\" \"test/server/highlight/**/*.test.ts\" \"test/server/lint/**/*.test.ts\" \"test/client/browser.test.ts\" \"test/client/bookRename.test.ts\" \"test/client/bookTree.test.ts\" \"test/client/editorIndent.test.ts\"",
     "test:integration": "node --import ./test/register.mjs --test --experimental-test-module-mocks \"test/client/highlightConfig.test.ts\" \"test/client/messages.test.ts\" \"test/client/preview.test.ts\" \"test/client/probe.test.ts\" \"test/server/build.test.ts\" \"test/server/jpbook.test.ts\"",
     "pretest:e2e": "npm run build:dev",
     "test:e2e": "node --import ./test/register.mjs --test \"test/e2e/**/*.test.ts\"",

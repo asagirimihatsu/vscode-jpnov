@@ -12,7 +12,7 @@
  *     these rows by `test/shared/lint/config-codegen.test.ts`.
  *
  * SCOPE vs STREAM: a rule's {@link Scope} is where the USER toggles it. `common` means "applies to
- * BOTH 地の文 and 台詞" — `select.ts` fans a `common` rule out onto the narration AND dialogue
+ * BOTH 地の文 and セリフ" — `select.ts` fans a `common` rule out onto the narration AND dialogue
  * {@link Stream}s (the buckets the driver actually runs). `narration`/`dialogue` are prose-specific;
  * `ruby` is the 読み.
  *
@@ -50,7 +50,7 @@ export interface RuleMeta {
 
 /**
  * Every Phase-1 rule. `common` rules are global typography/structure checks meaningful in both 地の文
- * and 台詞; `narration` rules are prose-specific; the single `ruby` rule is a 3-way drop-down.
+ * and セリフ; `narration` rules are prose-specific; the single `ruby` rule is a 3-way drop-down.
  *
  * Phase 1 is deliberately DICTIONARY-FREE: no kuromoji (morphological) rules and no prh/word-list
  * rules. 読点上限 (`maxTen`) ships as a custom kuromoji-free rule because the stock
@@ -60,7 +60,7 @@ export interface RuleMeta {
  * exact code union) while still type-checking each row against {@link RuleMeta}.
  */
 export const RULES = [
-  // --- common (地の文 + 台詞): global typography / structure ------------------
+  // --- common (地の文 + セリフ): global typography / structure ------------------
   { id: 'sentenceLength', scope: 'common', kind: 'threshold', min: 1, max: 1000, suggested: 100 },
   { id: 'maxTen', scope: 'common', kind: 'threshold', min: 1, max: 20, suggested: 3 },
   { id: 'maxKanjiRun', scope: 'common', kind: 'threshold', min: 1, max: 20, suggested: 6 },

@@ -14,7 +14,7 @@ import { tokenize } from '../../../src/shared/compiler/tokenizer.ts';
 
 /** The exact source substring a `[a, b)` hit on `stream` maps back to. */
 function mapped(src: string, stream: Stream, a: number, b: number): string {
-  const doc = TextDocument.create('mem://x.jpnov', 'novel-jp', 1, src);
+  const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, src);
   const r = mapRange(stream, doc, a, b);
   return src.slice(doc.offsetAt(r.start), doc.offsetAt(r.end));
 }
@@ -146,7 +146,7 @@ test('a fix insertion AT the stream-head synthetic unit lands before the first c
   // The synthetic 　 can be narration[0]; an empty fix range there resolves to the first
   // content char's offset (after the ］).
   const src = '［＃３字下げ］本文の行。';
-  const doc = TextDocument.create('mem://x.jpnov', 'novel-jp', 1, src);
+  const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, src);
   const r = mapFixRange(extractStreams(src).narration, doc, 0, 0);
   assert.equal(doc.offsetAt(r.start), src.indexOf('本'));
   assert.equal(doc.offsetAt(r.end), src.indexOf('本'));
@@ -165,7 +165,7 @@ test('injection stays in lockstep with the rendered indent (layout.ts)', () => {
     '［＃ここから２字下げ］同じ行の本文。',
     'ブロック内の行。',
     '　字面の空白も持つブロック内の行。',
-    '「ブロック内の台詞。」',
+    '「ブロック内のセリフ。」',
     '［＃０字下げ］ブロック内のゼロ行。',
     '｜巳一《みはつ》のルビ行。',
     '［＃ここから４字下げ］',

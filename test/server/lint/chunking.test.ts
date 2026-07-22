@@ -80,7 +80,7 @@ test('no newline at all -> single chunk regardless of size (documented residual)
 test('tiling holds on mixed real-ish prose', () => {
   const text = [
     '　地の文がある。読点、も、ある。\n',
-    '「台詞がここにある」\n',
+    '「セリフがここにある」\n',
     '未終端の行\n',
     'が続いてから終わる。\n',
     '\n',

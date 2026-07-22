@@ -30,7 +30,7 @@ const fixture = (name: string): string =>
   readFileSync(new URL(`../../../test-fixtures/novel/${name}`, import.meta.url), 'utf8');
 
 async function lintWith(src: string, chunking: LintRunOptions['chunking']): Promise<LintFinding[]> {
-  const doc = TextDocument.create('mem://parity.jpnov', 'novel-jp', 1, src);
+  const doc = TextDocument.create('mem://parity.jpnov', 'jpnov', 1, src);
   const result = computeLintFindings(src, selectRules(RULES), doc, chunking !== undefined ? { chunking } : undefined);
   return Array.isArray(result) ? result : await result;
 }
@@ -74,7 +74,7 @@ test('parity on the construct showcase fixture', async () => {
 test('parity on a generated large corpus (many chunks, violations near seams)', async () => {
   const para =
     '　これは長い文でありまして、読点、が、いくつも、続き、そして半角のｶﾅも紛れ込む上に長さの上限も超えるのです。\n' +
-    '「開いた括弧（が閉じないままの台詞」\n' +
+    '「開いた括弧（が閉じないままのセリフ」\n' +
     '未終端の行が\nここまで続いて終わる。\n\n';
   const src = para.repeat(50);
   const tiny = normalized(await lintWith(src, TINY));
@@ -92,7 +92,7 @@ test('parity with block annotations straddling many chunk seams', async () => {
     '［＃ここから２字下げ］\n' +
     'これは長い段落でありまして、読点、が、続いて、句点で終わる。\n' +
     '［＃ここから太字］この一節は太字。［＃ここで太字終わり］\n' +
-    '「開いた括弧の台詞」\n' +
+    '「開いた括弧のセリフ」\n' +
     '［＃ここで字下げ終わり］\n' +
     '［＃３字下げ］行頭の指定で字下げされた行。\n\n';
   const src = para.repeat(50);
@@ -115,7 +115,7 @@ test('forced seam still yields bounded, well-formed findings (documented diverge
   // stay linear. Findings may legitimately differ from unchunked at forced seams — assert
   // only structural sanity, not parity.
   const src = 'この行に終端はなく\n'.repeat(400);
-  const doc = TextDocument.create('mem://forced.jpnov', 'novel-jp', 1, src);
+  const doc = TextDocument.create('mem://forced.jpnov', 'jpnov', 1, src);
   const result = computeLintFindings(src, selectRules(RULES), doc, { chunking: { target: 64, max: 256 } });
   const findings = Array.isArray(result) ? result : await result;
   for (const f of findings) {

@@ -203,9 +203,9 @@ export class Preview {
 
   // --- internals ----------------------------------------------------------
 
-  /** Only Japanese Novel source documents (novel-jp / `.jpnov`) are previewable. */
+  /** Only Japanese Novel source documents (jpnov / `.jpnov`) are previewable. */
   private isPreviewable(doc: vscode.TextDocument): boolean {
-    return doc.languageId === 'novel-jp';
+    return doc.languageId === 'jpnov';
   }
 
   /** Posts a scroll-to-line message to the live webview (no re-render). */

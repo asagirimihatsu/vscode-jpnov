@@ -2,7 +2,7 @@
  * Extension entry (client / host side). This is the ONLY tree permitted to
  * value-import `vscode`. It launches the forked Node language server over IPC and owns
  * the host-side concerns: the Books build panel (in the extension's own Activity Bar
- * container) and the live preview. The novel-jp language id is bound declaratively to
+ * container) and the live preview. The jpnov language id is bound declaratively to
  * `.jpnov` (package.json), so there is no runtime language-id management here.
  *
  * The pure compiler + all book parsing live server-side; the client is a thin
@@ -16,7 +16,7 @@
  *     root readDirectory per workspace folder. Instant `.jpnov` colorization does not
  *     depend on any of this — the TextMate grammar is applied by VS Code core.
  *   Phase 2 `ensureStarted()` — single-flight; constructs the client + UI singletons
- *     and forks the server on the FIRST real demand: a novel-jp/jpbook document, a
+ *     and forks the server on the FIRST real demand: a jpnov/jpbook document, a
  *     jpnov command, a restored preview panel, or a probe hit on a workspace folder
  *     (so a novel workspace still self-populates its Books view shortly after
  *     startup, just off the window-open critical path).
@@ -43,6 +43,7 @@ import {
 import { registerBookCommands } from './book/manage.ts';
 import { BooksView } from './book/view.ts';
 import { command } from './commands.ts';
+import { registerAutoIndent } from './editor/autoIndent.ts';
 import { buildHighlightSnapshot } from './highlightConfig.ts';
 import { buildLintSnapshot } from './lintConfig.ts';
 import { folderIsNovelProject } from './probe.ts';
@@ -62,7 +63,7 @@ let coldStartWatcher: vscode.FileSystemWatcher | undefined;
 
 /** Documents that justify starting the language server. */
 function isNovelDoc(doc: vscode.TextDocument): boolean {
-  return doc.languageId === 'novel-jp' || doc.languageId === 'novel-jp-book';
+  return doc.languageId === 'jpnov' || doc.languageId === 'jpbook';
 }
 
 /**
@@ -118,8 +119,8 @@ function ensureStarted(): void {
 
   const clientOptions: LanguageClientOptions = {
     documentSelector: [
-      { language: 'novel-jp' },
-      { language: 'novel-jp-book' },
+      { language: 'jpnov' },
+      { language: 'jpbook' },
     ],
     initializationOptions: {
       lintConfig: buildLintSnapshot(),
@@ -301,6 +302,9 @@ export function activate(context: vscode.ExtensionContext): void {
     // The Books panel's tree-as-form editing (plain: they only fire from tree nodes).
     ...registerBookCommands(),
   );
+
+  // Editor typing behavior (自動字下げ): server-free, so it registers in Phase 1.
+  context.subscriptions.push(registerAutoIndent());
 
   // Lazy-start triggers. The listener covers documents opened AFTER activation; the
   // synchronous scan below covers the one that caused an onLanguage activation (it was

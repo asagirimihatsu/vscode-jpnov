@@ -14,7 +14,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { annotationDiagnostics } from '../../../src/server/syntax.ts';
 
 const doc = (text: string): TextDocument =>
-  TextDocument.create('mem://x.jpnov', 'novel-jp', 1, text);
+  TextDocument.create('mem://x.jpnov', 'jpnov', 1, text);
 
 test('a clean document yields no syntax diagnostics', () => {
   assert.deepEqual(annotationDiagnostics(doc('本文［＃メモ］と《るび》。')), []);

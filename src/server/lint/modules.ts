@@ -44,7 +44,7 @@ const jaNoMixedPeriodRule = unwrapDefault(jaNoMixedPeriod);
 /** Full-width space + opening brackets allowed at a paragraph head (general-novel-style-ja). */
 const LEADING_PARAGRAPH_CHARS = '　「『（【〈';
 /** Sentence-ending marks accepted besides 。 (ja-no-mixed-period). ― … are real enders; 」』 mean the
- *  "sentence" was a quotation (台詞) — not a missing-句点 case — so a 「…」 line is never flagged. */
+ *  "sentence" was a quotation (セリフ) — not a missing-句点 case — so a 「…」 line is never flagged. */
 const ALLOWED_PERIOD_MARKS = ['―', '…', '」', '』'];
 
 /**

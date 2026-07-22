@@ -58,7 +58,7 @@ async function openPreviewWith(html: string) {
   // The constructor type is LanguageClient; the runtime only needs sendRequest.
   const preview = new Preview(fakeClient(html) as never);
 
-  const d = doc('file:///proj/src/a.jpnov', 'novel-jp', 'これは本文です。');
+  const d = doc('file:///proj/src/a.jpnov', 'jpnov', 'これは本文です。');
   state.textDocuments.push(d);
   state.activeEditor = { document: d, viewColumn: 1 };
 
@@ -113,7 +113,7 @@ test('a server render error is surfaced inside a hardened shell, not thrown', as
   };
   const preview = new Preview(failing as never);
 
-  const d = doc('file:///proj/src/a.jpnov', 'novel-jp', 'x');
+  const d = doc('file:///proj/src/a.jpnov', 'jpnov', 'x');
   state.textDocuments.push(d);
   state.activeEditor = { document: d, viewColumn: 1 };
 
@@ -192,7 +192,7 @@ test('the injected script positions synchronously and defeats history scroll res
 
 test('render bakes the top-most cursor line into the scroll script', async () => {
   const preview = new Preview(fakeClient(SERVER_HTML) as never);
-  const d = doc('file:///proj/src/a.jpnov', 'novel-jp', 'x');
+  const d = doc('file:///proj/src/a.jpnov', 'jpnov', 'x');
   state.textDocuments.push(d);
   state.activeEditor = { document: d, viewColumn: 1 };
   // Two cursors; the earliest (line 4) wins, not selections[0] (line 9).
@@ -210,7 +210,7 @@ test('render bakes the top-most cursor line into the scroll script', async () =>
 test('a cursor move posts a reveal for the top-most (earliest) cursor line', async () => {
   const { panel } = await openPreviewWith(SERVER_HTML);
   const ed = {
-    document: doc('file:///proj/src/a.jpnov', 'novel-jp', 'x'),
+    document: doc('file:///proj/src/a.jpnov', 'jpnov', 'x'),
     selections: [{ active: { line: 7 } }, { active: { line: 3 } }],
   };
   state.onDidChangeSelection.fire({ textEditor: ed, selections: ed.selections });
@@ -227,7 +227,7 @@ test('a cursor move posts a reveal for the top-most (earliest) cursor line', asy
 
 test('an edit re-render while the editor is momentarily invisible keeps the last line', async () => {
   const preview = new Preview(fakeClient(SERVER_HTML) as never);
-  const d = doc('file:///proj/src/a.jpnov', 'novel-jp', 'x');
+  const d = doc('file:///proj/src/a.jpnov', 'jpnov', 'x');
   state.textDocuments.push(d);
   state.activeEditor = { document: d, viewColumn: 1 };
   state.visibleEditors.push({ document: d, selections: [{ active: { line: 6 } }] });
@@ -246,7 +246,7 @@ test('an edit re-render while the editor is momentarily invisible keeps the last
 test('a cursor-move reveal updates the line a later render falls back to', async () => {
   const { panel } = await openPreviewWith(SERVER_HTML); // no visibleTextEditors entry
   const ed = {
-    document: doc('file:///proj/src/a.jpnov', 'novel-jp', 'x'),
+    document: doc('file:///proj/src/a.jpnov', 'jpnov', 'x'),
     selections: [{ active: { line: 9 } }],
   };
   state.onDidChangeSelection.fire({ textEditor: ed, selections: ed.selections });
@@ -280,7 +280,7 @@ test('rendered html persists {uri, line} via setState for the next reload', asyn
 });
 
 test('adopt() with persisted state renders that document and bakes its cursor line', async () => {
-  state.textDocuments.push(doc('file:///proj/src/a.jpnov', 'novel-jp', '本文です。'));
+  state.textDocuments.push(doc('file:///proj/src/a.jpnov', 'jpnov', '本文です。'));
 
   const { panel } = adoptWith(fakeClient(SERVER_HTML), {
     uri: 'file:///proj/src/a.jpnov',
@@ -295,7 +295,7 @@ test('adopt() with persisted state renders that document and bakes its cursor li
 });
 
 test('adopt() prefers the active previewable editor over stale persisted state', async () => {
-  const active = doc('file:///proj/src/b.jpnov', 'novel-jp', 'アクティブ');
+  const active = doc('file:///proj/src/b.jpnov', 'jpnov', 'アクティブ');
   state.textDocuments.push(active);
   state.activeEditor = { document: active, viewColumn: 1 };
 
@@ -312,7 +312,7 @@ test('adopt() prefers the active previewable editor over stale persisted state',
 });
 
 test('adopt() with the active editor matching the persisted uri restores its line', async () => {
-  const active = doc('file:///proj/src/a.jpnov', 'novel-jp', '本文');
+  const active = doc('file:///proj/src/a.jpnov', 'jpnov', '本文');
   state.textDocuments.push(active);
   state.activeEditor = { document: active, viewColumn: 1 };
   // No visibleTextEditors entry: startup editor restoration hasn't resolved yet.
@@ -346,7 +346,7 @@ test('adopt() tolerates garbage state shapes without throwing', async () => {
 });
 
 test('adopt() paints the loading shell synchronously before the restored render lands', () => {
-  state.textDocuments.push(doc('file:///proj/src/a.jpnov', 'novel-jp', 'x'));
+  state.textDocuments.push(doc('file:///proj/src/a.jpnov', 'jpnov', 'x'));
 
   const { panel } = adoptWith(fakeClient(SERVER_HTML), {
     uri: 'file:///proj/src/a.jpnov',
@@ -359,7 +359,7 @@ test('adopt() paints the loading shell synchronously before the restored render 
 });
 
 test('adopt() paints the loading shell synchronously in the active-editor branch too', () => {
-  const active = doc('file:///proj/src/b.jpnov', 'novel-jp', 'x');
+  const active = doc('file:///proj/src/b.jpnov', 'jpnov', 'x');
   state.textDocuments.push(active);
   state.activeEditor = { document: active, viewColumn: 1 };
 
@@ -384,7 +384,7 @@ test('adopt() falls back to the empty-state shell when the persisted file is gon
 
   // The adopted panel is fully live: focusing a previewable editor re-renders it.
   state.onDidChangeActiveEditor.fire({
-    document: doc('file:///proj/src/c.jpnov', 'novel-jp', 'x'),
+    document: doc('file:///proj/src/c.jpnov', 'jpnov', 'x'),
   });
   await tick();
   assert.match(panel.webview.html, /本文/);
@@ -414,7 +414,7 @@ test('adopt() while a live panel exists disposes the incoming panel', async () =
 });
 
 test('open() after adoption reveals the adopted panel instead of creating a second one', async () => {
-  const d = doc('file:///proj/src/a.jpnov', 'novel-jp', 'x');
+  const d = doc('file:///proj/src/a.jpnov', 'jpnov', 'x');
   state.textDocuments.push(d);
   state.activeEditor = { document: d, viewColumn: 1 };
 
@@ -435,7 +435,7 @@ test('adoption wires the live-update listeners (edit re-render + cursor reveal)'
       return Promise.resolve({ html: SERVER_HTML });
     },
   };
-  const d = doc('file:///proj/src/a.jpnov', 'novel-jp', '一');
+  const d = doc('file:///proj/src/a.jpnov', 'jpnov', '一');
   state.textDocuments.push(d);
 
   const { panel } = adoptWith(counting, { uri: 'file:///proj/src/a.jpnov', line: 0 });
@@ -475,7 +475,7 @@ test('a render resolving after the panel closed writes nothing and does not thro
       }),
   };
   const preview = new Preview(deferred as never);
-  const d = doc('file:///proj/src/a.jpnov', 'novel-jp', 'x');
+  const d = doc('file:///proj/src/a.jpnov', 'jpnov', 'x');
   state.textDocuments.push(d);
   state.activeEditor = { document: d, viewColumn: 1 };
 
@@ -501,7 +501,7 @@ test('renderDocument ships the settings snapshot on the renderFile request', asy
     },
   };
   const preview = new Preview(capturing as never);
-  const d = doc('file:///proj/src/a.jpnov', 'novel-jp', '一');
+  const d = doc('file:///proj/src/a.jpnov', 'jpnov', '一');
   state.textDocuments.push(d);
   state.activeEditor = { document: d, viewColumn: 1 };
 
@@ -529,7 +529,7 @@ test('refresh() re-renders the shown document with fresh settings', async () => 
     },
   };
   const preview = new Preview(counting as never);
-  const d = doc('file:///proj/src/a.jpnov', 'novel-jp', '一');
+  const d = doc('file:///proj/src/a.jpnov', 'jpnov', '一');
   state.textDocuments.push(d);
   state.activeEditor = { document: d, viewColumn: 1 };
 

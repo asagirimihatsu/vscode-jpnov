@@ -48,7 +48,7 @@ test('dialogue content keeps the body colour even for a configured surface', () 
 });
 
 test('an unclosed corner bracket does not throw; the opener is still a marker', () => {
-  const toks = decode(buildSemanticTokens(doc('「未完の台詞'), rec).data);
+  const toks = decode(buildSemanticTokens(doc('「未完のセリフ'), rec).data);
   assert.equal(at(toks, 0, 0)?.type, MARKER);
 });
 

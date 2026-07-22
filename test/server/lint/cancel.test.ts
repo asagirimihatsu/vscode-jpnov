@@ -15,7 +15,7 @@ const SELECTION = selectRules({ 'jpnov.lint.common.sentenceLength': 10 });
 
 test('shouldCancel=true between chunks rejects with LintCancelled', async () => {
   const src = '　この文はわざと長くしてあり検査対象になる。\n'.repeat(30);
-  const doc = TextDocument.create('mem://cancel.jpnov', 'novel-jp', 1, src);
+  const doc = TextDocument.create('mem://cancel.jpnov', 'jpnov', 1, src);
   let polls = 0;
   const result = computeLintFindings(src, SELECTION, doc, {
     shouldCancel: () => {
@@ -31,7 +31,7 @@ test('shouldCancel=true between chunks rejects with LintCancelled', async () => 
 
 test('a single-chunk run never polls shouldCancel and resolves normally', async () => {
   const src = '　この文はわざと長くしてあり検査対象になる。\n';
-  const doc = TextDocument.create('mem://cancel1.jpnov', 'novel-jp', 1, src);
+  const doc = TextDocument.create('mem://cancel1.jpnov', 'jpnov', 1, src);
   let polls = 0;
   const result = computeLintFindings(src, SELECTION, doc, {
     shouldCancel: () => {

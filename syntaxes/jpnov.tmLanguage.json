@@ -1,6 +1,6 @@
 {
   "name": "Japanese Novel",
-  "scopeName": "text.novel-jp",
+  "scopeName": "text.jpnov",
   "comment": "Instant (pre-activation) colorization for .jpnov. Scope families are chosen so VS Code's DEFAULT semantic-type→scope fallback lands on the SAME colors the LSP semantic layer later emits (comment→comment, keyword→keyword — see src/server/semanticTokens.ts HIGHLIGHTS): when the server's tokens arrive they refine invisibly instead of repainting. Every pattern is a single-line `match` (never begin/end), and the tokenizer bounds delimiter pairing to the line too, so both layers agree: an unclosed ［＃ is DELIBERATELY greyed to its line end (the semantic layer marks the same span as `marker` and the server flags it as an Error), while a lone 《 or a stray ］/》 stays default text. The 傍点/傍線/太字/斜体 variant alternations and the single-line ［＃○字下げ］ line-head (^) anchor are checked against src/shared/compiler/emphasis.ts by test/shared/compiler/grammar-sync.test.ts (canonical length-desc order) — regenerate an alternation from that test's failure output, never by hand. ［＃○字下げ］ takes full-width digits only ([０-９]+, per the locked spec); a mid-line one is inert and deliberately falls through to the generic comment rule (the server tokenizer degrades it to a comment too, so both layers grey it).",
   "patterns": [
     { "include": "#annotation" },
@@ -14,212 +14,212 @@
           "comment": "Page break ［＃改ページ］ — frame greyed, directive keyword-colored (semantic: marker/directive).",
           "match": "(［＃)(改ページ)(］)",
           "captures": {
-            "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "keyword.other.directive.novel-jp" },
-            "3": { "name": "comment.block.annotation.novel-jp" }
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "keyword.other.directive.jpnov" },
+            "3": { "name": "comment.block.annotation.jpnov" }
           }
         },
         {
           "comment": "Block END ［＃ここで(字下げ|太字|斜体)終わり］ — only the style keyword (字下げ/太字/斜体) is a directive; the structural ここで and 終わり are demoted to comment (mirrors the semantic layer, which emits `marker` over each — like the connector に). BEFORE block START (終わり suffix) and BEFORE the span rules. ここで傍点終わり etc. is NOT here (傍点/傍線 have no block form) and falls through to the generic comment rule, exactly like the tokenizer.",
           "match": "(［＃)(ここで)(字下げ|太字|斜体)(終わり)(］)",
           "captures": {
-            "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "comment.other.annotation.novel-jp" },
-            "3": { "name": "keyword.other.directive.novel-jp" },
-            "4": { "name": "comment.other.annotation.novel-jp" },
-            "5": { "name": "comment.block.annotation.novel-jp" }
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "comment.other.annotation.jpnov" },
+            "3": { "name": "keyword.other.directive.jpnov" },
+            "4": { "name": "comment.other.annotation.jpnov" },
+            "5": { "name": "comment.block.annotation.jpnov" }
           }
         },
         {
           "comment": "Block START ［＃ここから(○字下げ|太字|斜体)］ (○ = full-width digits ONLY, kept INSIDE the keyword). Only the style keyword (○字下げ/太字/斜体) is a directive; the structural ここから is demoted to comment (mirrors the semantic layer, which emits `marker` over it — like the connector に). The hanging-indent 折り返して form has extra text before ］ so it falls through to the generic comment rule, exactly like the tokenizer.",
           "match": "(［＃)(ここから)([０-９]+字下げ|太字|斜体)(］)",
           "captures": {
-            "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "comment.other.annotation.novel-jp" },
-            "3": { "name": "keyword.other.directive.novel-jp" },
-            "4": { "name": "comment.block.annotation.novel-jp" }
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "comment.other.annotation.jpnov" },
+            "3": { "name": "keyword.other.directive.jpnov" },
+            "4": { "name": "comment.block.annotation.jpnov" }
           }
         },
         {
           "comment": "Single-line ［＃○字下げ］ — LINE-HEAD ONLY (^). A mid-line one is inert (the server tokenizer degrades it to a comment) → it must fall through to the generic comment rule and stay grey in BOTH layers. Full-width digits only.",
           "match": "^(［＃)([０-９]+字下げ)(］)",
           "captures": {
-            "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "keyword.other.directive.novel-jp" },
-            "3": { "name": "comment.block.annotation.novel-jp" }
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "keyword.other.directive.jpnov" },
+            "3": { "name": "comment.block.annotation.jpnov" }
           }
         },
         {
           "comment": "傍点/傍線 span END ［＃(左に)?<dot|line>終わり］ — only the variant is a directive; the structural 終わり is demoted to comment (mirrors the semantic layer emitting `marker` over it). Must be tried BEFORE span start (終わり suffix). The span form's left prefix is bare 左に ONLY (the postfix form uses の左に — form-bound per the Aozora spec); a の左に span falls through to the generic comment rule, exactly like the tokenizer.",
           "match": "(［＃)(左に)?(二重丸傍点|白ゴマ傍点|白三角傍点|蛇の目傍点|黒三角傍点|ばつ傍点|二重傍線|白丸傍点|×傍点|丸傍点|傍点|傍線|波線|破線|鎖線)(終わり)(］)",
           "captures": {
-            "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "comment.other.annotation.novel-jp" },
-            "3": { "name": "keyword.other.directive.novel-jp" },
-            "4": { "name": "comment.other.annotation.novel-jp" },
-            "5": { "name": "comment.block.annotation.novel-jp" }
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "comment.other.annotation.jpnov" },
+            "3": { "name": "keyword.other.directive.jpnov" },
+            "4": { "name": "comment.other.annotation.jpnov" },
+            "5": { "name": "comment.block.annotation.jpnov" }
           }
         },
         {
           "comment": "傍点/傍線 span START ［＃(左に)?<dot|line>］ — bare 左に only (form-bound; see the span END rule).",
           "match": "(［＃)(左に)?(二重丸傍点|白ゴマ傍点|白三角傍点|蛇の目傍点|黒三角傍点|ばつ傍点|二重傍線|白丸傍点|×傍点|丸傍点|傍点|傍線|波線|破線|鎖線)(］)",
           "captures": {
-            "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "comment.other.annotation.novel-jp" },
-            "3": { "name": "keyword.other.directive.novel-jp" },
-            "4": { "name": "comment.block.annotation.novel-jp" }
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "comment.other.annotation.jpnov" },
+            "3": { "name": "keyword.other.directive.jpnov" },
+            "4": { "name": "comment.block.annotation.jpnov" }
           }
         },
         {
           "comment": "太字/斜体 inline span END ［＃(太字|斜体)終わり］ — only the variant is a directive; the structural 終わり is demoted to comment (mirrors the semantic layer emitting `marker` over it). Before its span START (終わり suffix).",
           "match": "(［＃)(太字|斜体)(終わり)(］)",
           "captures": {
-            "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "keyword.other.directive.novel-jp" },
-            "3": { "name": "comment.other.annotation.novel-jp" },
-            "4": { "name": "comment.block.annotation.novel-jp" }
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "keyword.other.directive.jpnov" },
+            "3": { "name": "comment.other.annotation.jpnov" },
+            "4": { "name": "comment.block.annotation.jpnov" }
           }
         },
         {
           "comment": "太字/斜体 inline span START ［＃(太字|斜体)］.",
           "match": "(［＃)(太字|斜体)(］)",
           "captures": {
-            "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "keyword.other.directive.novel-jp" },
-            "3": { "name": "comment.block.annotation.novel-jp" }
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "keyword.other.directive.jpnov" },
+            "3": { "name": "comment.block.annotation.jpnov" }
           }
         },
         {
           "comment": "傍点/傍線 postfix ［＃「対象」(に|の左に)?<dot|line>］ — a SINGLE alternation: the connector に and the postfix-form direction prefix の左に are mutually exclusive (the spec never combines them; にの左に degrades to a comment in both layers), and bare 左に is the SPAN spelling, never valid here (form-bound per the Aozora spec — exactly like the tokenizer's form-aware resolveStyle). の alone is NOT a connector, so a lone の+variant falls through to the generic comment rule. The target (group 3) is deliberately UNSCOPED so it keeps the default foreground, exactly like the semantic layer. The target must be NON-empty ([^」]+): the tokenizer rejects an empty target (comment fallback), so an empty one must fall through to the generic annotation rule below.",
           "match": "(［＃)(「)([^」]+)(」)(に|の左に)?(二重丸傍点|白ゴマ傍点|白三角傍点|蛇の目傍点|黒三角傍点|ばつ傍点|二重傍線|白丸傍点|×傍点|丸傍点|傍点|傍線|波線|破線|鎖線)(］)",
           "captures": {
-            "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "comment.other.dialogue.novel-jp" },
-            "4": { "name": "comment.other.dialogue.novel-jp" },
-            "5": { "name": "comment.other.annotation.novel-jp" },
-            "6": { "name": "keyword.other.directive.novel-jp" },
-            "7": { "name": "comment.block.annotation.novel-jp" }
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "comment.other.dialogue.jpnov" },
+            "4": { "name": "comment.other.dialogue.jpnov" },
+            "5": { "name": "comment.other.annotation.jpnov" },
+            "6": { "name": "keyword.other.directive.jpnov" },
+            "7": { "name": "comment.block.annotation.jpnov" }
           }
         },
         {
           "comment": "太字/斜体 postfix ［＃「対象」は(太字|斜体)］ — connector は is REQUIRED (not に), no direction. A mis-paired connector (は+傍点, に+太字) matches neither postfix rule and falls through to the generic comment rule, exactly like the tokenizer's connector matrix.",
           "match": "(［＃)(「)([^」]+)(」)(は)(太字|斜体)(］)",
           "captures": {
-            "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "comment.other.dialogue.novel-jp" },
-            "4": { "name": "comment.other.dialogue.novel-jp" },
-            "5": { "name": "comment.other.annotation.novel-jp" },
-            "6": { "name": "keyword.other.directive.novel-jp" },
-            "7": { "name": "comment.block.annotation.novel-jp" }
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "comment.other.dialogue.jpnov" },
+            "4": { "name": "comment.other.dialogue.jpnov" },
+            "5": { "name": "comment.other.annotation.jpnov" },
+            "6": { "name": "keyword.other.directive.jpnov" },
+            "7": { "name": "comment.block.annotation.jpnov" }
           }
         },
         {
           "comment": "縦中横 span END ［＃縦中横終わり］ — 縦中横 is the directive, the structural 終わり demotes to comment (mirrors the semantic layer). BEFORE the span START (終わり suffix), exactly like the emphasis span pair.",
           "match": "(［＃)(縦中横)(終わり)(］)",
           "captures": {
-            "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "keyword.other.directive.novel-jp" },
-            "3": { "name": "comment.other.annotation.novel-jp" },
-            "4": { "name": "comment.block.annotation.novel-jp" }
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "keyword.other.directive.jpnov" },
+            "3": { "name": "comment.other.annotation.jpnov" },
+            "4": { "name": "comment.block.annotation.jpnov" }
           }
         },
         {
           "comment": "縦中横 span START ［＃縦中横］ — a lone command word, like 改ページ. No block (ここから) form exists.",
           "match": "(［＃)(縦中横)(］)",
           "captures": {
-            "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "keyword.other.directive.novel-jp" },
-            "3": { "name": "comment.block.annotation.novel-jp" }
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "keyword.other.directive.jpnov" },
+            "3": { "name": "comment.block.annotation.jpnov" }
           }
         },
         {
           "comment": "縦中横 postfix ［＃「対象」は縦中横］ — the connector は is REQUIRED (like 太字/斜体; a bare or に-paired 縦中横 falls through to the generic comment rule, exactly like the tokenizer). The target (group 3) is deliberately UNSCOPED so it keeps the default foreground.",
           "match": "(［＃)(「)([^」]+)(」)(は)(縦中横)(］)",
           "captures": {
-            "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "comment.other.dialogue.novel-jp" },
-            "4": { "name": "comment.other.dialogue.novel-jp" },
-            "5": { "name": "comment.other.annotation.novel-jp" },
-            "6": { "name": "keyword.other.directive.novel-jp" },
-            "7": { "name": "comment.block.annotation.novel-jp" }
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "comment.other.dialogue.jpnov" },
+            "4": { "name": "comment.other.dialogue.jpnov" },
+            "5": { "name": "comment.other.annotation.jpnov" },
+            "6": { "name": "keyword.other.directive.jpnov" },
+            "7": { "name": "comment.block.annotation.jpnov" }
           }
         },
         {
           "comment": "左ルビ postfix ［＃「対象」の左に「よみ」のルビ］ — の左に is the postfix-form direction prefix (never bare 左に here), the reading 「よみ」 greys whole like a 《》 reading, のルビ is the directive; the target (group 3) keeps the default foreground. The reading must be NON-empty ([^」]+): the tokenizer degrades an empty one to a comment, so it must fall through to the generic rule. The sibling …の注記 tail (ママ — out of scope) matches nothing here and falls through too.",
           "match": "(［＃)(「)([^」]+)(」)(の左に)(「)([^」]+)(」)(のルビ)(］)",
           "captures": {
-            "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "comment.other.dialogue.novel-jp" },
-            "4": { "name": "comment.other.dialogue.novel-jp" },
-            "5": { "name": "comment.other.annotation.novel-jp" },
-            "6": { "name": "comment.other.ruby.novel-jp" },
-            "7": { "name": "comment.other.ruby.novel-jp" },
-            "8": { "name": "comment.other.ruby.novel-jp" },
-            "9": { "name": "keyword.other.directive.novel-jp" },
-            "10": { "name": "comment.block.annotation.novel-jp" }
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "comment.other.dialogue.jpnov" },
+            "4": { "name": "comment.other.dialogue.jpnov" },
+            "5": { "name": "comment.other.annotation.jpnov" },
+            "6": { "name": "comment.other.ruby.jpnov" },
+            "7": { "name": "comment.other.ruby.jpnov" },
+            "8": { "name": "comment.other.ruby.jpnov" },
+            "9": { "name": "keyword.other.directive.jpnov" },
+            "10": { "name": "comment.block.annotation.jpnov" }
           }
         },
         {
           "comment": "見出し postfix ［＃「対象」は(大|中|小)見出し］ — the connector は is REQUIRED (like 縦中横; a bare or に-paired 見出し falls through to the generic comment rule, exactly like the tokenizer). The target (group 3) is deliberately UNSCOPED so it keeps the default foreground.",
           "match": "(［＃)(「)([^」]+)(」)(は)(中見出し|大見出し|小見出し)(］)",
           "captures": {
-            "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "comment.other.dialogue.novel-jp" },
-            "4": { "name": "comment.other.dialogue.novel-jp" },
-            "5": { "name": "comment.other.annotation.novel-jp" },
-            "6": { "name": "keyword.other.directive.novel-jp" },
-            "7": { "name": "comment.block.annotation.novel-jp" }
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "comment.other.dialogue.jpnov" },
+            "4": { "name": "comment.other.dialogue.jpnov" },
+            "5": { "name": "comment.other.annotation.jpnov" },
+            "6": { "name": "keyword.other.directive.jpnov" },
+            "7": { "name": "comment.block.annotation.jpnov" }
           }
         },
         {
           "comment": "見出し block END ［＃ここで(大|中|小)見出し終わり］ — only the level literal is a directive; the structural ここで and 終わり are demoted to comment (mirrors the semantic layer). BEFORE block START (終わり suffix), exactly like the 字下げ/太字 block pair.",
           "match": "(［＃)(ここで)(中見出し|大見出し|小見出し)(終わり)(］)",
           "captures": {
-            "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "comment.other.annotation.novel-jp" },
-            "3": { "name": "keyword.other.directive.novel-jp" },
-            "4": { "name": "comment.other.annotation.novel-jp" },
-            "5": { "name": "comment.block.annotation.novel-jp" }
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "comment.other.annotation.jpnov" },
+            "3": { "name": "keyword.other.directive.jpnov" },
+            "4": { "name": "comment.other.annotation.jpnov" },
+            "5": { "name": "comment.block.annotation.jpnov" }
           }
         },
         {
           "comment": "見出し block START ［＃ここから(大|中|小)見出し］ — the structural ここから is demoted to comment, the level literal is the directive (mirrors the semantic layer).",
           "match": "(［＃)(ここから)(中見出し|大見出し|小見出し)(］)",
           "captures": {
-            "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "comment.other.annotation.novel-jp" },
-            "3": { "name": "keyword.other.directive.novel-jp" },
-            "4": { "name": "comment.block.annotation.novel-jp" }
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "comment.other.annotation.jpnov" },
+            "3": { "name": "keyword.other.directive.jpnov" },
+            "4": { "name": "comment.block.annotation.jpnov" }
           }
         },
         {
           "comment": "見出し inline span END ［＃(大|中|小)見出し終わり］ — the level literal is the directive, the structural 終わり demotes to comment. BEFORE the span START (終わり suffix), exactly like the emphasis/縦中横 span pairs.",
           "match": "(［＃)(中見出し|大見出し|小見出し)(終わり)(］)",
           "captures": {
-            "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "keyword.other.directive.novel-jp" },
-            "3": { "name": "comment.other.annotation.novel-jp" },
-            "4": { "name": "comment.block.annotation.novel-jp" }
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "keyword.other.directive.jpnov" },
+            "3": { "name": "comment.other.annotation.jpnov" },
+            "4": { "name": "comment.block.annotation.jpnov" }
           }
         },
         {
           "comment": "見出し inline span START ［＃(大|中|小)見出し］ — a lone command word, like 縦中横.",
           "match": "(［＃)(中見出し|大見出し|小見出し)(］)",
           "captures": {
-            "1": { "name": "comment.block.annotation.novel-jp" },
-            "2": { "name": "keyword.other.directive.novel-jp" },
-            "3": { "name": "comment.block.annotation.novel-jp" }
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "keyword.other.directive.jpnov" },
+            "3": { "name": "comment.block.annotation.jpnov" }
           }
         },
         {
           "comment": "Any other ［＃…］ (block layout, the 折り返して indent form, a mid-line 字下げ, a half-width digit, a mis-paired connector, unknown) — whole annotation greyed, matching the server's `comment` classification. Single-line, so an unclosed ［＃ never runs away.",
           "match": "(［＃)([^］]*)(］)",
-          "name": "comment.block.annotation.novel-jp"
+          "name": "comment.block.annotation.jpnov"
         },
         {
           "comment": "Unterminated ［＃… with no ］ before the line end — greyed exactly like a closed annotation (the tokenizer swallows the same span as a `brokenAnnotation` and the semantic layer marks it `marker`; the server adds the Error squiggle). $ bounds it to the line; LAST so every closed rule above wins first ([^］]*$ never matches once a closing ］ follows the opener on the line).",
           "match": "(［＃)([^］]*)$",
-          "name": "comment.block.annotation.novel-jp"
+          "name": "comment.block.annotation.jpnov"
         }
       ]
     },
@@ -228,12 +228,12 @@
         {
           "comment": "Ruby reading 《…》 incl. both brackets — greyed like the semantic marker; the base (親文字) before it keeps the default foreground. Empty 《》 / a lone 《 are left default (the tokenizer treats them literally).",
           "match": "《[^》]+》",
-          "name": "comment.other.ruby.novel-jp"
+          "name": "comment.other.ruby.jpnov"
         },
         {
           "comment": "Explicit ruby base marker ｜ — the 親文字 after it stays default.",
           "match": "｜",
-          "name": "comment.other.ruby.novel-jp"
+          "name": "comment.other.ruby.jpnov"
         }
       ]
     },
@@ -242,7 +242,7 @@
         {
           "comment": "Dialogue corner-bracket delimiters — greyed; the utterance content keeps the default foreground (the semantic layer masks it too). Matching per CHARACTER keeps multi-line 「…」 stateless and safe.",
           "match": "[「」『』]",
-          "name": "comment.other.dialogue.novel-jp"
+          "name": "comment.other.dialogue.jpnov"
         }
       ]
     }

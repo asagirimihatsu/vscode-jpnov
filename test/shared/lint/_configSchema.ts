@@ -266,6 +266,24 @@ function bookSection(): unknown {
   };
 }
 
+/**
+ * The Editor section: 自動字下げ typing behavior. Client-only (never sent to the resolver),
+ * so the default is a bare literal here, mirrored in `client/editor/indent.ts`.
+ */
+function editorSection(): unknown {
+  return {
+    title: '%jpnov.editor.title%',
+    order: 9,
+    properties: {
+      'jpnov.editor.autoIndent': {
+        type: 'boolean',
+        default: true,
+        markdownDescription: '%jpnov.editor.autoIndent.description%',
+      },
+    },
+  };
+}
+
 /** The `.label` + `.description` key pair for one enum choice. */
 function enumChoiceKeys(choiceKey: string): string[] {
   return [`${choiceKey}.label`, `${choiceKey}.description`];
@@ -301,6 +319,8 @@ function renderNlsKeys(): string[] {
     ...UPDATE_REFERENCES_MODES.flatMap((v) =>
       enumChoiceKeys(`jpnov.book.updateReferencesOnFileMove.${v}`),
     ),
+    'jpnov.editor.title',
+    'jpnov.editor.autoIndent.description',
   ];
 }
 
@@ -316,6 +336,7 @@ export function expectedConfiguration(): unknown[] {
     buildSection(),
     highlightSection(),
     bookSection(),
+    editorSection(),
   ];
 }
 
