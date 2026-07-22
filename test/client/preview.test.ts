@@ -157,6 +157,39 @@ test('a nonce-matched cursor-follow script is injected before </body>', async ()
   assert.match(html, /<p>本文<\/p><script /);
 });
 
+test('reveal parks the anchor column at the golden ratio via relative scrollBy', async () => {
+  const { panel } = await openPreviewWith(SERVER_HTML);
+  const html = panel.webview.html;
+  assert.match(html, /window\.scrollBy\(/);
+  assert.match(html, /window\.innerWidth\*0\.618/);
+  assert.doesNotMatch(html, /scrollIntoView/);
+});
+
+test('the injected script re-reveals on resize (vh-driven layout settles after load)', async () => {
+  const { panel } = await openPreviewWith(SERVER_HTML);
+  const html = panel.webview.html;
+  assert.match(html, /addEventListener\('resize'/);
+  assert.match(html, /cancelAnimationFrame\(raf\)/);
+});
+
+test('cursor reveals glide with a short chase; re-asserts and reduced motion stay instant', async () => {
+  const { panel } = await openPreviewWith(SERVER_HTML);
+  const html = panel.webview.html;
+  assert.match(html, /reveal\(m\.line,1\)/);
+  assert.match(html, /anim=requestAnimationFrame\(step\)/);
+  assert.match(html, /prefers-reduced-motion/);
+  assert.match(html, /requestAnimationFrame\(function\(\)\{reveal\(cur\);\}\)/);
+});
+
+test('the injected script positions synchronously and defeats history scroll restoration', async () => {
+  const { panel } = await openPreviewWith(SERVER_HTML);
+  const html = panel.webview.html;
+  assert.match(html, /history\.scrollRestoration='manual'/);
+  // The call directly after the reveal() definition is the parse-time positioning.
+  assert.match(html, /\}reveal\(cur\);window\.addEventListener\('message'/);
+  assert.match(html, /addEventListener\('load'/);
+});
+
 test('render bakes the top-most cursor line into the scroll script', async () => {
   const preview = new Preview(fakeClient(SERVER_HTML) as never);
   const d = doc('file:///proj/src/a.jpnov', 'novel-jp', 'x');
@@ -171,7 +204,7 @@ test('render bakes the top-most cursor line into the scroll script', async () =>
   preview.open(true);
   await tick();
 
-  assert.match(firstPanel().webview.html, /reveal\(4\)/);
+  assert.match(firstPanel().webview.html, /var cur=4;/);
 });
 
 test('a cursor move posts a reveal for the top-most (earliest) cursor line', async () => {
@@ -190,6 +223,37 @@ test('a cursor move posts a reveal for the top-most (earliest) cursor line', asy
   );
   assert.ok(reveal, 'a reveal message was posted on cursor move');
   assert.equal(reveal.line, 3, 'follows the earliest cursor, not selections[0]');
+});
+
+test('an edit re-render while the editor is momentarily invisible keeps the last line', async () => {
+  const preview = new Preview(fakeClient(SERVER_HTML) as never);
+  const d = doc('file:///proj/src/a.jpnov', 'novel-jp', 'x');
+  state.textDocuments.push(d);
+  state.activeEditor = { document: d, viewColumn: 1 };
+  state.visibleEditors.push({ document: d, selections: [{ active: { line: 6 } }] });
+
+  preview.open(true);
+  await tick();
+  assert.match(firstPanel().webview.html, /var cur=6;/);
+
+  // Save-with-mutation transient: the editor blinks out of visibleTextEditors, an edit lands.
+  state.visibleEditors.length = 0;
+  state.onDidChangeDoc.fire({ document: d });
+  await new Promise((r) => setTimeout(r, 150));
+  assert.match(firstPanel().webview.html, /var cur=6;/);
+});
+
+test('a cursor-move reveal updates the line a later render falls back to', async () => {
+  const { panel } = await openPreviewWith(SERVER_HTML); // no visibleTextEditors entry
+  const ed = {
+    document: doc('file:///proj/src/a.jpnov', 'novel-jp', 'x'),
+    selections: [{ active: { line: 9 } }],
+  };
+  state.onDidChangeSelection.fire({ textEditor: ed, selections: ed.selections });
+
+  state.onDidChangeDoc.fire({ document: ed.document });
+  await new Promise((r) => setTimeout(r, 150));
+  assert.match(panel.webview.html, /var cur=9;/);
 });
 
 // --- window-reload revival (adopt) -----------------------------------------
@@ -227,7 +291,7 @@ test('adopt() with persisted state renders that document and bakes its cursor li
   assert.deepEqual(state.openedDocs, ['file:///proj/src/a.jpnov']);
   assert.match(panel.webview.html, /本文/);
   // No editor is visible, so the persisted line drives the initial scroll.
-  assert.match(panel.webview.html, /reveal\(5\)/);
+  assert.match(panel.webview.html, /var cur=5;/);
 });
 
 test('adopt() prefers the active previewable editor over stale persisted state', async () => {
@@ -244,7 +308,7 @@ test('adopt() prefers the active previewable editor over stale persisted state',
   assert.equal(state.openedDocs.length, 0, 'the stale uri is never loaded');
   assert.equal(panel.title, 'b.jpnov — Preview');
   // A different document's persisted line must not leak into this render.
-  assert.match(panel.webview.html, /reveal\(0\)/);
+  assert.match(panel.webview.html, /var cur=0;/);
 });
 
 test('adopt() with the active editor matching the persisted uri restores its line', async () => {
@@ -259,7 +323,7 @@ test('adopt() with the active editor matching the persisted uri restores its lin
   });
   await tick();
 
-  assert.match(panel.webview.html, /reveal\(7\)/);
+  assert.match(panel.webview.html, /var cur=7;/);
 });
 
 test('adopt() with no state and no editor shows the empty-state shell (pre-fix sessions)', async () => {
