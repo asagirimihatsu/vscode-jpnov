@@ -3,11 +3,16 @@
   "displayName": "Japanese Novel",
   "publisher": "asagirimihatsu",
   "version": "0.0.6",
-  "description": "A plugin for Visual Studio Code for formatting, previewing, and generating ebooks of Japanese novels annotated by Aozora Bunko",
+  "description": "Write Japanese novels in VS Code — vertical-writing preview, Aozora Bunko notation, and print-ready book output (PDF, HTML, and text)",
+  "icon": "resources/icon.png",
   "keywords": [
-    "plugin",
+    "小説",
+    "縦書き",
+    "青空文庫",
     "novel",
-    "japanese"
+    "japanese",
+    "aozora",
+    "vertical writing"
   ],
   "homepage": "https://github.com/asagirimihatsu/vscode-jpnov#readme",
   "bugs": {

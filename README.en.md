@@ -26,6 +26,22 @@ one-command HTML / PDF / text builds. No AI anywhere in the writing path
 
 ![VS Code with an annotated chapter on the left and the vertical preview on the right](docs/images/vscode-side-by-side.png)
 
+## Design stance
+
+- **No AI.** Nothing in the writing path involves AI; Copilot is disabled by
+  default for `.jpnov` / `.jpbook` (see [No-AI policy](#no-ai-policy)).
+- **Dictionary-free.** No morphological analysis, no bundled word lists — so no
+  false positives on ordinary words and no coined term left behind. What
+  deserves highlighting is declared by the author; the lint rules reason about
+  structure, not vocabulary.
+- **Zero runtime dependencies.** Everything ships bundled: no package manager,
+  no post-install downloads, no network traffic — fully offline, with an
+  instant preview. Even PDF export just drives a browser already on the
+  machine, offline like everything else.
+- **Non-invasive.** Sources are plain text in Aozora notation under dedicated
+  extensions (`.jpnov` / `.jpbook`), so no `.txt` / `.md` project is ever
+  touched, and the manuscript outlives the tool.
+
 ## Quick start
 
 1. **Write a chapter.** Create a file ending in `.jpnov` (e.g. `chapter1.jpnov`)
@@ -179,7 +195,12 @@ Outputs land in `<outDir>/<book path>.{html,pdf,txt}` with `outDir`
 defaulting to `dist`. Two book files that resolve to the same output path fail
 the build with a diagnostic instead of overwriting each other.
 
-![The Books view with a checked book and the build buttons](docs/images/vscode-books-panel.png)
+A `.jpbook` is a reading-order table of contents — file names and folder
+layout never decide what a book contains or in what order. That scales to long
+works: keep one `.jpbook` per volume and hand your editor only the newest
+volume's PDF; keep alternate drafts of a chapter side by side and swap a
+single line to retarget a submission; name and move chapter files freely
+without reshuffling the book.
 
 On `.jpbook` files the editor offers completion (chapter paths, metadata keys
 and enum values), diagnostics (missing files, duplicates, escaping the
@@ -192,7 +213,7 @@ clicking an Info row edits the title, header, or page number in place. Every
 action rewrites the `.jpbook` text itself, so the panel and code mode always
 agree.
 
-![A book expanded in the Books view: its chapter list and the Book Info rows](docs/images/vscode-book-manage.png)
+![The Books view: expanded to its chapter list and Book Info rows, with the build buttons in the view title bar](docs/images/vscode-books-panel.png)
 
 Renaming or moving a chapter (or a folder of chapters) inside VS Code offers
 to update every `.jpbook` that references it —
@@ -257,7 +278,9 @@ write — handy where Japanese drops the subject:
   are **bolded** wherever they appear in narration, without changing colour.
   If a surface is in both lists, the subject form wins.
 
-Both lists apply per workspace folder and take effect immediately in open
+Matching is exact — no dictionary, no guessing — so ordinary words are never
+miscoloured and invented names are always caught. Both lists apply per
+workspace folder and take effect immediately in open
 editors — no reload, no rebuild. Colouring is delivered as LSP semantic tokens;
 override the colours under `editor.semanticTokenColorCustomizations` if you
 like.
@@ -269,6 +292,11 @@ like.
 Japanese Novel runs prose checks as you write, surfaced as editor diagnostics
 with quick fixes (and a **Fix all auto-fixable problems** source action).
 Everything is a plain `jpnov.lint.*` setting under **Japanese Novel — Lint**.
+
+Checks run per stream: narration, dialogue (`「…」`), and ruby readings are
+linted separately, so narration-only style rules never fire inside a line of
+dialogue. Being dictionary-free, the rules never guess at vocabulary — a
+coined proper noun is never "corrected".
 
 - **Hygiene checks are on by default** — half-width kana, decomposed (NFD)
   characters, zero-width / invisible characters, and invalid control
