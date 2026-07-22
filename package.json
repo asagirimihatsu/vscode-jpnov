@@ -2,8 +2,8 @@
   "name": "jpnov",
   "displayName": "Japanese Novel",
   "publisher": "asagirimihatsu",
-  "version": "0.0.6",
-  "description": "Write Japanese novels in VS Code — vertical-writing preview, Aozora Bunko notation, and print-ready book output (PDF, HTML, and text)",
+  "version": "0.1.0",
+  "description": "VS Code を小説の執筆環境に変える拡張機能。書いた文章はすぐ隣に縦書きで表示され、章をまとめて HTML・PDF・テキストの本として出力できます。記法は青空文庫の注記そのまま。",
   "icon": "resources/icon.png",
   "keywords": [
     "小説",
