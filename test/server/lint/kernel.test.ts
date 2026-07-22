@@ -20,7 +20,7 @@ interface Hit {
 
 /** Run the driver and project each finding to { code, flagged source text, optional fix }. */
 async function lintAll(src: string, raw: RawLintConfigWire): Promise<Hit[]> {
-  const doc = TextDocument.create('mem://x.jpnov', 'novel-jp', 1, src);
+  const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, src);
   const result = computeLintFindings(src, selectRules(raw), doc);
   const findings = Array.isArray(result) ? result : await result;
   const slice = (r: { start: { line: number; character: number }; end: { line: number; character: number } }): string =>
@@ -40,7 +40,7 @@ async function lint(src: string, raw: RawLintConfigWire): Promise<{ code: string
 /** Apply every fix (right-to-left so offsets stay valid) and return the resulting source — the real
  *  "does the fix corrupt the text?" check (no deleted chars, no eaten newlines). */
 async function applied(src: string, raw: RawLintConfigWire): Promise<string> {
-  const doc = TextDocument.create('mem://x.jpnov', 'novel-jp', 1, src);
+  const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, src);
   const result = computeLintFindings(src, selectRules(raw), doc);
   const findings = Array.isArray(result) ? result : await result;
   const edits = findings
@@ -56,7 +56,7 @@ async function applied(src: string, raw: RawLintConfigWire): Promise<string> {
 }
 
 test('no rules enabled -> synchronous empty result', () => {
-  const doc = TextDocument.create('mem://x.jpnov', 'novel-jp', 1, '　半 角 が あ る。');
+  const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, '　半 角 が あ る。');
   const result = computeLintFindings(doc.getText(), selectRules({}), doc);
   assert.deepEqual(result, []); // not a Promise
 });

@@ -79,7 +79,7 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
     case 'syntax.tcyTooLong':
       return '縦中横 is too long (3 characters or fewer avoid distortion)';
     // --- prose lint (one static, arg-less code per (scope, rule); see lint/catalog.ts).
-    // `common` rules run on both 地の文 + 台詞 under one code; JA lives in bundle.l10n.ja.json.
+    // `common` rules run on both 地の文 + セリフ under one code; JA lives in bundle.l10n.ja.json.
     case 'lint.common.sentenceLength':
       return 'this sentence is too long';
     case 'lint.common.maxTen':

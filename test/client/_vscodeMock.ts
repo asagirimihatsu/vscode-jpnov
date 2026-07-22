@@ -428,11 +428,11 @@ export function buildVscode(state: MockState): Record<string, unknown> {
         return Promise.reject(FileSystemError.FileNotFound(uri));
       }
       // Prefer a registered document (lets tests control languageId/text); fall back
-      // to fabricating a novel-jp doc so pre-existing tests keep working unchanged.
+      // to fabricating a jpnov doc so pre-existing tests keep working unchanged.
       const existing = state.textDocuments.find(
         (d) => d.uri.toString() === uri.toString(),
       );
-      return Promise.resolve(existing ?? doc(uri.toString(), 'novel-jp'));
+      return Promise.resolve(existing ?? doc(uri.toString(), 'jpnov'));
     },
     findFiles(
       include: RelativePattern,

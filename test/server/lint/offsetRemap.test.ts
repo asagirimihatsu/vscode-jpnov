@@ -14,7 +14,7 @@ import { selectRules } from '../../../src/shared/lint/select.ts';
 const CHUNKING = { chunking: { target: 40, max: 10_000_000 } } as const;
 
 async function lint(src: string): Promise<{ doc: TextDocument; findings: LintFinding[] }> {
-  const doc = TextDocument.create('mem://remap.jpnov', 'novel-jp', 1, src);
+  const doc = TextDocument.create('mem://remap.jpnov', 'jpnov', 1, src);
   const result = computeLintFindings(
     src,
     selectRules({ 'jpnov.lint.common.noHankakuKana': true }),

@@ -76,8 +76,8 @@ documents.listen(connection);
 
 /** The document selector the client uses to route docs/requests to this server. */
 const DOCUMENT_SELECTOR = [
-  { language: 'novel-jp' },
-  { language: 'novel-jp-book' },
+  { language: 'jpnov' },
+  { language: 'jpbook' },
 ] as const;
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
@@ -103,7 +103,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         legend: SEMANTIC_LEGEND,
         full: true,
       },
-      // *.jpbook editor features (routed for `novel-jp-book` via the document selector).
+      // *.jpbook editor features (routed for `jpbook` via the document selector).
       // Trigger on "/" (descend a subdir) AND on every digit: VS Code's quick-suggest does not
       // auto-fire on a leading digit (it reads it as a number literal), so digit-led filenames
       // (e.g. 0001-chapter.jpnov) would otherwise need a manual Ctrl+Space.
@@ -131,7 +131,7 @@ connection.onInitialized(() => {
   connection.workspace.onDidChangeWorkspaceFolders((e) => {
     context.roots.change(e.added.map((f) => f.uri), e.removed.map((f) => f.uri));
     for (const doc of documents.all()) {
-      if (doc.languageId === 'novel-jp-book') {
+      if (doc.languageId === 'jpbook') {
         scheduleJpbookDiagnostics(doc);
       }
     }
@@ -196,14 +196,14 @@ connection.onRequest(
 // the owning root declares any. Fully synchronous — markup and colours emit on the first request.
 connection.languages.semanticTokens.on((params) => {
   const doc = documents.get(params.textDocument.uri);
-  // Only novel-jp documents are highlighted (book files share the selector but stay plain).
-  if (doc?.languageId !== 'novel-jp') {
+  // Only jpnov documents are highlighted (book files share the selector but stay plain).
+  if (doc?.languageId !== 'jpnov') {
     return { data: [] };
   }
   return buildSemanticTokens(doc, context.highlight.recognizerFor(params.textDocument.uri));
 });
 
-// --- *.jpbook editor features (novel-jp-book) -------------------------------
+// --- *.jpbook editor features (jpbook) -------------------------------
 
 /** Returns line `n`'s text (no terminator); `position.character` indexes into this. */
 function lineAt(doc: TextDocument, line: number): string {
@@ -218,7 +218,7 @@ function lineAt(doc: TextDocument, line: number): string {
 // only for book files, delegated to the fs-backed resolver.
 connection.onCompletion((params) => {
   const doc = documents.get(params.textDocument.uri);
-  if (doc?.languageId !== 'novel-jp-book') {
+  if (doc?.languageId !== 'jpbook') {
     return [];
   }
   return completeJpbook(
@@ -232,7 +232,7 @@ connection.onCompletion((params) => {
 // Cmd+click targets: one link per valid chapter line pointing at the resolved file URI.
 connection.onDocumentLinks((params) => {
   const doc = documents.get(params.textDocument.uri);
-  if (doc?.languageId !== 'novel-jp-book') {
+  if (doc?.languageId !== 'jpbook') {
     return [];
   }
   return documentLinksForJpbook(context.roots.rootOf(doc.uri), parseJpbook(doc.getText()));
@@ -253,7 +253,7 @@ function scheduleJpbookDiagnostics(doc: TextDocument): void {
     setTimeout(() => {
       jpbookDebounce.delete(uri);
       const current = documents.get(uri);
-      if (current?.languageId !== 'novel-jp-book' || current.version !== scheduledVersion) {
+      if (current?.languageId !== 'jpbook' || current.version !== scheduledVersion) {
         return;
       }
       void (async () => {
@@ -307,7 +307,7 @@ function scheduleProseDiagnostics(doc: TextDocument): void {
     setTimeout(() => {
       proseDebounce.delete(uri);
       const current = documents.get(uri);
-      if (current?.languageId !== 'novel-jp' || current.version !== scheduledVersion) {
+      if (current?.languageId !== 'jpnov' || current.version !== scheduledVersion) {
         return;
       }
       // Superseded runs abort between chunks instead of running to completion: the version
@@ -344,7 +344,7 @@ connection.onCodeAction((
   token: CancellationToken,
 ): CodeAction[] | Promise<CodeAction[]> => {
   const doc = documents.get(params.textDocument.uri);
-  if (doc?.languageId !== 'novel-jp') {
+  if (doc?.languageId !== 'jpnov') {
     return [];
   }
   const uri = doc.uri;
@@ -380,7 +380,7 @@ connection.onCodeAction((
 /** Re-lint every open .jpnov — used when the lint selection changes (no text edit drives it). */
 function revalidateOpenNovels(): void {
   for (const doc of documents.all()) {
-    if (doc.languageId === 'novel-jp') {
+    if (doc.languageId === 'jpnov') {
       scheduleProseDiagnostics(doc);
     }
   }
@@ -388,9 +388,9 @@ function revalidateOpenNovels(): void {
 
 // onDidChangeContent fires on open AND on every edit, so it covers initial validation too.
 documents.onDidChangeContent((e) => {
-  if (e.document.languageId === 'novel-jp-book') {
+  if (e.document.languageId === 'jpbook') {
     scheduleJpbookDiagnostics(e.document);
-  } else if (e.document.languageId === 'novel-jp') {
+  } else if (e.document.languageId === 'jpnov') {
     scheduleProseDiagnostics(e.document);
   }
 });
@@ -402,7 +402,7 @@ documents.onDidClose((e) => {
   clearTimeout(proseDebounce.get(e.document.uri));
   proseDebounce.delete(e.document.uri);
   findingsCache.delete(e.document.uri);
-  if (e.document.languageId === 'novel-jp-book' || e.document.languageId === 'novel-jp') {
+  if (e.document.languageId === 'jpbook' || e.document.languageId === 'jpnov') {
     void connection.sendDiagnostics({ uri: e.document.uri, diagnostics: [] });
   }
 });

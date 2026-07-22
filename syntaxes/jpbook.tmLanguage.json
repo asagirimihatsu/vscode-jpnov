@@ -1,25 +1,25 @@
 {
   "name": "Japanese Novel Book",
-  "scopeName": "text.novel-jp-book",
+  "scopeName": "text.jpbook",
   "comment": "An optional ----fenced front-matter block (key: value metadata), then one relative .jpnov source path per line. Deliberately error-agnostic: backslashes, non-.jpnov paths, missing files, and unknown/duplicate metadata keys are the language server's diagnostics to report — the grammar must not second-guess them (any key: value line inside the fences is painted as metadata). The front-matter region anchors on a fence at the very start of the document (\\A); a fence after leading blank lines still parses server-side, it just goes unpainted. There is no semantic-token layer for book files, so nothing can repaint over this.",
   "patterns": [
     {
-      "name": "meta.frontmatter.novel-jp-book",
+      "name": "meta.frontmatter.jpbook",
       "begin": "\\A[ \\t　]*(---)[ \\t　]*$",
       "end": "^[ \\t　]*(---)[ \\t　]*$",
       "beginCaptures": {
-        "1": { "name": "punctuation.section.frontmatter.begin.novel-jp-book" }
+        "1": { "name": "punctuation.section.frontmatter.begin.jpbook" }
       },
       "endCaptures": {
-        "1": { "name": "punctuation.section.frontmatter.end.novel-jp-book" }
+        "1": { "name": "punctuation.section.frontmatter.end.jpbook" }
       },
       "patterns": [
         {
           "match": "^[ \\t　]*([^:：]+?)[ \\t　]*([:：])[ \\t　]*(.*?)[ \\t　]*$",
           "captures": {
-            "1": { "name": "support.type.property-name.novel-jp-book" },
-            "2": { "name": "punctuation.separator.key-value.novel-jp-book" },
-            "3": { "name": "string.unquoted.value.novel-jp-book" }
+            "1": { "name": "support.type.property-name.jpbook" },
+            "2": { "name": "punctuation.separator.key-value.jpbook" },
+            "3": { "name": "string.unquoted.value.jpbook" }
           }
         }
       ]
@@ -27,8 +27,8 @@
     {
       "match": "^\\s*(\\S.*?)(\\.jpnov)\\s*$",
       "captures": {
-        "1": { "name": "string.unquoted.path.novel-jp-book" },
-        "2": { "name": "keyword.other.extension.novel-jp-book" }
+        "1": { "name": "string.unquoted.path.jpbook" },
+        "2": { "name": "keyword.other.extension.jpbook" }
       }
     }
   ]

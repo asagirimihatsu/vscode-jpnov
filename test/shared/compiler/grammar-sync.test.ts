@@ -1,7 +1,7 @@
 /**
  * Drift guard: the tmLanguage variant alternations + the single-line 字下げ ^-anchor must match
  * the emphasis.ts mapper. Canonical order = length desc, code-unit asc. On drift it prints the
- * exact string to paste into syntaxes/novel-jp.tmLanguage.json — the alternation is never
+ * exact string to paste into syntaxes/jpnov.tmLanguage.json — the alternation is never
  * hand-edited (see the grammar file's header comment).
  */
 import { test } from 'node:test';
@@ -15,7 +15,7 @@ const canonical = (vs: readonly string[]): string =>
   [...new Set(vs)].sort((a, b) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0)).join('|');
 
 const grammar = JSON.parse(
-  readFileSync(new URL('../../../syntaxes/novel-jp.tmLanguage.json', import.meta.url), 'utf8'),
+  readFileSync(new URL('../../../syntaxes/jpnov.tmLanguage.json', import.meta.url), 'utf8'),
 ) as { repository: { annotation: { patterns: { match?: string }[] } } };
 const matches: string[] = grammar.repository.annotation.patterns
   .map((p) => p.match)

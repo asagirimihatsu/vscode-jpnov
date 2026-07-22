@@ -1,5 +1,5 @@
 /**
- * Shared scaffolding for the highlight semantic-token tests: build a novel-jp document, decode the
+ * Shared scaffolding for the highlight semantic-token tests: build a jpnov document, decode the
  * LSP delta-encoded token stream into absolute tuples, and query it by position. (Not a `*.test.ts`
  * file, so the runner imports it as a helper rather than executing it.)
  */
@@ -13,7 +13,7 @@ export interface Tok {
 }
 
 export const doc = (text: string): TextDocument =>
-  TextDocument.create('file:///t.txt', 'novel-jp', 1, text);
+  TextDocument.create('file:///t.txt', 'jpnov', 1, text);
 
 /** Decode the LSP delta-encoded token array into absolute tuples. */
 export function decode(data: readonly number[]): Tok[] {

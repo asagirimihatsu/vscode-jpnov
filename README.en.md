@@ -17,6 +17,8 @@ one-command HTML / PDF / text builds. No AI anywhere in the writing path
   using the same layout engine as the builds.
 - **Aozora Bunko annotations** — ruby (incl. both-side), emphasis dots, side
   lines, bold/italic, tate-chū-yoko, indents, page breaks.
+- **Auto indent** — every Enter starts the new line with a full-width space;
+  open it with `「` or `『` and the space is removed.
 - **Book builds** — collect chapters into a paginated vertical HTML file, a
   print-ready PDF, or a concatenated Aozora-format text.
 - **Proofreading** — hygiene checks on by default, opt-in manuscript-convention
@@ -164,6 +166,21 @@ characters or fewer (longer squishes and raises a Warning). **自動縦中横**
 half-width pairs `!!` `!?` `?!` `??` with no markup — runs of three or more are
 never touched — and the text build writes the explicit markers out, so the
 `.txt` round-trips; set it to `none` to turn it off.
+
+## Auto indent
+
+Japanese novels open each paragraph with one full-width space and leave
+dialogue lines starting with `「` or `『` unindented. The editor follows that
+convention as you type:
+
+- Pressing Enter starts the new line with a full-width space.
+- Open the line with `「` or `『` and the space is removed.
+- Press Enter again without typing anything and the leftover space is
+  cleared, leaving a true blank line.
+- Only spaces inserted automatically are ever removed — spaces you enter
+  yourself are left alone.
+
+Turn it off under **Japanese Novel — Editor** (`jpnov.editor.autoIndent`).
 
 ## Preview
 
@@ -372,7 +389,7 @@ Threshold rules take an integer or `null` (off). All rules run on narration;
 | `jpnov.lint.narration.jaNoMixedPeriod` | `false` | Narration sentences end with `。` (auto-fix) |
 | `jpnov.lint.ruby.kana` | `off` | Ruby readings all-hiragana / all-katakana |
 
-### Japanese Novel — Project / PDF Output / Highlighting / Book Files
+### Japanese Novel — Project / PDF Output / Highlighting / Book Files / Editor
 
 | Setting | Default | Scope | Meaning |
 | --- | --- | --- | --- |
@@ -381,6 +398,7 @@ Threshold rules take an integer or `null` (off). All rules run on narration;
 | `jpnov.highlight.characters` | `[]` | folder | Cast names (see highlighting) |
 | `jpnov.highlight.keywords` | `[]` | folder | Coined terms (see highlighting) |
 | `jpnov.book.updateReferencesOnFileMove` | `prompt` | user | Update `.jpbook` paths on rename/move (`always`, `never`) |
+| `jpnov.editor.autoIndent` | on | user | Full-width space on Enter, removed again for `「`/`『` lines (see auto indent) |
 
 ## Commands
 
