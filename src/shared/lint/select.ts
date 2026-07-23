@@ -61,9 +61,9 @@ export function selectRules(raw: RawLintConfigWire): RuleSelection {
         options = { max: clamp(value, rule.min, rule.max) };
       }
     } else {
-      // enum: enabled when the value is a non-off member of the rule's choices.
+      // enum: enabled on any member other than 'off' — the spelling client/lintConfig.ts also drops.
       const values: readonly string[] = rule.values;
-      if (typeof value === 'string' && value !== values[0] && values.includes(value)) {
+      if (typeof value === 'string' && value !== 'off' && values.includes(value)) {
         options = { mode: value };
       }
     }

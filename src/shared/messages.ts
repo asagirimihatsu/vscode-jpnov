@@ -78,7 +78,7 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return '［＃縦中横終わり］ without a matching ［＃縦中横］';
     case 'syntax.tcyTooLong':
       return '縦中横 is too long (3 characters or fewer avoid distortion)';
-    // --- prose lint (one static, arg-less code per (scope, rule); see lint/catalog.ts).
+    // --- prose lint (one code per (scope, rule); see lint/catalog.ts).
     // `common` rules run on both 地の文 + セリフ under one code; JA lives in bundle.l10n.ja.json.
     case 'lint.common.sentenceLength':
       return 'this sentence is too long';
@@ -86,8 +86,10 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return 'too many commas (、) in one sentence';
     case 'lint.common.maxKanjiRun':
       return 'too many consecutive kanji';
-    case 'lint.common.noEmDash':
-      return 'use a double dash (――), not a single em dash (—)';
+    case 'lint.common.dash':
+      return `use the configured dash character (${a(0)})`;
+    case 'lint.common.dash.parity':
+      return 'use an even number of dashes';
     case 'lint.common.noUnmatchedPair':
       return 'unmatched bracket or quote';
     case 'lint.common.noHankakuKana':

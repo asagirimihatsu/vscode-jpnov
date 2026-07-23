@@ -426,5 +426,5 @@ show: the squiggle and the open quick-fix menu.
 
 Settings (<kbd>⌘,</kbd>) → search `jpnov` (settings search matches the key
 prefix; it does not index the localized group titles, so 「小説」 finds
-nothing). Must show: the 「小説 — 組版」 group with the 40 × 34 defaults
+nothing). Must show: the 「小説 — 組版と出力」 group with the 40 × 34 defaults
 visible.

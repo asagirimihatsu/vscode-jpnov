@@ -236,6 +236,38 @@ export function mapRange(
   return { start: doc.positionAt(startOffset), end: doc.positionAt(endOffset) };
 }
 
+/** True when `[start, end)` maps to ONE unbroken source span (see {@link contiguousPieces}). An
+ *  empty span is contiguous — an insert point sits between characters, overwriting nothing. */
+export function isContiguous(stream: Stream, start: number, end: number): boolean {
+  const map = stream.srcMap;
+  for (let k = Math.max(start + 1, 1); k < Math.min(end, map.length); k += 1) {
+    if ((map[k] ?? 0) !== (map[k - 1] ?? 0) + 1) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * The stream cut wherever `srcMap` stops being consecutive (elided markup, the synthetic 字下げ
+ * space), each piece carrying its start index into `stream.text`. Only a hit that stays inside one
+ * piece has a fix range covering exactly its own characters — a wider one overwrites the gap.
+ */
+export function contiguousPieces(
+  stream: Stream,
+): readonly { readonly text: string; readonly base: number }[] {
+  const map = stream.srcMap;
+  const out: { text: string; base: number }[] = [];
+  let base = 0;
+  for (let k = 1; k <= map.length; k += 1) {
+    if (k === map.length || (map[k] ?? 0) !== (map[k - 1] ?? 0) + 1) {
+      out.push({ text: stream.text.slice(base, k), base });
+      base = k;
+    }
+  }
+  return out;
+}
+
 /**
  * Maps a FIX range `[start, end)` to a source {@link Range}. Unlike {@link mapRange} (which always
  * covers at least one character — right for a diagnostic squiggle), this PRESERVES an empty range as

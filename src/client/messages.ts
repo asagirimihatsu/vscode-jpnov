@@ -96,8 +96,10 @@ export function renderMessage(msg: LocalizableMessage): string {
       return vscode.l10n.t('too many commas (、) in one sentence');
     case 'lint.common.maxKanjiRun':
       return vscode.l10n.t('too many consecutive kanji');
-    case 'lint.common.noEmDash':
-      return vscode.l10n.t('use a double dash (――), not a single em dash (—)');
+    case 'lint.common.dash':
+      return vscode.l10n.t('use the configured dash character ({0})', s(0));
+    case 'lint.common.dash.parity':
+      return vscode.l10n.t('use an even number of dashes');
     case 'lint.common.noUnmatchedPair':
       return vscode.l10n.t('unmatched bracket or quote');
     case 'lint.common.noHankakuKana':

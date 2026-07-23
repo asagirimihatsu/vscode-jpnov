@@ -31,7 +31,8 @@ export type Stream = 'narration' | 'dialogue' | 'ruby';
  *   - `boolean`   -> `jpnov.lint.…` is a `boolean` (default `false`).
  *   - `threshold` -> `jpnov.lint.…` is `integer | null` (default `null` = off); a number is clamped
  *     to `[min, max]`. `suggested` is the recommended value shown to the user (NOT a default).
- *   - `enum`      -> `jpnov.lint.…` is a string drop-down; `values[0]` is the off/default choice.
+ *   - `enum`      -> `jpnov.lint.…` is a string drop-down. `select.ts` keys enablement off the
+ *     literal `'off'` member, at any position in `values`.
  */
 export interface RuleMeta {
   /** Unique WITHIN a scope; the tail of both the setting key and the diagnostic code. */
@@ -42,10 +43,10 @@ export interface RuleMeta {
   readonly min?: number;
   readonly max?: number;
   readonly suggested?: number;
-  /** Enum rules only: the drop-down choices; `values[0]` is the off/default. */
+  /** Enum rules only: the drop-down choices, in display order; one of them must be `'off'`. */
   readonly values?: readonly string[];
-  /** Boolean rules only: the package.json default (omit -> `false`); the data-hygiene rules ship `true`. */
-  readonly default?: boolean;
+  /** The package.json default. Omit for `false` (boolean) / `values[0]` (enum). */
+  readonly default?: boolean | string;
 }
 
 /**
@@ -64,7 +65,13 @@ export const RULES = [
   { id: 'sentenceLength', scope: 'common', kind: 'threshold', min: 1, max: 1000, suggested: 100 },
   { id: 'maxTen', scope: 'common', kind: 'threshold', min: 1, max: 20, suggested: 3 },
   { id: 'maxKanjiRun', scope: 'common', kind: 'threshold', min: 1, max: 20, suggested: 6 },
-  { id: 'noEmDash', scope: 'common', kind: 'boolean' },
+  {
+    id: 'dash',
+    scope: 'common',
+    kind: 'enum',
+    values: ['emDash', 'horizontalBar', 'boxDrawing', 'off'],
+    default: 'horizontalBar',
+  },
   { id: 'noUnmatchedPair', scope: 'common', kind: 'boolean' },
   { id: 'noHankakuKana', scope: 'common', kind: 'boolean', default: true },
   { id: 'noNfd', scope: 'common', kind: 'boolean', default: true },

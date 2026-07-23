@@ -291,11 +291,29 @@
             "order": 3,
             "markdownDescription": "%jpnov.lint.common.maxKanjiRun.description%"
           },
-          "jpnov.lint.common.noEmDash": {
-            "type": "boolean",
-            "default": false,
+          "jpnov.lint.common.dash": {
+            "type": "string",
+            "enum": [
+              "emDash",
+              "horizontalBar",
+              "boxDrawing",
+              "off"
+            ],
+            "default": "horizontalBar",
+            "enumItemLabels": [
+              "%jpnov.lint.common.dash.emDash.label%",
+              "%jpnov.lint.common.dash.horizontalBar.label%",
+              "%jpnov.lint.common.dash.boxDrawing.label%",
+              "%jpnov.lint.common.dash.off.label%"
+            ],
+            "enumDescriptions": [
+              "%jpnov.lint.common.dash.emDash.description%",
+              "%jpnov.lint.common.dash.horizontalBar.description%",
+              "%jpnov.lint.common.dash.boxDrawing.description%",
+              "%jpnov.lint.common.dash.off.description%"
+            ],
             "order": 4,
-            "markdownDescription": "%jpnov.lint.common.noEmDash.description%"
+            "markdownDescription": "%jpnov.lint.common.dash.description%"
           },
           "jpnov.lint.common.noUnmatchedPair": {
             "type": "boolean",

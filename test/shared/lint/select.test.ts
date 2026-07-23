@@ -11,8 +11,8 @@ test('an empty snapshot (nothing enabled) leaves every stream empty', () => {
 });
 
 test('a common rule is fanned onto BOTH narration and dialogue under one code', () => {
-  const sel = selectRules({ 'jpnov.lint.common.noEmDash': true });
-  const expected = { id: 'noEmDash', options: true, code: 'lint.common.noEmDash' };
+  const sel = selectRules({ 'jpnov.lint.common.noUnmatchedPair': true });
+  const expected = { id: 'noUnmatchedPair', options: true, code: 'lint.common.noUnmatchedPair' };
   assert.deepEqual(sel.narration, [expected]);
   assert.deepEqual(sel.dialogue, [expected]);
   assert.deepEqual(sel.ruby, []);
@@ -26,8 +26,8 @@ test('a common threshold rule clamps to bounds and lands in both streams', () =>
 });
 
 test('a boolean rule enables only on exactly true', () => {
-  assert.ok(isSelectionEmpty(selectRules({ 'jpnov.lint.common.noEmDash': false })));
-  assert.ok(isSelectionEmpty(selectRules({ 'jpnov.lint.common.noEmDash': 1 })));
+  assert.ok(isSelectionEmpty(selectRules({ 'jpnov.lint.common.noUnmatchedPair': false })));
+  assert.ok(isSelectionEmpty(selectRules({ 'jpnov.lint.common.noUnmatchedPair': 1 })));
 });
 
 test('a narration-only rule stays out of dialogue', () => {
@@ -44,4 +44,14 @@ test('the ruby enum resolves a mode; off / unknown values stay off', () => {
   ]);
   assert.ok(isSelectionEmpty(selectRules({ 'jpnov.lint.ruby.kana': 'off' })));
   assert.ok(isSelectionEmpty(selectRules({ 'jpnov.lint.ruby.kana': 'romaji' })));
+});
+
+test('an enum whose off choice is listed last still resolves by the "off" spelling', () => {
+  const expected = { id: 'dash', options: { mode: 'emDash' }, code: 'lint.common.dash' };
+  const sel = selectRules({ 'jpnov.lint.common.dash': 'emDash' });
+  assert.deepEqual(sel.narration, [expected]);
+  assert.deepEqual(sel.dialogue, [expected]);
+  // 'off' is last in `values`, so enablement cannot key off the FIRST value
+  assert.ok(isSelectionEmpty(selectRules({ 'jpnov.lint.common.dash': 'off' })));
+  assert.ok(isSelectionEmpty(selectRules({ 'jpnov.lint.common.dash': 'enDash' })));
 });

@@ -36,7 +36,7 @@ import { diagnostic } from '../diagnostics.ts';
 import { chunkRanges } from './chunking.ts';
 import { unwrapDefault } from './interop.ts';
 import { RULE_IMPL } from './modules.ts';
-import { extractStreams, mapFixRange, mapRange } from './streams.ts';
+import { contiguousPieces, extractStreams, isContiguous, mapFixRange, mapRange } from './streams.ts';
 import type { Stream } from './streams.ts';
 
 /** A single auto-fix edit, already mapped to SOURCE coordinates. */
@@ -81,6 +81,11 @@ const PLUGINS: NonNullable<TextlintKernelOptions['plugins']> = [
 
 const WARNING = DiagnosticSeverity.Warning;
 
+/** The whole stream as one piece — the shape a non-`perPiece` scanner is handed. */
+const WHOLE = (stream: Stream): readonly { readonly text: string; readonly base: number }[] => [
+  { text: stream.text, base: 0 },
+];
+
 /** Pair a diagnostic with an optional fix, omitting `fix` entirely when absent (exactOptional…). */
 function finding(diag: Diagnostic, fix: LintFix | undefined): LintFinding {
   return fix !== undefined ? { diagnostic: diag, fix } : { diagnostic: diag };
@@ -94,6 +99,7 @@ async function lintStream(
   opts?: LintRunOptions,
 ): Promise<LintFinding[]> {
   const out: LintFinding[] = [];
+  let pieces: ReturnType<typeof contiguousPieces> | undefined; // only a perPiece scanner needs them
   const kernelRules: NonNullable<TextlintKernelOptions['rules']> = [];
   const codeByRuleId = new Map<string, LintCode>();
   const insertAfterByRuleId = new Map<string, string>();
@@ -101,14 +107,23 @@ async function lintStream(
   for (const rule of rules) {
     const impl = RULE_IMPL[rule.id];
     if (impl.kind === 'prescan') {
-      for (const span of impl.scan(stream.text, rule.options)) {
-        // Diagnostic squiggle covers the span; the fix uses mapFixRange so an empty (insert) span
-        // stays a zero-width insert and a replace covers exactly its characters.
-        const fix =
-          span.fix !== undefined
-            ? { range: mapFixRange(stream, doc, span.start, span.end), newText: span.fix }
-            : undefined;
-        out.push(finding(diagnostic(mapRange(stream, doc, span.start, span.end), { code: rule.code }, WARNING), fix));
+      // `perPiece` scanners see one contiguous piece at a time; the rest see the whole stream,
+      // because a scanner that reads its neighbours would misjudge the character at a piece edge.
+      const scanned = impl.perPiece === true ? (pieces ??= contiguousPieces(stream)) : WHOLE(stream);
+      for (const piece of scanned) {
+        for (const span of impl.scan(piece.text, rule.options)) {
+          const start = piece.base + span.start;
+          const end = piece.base + span.end;
+          // The fix uses mapFixRange so an empty (insert) span stays a zero-width insert and a
+          // replace covers exactly its characters — but only when those characters are contiguous
+          // in SOURCE; a span reaching across elided markup would overwrite it.
+          const fix =
+            span.fix !== undefined && isContiguous(stream, start, end)
+              ? { range: mapFixRange(stream, doc, start, end), newText: span.fix }
+              : undefined;
+          const message = span.message ?? { code: rule.code };
+          out.push(finding(diagnostic(mapRange(stream, doc, start, end), message, WARNING), fix));
+        }
       }
     } else {
       // kernel rule: register under the catalog id so message.ruleId round-trips to the rule's code.
@@ -151,11 +166,13 @@ async function lintStream(
         // `insertAfter` rules (e.g. append 。) override the rule's own fix with a zero-width INSERT at
         // the END of the message — mapFixRange keeps it before any trailing newline. Otherwise the
         // rule's own `message.fix` (a replacement) is mapped the same way.
+        // A kernel rule sees the clean stream too, so `。［＃…］。` arrives as `。。`; a
+        // replacement spanning that gap would delete the markup, so it is dropped.
         const insertAfter = insertAfterByRuleId.get(msg.ruleId);
         let fix: LintFix | undefined;
         if (insertAfter !== undefined) {
           fix = { range: mapFixRange(stream, doc, a + msg.range[1], a + msg.range[1]), newText: insertAfter };
-        } else if (msg.fix !== undefined) {
+        } else if (msg.fix !== undefined && isContiguous(stream, a + msg.fix.range[0], a + msg.fix.range[1])) {
           fix = { range: mapFixRange(stream, doc, a + msg.fix.range[0], a + msg.fix.range[1]), newText: msg.fix.text };
         }
         out.push(finding(diagnostic(mapRange(stream, doc, a + msg.range[0], a + msg.range[1]), { code }, WARNING), fix));
