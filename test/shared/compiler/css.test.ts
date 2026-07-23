@@ -193,6 +193,26 @@ test('縦中横 .tcy rule is on-demand and identical in both media', () => {
   assert.doesNotMatch(build(), /\.tcy\b/);
 });
 
+test('ダッシュ .dash rule is on-demand and identical in both media', () => {
+  // `-webkit-text-fill-color`, not `color:transparent`, which would take `currentColor` and the
+  // drawn rule with it. `dash-j` is per character because a bare `.dash + .dash` also matches
+  // across the prose between two separate runs. 太字/見出し thicken through the ONE property.
+  const rule =
+    '.dash{--dash-w:0.07em;position:relative;-webkit-text-fill-color:transparent}' +
+    '.dash::before{content:"";position:absolute;inset-inline:0.12em;' +
+    'inset-block-start:calc(50% - var(--dash-w) / 2);block-size:var(--dash-w);' +
+    'background:currentColor;-webkit-print-color-adjust:exact;print-color-adjust:exact;' +
+    'pointer-events:none}' +
+    '.dash-j::before{inset-inline-end:0}' +
+    '.dash-j + .dash::before{inset-inline-start:0}' +
+    '.b .dash,.midashi .dash{--dash-w:calc(0.07em + 1px)}';
+  assert.ok(preview({ usedClasses: ['dash'] }).includes(rule));
+  assert.ok(build({ usedClasses: ['dash'] }).includes(rule));
+  assert.doesNotMatch(preview({ usedClasses: ['dash'] }), /:has\(/); // the join is in the HTML
+  assert.doesNotMatch(preview(), /\.dash\b/); // zero dead rules
+  assert.doesNotMatch(build(), /\.dash\b/);
+});
+
 test('見出し .midashi rule is on-demand and identical in both media', () => {
   const rule = '.midashi{font-family:sans-serif;font-weight:bold}';
   assert.ok(preview({ usedClasses: ['midashi'] }).includes(rule));

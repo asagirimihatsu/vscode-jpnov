@@ -21,11 +21,12 @@ import noUnmatchedPair from '@textlint-rule/textlint-rule-no-unmatched-pair';
 import jaNoMixedPeriod from 'textlint-rule-ja-no-mixed-period';
 import type { TextlintRuleModule } from '@textlint/types';
 
+import { DASH_CHARS } from '../../shared/compiler/layout.ts';
 import type { CatalogId } from '../../shared/lint/catalog.ts';
 
 import { unwrapDefault } from './interop.ts';
 import maxTen from './rules/maxTen.ts';
-import { fullWidthSpaceScan, minusPositionScan, noEmDashScan, rubyKanaScan } from './prescan.ts';
+import { dashScan, fullWidthSpaceScan, minusPositionScan, rubyKanaScan } from './prescan.ts';
 import type { PreScan } from './prescan.ts';
 
 // Each CJS rule, normalized past its `.default` wrapper exactly once (see interop.ts). `maxTen` is a
@@ -43,9 +44,10 @@ const jaNoMixedPeriodRule = unwrapDefault(jaNoMixedPeriod);
 
 /** Full-width space + opening brackets allowed at a paragraph head (general-novel-style-ja). */
 const LEADING_PARAGRAPH_CHARS = '　「『（【〈';
-/** Sentence-ending marks accepted besides 。 (ja-no-mixed-period). ― … are real enders; 」』 mean the
- *  "sentence" was a quotation (セリフ) — not a missing-句点 case — so a 「…」 line is never flagged. */
-const ALLOWED_PERIOD_MARKS = ['―', '…', '」', '』'];
+/** Sentence-ending marks accepted besides 。 (ja-no-mixed-period). Every dash spelling and … are
+ *  real enders; 」』 mean the "sentence" was a quotation (セリフ) — not a missing-句点 case — so a
+ *  「…」 line is never flagged. */
+const ALLOWED_PERIOD_MARKS = [...DASH_CHARS, '…', '」', '』'];
 
 /**
  * How a rule executes:
@@ -61,7 +63,12 @@ export type RuleImpl =
     readonly options?: Record<string, unknown>;
     readonly insertAfter?: string;
   }
-  | { readonly kind: 'prescan'; readonly scan: PreScan };
+  | {
+    readonly kind: 'prescan';
+    readonly scan: PreScan;
+    /** Scan each contiguous source piece alone: a run interrupted by markup is two runs, not one. */
+    readonly perPiece?: boolean;
+  };
 
 /** Catalog id -> implementation. The `Record<CatalogId, …>` type requires exactly the catalog ids
  *  (a missing/extra impl fails to compile) and keeps `options` reachable on the kernel variant. */
@@ -70,7 +77,7 @@ export const RULE_IMPL: Record<CatalogId, RuleImpl> = {
   sentenceLength: { kind: 'kernel', rule: sentenceLengthRule },
   maxTen: { kind: 'kernel', rule: maxTen },
   maxKanjiRun: { kind: 'kernel', rule: maxKanjiRule },
-  noEmDash: { kind: 'prescan', scan: noEmDashScan },
+  dash: { kind: 'prescan', scan: dashScan, perPiece: true },
   noUnmatchedPair: { kind: 'kernel', rule: noUnmatchedPairRule },
   noHankakuKana: { kind: 'kernel', rule: noHankakuKanaRule },
   noNfd: { kind: 'kernel', rule: noNfdRule },
@@ -83,7 +90,8 @@ export const RULE_IMPL: Record<CatalogId, RuleImpl> = {
   generalNovelStyle: {
     kind: 'kernel',
     rule: generalNovelStyleRule,
-    options: { chars_leading_paragraph: LEADING_PARAGRAPH_CHARS },
+    // `even_number_dashes` off: the `dash` rule owns dash parity and would double-report.
+    options: { chars_leading_paragraph: LEADING_PARAGRAPH_CHARS, even_number_dashes: false },
   },
   jaNoMixedPeriod: {
     kind: 'kernel',

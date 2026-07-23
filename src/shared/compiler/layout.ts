@@ -19,6 +19,17 @@ import { resolveStyle } from './emphasis.ts';
 import { escapeComment, escapeHtml } from './escape.ts';
 import { tokenize, type HeadingLevel, type Token } from './tokenizer.ts';
 
+/** The dash glyph each `jpnov.lint.common.dash` choice stands for. */
+export const DASH_BY_MODE: Readonly<Record<string, string>> = {
+  emDash: '—', // U+2014
+  horizontalBar: '―', // U+2015
+  boxDrawing: '─', // U+2500
+};
+
+/** Every dash glyph, whatever the setting selects: all of them bind as one 分離禁止 class and
+ *  render as a drawn rule. Shared with the lint scanner (server/lint/prescan.ts). */
+export const DASH_CHARS = new Set<string>(Object.values(DASH_BY_MODE));
+
 /**
  * One laid-out glyph group: a char (1 cell), a ruby unit (base char count, atomic), or a
  * 縦中横 cell (ALWAYS 1 cell however many half-width chars it combines, atomic).
@@ -50,6 +61,13 @@ interface Unit {
   weight?: string | undefined;
   /** 斜体: `i`. */
   style?: string | undefined;
+}
+
+/** True for a unit that is still plain text: `dash` is a presentation class over an ordinary
+ *  character, unlike the composed cells 縦中横/ルビ produce. Every guard that treats a classed
+ *  unit as off-limits must ask this, or dashes silently drop out of it. */
+function isPlainText(u: Unit): boolean {
+  return u.cssClass === undefined || u.cssClass === 'dash';
 }
 
 /** A source row: a line of units (+ optional 字下げ / 見出し), or a forced page break. */
@@ -231,7 +249,7 @@ function applyLeftRuby(
         single.cssClass = rubyLane(single.ruby, cells);
         return;
       }
-      if (real.every((u) => u.ruby === undefined && u.cssClass === undefined)) {
+      if (real.every((u) => u.ruby === undefined && isPlainText(u))) {
         const first = units[m.first];
         const ruby = { base: target, left: reading };
         const cells = rubyCells(ruby);
@@ -399,8 +417,22 @@ export function buildRows(tokens: readonly Token[], issues?: number[]): Row[] {
     }
   };
 
+  // Dash joins (row complete): decided after the postfix passes, which re-channel or swallow the
+  // units around a dash. A join also needs a shared unit key — emitLine wraps each channel run in
+  // its own span, and the css.ts join `.dash-j + .dash` is an adjacent-sibling selector.
+  const markDashJoins = (): void => {
+    for (let i = 0; i + 1 < cur.length; i += 1) {
+      const u = cur[i];
+      const next = cur[i + 1];
+      if (u?.cssClass === 'dash' && next?.cssClass === 'dash' && unitKey(next) === unitKey(u)) {
+        u.html = u.html.replace('class="dash"', 'class="dash dash-j"');
+      }
+    }
+  };
+
   const endLine = (isFlush: boolean): void => {
     settleRubyOverhang();
+    markDashJoins();
     const hasReal = cur.some((u) => u.cells > 0);
     // `heading` is CONDITIONAL: row snapshots deepEqual whole objects, so an absent heading
     // must be an absent KEY, never an explicit undefined.
@@ -447,7 +479,13 @@ export function buildRows(tokens: readonly Token[], issues?: number[]): Row[] {
             tcyBuf += part;
           } else {
             for (const ch of part) {
-              cur.push(mk(1, escapeHtml(ch), ch));
+              const u = mk(1, escapeHtml(ch), ch);
+              // 縦中横 and ルビ cells build their own html; a dash inside one stays a font glyph.
+              if (DASH_CHARS.has(ch)) {
+                u.cssClass = 'dash';
+                u.html = `<span class="dash">${u.html}</span>`;
+              }
+              cur.push(u);
             }
           }
         }
@@ -738,21 +776,21 @@ function lastReal(units: readonly Unit[], start: number, before: number): number
 
 /**
  * 分離禁止 classes (cl-08, https://www.w3.org/TR/jlreq/#character_classes): adjacent SAME-CLASS
- * chars bind (mixed codepoints included, e.g. —―). Half-width 約物 bind only as an exact pair —
- * the shape autoTcy targets — and only when it left them as two cells (full-width ！？ need no
- * binding: they are 行頭禁則, so the 追い出し cascade already moves a split pair whole).
+ * chars bind (mixed codepoints included, e.g. —―; the dash class is {@link DASH_CHARS}).
+ * Half-width 約物 bind only as an exact pair — the shape autoTcy targets — and only when it left
+ * them as two cells (full-width ！？ need no binding: they are 行頭禁則, so the 追い出し cascade
+ * already moves a split pair whole).
  */
-const INSEP_DASH = new Set('—―'); // U+2014 U+2015
 const INSEP_LEADER = new Set('…‥'); // U+2026 U+2025
 const INSEP_BANG = new Set('!?'); // half-width; exactly-2 runs only
 
 /** The 分離禁止 class a unit binds under, or undefined (classed / ruby / multi-char / zero-width). */
 function insepClass(u: Unit | undefined): Set<string> | undefined {
-  if (u?.cells !== 1 || u.text.length !== 1 || u.cssClass !== undefined || u.ruby !== undefined) {
+  if (u?.cells !== 1 || u.text.length !== 1 || !isPlainText(u) || u.ruby !== undefined) {
     return undefined;
   }
-  if (INSEP_DASH.has(u.text)) {
-    return INSEP_DASH;
+  if (DASH_CHARS.has(u.text)) {
+    return DASH_CHARS;
   }
   if (INSEP_LEADER.has(u.text)) {
     return INSEP_LEADER;
@@ -773,7 +811,12 @@ function mergeRun(units: readonly Unit[], head: Unit, start: number, end: number
       html += u.html;
     }
   }
-  return { cells, text, html, emph: head.emph, line: head.line, weight: head.weight, style: head.style };
+  const merged: Unit = { cells, text, html, emph: head.emph, line: head.line, weight: head.weight, style: head.style };
+  if (head.cssClass !== undefined) {
+    // emitLine's class sink is what emits the rule, so a merged unit must keep the class.
+    merged.cssClass = head.cssClass;
+  }
+  return merged;
 }
 
 /**

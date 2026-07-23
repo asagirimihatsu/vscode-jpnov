@@ -55,6 +55,9 @@ async function applied(src: string, raw: RawLintConfigWire): Promise<string> {
   return out;
 }
 
+/** The ダッシュ rule on its shipped default (HORIZONTAL BAR ―). */
+const DASH_BAR: RawLintConfigWire = { 'jpnov.lint.common.dash': 'horizontalBar' };
+
 test('no rules enabled -> synchronous empty result', () => {
   const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, '　半 角 が あ る。');
   const result = computeLintFindings(doc.getText(), selectRules({}), doc);
@@ -64,16 +67,26 @@ test('no rules enabled -> synchronous empty result', () => {
 // --- the common fan-out: one setting runs on BOTH narration and dialogue ---
 
 test('a common rule sees content INSIDE 「」 (dialogue stream)', async () => {
-  assert.deepEqual(await lint('「彼は—と」', { 'jpnov.lint.common.noEmDash': true }), [
-    { code: 'lint.common.noEmDash', text: '—' },
-  ]);
+  assert.deepEqual(await lint('「彼は—と」', DASH_BAR), [{ code: 'lint.common.dash', text: '—' }]);
+});
+
+test('a prescan message reaches Diagnostic.data whole, args included', async () => {
+  // renderEnglish substitutes a missing arg with '', so a dropped arg would surface only here
+  const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, '彼は——と');
+  const result = computeLintFindings(doc.getText(), selectRules(DASH_BAR), doc);
+  const findings = Array.isArray(result) ? result : await result;
+  assert.deepEqual(
+    findings.map((f) => f.diagnostic.data as unknown),
+    [{ code: 'lint.common.dash', args: ['―'] }],
+  );
+  assert.equal(findings[0]?.diagnostic.message, 'use the configured dash character (―)');
 });
 
 test('a common rule fires in BOTH streams (narration + dialogue) under one code', async () => {
   // first — is narration, the second is inside the quote
-  const hits = await lint('—と「—」', { 'jpnov.lint.common.noEmDash': true });
+  const hits = await lint('—と「—」', DASH_BAR);
   assert.equal(hits.length, 2);
-  assert.ok(hits.every((h) => h.code === 'lint.common.noEmDash' && h.text === '—'));
+  assert.ok(hits.every((h) => h.code === 'lint.common.dash' && h.text === '—'));
 });
 
 test('common maxTen counts the (max+1)-th 読点 of a sentence', async () => {
@@ -118,9 +131,71 @@ test('generalNovelStyle fix INSERTS the indent (does not overwrite the first cha
   assert.equal(await applied('普通の段落。', { 'jpnov.lint.narration.generalNovelStyle': true }), '　普通の段落。');
 });
 
-test('noEmDash fix normalizes — and a run —— to one 二倍ダッシュ ――', async () => {
-  assert.equal(await applied('彼は—と', { 'jpnov.lint.common.noEmDash': true }), '彼は――と');
-  assert.equal(await applied('彼は——と', { 'jpnov.lint.common.noEmDash': true }), '彼は――と');
+test('dash fix pairs an odd run and rewrites a foreign glyph in place', async () => {
+  assert.equal(await applied('彼は—と', DASH_BAR), '彼は――と');
+  assert.equal(await applied('彼は——と', DASH_BAR), '彼は――と'); // same length, chosen glyph
+  assert.equal(await applied('彼は―――と', DASH_BAR), '彼は――――と'); // odd rounds up
+  assert.equal(await applied('彼は――と', { 'jpnov.lint.common.dash': 'boxDrawing' }), '彼は──と');
+  assert.equal(await applied('彼は―と', { 'jpnov.lint.common.dash': 'off' }), '彼は―と');
+});
+
+test('generalNovelStyle leaves dash parity to the dash rule (ellipsis parity stays its own)', async () => {
+  const both = { ...DASH_BAR, 'jpnov.lint.narration.generalNovelStyle': true };
+  // one warning for the odd dash run, from the dash rule — not two
+  const dashHits = (await lint('　彼は―――と言った。', both)).filter((h) => h.text.includes('―'));
+  assert.deepEqual(dashHits, [{ code: 'lint.common.dash.parity', text: '―――' }]);
+  const leaderHits = await lint('　彼は…と言った。', both);
+  assert.ok(leaderHits.some((h) => h.code === 'lint.narration.generalNovelStyle'));
+});
+
+/** Every ［＃…］ annotation, ｜ and 《…》 in `src`, in order — the markup a fix must never touch. */
+function markup(src: string): string[] {
+  return src.match(/［＃[^］]*］|《[^》]*》|｜/g) ?? [];
+}
+
+test('no auto-fix overwrites the markup between two clean characters', async () => {
+  // Every fixable rule sees a CLEAN stream, where markup contributes no text: `―［＃…］―` arrives
+  // as `――`. A fix range spanning that gap maps back to one contiguous source range and would
+  // delete the annotation — silently, since SourceFixAll runs on save.
+  const cases: [string, RawLintConfigWire][] = [
+    ['あ―［＃ここから太字］――い［＃ここで太字終わり］', DASH_BAR],
+    ['あ―［＃改丁］――い', DASH_BAR],
+    ['あ――｜―《ダ》い', DASH_BAR],
+    ['｜巳一《みはつ》は――［＃ここから太字］―と。［＃ここで太字終わり］', DASH_BAR],
+    ['あ ［＃「z」に傍点］ い', { 'jpnov.lint.common.jaNoSpaceBetweenFullWidth': true }],
+    ['あ ｜漢《かん》 い', { 'jpnov.lint.common.jaNoSpaceBetweenFullWidth': true }],
+    ['　あ。［＃「z」に傍点］。い', { 'jpnov.lint.narration.generalNovelStyle': true }],
+    ['　あー［＃「z」に傍点］ーい', { 'jpnov.lint.narration.generalNovelStyle': true }],
+    ['　あ、［＃改丁］、い', { 'jpnov.lint.narration.generalNovelStyle': true }],
+    ['はｱ［＃「z」に傍点］ｲだ', { 'jpnov.lint.common.noHankakuKana': true }],
+    ['好き［＃「好き」に傍点］', { 'jpnov.lint.narration.jaNoMixedPeriod': true }],
+  ];
+  for (const [src, raw] of cases) {
+    assert.deepEqual(markup(await applied(src, raw)), markup(src), src);
+  }
+});
+
+test('only the dash rule is scanned per piece — the rest keep their neighbours', async () => {
+  // A scanner that reads the character next to its hit misjudges the one at a piece edge, so
+  // only a rule whose notion of a run must match the renderer's opts in.
+  const MINUS = { 'jpnov.lint.common.minusPosition': true };
+  const SPACE = { 'jpnov.lint.common.jaNoSpaceBetweenFullWidth': true };
+  assert.deepEqual(await lint('気温は−［＃縦中横］１０［＃縦中横終わり］度。', MINUS), []);
+  assert.deepEqual(await lint('あ ｜漢《かん》い', SPACE), [
+    { code: 'lint.common.jaNoSpaceBetweenFullWidth', text: ' ' },
+  ]);
+  // …and the markup between two hits still costs only the FIX, never the warning
+  assert.equal(await applied('あ ［＃「z」に傍点］ い', SPACE), 'あ ［＃「z」に傍点］ い');
+  assert.equal((await lint('あ ［＃「z」に傍点］ い', SPACE)).length, 1);
+});
+
+test('a dash run split by markup is two runs — matching how it renders', async () => {
+  // A fix may not reach across the markup, so the run ends at the gap and each piece pairs alone.
+  assert.equal(await applied('あ―［＃改丁］―い', DASH_BAR), 'あ――［＃改丁］――い');
+  assert.deepEqual(await lint('あ―［＃改丁］―い', DASH_BAR), [
+    { code: 'lint.common.dash.parity', text: '―' },
+    { code: 'lint.common.dash.parity', text: '―' },
+  ]);
 });
 
 test('jaNoMixedPeriod fix appends 。 at the end WITHOUT eating the trailing newline', async () => {
@@ -129,7 +204,8 @@ test('jaNoMixedPeriod fix appends 。 at the end WITHOUT eating the trailing new
 });
 
 test('jaNoMixedPeriod does not warn on a 「」 line, …/― endings, or blank lines', async () => {
-  for (const src of ['「〇」', '好き…', '好き―', '文。\n\n文。']) {
+  // every dash spelling ends a sentence — ALLOWED_PERIOD_MARKS derives from DASH_CHARS
+  for (const src of ['「〇」', '好き…', '好き—', '好き―', '好き─', '文。\n\n文。']) {
     assert.deepEqual(await lint(src, { 'jpnov.lint.narration.jaNoMixedPeriod': true }), [], src);
   }
 });

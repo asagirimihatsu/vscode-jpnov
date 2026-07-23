@@ -6,9 +6,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  dashScan,
   fullWidthSpaceScan,
   minusPositionScan,
-  noEmDashScan,
   rubyKanaScan,
 } from '../../../src/server/lint/prescan.ts';
 import type { PreScan } from '../../../src/server/lint/prescan.ts';
@@ -33,10 +33,41 @@ test('rubyKana katakana mode: hiragana readings fail (ー stays neutral)', () =>
   assert.deepEqual(flagged(rubyKanaScan, 'らーめん\nみはつ', { mode: 'katakana' }), ['らーめん', 'みはつ']);
 });
 
-test('noEmDash: an em-dash run (single or double) is one span fixed to ――', () => {
-  assert.deepEqual(noEmDashScan('彼は—と', true), [{ start: 2, end: 3, fix: '――' }]);
-  assert.deepEqual(noEmDashScan('彼は——と', true), [{ start: 2, end: 4, fix: '――' }]); // run together
-  assert.deepEqual(flagged(noEmDashScan, '―だけ'), []); // ― (U+2015) is the target form, not flagged
+const BAR = { mode: 'horizontalBar' } as const; // the shipped default: ― U+2015
+
+const PARITY = { code: 'lint.common.dash.parity' };
+const CHAR = { code: 'lint.common.dash', args: ['―'] };
+
+test('dash: a run of the chosen glyph passes only at an even length', () => {
+  assert.deepEqual(flagged(dashScan, '彼は――と', BAR), []);
+  assert.deepEqual(flagged(dashScan, '彼は――――と', BAR), []); // longer even runs are the author's
+  assert.deepEqual(dashScan('彼は―と', BAR), [{ start: 2, end: 3, fix: '――', message: PARITY }]);
+  assert.deepEqual(dashScan('彼は―――と', BAR), [
+    { start: 2, end: 5, fix: '――――', message: PARITY },
+  ]);
+});
+
+test('dash: any other dash glyph is rewritten to the chosen one, length preserved', () => {
+  assert.deepEqual(dashScan('彼は——と', BAR), [{ start: 2, end: 4, fix: '――', message: CHAR }]);
+  assert.deepEqual(dashScan('彼は──と', BAR), [{ start: 2, end: 4, fix: '――', message: CHAR }]);
+  assert.deepEqual(dashScan('彼は—―と', BAR), [{ start: 2, end: 4, fix: '――', message: CHAR }]);
+  assert.deepEqual(dashScan('あ―い―う', BAR), [
+    { start: 1, end: 2, fix: '――', message: PARITY },
+    { start: 3, end: 4, fix: '――', message: PARITY },
+  ]);
+  // wrong glyph AND odd: the character message wins
+  assert.deepEqual(dashScan('彼は—――と', BAR), [{ start: 2, end: 5, fix: '――――', message: CHAR }]);
+});
+
+test('dash: each mode judges by its own glyph; an unset mode checks nothing', () => {
+  assert.deepEqual(flagged(dashScan, '彼は——と', { mode: 'emDash' }), []);
+  assert.deepEqual(flagged(dashScan, '彼は──と', { mode: 'boxDrawing' }), []);
+  assert.deepEqual(dashScan('彼は――と', { mode: 'emDash' }), [
+    { start: 2, end: 4, fix: '——', message: { code: 'lint.common.dash', args: ['—'] } },
+  ]);
+  // 'off' never reaches a scanner (select.ts drops it), but an unknown mode must stay silent too
+  assert.deepEqual(flagged(dashScan, '彼は―と', { mode: 'off' }), []);
+  assert.deepEqual(flagged(dashScan, '彼は―と', true), []);
 });
 
 test('fullWidthSpace: a half-width space between full-width chars is fixed to 　 (run collapses)', () => {

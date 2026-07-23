@@ -101,6 +101,11 @@ but not Japanese typesetting:
   | :---: | :---: |
   | <img src="docs/images/kinsoku-off.png" width="250" alt="Without kinsoku: a full stop opens a line and an opening bracket ends one"> | <img src="docs/images/kinsoku-on.png" width="250" alt="With kinsoku: the full stop hangs at the end of the previous line and the bracket moves inline"> |
 
+- **Dashes（ダッシュ）** — Japanese novels write a dash as a doubled pair
+  (`――`), and it is typeset as one unbroken dash. Pick the
+  character you write in `jpnov.lint.common.dash` (default `―`); any other
+  dash character, or an odd-numbered run, is flagged with an auto-fix.
+
 - **Genkō yōshi（原稿用紙）** — the manuscript grid Japanese prose is drafted
   on. The default page of **40 characters × 34 lines** mirrors common
   submission requirements; turn on line numbers and column rules for the classic
@@ -318,7 +323,8 @@ coined proper noun is never "corrected".
 - **Hygiene checks are on by default** — half-width kana, decomposed (NFD)
   characters, zero-width / invisible characters, and invalid control
   characters — so a stray malformed or invisible character never slips into a
-  manuscript.
+  manuscript. The dash check (`common.dash`) is on too, keeping one dash
+  character throughout.
 - **Publication-style checks are opt-in.** `narration.generalNovelStyle`
   (a bundle of general conventions: paragraph indent, punctuation spacing,
   numeral style, and more) and `narration.jaNoMixedPeriod` (narration
@@ -368,10 +374,10 @@ Threshold rules take an integer or `null` (off). All rules run on narration;
 | `jpnov.lint.common.noNfd` | `true` | Decomposed (NFD) characters |
 | `jpnov.lint.common.noZeroWidth` | `true` | Zero-width / invisible characters |
 | `jpnov.lint.common.noControlChar` | `true` | Invalid control characters |
+| `jpnov.lint.common.dash` | `horizontalBar` | One dash character throughout, in even-numbered runs (auto-fix) |
 | `jpnov.lint.common.sentenceLength` | `null` | Sentence length limit (suggested 100) |
 | `jpnov.lint.common.maxTen` | `null` | Commas (、) per sentence (suggested 3) |
 | `jpnov.lint.common.maxKanjiRun` | `null` | Consecutive kanji (suggested 6) |
-| `jpnov.lint.common.noEmDash` | `false` | Single `—` instead of a double dash `――` |
 | `jpnov.lint.common.noUnmatchedPair` | `false` | Unmatched brackets / quotes |
 | `jpnov.lint.common.jaNoSpaceBetweenFullWidth` | `false` | Space between full-width characters (auto-fix) |
 | `jpnov.lint.common.jaUnnaturalAlphabet` | `false` | Unnatural alphabet usage |

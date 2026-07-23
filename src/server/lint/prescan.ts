@@ -6,14 +6,22 @@
  *
  * Relative imports only (native test loader).
  */
+import { DASH_BY_MODE, DASH_CHARS } from '../../shared/compiler/layout.ts';
 import { isHiragana, isKatakana } from '../../shared/compiler/tokenizer.ts';
 import type { ActiveRule } from '../../shared/lint/select.ts';
+import type { LocalizableMessage } from '../../shared/protocol.ts';
 
-/** A pre-scan: clean text + the rule's resolved options -> the spans to flag (UTF-16 offsets). */
+/** A pre-scan: clean text + the rule's resolved options -> the spans to flag (UTF-16 offsets).
+ *  `message` overrides the code the driver supplies by default (`rule.code`, no args). */
 export type PreScan = (
   text: string,
   options: ActiveRule['options'],
-) => readonly { readonly start: number; readonly end: number; readonly fix?: string }[];
+) => readonly {
+  readonly start: number;
+  readonly end: number;
+  readonly fix?: string;
+  readonly message?: LocalizableMessage;
+}[];
 
 /** The three minus glyphs (ASCII, full-width, true minus) the prose may use as a sign. */
 const MINUS = new Set(['-', '－', '−']);
@@ -38,24 +46,39 @@ export const minusPositionScan: PreScan = (text) => {
   return out;
 };
 
-const EM_DASH = '—'; // — the single em dash novels avoid
-const DOUBLE_DASH = '――'; // ―― 二倍ダッシュ (the replacement)
-
-/** Flags a maximal run of em dashes (—); the fix replaces the WHOLE run with one 二倍ダッシュ (――),
- *  so `—` and a stray `——` both normalize cleanly without leaving a dangling dash. */
-export const noEmDashScan: PreScan = (text) => {
-  const out: { start: number; end: number; fix: string }[] = [];
+/** Flags a maximal run of dash characters (mixed spellings included) unless it is an even-length
+ *  run of the chosen glyph; the fix rewrites the run in that glyph, rounding an odd length up. */
+export const dashScan: PreScan = (text, options) => {
+  const mode = typeof options === 'object' && 'mode' in options ? options.mode : undefined;
+  const want = mode === undefined ? undefined : DASH_BY_MODE[mode];
+  if (want === undefined) {
+    return [];
+  }
+  const out: { start: number; end: number; fix: string; message: LocalizableMessage }[] = [];
   let i = 0;
   while (i < text.length) {
-    if (text.charAt(i) !== EM_DASH) {
+    if (!DASH_CHARS.has(text.charAt(i))) {
       i += 1;
       continue;
     }
     const start = i;
-    while (i < text.length && text.charAt(i) === EM_DASH) {
+    let pure = true;
+    while (i < text.length && DASH_CHARS.has(text.charAt(i))) {
+      pure &&= text.charAt(i) === want;
       i += 1;
     }
-    out.push({ start, end: i, fix: DOUBLE_DASH });
+    const len = i - start;
+    if (pure && len % 2 === 0) {
+      continue;
+    }
+    out.push({
+      start,
+      end: i,
+      fix: want.repeat(len + (len % 2)),
+      message: pure
+        ? { code: 'lint.common.dash.parity' }
+        : { code: 'lint.common.dash', args: [want] },
+    });
   }
   return out;
 };

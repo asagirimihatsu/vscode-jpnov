@@ -288,6 +288,72 @@ test('the built page renders vertically in a headless Chromium', BROWSER_SKIP, a
   assert.ok(metrics.tcyCount >= 2, 'both 縦中横 units must reach the DOM');
 });
 
+/** Same parse-time trick as MEASURE_SCRIPT, for the drawn ダッシュ rules. */
+const DASH_MEASURE_SCRIPT = `<script>
+(() => {
+  const dashes = [...document.querySelectorAll('.dash')];
+  const plain = dashes.find((d) => !d.closest('.b, .midashi'));
+  const bold = dashes.find((d) => d.closest('.b'));
+  const cs = plain ? getComputedStyle(plain, '::before') : null;
+  const pair = plain && plain.nextElementSibling && plain.nextElementSibling.classList.contains('dash')
+    ? getComputedStyle(plain.nextElementSibling, '::before')
+    : null;
+  document.documentElement.setAttribute('${MARKER}', JSON.stringify({
+    dashCount: dashes.length,
+    cellExtent: plain ? plain.getBoundingClientRect().height : 0,
+    rootFontSize: parseFloat(getComputedStyle(document.documentElement).fontSize),
+    thickness: cs ? parseFloat(cs.blockSize) : 0,
+    boldThickness: bold ? parseFloat(getComputedStyle(bold, '::before').blockSize) : 0,
+    runStart: cs ? parseFloat(cs.insetInlineStart) : -1,
+    joinLeading: cs ? parseFloat(cs.insetInlineEnd) : -1,
+    joinTrailing: pair ? parseFloat(pair.insetInlineStart) : -1,
+    runEnd: pair ? parseFloat(pair.insetInlineEnd) : -1,
+    painted: cs ? cs.backgroundColor : 'none',
+    printSafe: cs ? (cs.printColorAdjust || cs.webkitPrintColorAdjust) : 'none',
+  }));
+})();
+</script>`;
+
+interface DashMetrics {
+  readonly dashCount: number;
+  readonly cellExtent: number;
+  readonly rootFontSize: number;
+  readonly thickness: number;
+  readonly boldThickness: number;
+  readonly runStart: number;
+  readonly joinLeading: number;
+  readonly joinTrailing: number;
+  readonly runEnd: number;
+  readonly painted: string;
+  readonly printSafe: string;
+}
+
+test('a ダッシュ run renders as one drawn, centred rule', BROWSER_SKIP, async () => {
+  assert.ok(browser, 'JPNOV_E2E_REQUIRE_BROWSER=1 but no Chromium-family browser was found');
+  const { html } = await conn().request<RenderFileResult>('jpnov/renderFile', {
+    uri: 'file:///e2e/dash.jpnov',
+    text: '　約束は――もう果たせない。\n　彼女は［＃太字］――［＃太字終わり］と黙った。\n',
+    settings: PREVIEW_SETTINGS,
+  });
+
+  const m = JSON.parse(await measurePage(browser, html, DASH_MEASURE_SCRIPT, 'dash')) as DashMetrics;
+
+  assert.equal(m.dashCount, 4, 'every dash cell carries its own drawn rule');
+  assert.ok(
+    Math.abs(m.cellExtent - m.rootFontSize) < 1,
+    `a hidden glyph must still advance one cell (${String(m.cellExtent)}px vs ${String(m.rootFontSize)}px)`,
+  );
+  assert.ok(m.thickness > 0 && m.painted !== 'none', 'the rule must actually paint');
+  assert.equal(m.printSafe, 'exact', 'the rule is a background — print would drop it otherwise');
+  assert.equal(m.joinLeading, 0, 'a dash facing another must run to the cell edge');
+  assert.equal(m.joinTrailing, 0, 'its neighbour must meet it there');
+  assert.ok(m.runStart > 0 && m.runEnd > 0, 'the outer ends of the run stay inset');
+  assert.ok(
+    m.boldThickness > m.thickness,
+    `太字 must thicken the rule (${String(m.boldThickness)}px vs ${String(m.thickness)}px)`,
+  );
+});
+
 /** Same parse-time trick as MEASURE_SCRIPT, for the preview's edge-frame geometry. */
 const EDGE_MEASURE_SCRIPT = `<script>
 (() => {

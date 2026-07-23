@@ -77,7 +77,8 @@ export type MsgCode =
   | 'syntax.unterminatedTcy' // args: [] — ［＃縦中横］ with no 終わり before its line end (the render auto-closes); range = the opening annotation
   | 'syntax.danglingTcyEnd' // args: [] — ［＃縦中横終わり］ with no open span (render no-op); range = the annotation
   | 'syntax.tcyTooLong' // args: [] — combined 縦中横 content over 3 code points (renders but squishes); range = the content (span form) / the annotation (postfix form)
-  | LintCode // args: [] — one static prose-lint code per (stream, rule); see lint/catalog.ts
+  | LintCode // one prose-lint code per (stream, rule); see lint/catalog.ts
+  | 'lint.common.dash.parity' // args: [] — the `dash` rule's second fault: right glyph, odd count
   | 'server.unexpected'; // args: [detail]  (detail = raw unexpected server error, untranslatable)
 
 /**

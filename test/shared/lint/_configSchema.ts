@@ -49,7 +49,7 @@ export function enumDescriptionKey(rule: RuleMeta, value: string): string {
 function propertyFor(rule: RuleMeta, order: number): Record<string, unknown> {
   const markdownDescription = `%${ruleDescriptionKey(rule)}%`;
   if (rule.kind === 'boolean') {
-    return { type: 'boolean', default: rule.default ?? false, order, markdownDescription };
+    return { type: 'boolean', default: rule.default === true, order, markdownDescription };
   }
   if (rule.kind === 'threshold') {
     return {
@@ -65,7 +65,7 @@ function propertyFor(rule: RuleMeta, order: number): Record<string, unknown> {
   return {
     type: 'string',
     enum: values,
-    default: values[0],
+    default: typeof rule.default === 'string' ? rule.default : values[0],
     enumItemLabels: values.map((v) => `%${enumLabelKey(rule, v)}%`),
     enumDescriptions: values.map((v) => `%${enumDescriptionKey(rule, v)}%`),
     order,

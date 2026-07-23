@@ -209,6 +209,7 @@ test('分離禁止: a dash pair crosses the wrap whole (mixed codepoints bind to
   // cpl 6: naive あいうえお― | ―か splits ――; the bound 2-cell unit moves whole.
   assert.deepEqual(klines('あいうえお――か', 6), ['あいうえお', '――か']);
   assert.deepEqual(klines('あいう—―え', 4), ['あいう', '—―え']); // U+2014 + U+2015
+  assert.deepEqual(klines('あいうえお──か', 6), ['あいうえお', '──か']); // U+2500 binds too
 });
 
 test('分離禁止: leader pairs (…… / ‥‥) cross the wrap whole', () => {
@@ -379,6 +380,45 @@ test('flowToHtml: a break followed by a blank line opens the next segment on the
       '<div class="segment"><div class="line" data-line="2"></div>' +
       '<div class="line" data-line="3">後</div></div></div>',
   );
+});
+
+test('ダッシュ: every dash glyph is wrapped, and a joined cell is marked in the HTML', () => {
+  const dash = (ch: string): string => `<span class="dash">${ch}</span>`;
+  const joined = (ch: string): string => `<span class="dash dash-j">${ch}</span>`;
+  assert.equal(
+    html('あ――い'),
+    `<div class="book"><div class="page" data-page="0"><div class="line" data-line="0">あ${joined('―')}${dash('―')}い</div></div></div>`,
+  );
+  assert.match(flow('—―─'), new RegExp(`${joined('—')}${joined('―')}${dash('─')}`));
+  assert.match(flow('あ―い'), new RegExp(dash('―')));
+  // TWO runs with prose between: the inner ends must NOT join — a CSS sibling selector cannot
+  // see the text node, so the marker has to come from here
+  assert.match(flow('あ――い――う'), new RegExp(`${joined('―')}${dash('―')}い${joined('―')}${dash('―')}`));
+});
+
+test('ダッシュ: the join is decided after the postfix passes, not at emission', () => {
+  const dash = (ch: string): string => `<span class="dash">${ch}</span>`;
+  // A postfix re-channels units that were already emitted; emitLine then wraps the second dash in
+  // its own channel span, so the two are no longer siblings and the CSS join cannot reach.
+  assert.match(flow('あ――い［＃「―い」に傍点］'), new RegExp(`${dash('―')}<span class="emph-fs">${dash('―')}`));
+  // A postfix 縦中横 swallows the following dash entirely — the survivor must not keep a marker
+  // pointing at a cell that no longer exists.
+  assert.match(flow('あ――い［＃「―い」は縦中横］'), new RegExp(`${dash('―')}<span class="tcy">`));
+});
+
+test('ダッシュ: a dash may still be a 左ルビ base (the ruby markup replaces the rule)', () => {
+  assert.match(flow('――［＃「――」の左に「and」のルビ］'), /<ruby class="lr">/);
+});
+
+test('ダッシュ: the class survives 分離禁止 binding, and never reaches a 縦中横 cell', () => {
+  // strict merges the run into ONE unit; the class must ride along or css.ts emits no rule
+  const bound = paginate(buildRows(tokenize('あ――')), 40, 34, 'strict').flat();
+  assert.deepEqual(
+    bound[0]?.units.map((u) => u.cssClass),
+    [undefined, 'dash'],
+  );
+  // inside 縦中横 the dash is part of the combined cell — one tcy span, no dash span
+  assert.match(flow('［＃縦中横］―［＃縦中横終わり］'), /<span class="tcy">―<\/span>/);
 });
 
 test('flowToHtml: honors the kinsoku mode (禁則) — the SAME engine as the build', () => {

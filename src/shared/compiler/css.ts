@@ -43,9 +43,9 @@ import * as S from './styles/styles.generated.ts';
 
 /**
  * The CSS rule for one used class name, or '' for an unknown one (keeps the "no stray rules"
- * invariant). `indent-N` (字下げ), `tcy` (縦中横) and `midashi` (見出し) are generated here —
- * they are layout geometry / line furniture, not style-table entries; the indent suffix check
- * is defence in depth (emitLine only ever emits positive N_eff). Every other class
+ * invariant). `indent-N` (字下げ), `tcy` (縦中横), `dash` (ダッシュ) and `midashi` (見出し) are
+ * generated here — they are layout geometry / line furniture, not style-table entries; the indent
+ * suffix check is defence in depth (emitLine only ever emits positive N_eff). Every other class
  * (emph-* / dec-* / b / i) is forwarded to emphasis.ts's {@link styleRule}, the single home of
  * the style CSS values.
  */
@@ -71,6 +71,22 @@ function classRule(name: string): string {
     // preview's `.line{font-family:serif}` has EQUAL specificity — this wins by source order
     // only (used-class rules are appended after the fragments in stylesheet()).
     return '.midashi{font-family:sans-serif;font-weight:bold}';
+  }
+  if (name === 'dash') {
+    // ダッシュ: the glyph is hidden and a centred ::before drawn in its place. Hiding must use
+    // `-webkit-text-fill-color` — `color:transparent` would take `currentColor`, and the rule
+    // with it. `dash-j` comes from layout.ts because `.dash + .dash` would also match across the
+    // prose between two separate runs.
+    return (
+      '.dash{--dash-w:0.07em;position:relative;-webkit-text-fill-color:transparent}' +
+      '.dash::before{content:"";position:absolute;inset-inline:0.12em;' +
+      'inset-block-start:calc(50% - var(--dash-w) / 2);block-size:var(--dash-w);' +
+      'background:currentColor;-webkit-print-color-adjust:exact;print-color-adjust:exact;' +
+      'pointer-events:none}' +
+      '.dash-j::before{inset-inline-end:0}' +
+      '.dash-j + .dash::before{inset-inline-start:0}' +
+      '.b .dash,.midashi .dash{--dash-w:calc(0.07em + 1px)}'
+    );
   }
   if (name === 'hang') {
     // ぶら下げ: negative letter-spacing cancels the hung 句読点's own advance, so only its
