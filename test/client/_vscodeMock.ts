@@ -148,6 +148,8 @@ export interface FakeWebview {
   html: string;
   cspSource: string;
   options: unknown;
+  /** Maps an on-disk Uri to a webview-loadable one (identity here; real VS Code rewrites the scheme). */
+  asWebviewUri(uri: Uri): Uri;
   /** Messages sent via `postMessage`, captured for assertions. */
   posted: unknown[];
   postMessage(message: unknown): Promise<boolean>;
@@ -539,6 +541,9 @@ export function makeFakeWebview(options?: unknown): FakeWebview {
     html: '',
     cspSource: 'vscode-webview://test',
     options,
+    asWebviewUri(uri: Uri): Uri {
+      return uri;
+    },
     posted: [],
     postMessage(message: unknown): Promise<boolean> {
       this.posted.push(message);

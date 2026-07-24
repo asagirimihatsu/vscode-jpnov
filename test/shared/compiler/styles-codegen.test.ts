@@ -1,9 +1,11 @@
 /**
- * Keeps the committed `styles.generated.ts` in sync with the authored `styles/*.css`
- * fragments, and guards the deliberate DOUBLE HOME of the @page geometry: LINE_PITCH /
- * FOLIO_BAND / PRINT_MARGIN live in geometry.ts (the TS `@page` generator consumes them —
- * `@page` cannot read `var()` portably) AND as plain literals in the fragments. If either
- * side moves alone, this fails loudly (see geometry.ts's module header).
+ * Guards the deliberate DOUBLE HOME of the @page geometry: LINE_PITCH / FOLIO_BAND / PRINT_MARGIN
+ * live in geometry.ts (the TS `@page` generator consumes them — `@page` cannot read `var()`
+ * portably) AND as plain literals in the authored `styles/*.css` fragments. If either side moves
+ * alone, this fails loudly (see geometry.ts's module header).
+ *
+ * (There is no committed-vs-generated drift test: `styles.generated.ts` is gitignored and
+ * regenerated on demand by `npm run gen`, so there is no stale artifact to guard.)
  *
  * The literal extraction keys on a KNOWN selector + property and never reads numbers embedded
  * in `calc()` expressions, so an intentional lowering to `calc(var())` breaks the assertion —
@@ -14,7 +16,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { generateStylesModule } from '../../../scripts/gen-styles.ts';
 import {
   FOLIO_BAND,
   LINE_PITCH,
@@ -58,14 +59,6 @@ function cssValue(css: string, selector: string, prop: string, within?: string):
   assert.ok(value !== undefined, `${selector}{${prop}:<number>} not found`);
   return Number.parseFloat(value);
 }
-
-test('styles.generated.ts is in sync with the *.css fragments', async () => {
-  assert.equal(
-    read('styles.generated.ts'),
-    await generateStylesModule(),
-    'styles.generated.ts is stale — run `npm run gen:styles`',
-  );
-});
 
 test('the .css geometry literals equal the geometry.ts constants (@page double-home guard)', () => {
   const previewBase = read('preview.base.css');

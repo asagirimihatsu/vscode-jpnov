@@ -20,5 +20,8 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "test-fixtures/**/*.ts", "scripts/**/*.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "test-fixtures/**/*.ts", "scripts/**/*.ts"],
+  // The browser-context webview code is a separate program (DOM lib, no node/vscode) — see
+  // src/client/webview/tsconfig.json. Its ambient env.d.ts must not leak `acquireVsCodeApi` into the host.
+  "exclude": ["src/client/webview/**/*"]
 }

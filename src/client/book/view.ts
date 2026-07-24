@@ -37,6 +37,8 @@ import { chapterLines, metaRows, moveChapterTo } from '#/shared/book/edits.ts';
 import { META_KEYS, parseJpbook, type MetaKey } from '#/shared/book/jpbook.ts';
 import { encodeTxt, TXT_ENCODING_DEFAULT, type TxtEncoding } from '#/shared/encoding.ts';
 
+import type { BookVM, BuildAction, ChapterVM, DetailMessage, MetaVM, StateMessage } from '../protocol.ts';
+
 import { applyBookEdits, metaLabel, metaValueParts } from './manage.ts';
 import type { BookNode } from './nodes.ts';
 import { booksHtml } from './webviewHtml.ts';
@@ -46,26 +48,6 @@ import { lastPathSegment } from '../paths.ts';
 import { convertHtmlToPdf } from '../pdf.ts';
 import { buildProjectDirs } from '../projectConfig.ts';
 import { buildHtmlSettings } from '../renderConfig.ts';
-
-/** A Books-panel build action: the two wire formats plus the client-only PDF post-process. */
-type BuildAction = BuildFormat | 'pdf';
-
-/** One book row in the pushed `state` (a flat, per-root-grouped list; no folder nesting). */
-interface BookVM {
-  readonly uri: string;
-  readonly title: string;
-  readonly fileRel: string;
-  readonly checked: boolean;
-}
-
-/** One chapter row in a pushed `detail`. */
-interface ChapterVM {
-  readonly line: number;
-  readonly name: string;
-  readonly folder: string;
-  readonly fileUri: string;
-  readonly missing: boolean;
-}
 
 function compareStr(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -86,6 +68,8 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   static readonly viewId = 'jpnov.books';
 
   private readonly client: LanguageClient;
+  /** The extension root, for `asWebviewUri`-serving the codicon stylesheet + font. */
+  private readonly extensionUri: vscode.Uri;
   private readonly disposables: vscode.Disposable[] = [];
   /** The live view, once resolved (visible at least once). Undefined while never-shown / disposed. */
   private view: vscode.WebviewView | undefined;
@@ -106,8 +90,9 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   /** The book whose DETAIL screen is currently open, so edits/refreshes re-push it. */
   private openDetailUri: string | undefined;
 
-  constructor(client: LanguageClient) {
+  constructor(client: LanguageClient, extensionUri: vscode.Uri) {
     this.client = client;
+    this.extensionUri = extensionUri;
 
     // A `.jpbook` appearing/disappearing changes the book SET, and a SAVE can change its
     // front-matter title (a book label) or chapters (the open detail), so create/delete/change
@@ -133,8 +118,13 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
   resolveWebviewView(view: vscode.WebviewView): void {
     this.view = view;
-    view.webview.options = { enableScripts: true };
-    view.webview.html = booksHtml(view.webview);
+    // Scripts are locked to a per-render nonce (CSP); the only loadable resource is the codicon
+    // stylesheet + font under the extension's media/codicon.
+    view.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'media', 'codicon')],
+    };
+    view.webview.html = booksHtml(view.webview, this.extensionUri);
 
     this.messageSub?.dispose();
     this.messageSub = view.webview.onDidReceiveMessage((m: unknown) => {
@@ -392,7 +382,8 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           })),
       }));
     const noFolder = (vscode.workspace.workspaceFolders ?? []).length === 0;
-    void view.webview.postMessage({ type: 'state', loading: !this.hasLoaded, noFolder, groups });
+    const message: StateMessage = { type: 'state', loading: !this.hasLoaded, noFolder, groups };
+    void view.webview.postMessage(message);
   }
 
   /** Parse one book and push its chapters (with missing-file flags) + metadata rows to the webview. */
@@ -434,14 +425,15 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         };
       }),
     );
-    const meta = metaRows(text).map((row) => {
+    const meta: MetaVM[] = metaRows(text).map((row) => {
       const parts = metaValueParts(row.key, row.value);
       return { key: row.key, label: metaLabel(row.key), value: parts.value, note: parts.note };
     });
     if (this.openDetailUri !== uri) {
       return; // navigated away during the async stats
     }
-    void view.webview.postMessage({ type: 'detail', uri, title: bookTitle(entry), chapters, meta });
+    const message: DetailMessage = { type: 'detail', uri, title: bookTitle(entry), chapters, meta };
+    void view.webview.postMessage(message);
   }
 
   /**

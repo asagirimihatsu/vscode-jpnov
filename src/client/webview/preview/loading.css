@@ -1,0 +1,20 @@
+/* The "Loading preview…" spinner. The strict CSP rules out loadable assets (no codicon font) and
+   inline style attributes, so this rides the host's nonce'd inline stylesheet, coloured by the
+   --vscode-* theme variables VS Code injects into every webview. */
+.loading {
+  display: flex;
+  align-items: center;
+  gap: .6em;
+  color: var(--vscode-descriptionForeground, #888);
+}
+.spinner {
+  width: 1em;
+  height: 1em;
+  border-radius: 50%;
+  flex: none;
+  border: 2px solid var(--vscode-progressBar-background, #0e70c0);
+  border-top-color: transparent;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }

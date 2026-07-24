@@ -1,0 +1,131 @@
+* { box-sizing: border-box; }
+/* Override VS Code's default injected body padding (0 20px) so the panel goes edge-to-edge. */
+html, body { height: 100%; margin: 0; padding: 0; }
+body {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size, 13px);
+  color: var(--vscode-foreground);
+}
+#app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.scroll { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; }
+/* .ic wraps the one bespoke SVG (the checkbox circle); codicons render as a font glyph instead. */
+.ic { display: inline-flex; align-items: center; justify-content: center; }
+.ic svg { display: block; }
+/* Match the hand-drawn glyphs' ~14px weight (codicon.css defaults to 16px; equal specificity,
+   linked before this inline style, so this wins on source order). */
+.codicon[class*='codicon-'] { font-size: 14px; }
+button { font: inherit; color: inherit; }
+button:focus-visible, input:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.list { padding: 2px 0; }
+.group-header {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--vscode-descriptionForeground); padding: 8px 8px 2px;
+}
+.row { display: flex; align-items: center; gap: 6px; padding: 0 6px 0 8px; min-height: 24px; }
+.row:hover { background: var(--vscode-list-hoverBackground); }
+/* Custom selection cell: a FULL-HEIGHT, fixed-width segment split from the content by a vertical
+   divider. Unchecked shows nothing (a faint single ring on hover); checked fills with a primary
+   tint + a double ring. */
+.row.book { padding-left: 0; }
+.cbtile {
+  flex: 0 0 auto; align-self: stretch; width: 36px;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; cursor: pointer; color: var(--vscode-foreground);
+  border-right: 1px solid var(--vscode-panel-border, transparent);
+}
+.cbtile .ic { opacity: 0; }
+.cbtile:hover:not(.on) .ic { opacity: .4; }
+.cbtile:hover:not(.on) .cd-inner { display: none; } /* hover-unchecked = single ring (hide inner) */
+.cbtile.on {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  background: color-mix(in srgb, var(--vscode-button-background) 50%, transparent);
+}
+.cbtile.on .ic { opacity: 1; } /* checked = double ring (outer + inner) */
+.main, .chmain, .meta {
+  flex: 1 1 auto; display: flex; align-items: center; gap: 6px; min-width: 0;
+  text-align: left; background: none; border: none; color: inherit; padding: 4px 0; cursor: pointer;
+}
+/* Meta rows are the row itself (a button), so give them full width + row padding, not content width. */
+.meta { width: 100%; padding: 4px 6px 4px 8px; }
+.maincol { flex: 1 1 auto; min-width: 0; }
+.title, .mlabeltext { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mlabel { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.mnote { flex: 0 0 auto; font-size: 11px; color: var(--vscode-descriptionForeground); }
+.sub, .mvalue {
+  font-size: 11px; color: var(--vscode-descriptionForeground);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.chev { flex: 0 0 auto; color: var(--vscode-descriptionForeground); }
+
+.dhdr {
+  display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+  position: sticky; top: 0; z-index: 1;
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  border-bottom: 1px solid var(--vscode-panel-border, transparent);
+}
+.dtitle { flex: 1 1 auto; text-align: center; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.iconbtn {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px;
+  background: none; border: none; cursor: pointer; padding: 3px; border-radius: 4px;
+}
+.iconbtn:hover { background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground)); }
+.iconbtn:disabled { opacity: .4; cursor: default; }
+.iconbtn:disabled:hover { background: none; }
+
+.section { padding: 0 0 2px; }
+.shead { display: flex; align-items: center; padding: 4px 8px 2px; }
+.stitle {
+  flex: 1 1 auto; font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--vscode-descriptionForeground);
+}
+.sectoggle { width: 100%; background: none; border: none; cursor: pointer; text-align: left; }
+.caret { flex: 0 0 auto; color: var(--vscode-descriptionForeground); }
+.acts { display: flex; flex: 0 0 auto; }
+.chapter.missing .title { color: var(--vscode-list-warningForeground, #cca700); }
+.grip { flex: 0 0 auto; cursor: grab; color: var(--vscode-descriptionForeground); }
+.chapter.dragging { opacity: .5; }
+.chapter.drop-before { box-shadow: inset 0 2px 0 var(--vscode-focusBorder); }
+.chapter.drop-after { box-shadow: inset 0 -2px 0 var(--vscode-focusBorder); }
+.warn { flex: 0 0 auto; color: var(--vscode-list-warningForeground, #cca700); }
+.pen { flex: 0 0 auto; color: var(--vscode-descriptionForeground); opacity: 0; }
+.meta:hover .pen, .meta:focus-visible .pen { opacity: 1; }
+.empty { padding: 4px 8px; color: var(--vscode-descriptionForeground); font-size: 12px; }
+
+.footer {
+  flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; padding: 8px;
+  border-top: 1px solid var(--vscode-panel-border, var(--vscode-sideBarSectionHeader-border, transparent));
+  background: var(--vscode-sideBar-background, transparent);
+}
+.selrow { display: flex; justify-content: space-between; }
+.link {
+  background: none; border: none; color: var(--vscode-textLink-foreground);
+  cursor: pointer; padding: 2px 0; font-size: 12px;
+}
+.link:hover { text-decoration: underline; }
+.link:disabled { opacity: .5; cursor: default; }
+.link:disabled:hover { text-decoration: none; }
+.btn {
+  display: block; width: 100%; padding: 5px 8px; border-radius: 4px; cursor: pointer;
+  border: 1px solid var(--vscode-button-border, transparent);
+  background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
+  color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+}
+.btn:hover { background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-secondaryBackground)); }
+.btn.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+.btn.primary:hover { background: var(--vscode-button-hoverBackground, var(--vscode-button-background)); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn:disabled:hover { background: var(--vscode-button-secondaryBackground, var(--vscode-button-background)); }
+.btn.primary:disabled:hover { background: var(--vscode-button-background); }
+.btnrow { display: flex; gap: 6px; }
+.btnrow .btn { flex: 1 1 0; }
+
+.welcome { padding: 16px 12px; display: flex; flex-direction: column; gap: 8px; }
+.wtitle { font-weight: 600; }
+.wbody { color: var(--vscode-descriptionForeground); font-size: 12px; line-height: 1.5; }
+.welcomebtn { margin-top: 2px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

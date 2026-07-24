@@ -18,6 +18,8 @@ const ROOT = new URL('../../../', import.meta.url); // repo root, from test/shar
 /** Files the runtime loads by path (not discoverable from the manifest). */
 const CODE_REFERENCED = [
   'dist/server/server.js', // extension.ts asAbsolutePath -> forked server module
+  'media/codicon/codicon.css', // book/webviewHtml.ts asWebviewUri -> Books-panel codicon stylesheet
+  'media/codicon/codicon.ttf', // @font-face in codicon.css (sibling of the stylesheet)
 ];
 
 /** vsce metadata that must survive the allowlist. */

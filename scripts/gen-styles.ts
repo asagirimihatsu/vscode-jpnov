@@ -1,6 +1,7 @@
 /**
- * Codegen: `src/shared/compiler/styles/*.css` → the committed
- * `src/shared/compiler/styles/styles.generated.ts` (one named export per fragment).
+ * Codegen: `src/shared/compiler/styles/*.css` → `src/shared/compiler/styles/styles.generated.ts`
+ * (one named export per fragment). The generated module is gitignored and regenerated on demand
+ * (`npm run gen`, also `prepare`, and every esbuild build) — there is no committed artifact.
  *
  * The fragments are authored as real CSS (comments, one rule per line); `normalize()` strips
  * the comments and joins the rules into the compact single-line form `stylesheet()` inlines
@@ -8,9 +9,9 @@
  * `calc()` / `color-mix()` must survive, so this is deliberately not a minifier).
  *
  * The generator is file-set-agnostic: it scans the directory, so adding/removing a fragment
- * needs no edit here. Consumers: css.ts (runtime), esbuild.config.js (regenerates on every
- * build; watch mode re-runs it when a fragment changes), and styles-codegen.test.ts (fails
- * with a pointer to `npm run gen:styles` when the committed module is stale).
+ * needs no edit here. Consumers: css.ts (runtime) and esbuild.config.js (regenerates up front,
+ * plus a watch plugin re-runs it on a fragment change). styles-codegen.test.ts guards the @page
+ * geometry double-home against these fragments (not a committed-vs-generated drift).
  */
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
@@ -48,7 +49,7 @@ export async function styleSourcePaths(): Promise<string[]> {
     .map((f) => join(STYLES_DIR, f));
 }
 
-/** Renders the full generated-module text (pure; the drift test compares against this). */
+/** Renders the full generated-module text (pure). */
 export async function generateStylesModule(): Promise<string> {
   const paths = await styleSourcePaths();
   const styles = await Promise.all(paths.map(async (path) => [path, normalize(await readFile(path, 'utf8'))] as const));
