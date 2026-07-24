@@ -34,6 +34,7 @@ import {
 
 import { chapterLines, metaRows, moveChapterTo } from '#/shared/book/edits.ts';
 import { parseJpbook } from '#/shared/book/jpbook.ts';
+import { encodeTxt, TXT_ENCODING_DEFAULT, type TxtEncoding } from '#/shared/encoding.ts';
 
 import { buildForest, type TreeDir } from './tree.ts';
 import { applyBookEdits, metaLabel, metaValueLabel } from './manage.ts';
@@ -405,14 +406,23 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
             return;
           }
 
-          // The CLIENT owns all filesystem writes (the server never touches vscode.fs).
+          // The CLIENT owns all filesystem writes and encodings.
+          const txtEncoding = vscode.workspace
+            .getConfiguration()
+            .get<TxtEncoding>('jpnov.layout.txt.encoding', TXT_ENCODING_DEFAULT);
           const written: string[] = [];
+          let substitutions = 0;
           for (const artifact of result.artifacts ?? []) {
+            let bytes: Uint8Array;
+            if (artifact.path.endsWith('.txt')) {
+              const encoded = encodeTxt(artifact.content, txtEncoding);
+              bytes = encoded.bytes;
+              substitutions += encoded.substitutions;
+            } else {
+              bytes = Buffer.from(artifact.content, 'utf8');
+            }
             try {
-              await vscode.workspace.fs.writeFile(
-                vscode.Uri.parse(artifact.path),
-                Buffer.from(artifact.content, 'utf8'),
-              );
+              await vscode.workspace.fs.writeFile(vscode.Uri.parse(artifact.path), bytes);
               written.push(artifact.path);
             } catch (err) {
               const message = err instanceof Error ? err.message : String(err);
@@ -440,6 +450,13 @@ export class BooksView implements vscode.TreeDataProvider<BookNode>, vscode.Disp
           if (written.length > 0) {
             // One artifact per book now (a single format), so the file count IS the book count.
             this.reportBuilt(written.length, label);
+            if (substitutions > 0) {
+              void vscode.window.showWarningMessage(
+                substitutions === 1
+                  ? vscode.l10n.t('Japanese Novel: 1 character became 〓 in the text output.')
+                  : vscode.l10n.t('Japanese Novel: {0} characters became 〓 in the text output.', String(substitutions)),
+              );
+            }
           } else if (errors.length === 0) {
             void vscode.window.showInformationMessage(
               vscode.l10n.t('Japanese Novel: nothing to build.'),

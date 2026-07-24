@@ -26,7 +26,7 @@ import type { CatalogId } from '../../shared/lint/catalog.ts';
 
 import { unwrapDefault } from './interop.ts';
 import maxTen from './rules/maxTen.ts';
-import { dashScan, fullWidthSpaceScan, minusPositionScan, rubyKanaScan } from './prescan.ts';
+import { dashScan, fullWidthSpaceScan, minusPositionScan, rubyKanaScan, shiftJisSafeScan } from './prescan.ts';
 import type { PreScan } from './prescan.ts';
 
 // Each CJS rule, normalized past its `.default` wrapper exactly once (see interop.ts). `maxTen` is a
@@ -55,6 +55,8 @@ const ALLOWED_PERIOD_MARKS = [...DASH_CHARS, '…', '」', '』'];
  *                they carry fixed `options`; threshold rules pass the normalized `{ max }`. `insertAfter`
  *                overrides the rule's own fix with an INSERT of that text after the message (e.g. 。).
  *  - `prescan` — a pure scanner over the stream's clean text (may carry its own `fix`).
+ *  - `raw`     — a pure scanner over the DOCUMENT SOURCE, run once per document instead of per
+ *                stream. For rules that must see what the streams drop (annotations, comments).
  */
 export type RuleImpl =
   | {
@@ -68,6 +70,10 @@ export type RuleImpl =
     readonly scan: PreScan;
     /** Scan each contiguous source piece alone: a run interrupted by markup is two runs, not one. */
     readonly perPiece?: boolean;
+  }
+  | {
+    readonly kind: 'raw';
+    readonly scan: PreScan;
   };
 
 /** Catalog id -> implementation. The `Record<CatalogId, …>` type requires exactly the catalog ids
@@ -83,6 +89,7 @@ export const RULE_IMPL: Record<CatalogId, RuleImpl> = {
   noNfd: { kind: 'kernel', rule: noNfdRule },
   noZeroWidth: { kind: 'kernel', rule: noZeroWidthRule },
   noControlChar: { kind: 'kernel', rule: noControlCharRule },
+  shiftJisSafe: { kind: 'raw', scan: shiftJisSafeScan },
   jaNoSpaceBetweenFullWidth: { kind: 'prescan', scan: fullWidthSpaceScan },
   jaUnnaturalAlphabet: { kind: 'kernel', rule: jaUnnaturalAlphabetRule },
   minusPosition: { kind: 'prescan', scan: minusPositionScan },

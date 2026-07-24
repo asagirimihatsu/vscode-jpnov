@@ -179,3 +179,26 @@ test('documentLinksForJpbook links every valid chapter line (existence not requi
   // Without an owning root there is no base to resolve against — no links at all.
   assert.deepEqual(documentLinksForJpbook(null, parsed), []);
 });
+
+test('diagnoseJpbook flags a hand-edited divider Shift JIS cannot hold, on the character itself', async () => {
+  // The Books panel refuses such a mark, and the prose lint never sees a `.jpbook`, so this is the
+  // only thing standing between a hand edit and a 〓 at every chapter seam.
+  const text = '---\ndivider: 😀\n---\na.jpnov';
+  const diags = await diagnoseJpbook(null, parseJpbook(text));
+  assert.deepEqual(
+    diags.map((d) => ({ code: (d.data as { code: string }).code, range: d.range, severity: d.severity })),
+    [{
+      code: 'jpbook.dividerNotEncodable',
+      range: { start: { line: 1, character: 9 }, end: { line: 1, character: 11 } },
+      severity: DiagnosticSeverity.Warning,
+    }],
+  );
+  // The flagged span is exactly the offending character.
+  assert.equal(text.split('\n')[1]?.slice(9, 11), '😀');
+});
+
+test('diagnoseJpbook leaves an encodable divider and the HTML-only metadata alone', async () => {
+  // ◇ encodes; title/header ride the HTML build, which is UTF-8, so an emoji there is fine.
+  const text = '---\ndivider: ◇\ntitle: 😀\nheader: 𠮷\n---\na.jpnov';
+  assert.deepEqual(await diagnoseJpbook(null, parseJpbook(text)), []);
+});

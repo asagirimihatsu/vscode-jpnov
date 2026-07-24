@@ -112,7 +112,7 @@ function isEdgeWhitespace(ch: string): boolean {
 }
 
 /** The `key: value` separator: the first ASCII or full-width colon (IME slips are common). */
-function colonIndex(value: string): number {
+export function colonIndex(value: string): number {
   const half = value.indexOf(':');
   const full = value.indexOf('：');
   if (half < 0) {

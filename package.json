@@ -94,7 +94,9 @@
           "］": true,
           "〔": true,
           "〕": true,
-          "〜": true
+          "〜": true,
+          "～": true,
+          "＊": true
         }
       },
       "[jpbook]": {
@@ -116,7 +118,9 @@
           "］": true,
           "〔": true,
           "〕": true,
-          "〜": true
+          "〜": true,
+          "～": true,
+          "＊": true
         }
       },
       "github.copilot.enable": {
@@ -238,18 +242,39 @@
             "order": 8,
             "markdownDescription": "%jpnov.layout.html.edgeLine.description%"
           },
+          "jpnov.layout.txt.encoding": {
+            "type": "string",
+            "enum": [
+              "shiftJis",
+              "utf8",
+              "utf8Bom"
+            ],
+            "default": "shiftJis",
+            "enumItemLabels": [
+              "%jpnov.layout.txt.encoding.shiftJis.label%",
+              "%jpnov.layout.txt.encoding.utf8.label%",
+              "%jpnov.layout.txt.encoding.utf8Bom.label%"
+            ],
+            "enumDescriptions": [
+              "%jpnov.layout.txt.encoding.shiftJis.description%",
+              "%jpnov.layout.txt.encoding.utf8.description%",
+              "%jpnov.layout.txt.encoding.utf8Bom.description%"
+            ],
+            "order": 9,
+            "markdownDescription": "%jpnov.layout.txt.encoding.description%"
+          },
           "jpnov.layout.outDir": {
             "type": "string",
             "default": "dist",
             "scope": "resource",
-            "order": 9,
+            "order": 10,
             "markdownDescription": "%jpnov.layout.outDir.description%"
           },
           "jpnov.layout.browserPath": {
             "type": "string",
             "default": "",
             "scope": "machine-overridable",
-            "order": 10,
+            "order": 11,
             "markdownDescription": "%jpnov.layout.browserPath.description%"
           }
         }
@@ -345,34 +370,40 @@
             "order": 9,
             "markdownDescription": "%jpnov.lint.common.noControlChar.description%"
           },
+          "jpnov.lint.common.shiftJisSafe": {
+            "type": "boolean",
+            "default": true,
+            "order": 10,
+            "markdownDescription": "%jpnov.lint.common.shiftJisSafe.description%"
+          },
           "jpnov.lint.common.jaNoSpaceBetweenFullWidth": {
             "type": "boolean",
             "default": false,
-            "order": 10,
+            "order": 11,
             "markdownDescription": "%jpnov.lint.common.jaNoSpaceBetweenFullWidth.description%"
           },
           "jpnov.lint.common.jaUnnaturalAlphabet": {
             "type": "boolean",
             "default": false,
-            "order": 11,
+            "order": 12,
             "markdownDescription": "%jpnov.lint.common.jaUnnaturalAlphabet.description%"
           },
           "jpnov.lint.common.minusPosition": {
             "type": "boolean",
             "default": false,
-            "order": 12,
+            "order": 13,
             "markdownDescription": "%jpnov.lint.common.minusPosition.description%"
           },
           "jpnov.lint.narration.generalNovelStyle": {
             "type": "boolean",
             "default": false,
-            "order": 13,
+            "order": 14,
             "markdownDescription": "%jpnov.lint.narration.generalNovelStyle.description%"
           },
           "jpnov.lint.narration.jaNoMixedPeriod": {
             "type": "boolean",
             "default": false,
-            "order": 14,
+            "order": 15,
             "markdownDescription": "%jpnov.lint.narration.jaNoMixedPeriod.description%"
           },
           "jpnov.lint.ruby.kana": {
@@ -393,7 +424,7 @@
               "%jpnov.lint.ruby.kana.hiragana.description%",
               "%jpnov.lint.ruby.kana.katakana.description%"
             ],
-            "order": 15,
+            "order": 16,
             "markdownDescription": "%jpnov.lint.ruby.kana.description%"
           }
         }

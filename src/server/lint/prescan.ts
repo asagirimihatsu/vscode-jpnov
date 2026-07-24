@@ -1,13 +1,15 @@
 /**
- * Pure, kuromoji-free pre-scanners — the non-kernel half of the rule set. Each takes a stream's
- * clean text (plus the rule's resolved options) and returns half-open `[start, end)` UTF-16 spans
- * into THAT text; the driver (`kernel.ts`) maps them to source via `mapRange`, so no scanner computes
- * a source position itself.
+ * Pure, kuromoji-free pre-scanners — the non-kernel half of the rule set. Each takes some text
+ * (plus the rule's resolved options) and returns half-open `[start, end)` UTF-16 spans into THAT
+ * text; no scanner computes a source position itself. Which text it gets is the driver's call
+ * (`modules.ts` `kind`): a `prescan` rule sees one stream's clean text and its spans are mapped back
+ * via `mapRange`, a `raw` rule sees the document source and its spans already ARE source offsets.
  *
  * Relative imports only (native test loader).
  */
 import { DASH_BY_MODE, DASH_CHARS } from '../../shared/compiler/layout.ts';
 import { isHiragana, isKatakana } from '../../shared/compiler/tokenizer.ts';
+import { unencodableChars } from '../../shared/encoding.ts';
 import type { ActiveRule } from '../../shared/lint/select.ts';
 import type { LocalizableMessage } from '../../shared/protocol.ts';
 
@@ -110,6 +112,26 @@ export const fullWidthSpaceScan: PreScan = (text) => {
     if (isNonAscii(text[start - 1]) && isNonAscii(text[i])) {
       out.push({ start, end: i, fix: FULL_WIDTH_SPACE });
     }
+  }
+  return out;
+};
+
+/** `U+` suffix identifying a code point in the message. */
+function hexCodePoint(cp: number): string {
+  return cp.toString(16).toUpperCase().padStart(4, '0');
+}
+
+/**
+ * Flags each character Shift JIS cannot hold; a built `.txt` writes 〓 in its place. Runs on the RAW
+ * source (`kind: 'raw'`) because annotations reach the `.txt` verbatim — a 左ルビ reading lives only
+ * inside its annotation and appears in no stream. No fix: the substitutes are semantic (𠮟 -> 叱),
+ * and `source.fixAll` would scatter them through a manuscript on save.
+ */
+export const shiftJisSafeScan: PreScan = (text) => {
+  const out: { start: number; end: number; message: LocalizableMessage }[] = [];
+  for (const { cluster, cp, offset, length } of unencodableChars(text)) {
+    const message: LocalizableMessage = { code: 'lint.common.shiftJisSafe', args: [cluster, hexCodePoint(cp)] };
+    out.push({ start: offset, end: offset + length, message });
   }
   return out;
 };

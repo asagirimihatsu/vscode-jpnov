@@ -19,7 +19,8 @@
  * client's Books selection panel.
  *
  * Book enumeration / file reads use `node:fs` on the `file:` scheme only (the server never
- * touches `vscode.fs`); the client owns artifact writes. Per-line diagnostics are computed by
+ * touches `vscode.fs`); the client owns artifact writes, and with them the output encoding —
+ * artifacts leave here as text. Per-line diagnostics are computed by
  * the shared {@link diagnoseJpbook} (the same path the live editor uses) and published on each
  * `.jpbook` URI, plus a file-level collision diagnostic when one applies.
  *

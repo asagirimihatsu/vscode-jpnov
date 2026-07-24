@@ -45,6 +45,7 @@ test('shipped defaults enable exactly the data-hygiene rules and ダッシュ on
     'lint.common.noHankakuKana',
     'lint.common.noNfd',
     'lint.common.noZeroWidth',
+    'lint.common.shiftJisSafe',
   ];
   assert.deepEqual(codes(selection.narration), shipped);
   assert.deepEqual(codes(selection.dialogue), shipped);
