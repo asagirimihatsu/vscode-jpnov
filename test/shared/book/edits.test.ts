@@ -151,6 +151,13 @@ test('moveChapterTo returns null for no-ops and non-chapters', () => {
   assert.equal(moveChapterTo(text, 5, 0), null);
 });
 
+test('moveChapterTo treats a blank line between chapters as still-adjacent (no-op)', () => {
+  // a (line 3) already precedes b (line 5) in chapter order, with a blank at line 4; moving a
+  // before b must be a no-op, not a spurious edit that relocates the blank line.
+  const text = '---\ntitle: t\n---\na.jpnov\n\nb.jpnov\nc.jpnov\n';
+  assert.equal(moveChapterTo(text, 3, 5), null);
+});
+
 // --- panel projections ---------------------------------------------------------
 
 test('chapterLines and metaRows project the panel model in fixed order', () => {

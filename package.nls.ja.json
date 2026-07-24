@@ -19,8 +19,6 @@
   "view.container.title": "小説",
   "view.books.name": "本の一覧",
   "view.books.contextualTitle": "小説: 本の一覧",
-  "viewsWelcome.books.content": "まだ本がありません。\n`.jpbook` は章をまとめて 1 冊にする本のファイルです。作成してワークスペース フォルダーに保存してください。\n[.jpbook を作成](command:workbench.action.files.newUntitledFile?%7B%22languageId%22%3A%22jpbook%22%7D)\n[ガイドを開く](command:jpnov.openGuide)",
-  "viewsWelcome.books.noFolder.content": "本のファイル（`.jpbook`）は、開いたフォルダー（ワークスペース）の中で使います。\nまず小説のフォルダーを開いて、その中に作成してください。手順はガイドでも案内しています。\n[フォルダーを開く](command:workbench.action.files.openFolder)\n[ガイドを開く](command:jpnov.openGuide)",
   "walkthrough.title": "小説をはじめる",
   "walkthrough.description": "縦書きの小説を書いて、プレビューして、本として出力します。",
   "walkthrough.chapter.title": "最初の章を書く",

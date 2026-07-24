@@ -1,5 +1,5 @@
 /**
- * The Books panel's management commands — tree-as-form editing over the `.jpbook` TEXT.
+ * The Books panel's management commands — form-style editing over the `.jpbook` TEXT.
  * Every action plans precise range edits via the pure `#/shared/book/edits.ts`, applies
  * them as one `WorkspaceEdit`, and SAVES immediately (settings-UI semantics: a panel
  * action persists on the spot; the saved file then re-enters through the panel's own
@@ -54,14 +54,19 @@ function positionLabel(value: PageNumberPosition): string {
   }
 }
 
-/** The meta row's value text: the set value, the annotated default, or "not set". */
-export function metaValueLabel(key: MetaKey, value: string | undefined): string {
+/**
+ * The meta row split into its bare display VALUE and a status NOTE (default / not-set), so the
+ * panel can place the note beside the LABEL rather than inside the value: a set value carries no
+ * note, an absent key with a default shows that default value tagged "(default)", and an absent
+ * key with no default shows an empty value tagged "(not set)".
+ */
+export function metaValueParts(key: MetaKey, value: string | undefined): { value: string; note: string } {
   const display = (v: string): string => (key === 'pageNumber' ? positionLabel(v as PageNumberPosition) : v);
   if (value !== undefined) {
-    return display(value);
+    return { value: display(value), note: '' };
   }
   if (key === 'title' || key === 'divider') {
-    return vscode.l10n.t('(not set)'); // no default: absent = no divider / no title
+    return { value: '', note: vscode.l10n.t('(not set)') }; // no default: absent = no divider / no title
   }
   const fallback =
     key === 'header'
@@ -70,8 +75,8 @@ export function metaValueLabel(key: MetaKey, value: string | undefined): string 
         ? BUILD_CHROME_DEFAULT.pageNumber
         : BUILD_CHROME_DEFAULT.pageNumberFormat;
   return fallback === ''
-    ? vscode.l10n.t('(not set)')
-    : vscode.l10n.t('{0} (default)', display(fallback));
+    ? { value: '', note: vscode.l10n.t('(not set)') }
+    : { value: display(fallback), note: vscode.l10n.t('(default)') };
 }
 
 /** Applies planned replaces and saves — the panel's watcher does the refresh. */
@@ -292,7 +297,7 @@ async function editMeta(arg: unknown): Promise<void> {
   await applyBookEdits(uri, [upsertMeta(text, node.metaKey, value)]);
 }
 
-/** Registers the five panel commands (plain — they only fire from tree nodes). */
+/** Registers the five panel commands (plain — they only fire from the Books panel). */
 export function registerBookCommands(): vscode.Disposable[] {
   return [
     command('jpbook.addChapters', addChapters),

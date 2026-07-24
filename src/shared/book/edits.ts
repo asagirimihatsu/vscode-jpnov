@@ -151,8 +151,15 @@ export function moveChapterTo(
 
   if (beforeLine !== null) {
     const target = chapterAt(parsed.lines, beforeLine);
-    if (target === null || beforeLine === fromLine || beforeLine === fromLine + 1) {
-      return null; // not a chapter, or already in place
+    if (target === null || beforeLine === fromLine) {
+      return null; // not a chapter, or dropping onto itself
+    }
+    // No-op if `beforeLine` is already the chapter immediately after `fromLine`. Blank lines can sit
+    // between chapters, so compare chapter ORDER, not raw line adjacency (fromLine + 1).
+    const chapters = parsed.lines.filter((pl) => pl.kind === 'ok' || pl.kind === 'duplicate');
+    const fromIdx = chapters.findIndex((pl) => pl.line === fromLine);
+    if (chapters[fromIdx + 1]?.line === beforeLine) {
+      return null;
     }
     return [removal, { start: at(beforeLine, 0), end: at(beforeLine, 0), newText: `${from.raw}${eol}` }];
   }

@@ -151,6 +151,10 @@ export interface FakeWebview {
   /** Messages sent via `postMessage`, captured for assertions. */
   posted: unknown[];
   postMessage(message: unknown): Promise<boolean>;
+  /** Host handler for webview->host messages (the WebviewView provider registers here). */
+  onDidReceiveMessage(listener: Listener<unknown>): Disposable;
+  /** Test helper: deliver a webview->host message to the registered handler(s). */
+  receive(message: unknown): void;
 }
 
 /** Just enough of a TextEditor: its document + the cursor selections. */
@@ -182,6 +186,10 @@ export interface MockState {
   textDocuments: FakeTextDocument[];
   panels: FakeWebviewPanel[];
   registeredCommands: Map<string, (...args: unknown[]) => unknown>;
+  /** `commands.executeCommand` invocations, so tests can assert dispatched jpbook.* / vscode.open. */
+  executedCommands: { command: string; args: unknown[] }[];
+  /** WebviewView providers registered via `window.registerWebviewViewProvider`, keyed by view id. */
+  registeredViewProviders: Map<string, unknown>;
   writtenFiles: { uri: string; content: string }[];
   onDidChangeDoc: EventEmitter<{ document: FakeTextDocument }>;
   onDidChangeActiveEditor: EventEmitter<{ document: FakeTextDocument } | undefined>;
@@ -229,6 +237,8 @@ export function createMockState(): MockState {
     textDocuments: [],
     panels: [],
     registeredCommands: new Map(),
+    executedCommands: [],
+    registeredViewProviders: new Map(),
     writtenFiles: [],
     onDidChangeDoc: new EventEmitter<{ document: FakeTextDocument }>(),
     onDidChangeActiveEditor: new EventEmitter<
@@ -269,6 +279,8 @@ export function resetMockState(s: MockState): void {
   s.textDocuments.length = 0;
   s.panels.length = 0;
   s.registeredCommands.clear();
+  s.executedCommands.length = 0;
+  s.registeredViewProviders.clear();
   s.writtenFiles.length = 0;
   s.activeEditor = undefined;
   s.visibleEditors.length = 0;
@@ -321,6 +333,10 @@ export function buildVscode(state: MockState): Record<string, unknown> {
       const panel = createFakePanel(viewType, title, _opts);
       state.panels.push(panel);
       return panel;
+    },
+    registerWebviewViewProvider(viewId: string, provider: unknown): Disposable {
+      state.registeredViewProviders.set(viewId, provider);
+      return new Disposable(() => state.registeredViewProviders.delete(viewId));
     },
     showErrorMessage(...args: unknown[]): Promise<undefined> {
       if (typeof args[0] === 'string') {
@@ -397,6 +413,19 @@ export function buildVscode(state: MockState): Record<string, unknown> {
       return state.workspaceFolders;
     },
     fs: fsApi,
+    createFileSystemWatcher(): {
+      onDidCreate: (l: Listener<Uri>) => Disposable;
+      onDidDelete: (l: Listener<Uri>) => Disposable;
+      onDidChange: (l: Listener<Uri>) => Disposable;
+      dispose(): void;
+    } {
+      // The Books provider only needs a disposable-returning watcher; tests drive refresh() directly.
+      const on = (listener: Listener<Uri>): Disposable => {
+        void listener;
+        return new Disposable(() => { /* no-op */ });
+      };
+      return { onDidCreate: on, onDidDelete: on, onDidChange: on, dispose() { /* no-op */ } };
+    },
     onDidChangeTextDocument: state.onDidChangeDoc.event,
     // Settings reads. Bare getConfiguration() + full keys (renderConfig.ts) resolves from
     // `state.config` as before; the section/scope form (highlightConfig.ts, probe.ts)
@@ -462,6 +491,11 @@ export function buildVscode(state: MockState): Record<string, unknown> {
       state.registeredCommands.set(id, handler);
       return new Disposable(() => state.registeredCommands.delete(id));
     },
+    executeCommand(command: string, ...args: unknown[]): Promise<unknown> {
+      state.executedCommands.push({ command, args });
+      const handler = state.registeredCommands.get(command);
+      return Promise.resolve(handler ? handler(...args) : undefined);
+    },
   };
 
   // l10n.t passthrough: returns the English source literal with {0}/{1}… substituted, so tests
@@ -480,6 +514,7 @@ export function buildVscode(state: MockState): Record<string, unknown> {
     workspace,
     commands,
     l10n,
+    env: { language: 'en' },
     Uri,
     FileType,
     FileSystemError,
@@ -497,6 +532,27 @@ export function doc(uri: string, languageId: string, text = ''): FakeTextDocumen
   return { uri: Uri.parse(uri), languageId, getText: () => text };
 }
 
+/** A fake `vscode.Webview`: captures outbound `postMessage` (posted) + delivers inbound (receive). */
+export function makeFakeWebview(options?: unknown): FakeWebview {
+  const recv = new EventEmitter<unknown>();
+  return {
+    html: '',
+    cspSource: 'vscode-webview://test',
+    options,
+    posted: [],
+    postMessage(message: unknown): Promise<boolean> {
+      this.posted.push(message);
+      return Promise.resolve(true);
+    },
+    onDidReceiveMessage(listener: Listener<unknown>): Disposable {
+      return recv.event(listener);
+    },
+    receive(message: unknown): void {
+      recv.fire(message);
+    },
+  };
+}
+
 /**
  * A standalone webview panel fake. `window.createWebviewPanel` delegates here (and
  * records into `state.panels`); tests can also build one directly to stand in for a
@@ -512,16 +568,7 @@ export function createFakePanel(
   return {
     viewType,
     title,
-    webview: {
-      html: '',
-      cspSource: 'vscode-webview://test',
-      options: opts,
-      posted: [],
-      postMessage(message: unknown): Promise<boolean> {
-        this.posted.push(message);
-        return Promise.resolve(true);
-      },
-    },
+    webview: makeFakeWebview(opts),
     disposed: false,
     reveal() {
       /* no-op */
@@ -531,5 +578,28 @@ export function createFakePanel(
       disposeEmitter.fire();
     },
     onDidDispose: disposeEmitter.event,
+  };
+}
+
+export interface FakeWebviewView {
+  webview: FakeWebview;
+  visible: boolean;
+  onDidDispose(listener: Listener<void>): Disposable;
+  onDidChangeVisibility(listener: Listener<void>): Disposable;
+  dispose(): void;
+}
+
+/** A fake sidebar WebviewView handed to `BooksViewProvider.resolveWebviewView`. */
+export function createFakeWebviewView(): FakeWebviewView {
+  const disposeEmitter = new EventEmitter<void>();
+  const visEmitter = new EventEmitter<void>();
+  return {
+    webview: makeFakeWebview(),
+    visible: true,
+    onDidDispose: disposeEmitter.event,
+    onDidChangeVisibility: visEmitter.event,
+    dispose() {
+      disposeEmitter.fire();
+    },
   };
 }

@@ -568,6 +568,7 @@
       "jpnov": [
         {
           "id": "jpnov.books",
+          "type": "webview",
           "name": "%view.books.name%",
           "icon": "$(book)",
           "when": "jpnov.active",
@@ -575,76 +576,12 @@
         }
       ]
     },
-    "viewsWelcome": [
-      {
-        "view": "jpnov.books",
-        "contents": "%viewsWelcome.books.content%",
-        "when": "workspaceFolderCount != 0"
-      },
-      {
-        "view": "jpnov.books",
-        "contents": "%viewsWelcome.books.noFolder.content%",
-        "when": "workspaceFolderCount == 0"
-      }
-    ],
     "menus": {
       "view/title": [
         {
-          "command": "jpbook.buildHtml",
+          "command": "jpbook.refresh",
           "group": "navigation@1",
           "when": "view == jpnov.books"
-        },
-        {
-          "command": "jpbook.buildTxt",
-          "group": "navigation@2",
-          "when": "view == jpnov.books"
-        },
-        {
-          "command": "jpbook.buildPdf",
-          "group": "navigation@3",
-          "when": "view == jpnov.books"
-        },
-        {
-          "command": "jpbook.selectAll",
-          "group": "navigation@4",
-          "when": "view == jpnov.books"
-        },
-        {
-          "command": "jpbook.deselectAll",
-          "group": "navigation@5",
-          "when": "view == jpnov.books"
-        },
-        {
-          "command": "jpbook.refresh",
-          "group": "navigation@6",
-          "when": "view == jpnov.books"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "jpbook.addChapters",
-          "group": "inline",
-          "when": "view == jpnov.books && viewItem == jpnovBook"
-        },
-        {
-          "command": "jpbook.removeChapter",
-          "group": "inline",
-          "when": "view == jpnov.books && viewItem == jpnovChapter"
-        },
-        {
-          "command": "jpbook.moveChapterUp",
-          "group": "1_move@1",
-          "when": "view == jpnov.books && viewItem == jpnovChapter"
-        },
-        {
-          "command": "jpbook.moveChapterDown",
-          "group": "1_move@2",
-          "when": "view == jpnov.books && viewItem == jpnovChapter"
-        },
-        {
-          "command": "jpbook.removeChapter",
-          "group": "9_remove",
-          "when": "view == jpnov.books && viewItem == jpnovChapter"
         }
       ],
       "editor/title": [
@@ -799,7 +736,7 @@
     "watch": "npm run watch:tsc & npm run watch:esbuild & wait",
     "pretest": "npm run type-check",
     "test": "node --import ./test/register.mjs --test --experimental-test-module-mocks \"test/shared/**/*.test.ts\" \"test/server/highlight/**/*.test.ts\" \"test/server/lint/**/*.test.ts\" \"test/client/browser.test.ts\" \"test/client/bookRename.test.ts\" \"test/client/bookTree.test.ts\" \"test/client/editorIndent.test.ts\"",
-    "test:integration": "node --import ./test/register.mjs --test --experimental-test-module-mocks \"test/client/highlightConfig.test.ts\" \"test/client/messages.test.ts\" \"test/client/preview.test.ts\" \"test/client/probe.test.ts\" \"test/server/build.test.ts\" \"test/server/jpbook.test.ts\"",
+    "test:integration": "node --import ./test/register.mjs --test --experimental-test-module-mocks \"test/client/booksView.test.ts\" \"test/client/highlightConfig.test.ts\" \"test/client/messages.test.ts\" \"test/client/preview.test.ts\" \"test/client/probe.test.ts\" \"test/server/build.test.ts\" \"test/server/jpbook.test.ts\"",
     "pretest:e2e": "npm run build:dev",
     "test:e2e": "node --import ./test/register.mjs --test \"test/e2e/**/*.test.ts\"",
     "vscode:prepublish": "npm run type-check && npm run lint && npm run build",
