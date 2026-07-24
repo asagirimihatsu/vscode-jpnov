@@ -63,6 +63,8 @@ const ARGS: Record<MsgCode, readonly (string | number)[]> = {
   'lint.common.noNfd': [],
   'lint.common.noZeroWidth': [],
   'lint.common.noControlChar': [],
+  'lint.common.shiftJisSafe': ['𠮷', '20BB7'],
+  'jpbook.dividerNotEncodable': ['❖'],
   'lint.common.jaNoSpaceBetweenFullWidth': [],
   'lint.common.jaUnnaturalAlphabet': [],
   'lint.common.minusPosition': [],

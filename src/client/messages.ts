@@ -59,6 +59,8 @@ export function renderMessage(msg: LocalizableMessage): string {
       return vscode.l10n.t('unknown metadata key "{0}" (known keys: {1})', s(0), s(1));
     case 'jpbook.metaDuplicateKey':
       return vscode.l10n.t('duplicate metadata key "{0}" (the first value wins)', s(0));
+    case 'jpbook.dividerNotEncodable':
+      return vscode.l10n.t('"{0}" can become 〓 in the text output; use another divider mark', s(0));
     case 'jpbook.metaBadEnum':
       return vscode.l10n.t('invalid value "{1}" for {0} (allowed: {2})', s(0), s(1), s(2));
     case 'jpbook.metaUnterminated':
@@ -110,6 +112,8 @@ export function renderMessage(msg: LocalizableMessage): string {
       return vscode.l10n.t('zero-width space');
     case 'lint.common.noControlChar':
       return vscode.l10n.t('invalid control character');
+    case 'lint.common.shiftJisSafe':
+      return vscode.l10n.t('"{0}" (U+{1}) may be an old-form or variant character; use another', s(0), s(1));
     case 'lint.common.jaNoSpaceBetweenFullWidth':
       return vscode.l10n.t('space between full-width characters');
     case 'lint.common.jaUnnaturalAlphabet':

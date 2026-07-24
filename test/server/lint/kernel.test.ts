@@ -302,3 +302,99 @@ test('ruby kana=katakana flags a hiragana reading', async () => {
 test('ruby kana=off leaves all readings alone', async () => {
   assert.deepEqual(await lint('名《メイ》前《まえ》', { 'jpnov.lint.ruby.kana': 'off' }), []);
 });
+
+// --- shiftJisSafe: the one `raw` rule (reads the source, not the streams) ---
+
+/** The rule on its shipped default. */
+const SJIS: RawLintConfigWire = { 'jpnov.lint.common.shiftJisSafe': true };
+
+test('shiftJisSafe flags a character Shift JIS lacks, once, over its whole code point', async () => {
+  assert.deepEqual(await lint('吉野家と𠮷野家', SJIS), [
+    { code: 'lint.common.shiftJisSafe', text: '𠮷' },
+  ]);
+});
+
+test('shiftJisSafe leaves encodable prose alone, aliases included', async () => {
+  // — 〜 − 髙 ① all reach Shift JIS through the table's alias overlay or the CP932 blocks.
+  assert.deepEqual(await lint('――〜−髙①ｱ。', SJIS), []);
+});
+
+test('shiftJisSafe sees inside annotations, which the streams drop', async () => {
+  // A 左ルビ reading lives ONLY in its annotation: no stream carries it, yet the .txt does.
+  const hits = await lint('峠《とうげ》［＃「峠」の左に「😀」のルビ］', SJIS);
+  assert.deepEqual(hits, [{ code: 'lint.common.shiftJisSafe', text: '😀' }]);
+});
+
+test('shiftJisSafe reports once per document, not once per stream', async () => {
+  // `common` rules fan onto narration AND dialogue; a raw rule must not double-report because of it.
+  assert.deepEqual(await lint('地の文😀\n「セリフ😀」', SJIS), [
+    { code: 'lint.common.shiftJisSafe', text: '😀' },
+    { code: 'lint.common.shiftJisSafe', text: '😀' },
+  ]);
+});
+
+test('shiftJisSafe offers no fix — the substitutes would be semantic', async () => {
+  const hits = await lintAll('𠮷', SJIS);
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0]?.fix, undefined);
+});
+
+test('shiftJisSafe off reports nothing', async () => {
+  assert.deepEqual(await lint('𠮷😀', { 'jpnov.lint.common.shiftJisSafe': false }), []);
+});
+
+test('shiftJisSafe stays quiet where an always-on hygiene rule already reports', async () => {
+  // All three ship ON, and everything they flag is unencodable by construction, so without the
+  // driver's range de-dup every default-configuration user would see two warnings on one character.
+  const shipped: RawLintConfigWire = {
+    ...SJIS,
+    'jpnov.lint.common.noZeroWidth': true,
+    'jpnov.lint.common.noNfd': true,
+    'jpnov.lint.common.noControlChar': true,
+  };
+  assert.deepEqual(await lint('\u3042\u200b\u3044', shipped), [
+    { code: 'lint.common.noZeroWidth', text: '\u200b' },
+  ]);
+  assert.deepEqual(await lint('\u304b\u3099', shipped), [
+    { code: 'lint.common.noNfd', text: '\u3099' },
+  ]);
+  assert.deepEqual(await lint('\u3042\u0085\u3044', shipped), [
+    { code: 'lint.common.noControlChar', text: '\u0085' },
+  ]);
+});
+
+test('shiftJisSafe still reports a variation selector — no sibling rule owns 異体字 loss', async () => {
+  // U+E0100 is a mark, but it composes with nothing, so noNfd never sees it.
+  assert.deepEqual(await lint('\u8fbb\u{E0100}', SJIS), [
+    { code: 'lint.common.shiftJisSafe', text: '\u{E0100}' },
+  ]);
+
+  // One diagnostic per WRITTEN character: ❤️ is two code points but one thing the author typed.
+  assert.deepEqual(await lint('「好き\u2764\uFE0F」', SJIS), [
+    { code: 'lint.common.shiftJisSafe', text: '\u2764' },
+  ]);
+});
+
+test('the de-dup holds when markup separates in SOURCE what is adjacent in a STREAM', async () => {
+  // The stream drops the annotation, so noNfd sees "\u304b\u3099" and maps back onto the mark; the raw
+  // scan saw them far apart. Deciding this in the driver (not in the scanner) is what makes it work.
+  const shipped: RawLintConfigWire = { ...SJIS, 'jpnov.lint.common.noNfd': true };
+  assert.deepEqual(await lint('\u304b［＃「\u304b」に傍点］\u3099', shipped), [
+    { code: 'lint.common.noNfd', text: '\u3099' },
+  ]);
+  // A character no sibling claims keeps its own finding alongside the sibling's.
+  assert.deepEqual(await lint('\u{20BB7}\u3099', shipped), [
+    { code: 'lint.common.shiftJisSafe', text: '\u{20BB7}' },
+    { code: 'lint.common.noNfd', text: '\u3099' },
+  ]);
+});
+
+test('shiftJisSafe reports invisible characters no sibling rule covers', async () => {
+  // The hygiene rules match narrow literal sets, so these reach the .txt as 〓 unless this rule
+  // speaks up. Reported by code point, since the character itself shows nothing.
+  for (const ch of ['\u00ad', '\u200c', '\u200d', '\u200e', '\u2060', '\ufeff', '\u2066']) {
+    assert.deepEqual(await lint(`\u3042${ch}\u3044`, SJIS), [
+      { code: 'lint.common.shiftJisSafe', text: ch },
+    ], `U+${ch.codePointAt(0)?.toString(16) ?? ''}`);
+  }
+});

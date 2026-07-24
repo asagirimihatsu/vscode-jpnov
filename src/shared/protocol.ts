@@ -63,6 +63,7 @@ export type MsgCode =
   | 'jpbook.metaUnknownKey' // args: [key, knownList]
   | 'jpbook.metaDuplicateKey' // args: [key]  (first value wins)
   | 'jpbook.metaBadEnum' // args: [key, value, allowedList]
+  | 'jpbook.dividerNotEncodable' // args: [char]
   | 'jpbook.metaUnterminated' // args: [] — front matter opened but no closing ---; range = the opening fence
   | 'path.empty' // args: [LabelId]
   | 'path.rootDot' // args: [LabelId]  (the root "." or a path collapsing to it)
@@ -172,7 +173,8 @@ export interface PreviewSettings extends LayoutSettings, PreviewChrome {}
 
 /**
  * The layout-core / `jpnov.layout.html.*` snapshot the client ships on every `jpnov/build`
- * request. Only the `.html` artifact consumes it (`.txt` is the raw Aozora source).
+ * request. Only the `.html` artifact consumes it (`.txt` is the raw Aozora source; its encoding is
+ * a client-side setting, never part of this snapshot).
  * Page furniture (ヘッダー/ノンブル) is deliberately ABSENT: it is book identity, carried by each
  * `.jpbook`'s own front matter and composed per book via `composeBookChrome`.
  */
@@ -231,7 +233,10 @@ export interface BuildParams {
 export interface BuildArtifact {
   /** Workspace-relative-or-absolute output path string; the CLIENT writes it. */
   readonly path: string;
-  /** Rendered output bytes (UTF-8 text) — a `.txt` or `.html` payload per `path`. */
+  /**
+   * Rendered output TEXT — a `.txt` or `.html` payload per `path`. The client encodes it on the
+   * way to disk: `.html` is UTF-8, `.txt` follows `jpnov.layout.txt.encoding`.
+   */
   readonly content: string;
 }
 

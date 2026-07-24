@@ -8,7 +8,9 @@
  * selected by the `.txt` ext, parses our already-clean text). Each chunk's message offsets are
  * rebased onto the stream, then every textlint message / pre-scan span is mapped back to a SOURCE
  * range by `mapRange` and stamped with the rule's own diagnostic code via the shared `diagnostic()`
- * factory — textlint's own message/severity are discarded so all output is uniform.
+ * factory — textlint's own message/severity are discarded so all output is uniform. A `raw` rule
+ * sits outside all of that: it reads the document source once (see `lintRaw`), because the streams
+ * drop annotation interiors that a built `.txt` still carries.
  *
  * Fixes ride along: `lintText` already attaches `message.fix` ({stream-range, text}) for fixable rules
  * (no-hankaku-kana, no-nfd, no-zero-width, no-invalid-control-character), and a pre-scan may carry its
@@ -28,7 +30,7 @@ import { DiagnosticSeverity } from 'vscode-languageserver/node';
 import type { Diagnostic, Range } from 'vscode-languageserver/node';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 
-import type { LintCode } from '../../shared/lint/catalog.ts';
+import type { CatalogId, LintCode } from '../../shared/lint/catalog.ts';
 import { isSelectionEmpty } from '../../shared/lint/select.ts';
 import type { ActiveRule, RuleSelection } from '../../shared/lint/select.ts';
 
@@ -106,6 +108,9 @@ async function lintStream(
 
   for (const rule of rules) {
     const impl = RULE_IMPL[rule.id];
+    if (impl.kind === 'raw') {
+      continue; // reads the source itself; `lintRaw` runs it once for the whole document
+    }
     if (impl.kind === 'prescan') {
       // `perPiece` scanners see one contiguous piece at a time; the rest see the whole stream,
       // because a scanner that reads its neighbours would misjudge the character at a piece edge.
@@ -182,6 +187,33 @@ async function lintStream(
   return out;
 }
 
+/** A range as a comparable key: two findings over the same characters are the same defect. */
+function rangeKey(r: Range): string {
+  return [r.start.line, r.start.character, r.end.line, r.end.character].join(':');
+}
+
+/**
+ * Runs the enabled `raw` rules over the document source. A `common` rule reaches the driver once per
+ * stream, so it is de-duplicated here — the source is one text, not three. Spans are already source
+ * offsets, so there is no stream mapping and no fix path.
+ */
+function lintRaw(text: string, selection: RuleSelection, doc: TextDocument): LintFinding[] {
+  const out: LintFinding[] = [];
+  const done = new Set<CatalogId>();
+  for (const rule of [...selection.narration, ...selection.dialogue, ...selection.ruby]) {
+    const impl = RULE_IMPL[rule.id];
+    if (impl.kind !== 'raw' || done.has(rule.id)) {
+      continue;
+    }
+    done.add(rule.id);
+    for (const span of impl.scan(text, rule.options)) {
+      const range = { start: doc.positionAt(span.start), end: doc.positionAt(span.end) };
+      out.push(finding(diagnostic(range, span.message ?? { code: rule.code }, WARNING), undefined));
+    }
+  }
+  return out;
+}
+
 /**
  * Computes prose-lint findings for `text` under `selection`. Returns `[]` SYNCHRONOUSLY when no rule
  * is enabled (the all-off default costs nothing — no extraction, no kernel); otherwise a Promise
@@ -206,6 +238,14 @@ export function computeLintFindings(
       lintStream(streams.dialogue, selection.dialogue, doc, opts),
       lintStream(streams.ruby, selection.ruby, doc, opts),
     ]);
-    return groups.flat();
+    // A `raw` rule reads the whole source, so it can restate a stream rule's finding over the very
+    // same characters (an unencodable character that is ALSO decomposed, invisible, …). The stream
+    // rule is the more specific one and often carries a fix, so it keeps that range. Deciding it
+    // here is what makes it correct: only the driver sees both halves, and markup can separate a
+    // pair in the SOURCE that is adjacent in a stream.
+    const streamed = groups.flat();
+    const taken = new Set(streamed.map((f) => rangeKey(f.diagnostic.range)));
+    const raw = lintRaw(text, selection, doc).filter((f) => !taken.has(rangeKey(f.diagnostic.range)));
+    return [...raw, ...streamed];
   })();
 }

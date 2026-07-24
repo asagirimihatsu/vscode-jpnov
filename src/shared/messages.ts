@@ -48,6 +48,8 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return `unknown metadata key "${a(0)}" (known keys: ${a(1)})`;
     case 'jpbook.metaDuplicateKey':
       return `duplicate metadata key "${a(0)}" (the first value wins)`;
+    case 'jpbook.dividerNotEncodable':
+      return `"${a(0)}" can become 〓 in the text output; use another divider mark`;
     case 'jpbook.metaBadEnum':
       return `invalid value "${a(1)}" for ${a(0)} (allowed: ${a(2)})`;
     case 'jpbook.metaUnterminated':
@@ -100,6 +102,8 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return 'zero-width space';
     case 'lint.common.noControlChar':
       return 'invalid control character';
+    case 'lint.common.shiftJisSafe':
+      return `"${a(0)}" (U+${a(1)}) may be an old-form or variant character; use another`;
     case 'lint.common.jaNoSpaceBetweenFullWidth':
       return 'space between full-width characters';
     case 'lint.common.jaUnnaturalAlphabet':

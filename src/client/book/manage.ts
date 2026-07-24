@@ -14,9 +14,11 @@ import type { TextReplace } from '#/shared/book/edits.ts';
 import { composeDividerValue, DIVIDER_PRESETS, parseDividerValue, parseJpbook, type MetaKey } from '#/shared/book/jpbook.ts';
 import { PAGE_NUMBER_POSITIONS, type PageNumberPosition } from '#/shared/compiler/chrome.ts';
 import { BUILD_CHROME_DEFAULT } from '#/shared/config/settings.ts';
+import { unencodableChars } from '#/shared/encoding.ts';
 import type { BookEntry } from '#/shared/protocol.ts';
 
 import { command } from '../commands.ts';
+import { renderMessage } from '../messages.ts';
 import { normalizeFsPath } from './rename.ts';
 import type { BookNode } from './nodes.ts';
 
@@ -209,7 +211,18 @@ async function pickDivider(current: string | undefined): Promise<string | undefi
     const typed = await vscode.window.showInputBox({
       prompt: vscode.l10n.t('Divider mark'),
       value: parsed?.mark ?? '',
-      validateInput: (v) => (v.trim() === '' ? vscode.l10n.t('Enter a divider mark') : null),
+      validateInput: (v) => {
+        const mark = v.trim();
+        if (mark === '') {
+          return vscode.l10n.t('Enter a divider mark');
+        }
+        // The divider repeats at every chapter seam, so one unencodable mark would 〓 the whole
+        // book. Refused here; a hand-edited `.jpbook` is caught by `diagnoseJpbook` instead.
+        const unencodable = unencodableChars(mark)[0];
+        return unencodable === undefined
+          ? null
+          : renderMessage({ code: 'jpbook.dividerNotEncodable', args: [unencodable.cluster] });
+      },
     });
     if (typed === undefined) {
       return undefined;

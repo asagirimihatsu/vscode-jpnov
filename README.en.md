@@ -356,6 +356,7 @@ highlighting lists are per workspace folder; the browser path is per machine.
 | `jpnov.layout.preview.edgeLine` | `none` | Column rules in the preview: `none` / `text` / `red` |
 | `jpnov.layout.html.lineNumbers` | `false` | Line numbers in built pages, restarting per page |
 | `jpnov.layout.html.edgeLine` | `none` | Column rules + page frame in built HTML: `none` / `text` / `red` |
+| `jpnov.layout.txt.encoding` | `shiftJis` | Encoding of built `.txt`: `shiftJis` / `utf8` / `utf8Bom` |
 | `jpnov.layout.outDir` | `dist` | Output folder (per workspace folder), never scanned for books |
 | `jpnov.layout.browserPath` | `""` | Chromium-family executable for PDF export (per machine) |
 
@@ -374,6 +375,7 @@ Threshold rules take an integer or `null` (off). All rules run on narration;
 | `jpnov.lint.common.noNfd` | `true` | Decomposed (NFD) characters |
 | `jpnov.lint.common.noZeroWidth` | `true` | Zero-width / invisible characters |
 | `jpnov.lint.common.noControlChar` | `true` | Invalid control characters |
+| `jpnov.lint.common.shiftJisSafe` | `true` | Characters Shift JIS lacks, written as 〓 in a `.txt` build |
 | `jpnov.lint.common.dash` | `horizontalBar` | One dash character throughout, in even-numbered runs (auto-fix) |
 | `jpnov.lint.common.sentenceLength` | `null` | Sentence length limit (suggested 100) |
 | `jpnov.lint.common.maxTen` | `null` | Commas (、) per sentence (suggested 3) |

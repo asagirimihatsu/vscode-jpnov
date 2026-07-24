@@ -24,14 +24,17 @@ import { CompletionItemKind, DiagnosticSeverity } from 'vscode-languageserver/no
 import type { CompletionItem, Diagnostic, DocumentLink, Range } from 'vscode-languageserver/node';
 
 import {
+  colonIndex,
   completeEntryLine,
   completeMetaLine,
+  metaKeyOf,
   metaRegionOf,
   type JpbookCompletion,
   type ParsedJpbook,
   type ParsedLine,
 } from '#/shared/book/jpbook.ts';
 import { resolveContained } from '#/shared/config/validate.ts';
+import { unencodableChars } from '#/shared/encoding.ts';
 
 import { diagnostic } from './diagnostics.ts';
 import { isFileScheme } from './fsUri.ts';
@@ -42,6 +45,31 @@ function lineRange(pl: ParsedLine): Range {
     start: { line: pl.line, character: pl.range.startChar },
     end: { line: pl.line, character: pl.range.endChar },
   };
+}
+
+/**
+ * Warns for each character of a `divider` value that Shift JIS cannot hold. Only `divider` is
+ * checked: it is the one front-matter value that reaches the built `.txt`, and it repeats at every
+ * chapter seam. This is manifest validation like every other `jpbook.*` diagnostic, NOT the
+ * `shiftJisSafe` prose rule — that one never sees a `.jpbook`, and a divider is a symbol rather
+ * than a character an author mistyped.
+ */
+function dividerEncodingWarnings(pl: ParsedLine): Diagnostic[] {
+  if (metaKeyOf(pl.value) !== 'divider') {
+    return [];
+  }
+  const afterColon = pl.value.slice(colonIndex(pl.value) + 1);
+  // Offset of the trimmed value within the line, so each range lands on the character itself.
+  const base = pl.range.startChar + (pl.value.length - afterColon.length) +
+    (afterColon.length - afterColon.trimStart().length);
+  return unencodableChars(afterColon.trim()).map(({ cluster, offset, length }) => diagnostic(
+    {
+      start: { line: pl.line, character: base + offset },
+      end: { line: pl.line, character: base + offset + length },
+    },
+    { code: 'jpbook.dividerNotEncodable', args: [cluster] },
+    DiagnosticSeverity.Warning,
+  ));
 }
 
 /** Classifies a `file:` URI on disk; any error (incl. ENOENT) is `'missing'`. */
@@ -75,7 +103,11 @@ export async function diagnoseJpbook(rootUri: string | null, parsed: ParsedJpboo
   const diagnostics: Diagnostic[] = [];
 
   for (const pl of parsed.lines) {
-    if (pl.kind === 'blank' || pl.kind === 'fence' || pl.kind === 'meta') {
+    if (pl.kind === 'meta') {
+      diagnostics.push(...dividerEncodingWarnings(pl));
+      continue;
+    }
+    if (pl.kind === 'blank' || pl.kind === 'fence') {
       continue;
     }
     const range = lineRange(pl);

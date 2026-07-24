@@ -20,6 +20,7 @@ import {
   LAYOUT_DEFAULT,
   PROJECT_DEFAULT,
 } from '../../../src/shared/config/types.ts';
+import { TXT_ENCODINGS, TXT_ENCODING_DEFAULT } from '../../../src/shared/encoding.ts';
 import { RULES, settingKey } from '../../../src/shared/lint/catalog.ts';
 import type { RuleMeta, Scope } from '../../../src/shared/lint/catalog.ts';
 
@@ -148,18 +149,29 @@ function layoutSection(): unknown {
         markdownDescription: '%jpnov.layout.html.lineNumbers.description%',
       },
       'jpnov.layout.html.edgeLine': edgeLineProperty('jpnov.layout.html.edgeLine', 8),
+      // The `.txt` slice: one setting, because the Aozora deliverable is plain text and only its
+      // encoding is a choice. HTML carries no counterpart — the HTML standard fixes it to UTF-8.
+      'jpnov.layout.txt.encoding': {
+        type: 'string',
+        enum: [...TXT_ENCODINGS],
+        default: TXT_ENCODING_DEFAULT,
+        enumItemLabels: TXT_ENCODINGS.map((v) => `%jpnov.layout.txt.encoding.${v}.label%`),
+        enumDescriptions: TXT_ENCODINGS.map((v) => `%jpnov.layout.txt.encoding.${v}.description%`),
+        order: 9,
+        markdownDescription: '%jpnov.layout.txt.encoding.description%',
+      },
       'jpnov.layout.outDir': {
         type: 'string',
         default: PROJECT_DEFAULT.outDir,
         scope: 'resource',
-        order: 9,
+        order: 10,
         markdownDescription: '%jpnov.layout.outDir.description%',
       },
       'jpnov.layout.browserPath': {
         type: 'string',
         default: '',
         scope: 'machine-overridable',
-        order: 10,
+        order: 11,
         markdownDescription: '%jpnov.layout.browserPath.description%',
       },
     },
@@ -254,6 +266,8 @@ function staticNlsKeys(): string[] {
     'jpnov.layout.html.lineNumbers.description',
     'jpnov.layout.html.edgeLine.description',
     ...EDGE_LINE_STYLES.flatMap((v) => enumChoiceKeys(`jpnov.layout.html.edgeLine.${v}`)),
+    'jpnov.layout.txt.encoding.description',
+    ...TXT_ENCODINGS.flatMap((v) => enumChoiceKeys(`jpnov.layout.txt.encoding.${v}`)),
     'jpnov.layout.outDir.description',
     'jpnov.layout.browserPath.description',
     'jpnov.editor.title',
