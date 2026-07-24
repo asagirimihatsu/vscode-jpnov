@@ -3,7 +3,9 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist/', 'node_modules/', '**/*.vsix', '.scratch/'],
+    // Generated modules (gitignored, produced by `npm run gen`) are machine-written string
+    // blobs — never hand-edited, so never linted (the JSON-encoded bundles use double quotes).
+    ignores: ['dist/', 'node_modules/', '**/*.vsix', '.scratch/', '**/*.generated.ts', 'media/codicon/'],
   },
   ...tseslint.configs.strictTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,

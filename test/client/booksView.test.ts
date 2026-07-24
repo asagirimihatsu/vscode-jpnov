@@ -10,8 +10,6 @@
  */
 import { test, mock, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 
 import {
   buildVscode,
@@ -28,6 +26,9 @@ mock.module('vscode', { namedExports: buildVscode(state) });
 
 const { BooksViewProvider } = await import('../../src/client/book/view.ts');
 const { ListBooksRequest, BuildRequest } = await import('../../src/shared/protocol.ts');
+
+/** A stand-in extension root (the provider asWebviewUri-serves the codicon assets under it). */
+const EXT = Uri.parse('file:///ext');
 
 beforeEach(() => {
   resetMockState(state);
@@ -81,7 +82,7 @@ function firstDetail(view: { webview: { posted: unknown[] } }): { type?: string;
 /** Construct + refresh + resolve + ready. Sets one workspace folder when there are books. */
 async function setup(books: ReturnType<typeof entry>[], buildResult?: unknown) {
   const client = fakeClient(books, buildResult);
-  const provider = new BooksViewProvider(client as never);
+  const provider = new BooksViewProvider(client as never, EXT as never);
   await provider.refresh(); // populate books, default-checked
   const first = books[0];
   if (first !== undefined) {
@@ -97,7 +98,7 @@ async function setup(books: ReturnType<typeof entry>[], buildResult?: unknown) {
 // --- shell / hardening ------------------------------------------------------
 
 test('resolveWebviewView renders a CSP-hardened shell with the app root', () => {
-  const provider = new BooksViewProvider(fakeClient([]) as never);
+  const provider = new BooksViewProvider(fakeClient([]) as never, EXT as never);
   const view = createFakeWebviewView();
   provider.resolveWebviewView(view as never);
   const html = view.webview.html;
@@ -105,11 +106,15 @@ test('resolveWebviewView renders a CSP-hardened shell with the app root', () => 
   assert.match(html, /default-src 'none'/);
   assert.match(html, /script-src 'nonce-[^']+'/);
   assert.match(html, /<div id="app">/);
-  assert.deepEqual(view.webview.options, { enableScripts: true });
+  // The codicon stylesheet is linked (served from the extension's media/ via asWebviewUri).
+  assert.match(html, /<link[^>]+codicon\.css[^>]+rel="stylesheet"/);
+  const opts = view.webview.options as { enableScripts: boolean; localResourceRoots: readonly unknown[] };
+  assert.equal(opts.enableScripts, true);
+  assert.equal(opts.localResourceRoots.length, 1);
 });
 
 test('the inline style and script carry the CSP nonce', () => {
-  const provider = new BooksViewProvider(fakeClient([]) as never);
+  const provider = new BooksViewProvider(fakeClient([]) as never, EXT as never);
   const view = createFakeWebviewView();
   provider.resolveWebviewView(view as never);
   const html = view.webview.html;
@@ -120,21 +125,6 @@ test('the inline style and script carry the CSP nonce', () => {
   assert.ok(styleNonce && scriptNonce && cspStyle && cspScript);
   assert.equal(styleNonce[1], cspStyle[1]);
   assert.equal(scriptNonce[1], cspScript[1]);
-});
-
-test('the embedded CSS / CLIENT_JS template bodies contain no stray backtick', () => {
-  // A raw backtick anywhere in these two template literals (even inside a comment) closes the
-  // template early and turns the rest into broken TS — a footgun hit three times during dev.
-  const src = readFileSync(fileURLToPath(new URL('../../src/client/book/webviewHtml.ts', import.meta.url)), 'utf8');
-  const bt = String.fromCharCode(96);
-  for (const marker of ['const CSS = ', 'const CLIENT_JS = ']) {
-    const open = src.indexOf(marker + bt);
-    assert.ok(open >= 0, `located ${marker}`);
-    const start = open + (marker + bt).length;
-    const close = src.indexOf(bt + ';', start);
-    assert.ok(close > start, `located the close of ${marker}`);
-    assert.equal(src.slice(start, close).includes(bt), false, `${marker}body must not contain a backtick`);
-  }
 });
 
 // --- state ------------------------------------------------------------------
@@ -169,7 +159,7 @@ test('multiple roots produce per-root labeled groups', async () => {
 test('state posted before the first enumeration is flagged loading', async () => {
   // Resolve + ready WITHOUT a prior refresh() (server still starting): the panel must show a
   // loading placeholder, not the misleading "no books yet" welcome.
-  const provider = new BooksViewProvider(fakeClient([]) as never);
+  const provider = new BooksViewProvider(fakeClient([]) as never, EXT as never);
   const view = createFakeWebviewView();
   provider.resolveWebviewView(view as never);
   view.webview.receive({ type: 'ready' });
@@ -331,7 +321,7 @@ test('no workspace folder posts the no-folder empty state', async () => {
 
 test('a folder with no books posts an empty (non-noFolder) list', async () => {
   state.workspaceFolders = [{ uri: Uri.parse('file:///ws'), name: 'ws', index: 0 }];
-  const provider = new BooksViewProvider(fakeClient([]) as never);
+  const provider = new BooksViewProvider(fakeClient([]) as never, EXT as never);
   await provider.refresh();
   const view = createFakeWebviewView();
   provider.resolveWebviewView(view as never);
@@ -361,7 +351,7 @@ test('a refresh whose open book vanished returns the webview to the list', async
   const bookUri = `${root}/src/a.jpbook`;
   state.textDocuments.push(doc(bookUri, 'jpbook', 'ch1.jpnov\n'));
   const client = fakeClient([entry(root, 'a')]);
-  const provider = new BooksViewProvider(client as never);
+  const provider = new BooksViewProvider(client as never, EXT as never);
   await provider.refresh();
   state.workspaceFolders = [{ uri: Uri.parse(root), name: 'ws', index: 0 }];
   const view = createFakeWebviewView();

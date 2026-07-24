@@ -1,0 +1,3 @@
+/* 縦中横: combine the cell's chars upright in one square. Media-independent (pure text
+   combination, no geometry), so the one rule serves preview and build alike. */
+.tcy{text-combine-upright:all}

@@ -3,13 +3,16 @@ import { readFile } from 'node:fs/promises';
 import * as esbuild from 'esbuild';
 
 import { styleSourcePaths, writeStylesModule } from './scripts/gen-styles.ts';
+import { webviewSourcePaths, writeWebviewModules } from './scripts/gen-webview.ts';
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
 
-// Regenerate the styles module up front so every build (dev, prod, and watch's first pass)
-// bundles fresh fragments; the styles-codegen plugin keeps --watch rebuilds fresh thereafter.
+// Regenerate the generated modules up front so every build (dev, prod, and watch's first pass)
+// bundles fresh sources; the codegen plugins keep --watch rebuilds fresh thereafter. The webview
+// bundle is minified in production so the packaged extension ships minified webview code.
 await writeStylesModule();
+await writeWebviewModules(production);
 
 /** @type {import('esbuild').BuildOptions} */
 const base = {
@@ -76,12 +79,40 @@ const stylesCodegen = {
   },
 };
 
+/**
+ * The CLIENT counterpart of stylesCodegen: the webview bundles (browser IIFE strings) that
+ * `book/webviewHtml.ts` and `preview/preview.ts` inline. Loading a `webviewBundle.generated.ts`
+ * re-runs the codegen (which bundles the webview TS via a nested esbuild) and registers the
+ * webview sources as watch deps, so a `--watch` edit to a webview `.ts`/`.css` re-bundles and
+ * re-triggers the client rebuild. Non-watch builds are covered by the up-front call above.
+ * @type {import('esbuild').Plugin}
+ */
+const webviewCodegen = {
+  name: 'webview-codegen',
+  setup(build) {
+    build.onLoad({ filter: /webviewBundle\.generated\.ts$/ }, async (args) => {
+      // The up-front writeWebviewModules() already produced these; only --watch needs to re-run on a
+      // source change (bundling the webview TS via nested esbuild is the costly step — skip it in
+      // one-shot builds, where it would only re-bundle to an identical result).
+      if (watch) {
+        await writeWebviewModules(production);
+      }
+      return {
+        contents: await readFile(args.path, 'utf8'),
+        loader: 'ts',
+        watchFiles: await webviewSourcePaths(),
+      };
+    });
+  },
+};
+
 /** @type {import('esbuild').BuildOptions[]} */
 const builds = [
   {
     ...base,
     entryPoints: ['src/client/extension.ts'],
     outfile: 'dist/client/extension.js',
+    plugins: [webviewCodegen],
   },
   {
     ...base,

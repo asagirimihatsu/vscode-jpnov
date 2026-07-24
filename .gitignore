@@ -5,3 +5,10 @@ dist/
 .DS_Store
 .scratch/
 .claude/
+
+# Generated on demand by `npm run gen` (also `prepare`) — never committed.
+src/shared/compiler/styles/styles.generated.ts
+src/client/book/webviewBundle.generated.ts
+src/client/preview/webviewBundle.generated.ts
+# Codicon font/stylesheet vendored from node_modules/@vscode/codicons at gen time.
+media/codicon/
