@@ -19,8 +19,6 @@
   "view.container.title": "Japanese Novel",
   "view.books.name": "Books",
   "view.books.contextualTitle": "Japanese Novel Books",
-  "viewsWelcome.books.content": "No books yet.\nA `.jpbook` collects your chapters into one book — create one and save it in your workspace folder.\n[Create a Book File](command:workbench.action.files.newUntitledFile?%7B%22languageId%22%3A%22jpbook%22%7D)\n[Open the Guide](command:jpnov.openGuide)",
-  "viewsWelcome.books.noFolder.content": "Book files (`.jpbook`) live inside a workspace folder, but none is open.\nOpen your novel's folder first, then create the book file there — the guide walks through it.\n[Open Folder](command:workbench.action.files.openFolder)\n[Open the Guide](command:jpnov.openGuide)",
   "walkthrough.title": "Get started with Japanese Novel",
   "walkthrough.description": "Write, preview, and build a vertical-writing Japanese novel.",
   "walkthrough.chapter.title": "Write your first chapter",

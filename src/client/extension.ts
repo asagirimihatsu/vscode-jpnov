@@ -41,7 +41,7 @@ import {
 } from '#/shared/protocol.ts';
 
 import { registerBookCommands } from './book/manage.ts';
-import { BooksView } from './book/view.ts';
+import { BooksViewProvider } from './book/view.ts';
 import { command } from './commands.ts';
 import { registerAutoIndent } from './editor/autoIndent.ts';
 import { buildHighlightSnapshot } from './highlightConfig.ts';
@@ -53,7 +53,7 @@ import { registerRenameTracking } from './book/tracking.ts';
 
 let client: LanguageClient | undefined;
 let preview: Preview | undefined;
-let booksView: BooksView | undefined;
+let booksView: BooksViewProvider | undefined;
 let extCtx: vscode.ExtensionContext | undefined;
 /** Phase-2 latch: `ensureStarted()` is single-flight and never un-runs until deactivate. */
 let started = false;
@@ -173,7 +173,7 @@ function ensureStarted(): void {
   );
 
   preview = new Preview(client);
-  booksView = new BooksView(client);
+  booksView = new BooksViewProvider(client);
 
   // Dispose UI singletons on deactivate (order: stop the client separately in deactivate()).
   // Rename tracking registers here too — novel workspaces only, like everything phase-2.
