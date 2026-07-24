@@ -48,7 +48,7 @@ import { buildHighlightSnapshot } from './highlightConfig.ts';
 import { buildLintSnapshot } from './lintConfig.ts';
 import { folderIsNovelProject } from './probe.ts';
 import { isLocalizableMessage, renderMessage } from './messages.ts';
-import { Preview } from './preview.ts';
+import { Preview } from './preview/preview.ts';
 import { registerRenameTracking } from './book/tracking.ts';
 
 let client: LanguageClient | undefined;
@@ -173,7 +173,7 @@ function ensureStarted(): void {
   );
 
   preview = new Preview(client);
-  booksView = new BooksViewProvider(client);
+  booksView = new BooksViewProvider(client, context.extensionUri);
 
   // Dispose UI singletons on deactivate (order: stop the client separately in deactivate()).
   // Rename tracking registers here too — novel workspaces only, like everything phase-2.

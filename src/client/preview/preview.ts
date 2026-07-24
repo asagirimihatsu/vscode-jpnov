@@ -21,8 +21,6 @@
  * the `jpnov.layout.charsPerLine` setting; ［＃改ページ］ appears as a labelled
  * `<div class="pagebreak">` marker.
  */
-import { randomBytes } from 'node:crypto';
-
 import * as vscode from 'vscode';
 
 import type { LanguageClient } from 'vscode-languageclient/node';
@@ -34,8 +32,12 @@ import {
   type RenderFileResult,
 } from '#/shared/protocol.ts';
 
-import { lastPathSegment } from './paths.ts';
-import { buildPreviewSettings } from './renderConfig.ts';
+import type { PreviewInit, RevealMessage } from '../protocol.ts';
+
+import { makeNonce } from '../nonce.ts';
+import { lastPathSegment } from '../paths.ts';
+import { buildPreviewSettings } from '../renderConfig.ts';
+import { LOADING_CSS, SCROLL_JS } from './webviewBundle.generated.ts';
 
 /**
  * Trailing-edge debounce for edit-driven re-renders. Every keystroke otherwise ships the whole
@@ -44,29 +46,6 @@ import { buildPreviewSettings } from './renderConfig.ts';
  * open/adopt/editor-switch renders stay immediate.
  */
 const RENDER_DEBOUNCE_MS = 120;
-
-/**
- * Viewport fraction (from the left edge) where reveal() parks the active column's
- * center; vertical-rl reads right-to-left, so >0.5 keeps the larger share of the pane
- * ahead (left) of the cursor line.
- */
-const REVEAL_RATIO = 0.6180339887498949;
-
-/**
- * Per-frame fraction of the remaining distance the cursor-follow glide covers (~150ms
- * to settle at 60fps). Only `reveal` messages glide — the parse/load/resize re-asserts
- * must jump so a swap's first paint is already parked.
- */
-const REVEAL_EASE = 0.3;
-
-/** Spinner styles for {@link Preview.loadingShell} (nonce'd `<style>`, theme-driven). */
-const LOADING_CSS =
-  '.loading{display:flex;align-items:center;gap:.6em;color:var(--vscode-descriptionForeground,#888);}' +
-  '.spinner{width:1em;height:1em;border-radius:50%;flex:none;' +
-  'border:2px solid var(--vscode-progressBar-background,#0e70c0);border-top-color:transparent;' +
-  'animation:spin 1s linear infinite;}' +
-  '@keyframes spin{to{transform:rotate(360deg)}}' +
-  '@media (prefers-reduced-motion:reduce){.spinner{animation:none;}}';
 
 export class Preview {
   /** The panel's viewType — the key the window-reload serializer registers under. */
@@ -211,8 +190,9 @@ export class Preview {
   /** Posts a scroll-to-line message to the live webview (no re-render). */
   private reveal(line: number): void {
     this.lastRevealLine = line;
+    const message: RevealMessage = { type: 'reveal', line };
     // Posts to the webview; postMessage never rejects (resolves false if the panel is gone), so void is safe.
-    void this.panel?.webview.postMessage({ type: 'reveal', line });
+    void this.panel?.webview.postMessage(message);
   }
 
   /**
@@ -369,8 +349,13 @@ export class Preview {
     }
     out = out.replace(/<head(\s[^>]*)?>/i, (m) => `${m}${meta}`);
 
-    // Inject the cursor-follow scroller at the end of <body> (DOM is ready by then).
-    const script = `<script nonce="${nonce}">${scrollScript(activeLine, docUri)}</script>`;
+    // Inject the scroller at the end of <body> (DOM is ready) as two nonce'd <script>s — a bootstrap
+    // that seeds `window.__INIT`, then the bundled scroller. Escaping `<` in the JSON forecloses a
+    // `</script>` breakout via a hostile file name; the two stay separate so the bundle's own
+    // `"use strict"` prologue keeps effect (same rationale as book/webviewHtml.ts's booksHtml).
+    const init: PreviewInit = { uri: docUri, line: activeLine };
+    const boot = `window.__INIT=${JSON.stringify(init).replace(/</g, '\\u003c')};`;
+    const script = `<script nonce="${nonce}">${boot}</script><script nonce="${nonce}">${SCROLL_JS}</script>`;
     if (/<\/body>/i.test(out)) {
       return out.replace(/<\/body>/i, `${script}</body>`);
     }
@@ -397,12 +382,7 @@ export class Preview {
     );
   }
 
-  /**
-   * Hardened "Loading preview…" document with a CSS-only spinner: the strict CSP rules
-   * out loadable assets (no codicon font) and `style=` attributes, so the spinner lives
-   * in the nonce'd `<style>`, colored by the `--vscode-*` theme variables VS Code
-   * injects into every webview.
-   */
+  /** Hardened "Loading preview…" placeholder; the CSS-only spinner + its rationale live in loading.css. */
   private loadingShell(webview: vscode.Webview): string {
     return this.shell(
       `<p class="loading"><span class="spinner"></span>${escapeHtml(vscode.l10n.t('Loading preview…'))}</p>`,
@@ -451,74 +431,6 @@ function minCursorLine(selections: readonly vscode.Selection[]): number {
 }
 
 /**
- * The webview-side script (runs in the panel). Persists `{uri, line}` through the
- * webview state API — the payload the window-reload serializer later hands back to
- * `adopt()` — and parks the paragraph whose `data-line` is the greatest value <= the
- * target line at the {@link REVEAL_RATIO} viewport position: synchronously at parse
- * time, on `reveal` messages (with the {@link REVEAL_EASE} glide), on resize, and
- * re-asserted after load, with history scroll restoration forced to manual.
- */
-function scrollScript(activeLine: number, docUri: string): string {
-  // JSON.stringify yields a valid JS string literal; escaping `<` forecloses a
-  // `</script>` breakout via a hostile file name.
-  const uriLiteral = JSON.stringify(docUri).replace(/</g, '\\u003c');
-  return [
-    '(function(){',
-    'var api=acquireVsCodeApi();',
-    // Each html swap is a same-URL navigation: Chromium may async-replay the previous
-    // document's scroll offset around load unless restoration is manual.
-    "try{history.scrollRestoration='manual';}catch{}",
-    `var cur=${String(activeLine)};`,
-    // Persist immediately and OUTSIDE rAF: rAF is suspended in hidden webviews, so a
-    // render finishing in a background panel would otherwise never reach setState.
-    `function persist(line){api.setState({uri:${uriLiteral},line:line});}`,
-    'persist(cur);',
-    "var rm=matchMedia('(prefers-reduced-motion:reduce)').matches;",
-    'var anim=0;',
-    // Relative deltas sidestep vertical-rl's negative-scrollLeft origin; the dy term
-    // clamps to a no-op while the preview stays exact-fill with no vertical overflow.
-    'function dst(t){var r=t.getBoundingClientRect();',
-    `return[(r.left+r.right)/2-window.innerWidth*${String(REVEAL_RATIO)},r.top+r.height/2-window.innerHeight/2];}`,
-    'function reveal(line,glide){',
-    'cur=line;',
-    "var ns=document.querySelectorAll('[data-line]');var t=null;",
-    'for(var i=0;i<ns.length;i++){',
-    "var l=parseInt(ns[i].getAttribute('data-line'),10);",
-    'if(isNaN(l)){continue;}',
-    'if(l<=line){t=ns[i];}else{break;}',
-    '}',
-    'cancelAnimationFrame(anim);',
-    'if(!t){return;}',
-    'if(!glide||rm){var d=dst(t);window.scrollBy(d[0],d[1]);return;}',
-    // Exponential chase: recomputing the remaining delta every frame keeps it drift-free
-    // and retarget-safe; the no-progress check ends the loop when an edge clamps the scroll.
-    '(function step(){',
-    'var d=dst(t);',
-    'if(Math.abs(d[0])<1&&Math.abs(d[1])<1){window.scrollBy(d[0],d[1]);return;}',
-    'var x=window.scrollX,y=window.scrollY;',
-    `window.scrollBy(d[0]*${String(REVEAL_EASE)},d[1]*${String(REVEAL_EASE)});`,
-    'if(window.scrollX===x&&window.scrollY===y){return;}',
-    'anim=requestAnimationFrame(step);',
-    '})();',
-    '}',
-    // Synchronous at parse time (DOM complete before </body>, getBoundingClientRect
-    // forces layout): the first paint is already parked, never a frame at the origin.
-    'reveal(cur);',
-    "window.addEventListener('message',function(e){",
-    "var m=e.data;if(m&&m.type==='reveal'&&typeof m.line==='number'){reveal(m.line,1);persist(m.line);}",
-    '});',
-    'var raf=0;',
-    "window.addEventListener('resize',function(){",
-    'cancelAnimationFrame(raf);raf=requestAnimationFrame(function(){reveal(cur);});',
-    '});',
-    // Re-assert after load: corrects any load-time scroll mover that slipped past
-    // manual restoration.
-    "window.addEventListener('load',function(){requestAnimationFrame(function(){reveal(cur);});});",
-    '})();',
-  ].join('');
-}
-
-/**
  * Defensive read of the serializer's persisted webview state: whatever a previous
  * session's injected script last `setState`-ed — or `undefined` for panels persisted
  * by builds that predate the serializer — so nothing about its shape can be trusted.
@@ -535,9 +447,4 @@ function parsePanelState(state: unknown): {
     uri: typeof uri === 'string' ? uri : undefined,
     line: typeof line === 'number' && Number.isFinite(line) ? line : undefined,
   };
-}
-
-/** Cryptographically-random nonce for the CSP (base64url, no padding). */
-function makeNonce(): string {
-  return randomBytes(24).toString('base64url');
 }

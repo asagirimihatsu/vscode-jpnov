@@ -1,0 +1,9 @@
+/* ダッシュ: the glyph is hidden and a centred ::before drawn in its place. Hiding must use
+   `-webkit-text-fill-color` — `color:transparent` would take `currentColor`, and the rule with
+   it. `dash-j` comes from layout.ts because `.dash + .dash` would also match across the prose
+   between two separate runs. */
+.dash{--dash-w:0.07em;position:relative;-webkit-text-fill-color:transparent}
+.dash::before{content:"";position:absolute;inset-inline:0.12em;inset-block-start:calc(50% - var(--dash-w) / 2);block-size:var(--dash-w);background:currentColor;-webkit-print-color-adjust:exact;print-color-adjust:exact;pointer-events:none}
+.dash-j::before{inset-inline-end:0}
+.dash-j + .dash::before{inset-inline-start:0}
+.b .dash,.midashi .dash{--dash-w:calc(0.07em + 1px)}

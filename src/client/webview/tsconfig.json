@@ -1,0 +1,12 @@
+{
+  // Nested so the editor and typescript-eslint projectService discover this browser-context program by
+  // proximity. `include` and `exclude:[]` are required overrides: without them it inherits the root's
+  // `src/**` include (whole tree, wrong lib) or `src/client/webview/**` exclude (empty program).
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2025", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "exclude": [],
+  "include": ["**/*.ts"]
+}
