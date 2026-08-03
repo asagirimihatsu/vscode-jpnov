@@ -45,7 +45,7 @@ import type { BookNode } from './nodes.ts';
 import { booksHtml } from './webviewHtml.ts';
 import { resolveBrowserExecutable } from '../browser.ts';
 import { renderMessage } from '../messages.ts';
-import { lastPathSegment } from '../paths.ts';
+import { lastPathSegment, splitRelPath } from '../paths.ts';
 import { convertHtmlToPdf } from '../pdf.ts';
 import { buildProjectDirs } from '../projectConfig.ts';
 import { buildHtmlSettings } from '../renderConfig.ts';
@@ -61,7 +61,7 @@ function chapterUri(rootUri: string, rel: string): vscode.Uri {
 
 /** The book's display label: its front-matter title, else the last segment of the output name. */
 function bookTitle(entry: BookEntry): string {
-  return entry.title ?? entry.outRel.slice(entry.outRel.lastIndexOf('/') + 1);
+  return entry.title ?? splitRelPath(entry.outRel).name;
 }
 
 export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
@@ -414,7 +414,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const chapters = await Promise.all(
       chapterLines(parsed.lines).map(async (line): Promise<ChapterVM> => {
         const rel = parsed.lines[line]?.value ?? '';
-        const slash = rel.lastIndexOf('/');
+        const { name, dir } = splitRelPath(rel);
         const target = chapterUri(entry.rootUri, rel);
         let missing = false;
         try {
@@ -425,8 +425,8 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         }
         return {
           line,
-          name: rel.slice(slash + 1),
-          folder: slash >= 0 ? rel.slice(0, slash) : '',
+          name,
+          folder: dir,
           fileUri: target.toString(),
           missing,
         };

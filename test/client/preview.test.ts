@@ -8,9 +8,7 @@
  * nonce on the inline `<style>`. We drive `open()` against a mocked active editor and a
  * fake LanguageClient, then assert on the resulting `webview.html`.
  *
- * NOT wired into `npm test` (test/client is authored-only). Run with a `vscode`
- * resolution shim present (see test/client/README.md):
- *   node --test --experimental-test-module-mocks "test/client/**\/*.test.ts"
+ * Runs in CI via `npm run test:integration`; for direct runs see test/client/README.md.
  */
 import { test, mock, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';

@@ -7,8 +7,8 @@
  * modules touch; anything else is intentionally absent so accidental new dependencies
  * fail loudly.
  *
- * NOT wired into `npm test` this round (test/client is authored-only); run with:
- *   node --test --experimental-test-module-mocks "test/client/**\/*.test.ts"
+ * Suites using this mock run in CI via `npm run test:integration`; for direct runs see
+ * test/client/README.md.
  */
 
 export type Listener<T> = (e: T) => unknown;
@@ -120,6 +120,24 @@ export class RelativePattern {
   }
 }
 
+/** Just enough of vscode.Range: the 4-number constructor the client's edit planners use. */
+export class Range {
+  readonly start: { line: number; character: number };
+  readonly end: { line: number; character: number };
+  constructor(startLine: number, startCharacter: number, endLine: number, endCharacter: number) {
+    this.start = { line: startLine, character: startCharacter };
+    this.end = { line: endLine, character: endCharacter };
+  }
+}
+
+/** Just enough of vscode.WorkspaceEdit: collects `replace` calls for `workspace.applyEdit`. */
+export class WorkspaceEdit {
+  readonly replaces: { uri: Uri; range: Range; newText: string }[] = [];
+  replace(uri: Uri, range: Range, newText: string): void {
+    this.replaces.push({ uri, range, newText });
+  }
+}
+
 export class ThemeColor {
   readonly id: string;
   constructor(id: string) {
@@ -142,6 +160,8 @@ export interface FakeTextDocument {
   uri: Uri;
   languageId: string;
   getText(): string;
+  /** Present on `doc()`-built documents (manage.ts saves after `applyEdit`); hand-rolled fakes may omit it. */
+  save?(): Promise<boolean>;
 }
 
 export interface FakeWebview {
@@ -193,13 +213,18 @@ export interface MockState {
   /** WebviewView providers registered via `window.registerWebviewViewProvider`, keyed by view id. */
   registeredViewProviders: Map<string, unknown>;
   writtenFiles: { uri: string; content: string }[];
+  /**
+   * Replaces from `workspace.applyEdit` (range as [startLine, startChar, endLine, endChar]).
+   * Recorded only — document text never mutates, so multi-step flows must reseed their docs.
+   */
+  appliedEdits: { uri: string; range: [number, number, number, number]; newText: string }[];
   onDidChangeDoc: EventEmitter<{ document: FakeTextDocument }>;
   onDidChangeActiveEditor: EventEmitter<{ document: FakeTextDocument } | undefined>;
   activeEditor: { document: FakeTextDocument; viewColumn?: number } | undefined;
   /** Editors the preview's cursor-follow consults via `window.visibleTextEditors`. */
   visibleEditors: FakeTextEditor[];
   onDidChangeSelection: EventEmitter<FakeSelectionChange>;
-  /** Programmed responses for the init-workspace prompts (FIFO; undefined = Esc/cancel). */
+  /** Programmed `showQuickPick` responses (FIFO; undefined = Esc/cancel). */
   quickPickQueue: unknown[];
   quickPickCalls: { items: unknown; options: unknown }[];
   inputBoxQueue: (string | undefined)[];
@@ -242,6 +267,7 @@ export function createMockState(): MockState {
     executedCommands: [],
     registeredViewProviders: new Map(),
     writtenFiles: [],
+    appliedEdits: [],
     onDidChangeDoc: new EventEmitter<{ document: FakeTextDocument }>(),
     onDidChangeActiveEditor: new EventEmitter<
       { document: FakeTextDocument } | undefined
@@ -284,6 +310,7 @@ export function resetMockState(s: MockState): void {
   s.executedCommands.length = 0;
   s.registeredViewProviders.clear();
   s.writtenFiles.length = 0;
+  s.appliedEdits.length = 0;
   s.activeEditor = undefined;
   s.visibleEditors.length = 0;
   s.onDidChangeSelection.dispose();
@@ -453,6 +480,28 @@ export function buildVscode(state: MockState): Record<string, unknown> {
         },
       };
     },
+    applyEdit(edit: WorkspaceEdit): Promise<boolean> {
+      for (const r of edit.replaces) {
+        state.appliedEdits.push({
+          uri: r.uri.toString(),
+          range: [r.range.start.line, r.range.start.character, r.range.end.line, r.range.end.character],
+          newText: r.newText,
+        });
+      }
+      return Promise.resolve(true);
+    },
+    // Single-folder parity: strip the containing folder's prefix; a uri outside every
+    // folder comes back unshortened.
+    asRelativePath(uri: Uri): string {
+      const s = uri.toString();
+      for (const folder of state.workspaceFolders ?? []) {
+        const base = `${folder.uri.toString().replace(/\/+$/, '')}/`;
+        if (s.startsWith(base)) {
+          return s.slice(base.length);
+        }
+      }
+      return uri.fsPath;
+    },
     openTextDocument(uri: Uri): Promise<FakeTextDocument> {
       state.openedDocs.push(uri.toString());
       if (state.unopenableDocs.has(uri.toString())) {
@@ -521,6 +570,8 @@ export function buildVscode(state: MockState): Record<string, unknown> {
     FileType,
     FileSystemError,
     RelativePattern,
+    Range,
+    WorkspaceEdit,
     ThemeColor,
     MarkdownString,
     Disposable,
@@ -531,7 +582,7 @@ export function buildVscode(state: MockState): Record<string, unknown> {
 }
 
 export function doc(uri: string, languageId: string, text = ''): FakeTextDocument {
-  return { uri: Uri.parse(uri), languageId, getText: () => text };
+  return { uri: Uri.parse(uri), languageId, getText: () => text, save: () => Promise.resolve(true) };
 }
 
 /** A fake `vscode.Webview`: captures outbound `postMessage` (posted) + delivers inbound (receive). */

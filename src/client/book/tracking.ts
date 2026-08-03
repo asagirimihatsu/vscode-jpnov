@@ -13,7 +13,7 @@
 import * as vscode from 'vscode';
 
 import { normalizeFsPath, planBookEdits, type BookEditPlan, type FileRename } from './rename.ts';
-import { lastPathSegment } from '../paths.ts';
+import { FIND_FILES_EXCLUDE, lastPathSegment } from '../paths.ts';
 
 const SETTING = 'jpnov.editor.updateRefsOnFileMove';
 
@@ -32,8 +32,7 @@ function persistMode(value: Mode): Thenable<void> {
 async function planAffectedBooks(
   renames: readonly FileRename[],
 ): Promise<{ uri: vscode.Uri; plan: BookEditPlan }[]> {
-  // Same exclusions as the startup probe; the server-side walk stays the build's arbiter.
-  const books = await vscode.workspace.findFiles('**/*.jpbook', '**/{node_modules,.*}/**');
+  const books = await vscode.workspace.findFiles('**/*.jpbook', FIND_FILES_EXCLUDE);
   const affected: { uri: vscode.Uri; plan: BookEditPlan }[] = [];
   for (const uri of books) {
     // Entries are root-relative: a book outside every workspace folder has no base at all

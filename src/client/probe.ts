@@ -20,6 +20,8 @@
  */
 import * as vscode from 'vscode';
 
+import { FIND_FILES_EXCLUDE } from './paths.ts';
+
 export async function folderIsNovelProject(
   folder: vscode.WorkspaceFolder,
 ): Promise<boolean> {
@@ -45,7 +47,7 @@ export async function folderIsNovelProject(
   try {
     const nested = await vscode.workspace.findFiles(
       new vscode.RelativePattern(folder, '**/*.jpbook'),
-      '**/{node_modules,.*}/**',
+      FIND_FILES_EXCLUDE,
       1,
     );
     return nested.length > 0;

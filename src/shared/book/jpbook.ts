@@ -65,6 +65,11 @@ export interface ParsedLine {
   readonly kind: JpbookLineKind;
 }
 
+/** A chapter entry line — `duplicate` still counts (it renders, moves, and dedupes like `ok`). */
+export function isChapter(pl: ParsedLine): boolean {
+  return pl.kind === 'ok' || pl.kind === 'duplicate';
+}
+
 /**
  * The recognized front-matter keys, in completion order; the page-furniture keys are shared
  * VERBATIM with {@link BuildChrome}'s field names. Adding a key: extend {@link JpbookMeta},

@@ -9,7 +9,7 @@
  */
 import * as vscode from 'vscode';
 
-import { appendChapters, chapterLines, moveChapterTo, removeChapter, upsertMeta } from '#/shared/book/edits.ts';
+import { appendChapters, chapterLines, listedChapters, moveChapterTo, removeChapter, upsertMeta } from '#/shared/book/edits.ts';
 import type { TextReplace } from '#/shared/book/edits.ts';
 import { composeDividerValue, DIVIDER_PRESETS, parseDividerValue, parseJpbook, type MetaKey } from '#/shared/book/jpbook.ts';
 import { PAGE_NUMBER_POSITIONS, type PageNumberPosition } from '#/shared/compiler/chrome.ts';
@@ -19,6 +19,7 @@ import type { BookEntry } from '#/shared/protocol.ts';
 
 import { command } from '../commands.ts';
 import { renderMessage } from '../messages.ts';
+import { FIND_FILES_EXCLUDE, splitRelPath } from '../paths.ts';
 import { normalizeFsPath } from './rename.ts';
 import type { BookNode } from './nodes.ts';
 
@@ -109,40 +110,42 @@ async function addChapters(arg: unknown): Promise<void> {
   if (node?.kind !== 'book') {
     return;
   }
+  // Entries are root-relative, so candidates come from THIS book's workspace folder only.
   const rootUri = vscode.Uri.parse(node.entry.rootUri);
-  const picked = await vscode.window.showOpenDialog({
-    canSelectMany: true,
-    defaultUri: rootUri,
-    openLabel: vscode.l10n.t('Add'),
-    filters: { 'Japanese Novel': ['jpnov'] },
+  const found = await vscode.workspace.findFiles(new vscode.RelativePattern(rootUri, '**/*.jpnov'), FIND_FILES_EXCLUDE);
+  if (found.length === 0) {
+    void vscode.window.showInformationMessage(vscode.l10n.t('Japanese Novel: no .jpnov files found in this workspace folder.'));
+    return;
+  }
+
+  const listed = listedChapters(parseJpbook((await bookText(node.entry)).text).lines);
+  type ChapterItem = vscode.QuickPickItem & { rel: string };
+  const items = found
+    .map((uri) => normalizeFsPath(vscode.workspace.asRelativePath(uri, false)))
+    .filter((rel) => !listed.has(rel))
+    .sort()
+    .map((rel): ChapterItem => {
+      const { name, dir } = splitRelPath(rel);
+      return dir === '' ? { label: name, rel } : { label: name, description: dir, rel };
+    });
+  if (items.length === 0) {
+    void vscode.window.showInformationMessage(vscode.l10n.t('Japanese Novel: no chapter files left to add.'));
+    return;
+  }
+
+  const picked = await vscode.window.showQuickPick(items, {
+    canPickMany: true,
+    matchOnDescription: true,
+    placeHolder: vscode.l10n.t('Select chapter files to add'),
   });
   if (picked === undefined || picked.length === 0) {
     return;
   }
 
-  // Entries are root-relative, so only files under THIS book's workspace folder qualify.
-  const rels: string[] = [];
-  let outside = 0;
-  for (const uri of picked) {
-    const folder = vscode.workspace.getWorkspaceFolder(uri);
-    if (folder?.uri.toString().replace(/\/$/, '') !== node.entry.rootUri) {
-      outside += 1;
-      continue;
-    }
-    rels.push(normalizeFsPath(vscode.workspace.asRelativePath(uri, false)));
-  }
-  if (outside > 0) {
-    // UI notification: showWarningMessage never rejects, so void is safe.
-    void vscode.window.showWarningMessage(
-      vscode.l10n.t('Japanese Novel: {0} file(s) were skipped — chapters must live in the same workspace folder as the book.', String(outside)),
-    );
-  }
-  if (rels.length === 0) {
-    return;
-  }
-
+  // Re-read AFTER the pick: the book may have changed while the picker was open, and the
+  // edit must anchor to the live text (appendChapters re-dedupes against it too).
   const { uri, text } = await bookText(node.entry);
-  const edit = appendChapters(text, rels);
+  const edit = appendChapters(text, picked.map((p) => p.rel));
   if (edit === null) {
     void vscode.window.showInformationMessage(vscode.l10n.t('Japanese Novel: already in this book.'));
     return;

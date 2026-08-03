@@ -7,6 +7,7 @@
  * reorders a metadata line — authors who care about metadata layout use code mode.
  */
 import {
+  isChapter,
   META_KEYS,
   metaKeyOf,
   metaRegionOf,
@@ -82,6 +83,11 @@ export function upsertMeta(text: string, key: MetaKey, value: string): TextRepla
   return appendAtEnd(parsed.lines, eol, entry);
 }
 
+/** Chapter paths already listed — the set GUI adds dedupe against. */
+export function listedChapters(lines: readonly ParsedLine[]): Set<string> {
+  return new Set(lines.filter(isChapter).map((pl) => pl.value));
+}
+
 /**
  * Appends chapters (root-relative paths) at the end of the document, skipping any already
  * listed (a GUI add must not manufacture `duplicate` warnings). Null when nothing new.
@@ -89,9 +95,7 @@ export function upsertMeta(text: string, key: MetaKey, value: string): TextRepla
 export function appendChapters(text: string, rels: readonly string[]): TextReplace | null {
   const parsed = parseJpbook(text);
   const eol = eolOf(text);
-  const listed = new Set(
-    parsed.lines.filter((pl) => pl.kind === 'ok' || pl.kind === 'duplicate').map((pl) => pl.value),
-  );
+  const listed = listedChapters(parsed.lines);
   const fresh = rels.filter((rel) => !listed.has(rel));
   if (fresh.length === 0) {
     return null;
@@ -100,10 +104,10 @@ export function appendChapters(text: string, rels: readonly string[]): TextRepla
   return appendAtEnd(parsed.lines, eol, fresh.join(eol));
 }
 
-/** The chapter (`ok`/`duplicate`) line at `line`, or null — the guard every mover uses. */
+/** The chapter line at `line`, or null — the guard every mover uses. */
 function chapterAt(lines: readonly ParsedLine[], line: number): ParsedLine | null {
   const pl = lines[line];
-  return pl !== undefined && (pl.kind === 'ok' || pl.kind === 'duplicate') ? pl : null;
+  return pl !== undefined && isChapter(pl) ? pl : null;
 }
 
 /**
@@ -156,7 +160,7 @@ export function moveChapterTo(
     }
     // No-op if `beforeLine` is already the chapter immediately after `fromLine`. Blank lines can sit
     // between chapters, so compare chapter ORDER, not raw line adjacency (fromLine + 1).
-    const chapters = parsed.lines.filter((pl) => pl.kind === 'ok' || pl.kind === 'duplicate');
+    const chapters = parsed.lines.filter(isChapter);
     const fromIdx = chapters.findIndex((pl) => pl.line === fromLine);
     if (chapters[fromIdx + 1]?.line === beforeLine) {
       return null;
@@ -164,7 +168,7 @@ export function moveChapterTo(
     return [removal, { start: at(beforeLine, 0), end: at(beforeLine, 0), newText: `${from.raw}${eol}` }];
   }
 
-  const chapters = parsed.lines.filter((pl) => pl.kind === 'ok' || pl.kind === 'duplicate');
+  const chapters = parsed.lines.filter(isChapter);
   const last = chapters[chapters.length - 1];
   if (last === undefined || last.line === fromLine) {
     return null; // already the last chapter
@@ -174,7 +178,7 @@ export function moveChapterTo(
 
 /** The chapter line numbers in document order — the panel's row → line mapping. */
 export function chapterLines(lines: readonly ParsedLine[]): number[] {
-  return lines.filter((pl) => pl.kind === 'ok' || pl.kind === 'duplicate').map((pl) => pl.line);
+  return lines.filter(isChapter).map((pl) => pl.line);
 }
 
 /** Fixed display order + current values for the panel's metadata rows (absent = undefined). */

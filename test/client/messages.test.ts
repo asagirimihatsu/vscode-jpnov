@@ -2,14 +2,12 @@
  * Parity guard for the two message renderers. `renderEnglish` (src/shared/messages.ts, used by the
  * vscode-free server to fill the English Diagnostic.message fallback) and `renderMessage`
  * (src/client/messages.ts, `vscode.l10n.t` whose English literal is the bundle KEY) MUST share
- * byte-identical English templates, or a JA-locale user and the English fallback would диverge.
+ * byte-identical English templates, or a JA-locale user and the English fallback would diverge.
  *
  * Under the vscode mock, `l10n.t` passes the English source through (substituting {0}/{1}), so
  * `renderMessage` in "English locale" must equal `renderEnglish` for every code + args.
  *
- * NOT wired into `npm test` (test/client is authored-only). Run with the vscode resolution shim
- * (see test/client/README.md):
- *   node --test --experimental-test-module-mocks "test/client/**\/*.test.ts"
+ * Runs in CI via `npm run test:integration`; for direct runs see test/client/README.md.
  */
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';

@@ -27,6 +27,7 @@ import {
   colonIndex,
   completeEntryLine,
   completeMetaLine,
+  isChapter,
   metaKeyOf,
   metaRegionOf,
   type JpbookCompletion,
@@ -161,7 +162,7 @@ export function documentLinksForJpbook(rootUri: string | null, parsed: ParsedJpb
   }
   const links: DocumentLink[] = [];
   for (const pl of parsed.lines) {
-    if (pl.kind !== 'ok' && pl.kind !== 'duplicate') {
+    if (!isChapter(pl)) {
       continue;
     }
     const resolved = resolveContained(rootUri, pl.value, 'jpbookEntry');
