@@ -1,14 +1,18 @@
 /**
- * The Books panel's webview-side renderer (runs in the panel's browser realm). It renders the DOM
- * from the host's pushed `state` / `detail` messages with `createElement` / `textContent` — user
- * data (book titles, chapter paths) NEVER flows through innerHTML, so it can carry no markup — and
- * dispatches every user action back as a typed message. The host ({@link ../../book/view.ts}) owns all
- * truth; a checkbox toggle updates optimistically and is not echoed, but each `state` push is
- * authoritative and reconciles the view.
+ * The Books panel's webview-side renderer (runs in the panel's browser realm). It rebuilds the DOM
+ * from the host's pushed `state` / `detail` messages with the `h()` builder — string children
+ * become text nodes, so user data (book titles, chapter paths) NEVER flows through innerHTML and
+ * can carry no markup — and dispatches every user action back as a typed message. The host
+ * ({@link ../../book/view.ts}) owns all truth; a checkbox toggle updates optimistically and is not
+ * echoed, but each `state` push is authoritative and reconciles the view.
+ *
+ * Because every push rebuilds the DOM, cross-render continuity rides on two mechanisms: `data-fk`
+ * focus keys captured/restored around each rebuild (capture/restore/focusFk), and applyControls(),
+ * which owns the footer buttons' disabled state after every render and optimistic toggle.
  *
  * Layout is master/detail: a LIST screen (per-root book rows + a pinned footer with the build
  * actions) drills into a DETAIL screen (one book's chapters + Book Info). Localized strings arrive
- * once via the host's `__INIT` bootstrap; icons are codicons ({@link ./icons.ts}).
+ * once via the host's `__INIT` bootstrap; icons are codicons (`CODICON`).
  */
 import type {
   BooksInbound,
@@ -73,43 +77,65 @@ let infoOpen = false;
 let dragLine: number | null = null;
 let detailWanted = false; // true only while the user intends to be on the detail screen
 
-function E<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  if (cls !== undefined) {
-    e.className = cls;
+/** The attributes/handlers this panel sets; keys mirror the DOM attribute names, so a grep for
+ * `data-fk` / `aria-expanded` finds every writer. Extend only as call sites need. */
+interface Props {
+  readonly class?: string;
+  readonly title?: string;
+  readonly role?: string;
+  readonly 'aria-label'?: string;
+  readonly 'aria-expanded'?: boolean;
+  readonly 'aria-hidden'?: true;
+  readonly 'data-fk'?: string;
+  readonly onClick?: () => void;
+}
+/** A child of `h()`; `false` is skipped so call sites can inline `cond && h(...)` conditionals. */
+type Child = Node | string | false;
+
+/** The Props keys h() writes with `setAttribute`; booleans serialize as 'true'/'false'. */
+const ATTRS: readonly Exclude<keyof Props, 'onClick'>[] =
+  ['class', 'title', 'role', 'aria-label', 'aria-expanded', 'aria-hidden', 'data-fk'];
+
+function h<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  props: Props,
+  ...children: Child[]
+): HTMLElementTagNameMap[K] {
+  const el = document.createElement(tag);
+  for (const name of ATTRS) {
+    const v = props[name];
+    if (v !== undefined) {
+      el.setAttribute(name, String(v));
+    }
   }
-  if (text !== undefined) {
-    e.textContent = text;
+  if (props.onClick !== undefined) {
+    el.addEventListener('click', props.onClick);
   }
-  return e;
-}
-function clear(n: Element): void {
-  while (n.firstChild) {
-    n.removeChild(n.firstChild);
+  for (const c of children) {
+    if (c !== false) {
+      el.append(c);
+    }
   }
-}
-/** A codicon glyph span. */
-function icon(name: IconName): HTMLSpanElement {
-  const s = E('span', 'codicon codicon-' + CODICON[name]);
-  s.setAttribute('aria-hidden', 'true');
-  return s;
-}
-function iconBtn(name: IconName, aria: string, fn: () => void): HTMLButtonElement {
-  const b = E('button', 'iconbtn');
-  b.appendChild(icon(name));
-  b.setAttribute('aria-label', aria);
-  b.title = aria;
-  b.addEventListener('click', fn);
-  return b;
-}
-function textBtn(cls: string, text: string, fn: () => void): HTMLButtonElement {
-  const b = E('button', cls, text);
-  b.addEventListener('click', fn);
-  return b;
-}
-function fk<T extends HTMLElement>(el: T, key: string): T {
-  el.setAttribute('data-fk', key);
   return el;
+}
+/** A codicon glyph span; `extraCls` appends site classes. */
+function icon(name: IconName, extraCls?: string): HTMLSpanElement {
+  const cls = 'codicon codicon-' + CODICON[name] + (extraCls === undefined ? '' : ' ' + extraCls);
+  return h('span', { class: cls, 'aria-hidden': true });
+}
+/** `data-fk` is required — every icon button participates in the focus-restore system. */
+interface BtnExtra {
+  readonly 'data-fk': string;
+  readonly disabled?: boolean;
+}
+function iconBtn(name: IconName, aria: string, fn: () => void, extra: BtnExtra): HTMLButtonElement {
+  const b = h('button', { class: 'iconbtn', 'aria-label': aria, title: aria, onClick: fn, 'data-fk': extra['data-fk'] }, icon(name));
+  b.disabled = extra.disabled ?? false;
+  return b;
+}
+/** The scrollable pane; `scroller()` (for capture/restore) finds it by this class. */
+function scrollPane(...children: Child[]): HTMLElement {
+  return h('div', { class: 'scroll' }, ...children);
 }
 function scroller(): Element | null {
   return app.querySelector('.scroll');
@@ -228,60 +254,54 @@ function render(): void {
 }
 
 function renderList(): void {
-  clear(app);
-  const scroll = E('div', 'scroll');
   // Before the first enumeration lands (server still starting) show a neutral placeholder, NOT the
   // "no books yet" welcome — the books may well exist and that copy would misleadingly say create one.
   if (state?.loading) {
-    scroll.appendChild(E('div', 'empty', L.loading));
-    app.appendChild(scroll);
+    app.replaceChildren(scrollPane(h('div', { class: 'empty' }, L.loading)));
     return;
   }
   if (state?.noFolder) {
-    scroll.appendChild(welcome(L.noFolderTitle, L.noFolderBody, [['openFolder', L.openFolder], ['openGuide', L.openGuide]]));
-    app.appendChild(scroll);
+    app.replaceChildren(scrollPane(
+      welcome(L.noFolderTitle, L.noFolderBody, [['openFolder', L.openFolder], ['openGuide', L.openGuide]])));
+    return;
+  }
+  if (counts().total === 0) {
+    app.replaceChildren(scrollPane(
+      welcome(L.noBooksTitle, L.noBooksBody, [['createBook', L.createBook], ['openGuide', L.openGuide]])));
     return;
   }
   const groups = state?.groups ?? [];
-  let total = 0;
-  for (const g of groups) {
-    total += g.books.length;
-  }
-  if (total === 0) {
-    scroll.appendChild(welcome(L.noBooksTitle, L.noBooksBody, [['createBook', L.createBook], ['openGuide', L.openGuide]]));
-    app.appendChild(scroll);
-    return;
-  }
-  const listEl = E('div', 'list');
-  for (const grp of groups) {
-    if (grp.rootLabel !== null) {
-      listEl.appendChild(E('div', 'group-header', grp.rootLabel));
-    }
-    for (const b of grp.books) {
-      listEl.appendChild(bookRow(b));
-    }
-  }
-  scroll.appendChild(listEl);
-  app.appendChild(scroll);
-  app.appendChild(footer());
+  app.replaceChildren(
+    scrollPane(h('div', { class: 'list' }, ...groups.flatMap((g) => [
+      g.rootLabel !== null && h('div', { class: 'group-header' }, g.rootLabel),
+      ...g.books.map((b) => bookRow(b)),
+    ]))),
+    footer(),
+  );
   applyControls();
 }
 
+/** The single writer of the checkbox's checked look (aria-checked, `.on` tint, glyph) — used at
+ * build time and by the optimistic toggle. */
+function paintChecked(cb: HTMLButtonElement, checked: boolean): void {
+  cb.setAttribute('aria-checked', String(checked));
+  cb.classList.toggle('on', checked);
+  cb.replaceChildren(icon(checked ? 'cbOn' : 'cbOff'));
+}
+
 function bookRow(bk: BookVM): HTMLElement {
-  const row = E('div', 'row book');
   // Custom checkbox: a button with role=checkbox. The glyph is always in the DOM (hidden until hover
   // or checked); the .on class tints the tile and swaps the outline circle for the filled one.
-  const cb = E('button', 'cbtile' + (bk.checked ? ' on' : ''));
-  cb.setAttribute('role', 'checkbox');
-  cb.setAttribute('aria-checked', bk.checked ? 'true' : 'false');
-  cb.setAttribute('aria-label', L.selectBook + ': ' + bk.title);
-  cb.appendChild(icon(bk.checked ? 'cbOn' : 'cbOff'));
-  fk(cb, 'cb:' + bk.uri);
+  const cb = h('button', {
+    class: 'cbtile',
+    role: 'checkbox',
+    'aria-label': L.selectBook + ': ' + bk.title,
+    'data-fk': 'cb:' + bk.uri,
+  });
+  paintChecked(cb, bk.checked);
   cb.addEventListener('click', () => {
     const checked = !bk.checked;
-    cb.setAttribute('aria-checked', checked ? 'true' : 'false');
-    cb.classList.toggle('on', checked);
-    cb.replaceChildren(icon(checked ? 'cbOn' : 'cbOff'));
+    paintChecked(cb, checked);
     // Optimistic: write the cached VM so applyControls()'s counts() sees the new value now, and a
     // later re-render off this state (e.g. Back from detail) reflects it. The host records the
     // selection authoritatively without echoing.
@@ -289,38 +309,34 @@ function bookRow(bk: BookVM): HTMLElement {
     applyControls();
     post({ type: 'toggle', uri: bk.uri, checked });
   });
-  row.appendChild(cb);
-  const main = E('button', 'main');
-  const col = E('div', 'maincol');
-  col.appendChild(E('div', 'title', bk.title));
-  col.appendChild(E('div', 'sub', bk.fileRel));
-  main.appendChild(col);
-  const chev = icon('chevR');
-  chev.classList.add('chev');
-  main.appendChild(chev);
-  main.setAttribute('aria-label', bk.title);
-  fk(main, 'book:' + bk.uri);
-  main.addEventListener('click', () => {
-    detailWanted = true;
-    post({ type: 'openDetail', uri: bk.uri });
-  });
-  row.appendChild(main);
-  return row;
+  return h('div', { class: 'row book' },
+    cb,
+    h('button', {
+      class: 'main',
+      'aria-label': bk.title,
+      'data-fk': 'book:' + bk.uri,
+      onClick: () => {
+        detailWanted = true;
+        post({ type: 'openDetail', uri: bk.uri });
+      },
+    },
+    h('div', { class: 'maincol' },
+      h('div', { class: 'title' }, bk.title),
+      h('div', { class: 'sub' }, bk.fileRel)),
+    icon('chevR', 'chev')));
 }
 
 function footer(): HTMLElement {
-  const f = E('div', 'footer');
-  const sel = E('div', 'selrow');
-  // Justified to the two edges: Deselect on the left, Select on the right.
-  sel.appendChild(fk(textBtn('link', L.deselectAll, poster({ type: 'deselectAll' })), 'deselall'));
-  sel.appendChild(fk(textBtn('link', L.selectAll, poster({ type: 'selectAll' })), 'selall'));
-  f.appendChild(sel);
-  f.appendChild(fk(textBtn('btn primary', L.buildPdf, poster({ type: 'build', format: 'pdf' })), 'bpdf'));
-  const brow = E('div', 'btnrow');
-  brow.appendChild(fk(textBtn('btn', L.buildTxt, poster({ type: 'build', format: 'txt' })), 'btxt'));
-  brow.appendChild(fk(textBtn('btn', L.buildHtml, poster({ type: 'build', format: 'html' })), 'bhtml'));
-  f.appendChild(brow);
-  return f; // disabled states are applied by applyControls() once the footer is in the DOM
+  // Disabled states are applied by applyControls() once the footer is in the DOM.
+  return h('div', { class: 'footer' },
+    // Justified to the two edges: Deselect on the left, Select on the right.
+    h('div', { class: 'selrow' },
+      h('button', { class: 'link', 'data-fk': 'deselall', onClick: poster({ type: 'deselectAll' }) }, L.deselectAll),
+      h('button', { class: 'link', 'data-fk': 'selall', onClick: poster({ type: 'selectAll' }) }, L.selectAll)),
+    h('button', { class: 'btn primary', 'data-fk': 'bpdf', onClick: poster({ type: 'build', format: 'pdf' }) }, L.buildPdf),
+    h('div', { class: 'btnrow' },
+      h('button', { class: 'btn', 'data-fk': 'btxt', onClick: poster({ type: 'build', format: 'txt' }) }, L.buildTxt),
+      h('button', { class: 'btn', 'data-fk': 'bhtml', onClick: poster({ type: 'build', format: 'html' }) }, L.buildHtml)));
 }
 
 function renderDetail(): void {
@@ -328,71 +344,68 @@ function renderDetail(): void {
     return;
   }
   const d = detail;
-  clear(app);
   dragLine = null; // a rebuild mid-drag (e.g. an edit-triggered refresh) cancels the in-progress drag
-  const scroll = E('div', 'scroll');
-  const hdr = E('div', 'dhdr');
-  const back = iconBtn('chevL', L.back, () => {
-    detailWanted = false;
-    screen = 'list';
-    detail = null;
-    post({ type: 'closeDetail' });
-    render();
-    focusFk('book:' + (lastDetailUri ?? ''));
-  });
-  fk(back, 'back'); // icon-only; the aria-label/title read "戻る" (Back) for SR + tooltip
-  hdr.appendChild(back);
-  hdr.appendChild(E('div', 'dtitle', d.title));
-  scroll.appendChild(hdr);
-
+  const hdr = h('div', { class: 'dhdr' },
+    iconBtn('chevL', L.back, () => {
+      detailWanted = false;
+      screen = 'list';
+      detail = null;
+      post({ type: 'closeDetail' });
+      render();
+      focusFk('book:' + (lastDetailUri ?? ''));
+    }, { 'data-fk': 'back' }),
+    h('div', { class: 'dtitle' }, d.title));
   // Book Info: collapsible (collapsed by default), ABOVE the table of contents.
-  const miSec = E('div', 'section');
-  const miHead = E('button', 'shead sectoggle');
-  miHead.setAttribute('aria-expanded', infoOpen ? 'true' : 'false');
-  const caret = icon(infoOpen ? 'down' : 'chevR');
-  caret.classList.add('caret');
-  miHead.appendChild(caret);
-  miHead.appendChild(E('span', 'stitle', L.bookInfo));
-  fk(miHead, 'infohead');
-  miHead.addEventListener('click', () => {
-    infoOpen = !infoOpen;
-    const c = capture();
-    render();
-    restore(c);
-  });
-  miSec.appendChild(miHead);
-  if (infoOpen) {
-    for (const mi of d.meta) {
-      miSec.appendChild(metaRow(d, mi));
-    }
-  }
-  scroll.appendChild(miSec);
-
+  const info = h('div', { class: 'section' },
+    h('button', {
+      class: 'shead sectoggle',
+      'aria-expanded': infoOpen,
+      'data-fk': 'infohead',
+      onClick: () => {
+        infoOpen = !infoOpen;
+        const c = capture();
+        render();
+        restore(c);
+      },
+    },
+    icon(infoOpen ? 'down' : 'chevR', 'caret'),
+    h('span', { class: 'stitle' }, L.bookInfo)),
+    ...(infoOpen ? d.meta.map((mi) => metaRow(d, mi)) : []));
   // Table of contents (chapters): always expanded; add + per-row move/remove.
-  const chSec = E('div', 'section');
-  const chHead = E('div', 'shead');
-  chHead.appendChild(E('span', 'stitle', L.chapters));
-  chHead.appendChild(fk(iconBtn('add', L.addChapters, poster({ type: 'addChapters', uri: d.uri })), 'add'));
-  chSec.appendChild(chHead);
   const chs = d.chapters;
-  if (chs.length === 0) {
-    chSec.appendChild(E('div', 'empty', L.noChapters));
-  }
-  for (let i = 0; i < chs.length; i++) {
-    const ch = chs[i];
-    if (ch !== undefined) {
-      chSec.appendChild(chapterRow(d, ch, i, chs.length));
-    }
-  }
-  scroll.appendChild(chSec);
-
-  app.appendChild(scroll);
+  const toc = h('div', { class: 'section' },
+    h('div', { class: 'shead' },
+      h('span', { class: 'stitle' }, L.chapters),
+      iconBtn('add', L.addChapters, poster({ type: 'addChapters', uri: d.uri }), { 'data-fk': 'add' })),
+    chs.length === 0 && h('div', { class: 'empty' }, L.noChapters),
+    ...chs.map((ch, i) => chapterRow(d, ch, i, chs.length)));
+  app.replaceChildren(scrollPane(hdr, info, toc));
 }
 
 function chapterRow(d: DetailMessage, ch: ChapterVM, idx: number, count: number): HTMLElement {
-  const row = E('div', 'row chapter' + (ch.missing ? ' missing' : ''));
-  const grip = E('span', 'grip codicon codicon-' + CODICON.grip);
-  grip.setAttribute('aria-hidden', 'true');
+  const grip = icon('grip', 'grip');
+  const row = h('div', { class: 'row chapter' + (ch.missing ? ' missing' : '') },
+    grip,
+    h('button', {
+      class: 'chmain',
+      title: ch.missing ? (L.missing + ': ' + ch.name) : L.openChapter,
+      'aria-label': ch.name,
+      'data-fk': 'chopen:' + ch.fileUri,
+      onClick: poster({ type: 'openFile', uri: ch.fileUri }),
+    },
+    ch.missing && icon('warn', 'warn'),
+    h('div', { class: 'maincol' },
+      h('div', { class: 'title' }, ch.name),
+      ch.folder !== '' && h('div', { class: 'sub' }, ch.folder))),
+    // Focus keys use the chapter's fileUri (stable across a move) so keyboard focus follows the row.
+    h('div', { class: 'acts' },
+      iconBtn('up', L.moveUp, poster({ type: 'moveChapter', uri: d.uri, line: ch.line, dir: -1 }),
+        { 'data-fk': 'ch:' + ch.fileUri + ':up', disabled: idx === 0 }),
+      iconBtn('down', L.moveDown, poster({ type: 'moveChapter', uri: d.uri, line: ch.line, dir: 1 }),
+        { 'data-fk': 'ch:' + ch.fileUri + ':down', disabled: idx === count - 1 }),
+      iconBtn('close', L.remove, poster({ type: 'removeChapter', uri: d.uri, line: ch.line }),
+        { 'data-fk': 'ch:' + ch.fileUri + ':rm' })));
+  // Drag wiring attaches after construction — the handlers mutate `row` from both elements.
   grip.draggable = true;
   grip.addEventListener('dragstart', (e: DragEvent) => {
     dragLine = ch.line;
@@ -407,35 +420,6 @@ function chapterRow(d: DetailMessage, ch: ChapterVM, idx: number, count: number)
     row.classList.remove('dragging');
     clearDrop();
   });
-  row.appendChild(grip);
-  const open = E('button', 'chmain');
-  if (ch.missing) {
-    const w = icon('warn');
-    w.classList.add('warn');
-    open.appendChild(w);
-  }
-  const col = E('div', 'maincol');
-  col.appendChild(E('div', 'title', ch.name));
-  if (ch.folder) {
-    col.appendChild(E('div', 'sub', ch.folder));
-  }
-  open.appendChild(col);
-  open.title = ch.missing ? (L.missing + ': ' + ch.name) : L.openChapter;
-  open.setAttribute('aria-label', ch.name);
-  fk(open, 'chopen:' + ch.fileUri);
-  open.addEventListener('click', poster({ type: 'openFile', uri: ch.fileUri }));
-  row.appendChild(open);
-  const acts = E('div', 'acts');
-  // Focus keys use the chapter's fileUri (stable across a move) so keyboard focus follows the row.
-  const up = fk(iconBtn('up', L.moveUp, poster({ type: 'moveChapter', uri: d.uri, line: ch.line, dir: -1 })), 'ch:' + ch.fileUri + ':up');
-  up.disabled = idx === 0;
-  const dn = fk(iconBtn('down', L.moveDown, poster({ type: 'moveChapter', uri: d.uri, line: ch.line, dir: 1 })), 'ch:' + ch.fileUri + ':down');
-  dn.disabled = idx === count - 1;
-  const rm = fk(iconBtn('close', L.remove, poster({ type: 'removeChapter', uri: d.uri, line: ch.line })), 'ch:' + ch.fileUri + ':rm');
-  acts.appendChild(up);
-  acts.appendChild(dn);
-  acts.appendChild(rm);
-  row.appendChild(acts);
   // Drop target: the pointer in a row's top half inserts before it, bottom half after it (before next).
   row.addEventListener('dragover', (e: DragEvent) => {
     if (dragLine === null || dragLine === ch.line) {
@@ -468,36 +452,27 @@ function chapterRow(d: DetailMessage, ch: ChapterVM, idx: number, count: number)
 }
 
 function metaRow(d: DetailMessage, mi: MetaVM): HTMLElement {
-  const row = E('button', 'row meta');
-  const col = E('div', 'maincol');
-  // Status note (（既定）/（未設定）) sits beside the LABEL; the value line holds only the value.
-  const labelLine = E('div', 'mlabel');
-  labelLine.appendChild(E('span', 'mlabeltext', mi.label));
-  if (mi.note) {
-    labelLine.appendChild(E('span', 'mnote', mi.note));
-  }
-  col.appendChild(labelLine);
-  if (mi.value) {
-    col.appendChild(E('div', 'mvalue', mi.value));
-  }
-  row.appendChild(col);
-  const pen = icon('edit');
-  pen.classList.add('pen');
-  row.appendChild(pen);
-  row.setAttribute('aria-label', mi.label + (mi.note ? ' ' + mi.note : '') + (mi.value ? ': ' + mi.value : ''));
-  fk(row, 'meta:' + mi.key);
-  row.addEventListener('click', poster({ type: 'editMeta', uri: d.uri, metaKey: mi.key }));
-  return row;
+  return h('button', {
+    class: 'row meta',
+    'aria-label': mi.label + (mi.note ? ' ' + mi.note : '') + (mi.value ? ': ' + mi.value : ''),
+    'data-fk': 'meta:' + mi.key,
+    onClick: poster({ type: 'editMeta', uri: d.uri, metaKey: mi.key }),
+  },
+  h('div', { class: 'maincol' },
+    // Status note (（既定）/（未設定）) sits beside the LABEL; the value line holds only the value.
+    h('div', { class: 'mlabel' },
+      h('span', { class: 'mlabeltext' }, mi.label),
+      mi.note !== '' && h('span', { class: 'mnote' }, mi.note)),
+    mi.value !== '' && h('div', { class: 'mvalue' }, mi.value)),
+  icon('edit', 'pen'));
 }
 
 function welcome(title: string, body: string, actions: readonly (readonly [WelcomeAction, string])[]): HTMLElement {
-  const w = E('div', 'welcome');
-  w.appendChild(E('div', 'wtitle', title));
-  w.appendChild(E('div', 'wbody', body));
-  for (const [action, label] of actions) {
-    w.appendChild(textBtn('btn welcomebtn', label, poster({ type: 'welcome', action })));
-  }
-  return w;
+  return h('div', { class: 'welcome' },
+    h('div', { class: 'wtitle' }, title),
+    h('div', { class: 'wbody' }, body),
+    ...actions.map(([action, label]) =>
+      h('button', { class: 'btn welcomebtn', onClick: poster({ type: 'welcome', action }) }, label)));
 }
 
 window.addEventListener('message', (e: MessageEvent) => {
