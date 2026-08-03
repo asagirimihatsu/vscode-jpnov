@@ -8,17 +8,19 @@
  *
  * Because every push rebuilds the DOM, cross-render continuity rides on two mechanisms: `data-fk`
  * focus keys captured/restored around each rebuild (capture/restore/focusFk), and applyControls(),
- * which owns the footer buttons' disabled state after every render and optimistic toggle.
+ * which owns the list footer's disabled state after each list render and optimistic toggle.
  *
- * Layout is master/detail: a LIST screen (per-root book rows + a pinned footer with the build
- * actions) drills into a DETAIL screen (one book's chapters + Book Info). Localized strings arrive
- * once via the host's `__INIT` bootstrap; icons are codicons (`CODICON`).
+ * Layout is master/detail: a LIST screen (per-root book rows) drills into a DETAIL screen (one
+ * book's chapters + Book Info); both carry a pinned footer with the build actions, the list's
+ * adding the selection links. Localized strings arrive once via the host's `__INIT` bootstrap;
+ * icons are codicons (`CODICON`).
  */
 import type {
   BooksInbound,
   BooksInit,
   BooksOutbound,
   BookVM,
+  BuildAction,
   ChapterVM,
   DetailMessage,
   MetaVM,
@@ -212,9 +214,13 @@ function counts(): { selected: number; total: number } {
   return { selected: sel, total };
 }
 // Drive every footer control from (selected, total): Select-all off when all are already selected,
-// Deselect-all off when none are, and the build buttons off when none are. Called after each render
-// and on every optimistic toggle.
+// Deselect-all off when none are, and the build buttons off when none are. Called after each list
+// render and on every optimistic toggle. The detail footer shares these data-fk keys but must stay
+// enabled, hence the list-only guard.
 function applyControls(): void {
+  if (screen !== 'list') {
+    return;
+  }
   const c = counts();
   const off = { selall: c.selected === c.total, deselall: c.selected === 0, build: c.selected === 0 };
   const els = app.querySelectorAll<HTMLButtonElement>('[data-fk]');
@@ -326,17 +332,20 @@ function bookRow(bk: BookVM): HTMLElement {
     icon('chevR', 'chev')));
 }
 
-function footer(): HTMLElement {
-  // Disabled states are applied by applyControls() once the footer is in the DOM.
+// Disabled states (list mode only) are applied by applyControls() once the footer is in the DOM.
+function footer(buildUri?: string): HTMLElement {
+  const build = (format: BuildAction): BooksOutbound =>
+    buildUri === undefined ? { type: 'build', format } : { type: 'build', format, uri: buildUri };
   return h('div', { class: 'footer' },
     // Justified to the two edges: Deselect on the left, Select on the right.
-    h('div', { class: 'selrow' },
-      h('button', { class: 'link', 'data-fk': 'deselall', onClick: poster({ type: 'deselectAll' }) }, L.deselectAll),
-      h('button', { class: 'link', 'data-fk': 'selall', onClick: poster({ type: 'selectAll' }) }, L.selectAll)),
-    h('button', { class: 'btn primary', 'data-fk': 'bpdf', onClick: poster({ type: 'build', format: 'pdf' }) }, L.buildPdf),
+    buildUri === undefined &&
+      h('div', { class: 'selrow' },
+        h('button', { class: 'link', 'data-fk': 'deselall', onClick: poster({ type: 'deselectAll' }) }, L.deselectAll),
+        h('button', { class: 'link', 'data-fk': 'selall', onClick: poster({ type: 'selectAll' }) }, L.selectAll)),
+    h('button', { class: 'btn primary', 'data-fk': 'bpdf', onClick: poster(build('pdf')) }, L.buildPdf),
     h('div', { class: 'btnrow' },
-      h('button', { class: 'btn', 'data-fk': 'btxt', onClick: poster({ type: 'build', format: 'txt' }) }, L.buildTxt),
-      h('button', { class: 'btn', 'data-fk': 'bhtml', onClick: poster({ type: 'build', format: 'html' }) }, L.buildHtml)));
+      h('button', { class: 'btn', 'data-fk': 'btxt', onClick: poster(build('txt')) }, L.buildTxt),
+      h('button', { class: 'btn', 'data-fk': 'bhtml', onClick: poster(build('html')) }, L.buildHtml)));
 }
 
 function renderDetail(): void {
@@ -379,7 +388,7 @@ function renderDetail(): void {
       iconBtn('add', L.addChapters, poster({ type: 'addChapters', uri: d.uri }), { 'data-fk': 'add' })),
     chs.length === 0 && h('div', { class: 'empty' }, L.noChapters),
     ...chs.map((ch, i) => chapterRow(d, ch, i, chs.length)));
-  app.replaceChildren(scrollPane(hdr, info, toc));
+  app.replaceChildren(scrollPane(hdr, info, toc), footer(d.uri));
 }
 
 function chapterRow(d: DetailMessage, ch: ChapterVM, idx: number, count: number): HTMLElement {

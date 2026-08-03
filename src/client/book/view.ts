@@ -248,7 +248,13 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         break;
       case 'build':
         if (msg.format === 'html' || msg.format === 'txt' || msg.format === 'pdf') {
-          await this.buildSelected(msg.format);
+          if (typeof msg.uri === 'string') {
+            if (this.entryOf(msg.uri) !== undefined) {
+              await this.buildSelected(msg.format, [msg.uri]);
+            }
+          } else {
+            await this.buildSelected(msg.format);
+          }
         }
         break;
       case 'openDetail':
@@ -451,13 +457,13 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
   /**
    * The build driver behind the panel's build actions (`jpbook.buildHtml`/`buildTxt`/
-   * `buildPdf`): render the CHECKED books to `action`'s one format (`pdf` = `.html` on the
-   * wire, converted client-side), write the returned artifacts (the client owns all
-   * filesystem writes), and report results. An empty selection is a no-op with a nudge
-   * rather than a silent "built 0".
+   * `buildPdf`): render the CHECKED books (or exactly `only`, when given) to `action`'s one
+   * format (`pdf` = `.html` on the wire, converted client-side), write the returned artifacts
+   * (the client owns all filesystem writes), and report results. An empty selection is a
+   * no-op with a nudge rather than a silent "built 0".
    */
-  async buildSelected(action: BuildAction): Promise<void> {
-    const books = [...this.checked];
+  async buildSelected(action: BuildAction, only?: readonly string[]): Promise<void> {
+    const books = only ?? [...this.checked];
     // 'HTML' / 'PDF' are proper nouns (not localized); 'text' translates. The label is passed
     // already-localized into the count templates below.
     const label = action === 'pdf' ? 'PDF' : action === 'html' ? 'HTML' : vscode.l10n.t('text');

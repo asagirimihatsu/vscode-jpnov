@@ -87,7 +87,8 @@ export type BooksOutbound =
   | { readonly type: 'toggle'; readonly uri: string; readonly checked: boolean }
   | { readonly type: 'selectAll' }
   | { readonly type: 'deselectAll' }
-  | { readonly type: 'build'; readonly format: BuildAction }
+  // `uri` present = build exactly that one book (the open detail); absent = the checked set.
+  | { readonly type: 'build'; readonly format: BuildAction; readonly uri?: string }
   | { readonly type: 'openDetail'; readonly uri: string }
   | { readonly type: 'closeDetail' }
   | { readonly type: 'openFile'; readonly uri: string }
