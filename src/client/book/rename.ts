@@ -14,7 +14,7 @@
  */
 import { posix } from 'node:path';
 
-import { parseJpbook } from '../../shared/book/jpbook.ts';
+import { isChapter, parseJpbook } from '../../shared/book/jpbook.ts';
 
 /** One rename from the event, as normalized absolute paths. */
 export interface FileRename {
@@ -70,7 +70,7 @@ export function planBookEdits(
   const unrepresentable: string[] = [];
 
   for (const pl of parseJpbook(text).lines) {
-    if (pl.kind !== 'ok' && pl.kind !== 'duplicate') {
+    if (!isChapter(pl)) {
       continue;
     }
     const abs = posix.normalize(posix.join(rootPath, pl.value));

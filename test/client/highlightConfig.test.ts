@@ -3,9 +3,7 @@
  * arrays included — the map defines the target roots), keys verbatim, values verbatim
  * (the SERVER normalizes; the client must not).
  *
- * NOT wired into `npm test` (test/client is authored-only). Run with a `vscode`
- * resolution shim present (see test/client/README.md):
- *   node --test --experimental-test-module-mocks "test/client/**\/*.test.ts"
+ * Runs in CI via `npm run test:integration`; for direct runs see test/client/README.md.
  */
 import { test, mock, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';

@@ -9,7 +9,7 @@ npm run test:integration
 
 (together with the fs-fixture server suites `test/server/build.test.ts` /
 `test/server/jpbook.test.ts`). The vscode-free client suites (`browser`, `bookRename`,
-`bookTree`) live in plain `npm test` instead.
+`bookTree`, `editorIndent`) live in plain `npm test` instead.
 
 ## How resolution works
 

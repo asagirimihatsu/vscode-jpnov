@@ -2,9 +2,7 @@
  * The startup probe: settings-presence (workspace/folder level only — NEVER user level),
  * root-level filename matching, and a capped deep search, per workspace folder.
  *
- * NOT wired into `npm test` (test/client is authored-only). Run with a `vscode`
- * resolution shim present (see test/client/README.md):
- *   node --test --experimental-test-module-mocks "test/client/**\/*.test.ts"
+ * Runs in CI via `npm run test:integration`; for direct runs see test/client/README.md.
  */
 import { test, mock, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
