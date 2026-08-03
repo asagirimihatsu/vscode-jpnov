@@ -215,6 +215,34 @@ test('build with an empty selection nudges and sends no request', async () => {
   assert.ok(state.infoMessages.some((m) => /no books selected/i.test(m)));
 });
 
+test('a build carrying a uri sends exactly that book and leaves the selection untouched', async () => {
+  const root = 'file:///ws';
+  const { view, client } = await setup([entry(root, 'a'), entry(root, 'b')]);
+  view.webview.receive({ type: 'deselectAll' });
+  await tick();
+  view.webview.receive({ type: 'build', format: 'html', uri: `${root}/src/a.jpbook` });
+  await tick();
+  assert.ok(client.calls.build, 'fires despite the empty selection');
+  assert.deepEqual(client.calls.build.books, [`${root}/src/a.jpbook`]);
+  assert.equal(client.calls.build.format, 'html');
+  // A later selection-driven build still sees the empty checked set: the uri build didn't add to it.
+  client.calls.build = null;
+  view.webview.receive({ type: 'build', format: 'txt' });
+  await tick();
+  assert.equal(client.calls.build, null);
+  assert.ok(state.infoMessages.some((m) => /no books selected/i.test(m)));
+});
+
+test('a uri build for a vanished book is dropped silently', async () => {
+  const root = 'file:///ws';
+  const { view, client } = await setup([entry(root, 'a')]);
+  view.webview.receive({ type: 'build', format: 'html', uri: `${root}/src/ghost.jpbook` });
+  await tick();
+  assert.equal(client.calls.build, null);
+  assert.equal(state.infoMessages.length, 0);
+  assert.equal(state.errorMessages.length, 0);
+});
+
 // --- detail -----------------------------------------------------------------
 
 test('openDetail posts chapters (missing flagged) and the five metadata rows', async () => {
