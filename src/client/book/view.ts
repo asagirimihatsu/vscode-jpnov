@@ -90,6 +90,8 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private pdfBuilding = false;
   /** The book whose DETAIL screen is currently open, so edits/refreshes re-push it. */
   private openDetailUri: string | undefined;
+  /** The contributed view title captured at resolve, restored when the detail closes. */
+  private defaultTitle: string | undefined;
 
   constructor(client: LanguageClient, extensionUri: vscode.Uri) {
     this.client = client;
@@ -136,8 +138,27 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         this.view = undefined;
       }
     });
+    this.defaultTitle = view.title;
+    this.applyDetailChrome();
     // The webview posts `ready` once its script loads; we answer with the current state there,
     // so no eager post is needed here (and none would land before the document loads anyway).
+  }
+
+  /**
+   * Mirrors the open detail into the view chrome: the title bar shows the book title (the
+   * list restores the contributed name), and the `jpnov.booksDetail` context key hides the
+   * view/title create-book `+` — the detail screen has its own `+` for chapters.
+   */
+  private applyDetailChrome(): void {
+    void vscode.commands.executeCommand('setContext', 'jpnov.booksDetail', this.openDetailUri !== undefined);
+    const view = this.view;
+    if (view === undefined) {
+      return;
+    }
+    const entry = this.openDetailUri === undefined ? undefined : this.entryOf(this.openDetailUri);
+    // The d.ts marks `title` exact-optional, but the runtime setter accepts undefined
+    // (restores the contributed name) — widen the target instead of writing ''.
+    (view as { title?: string | undefined }).title = entry === undefined ? this.defaultTitle : bookTitle(entry);
   }
 
   // --- commands (wired in extension.ts) ------------------------------------
@@ -195,10 +216,42 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       this.openDetailUri = undefined;
       void this.view?.webview.postMessage({ type: 'closeDetail' });
     }
+    this.applyDetailChrome(); // also refreshes the title after a front-matter title edit
     this.postState();
     if (this.openDetailUri !== undefined) {
       void this.postDetail(this.openDetailUri);
     }
+  }
+
+  /**
+   * Post-create hand-off from `jpbook.createBook`: focus the view and open the new book's
+   * detail. The detail key must match the server's enumeration, which composes URIs by
+   * plain string concatenation (`childUri`) — `Uri.joinPath().toString()` percent-encodes
+   * non-ASCII names and would never match a Japanese title — so the key is composed the
+   * same way here, with a normalization-insensitive re-find as the fallback (NFD volumes).
+   */
+  async revealNewBook(folder: vscode.Uri, fileName: string): Promise<void> {
+    // `<viewId>.focus` resolves a never-shown webview; the ready handshake then re-pulls
+    // state + detail, so this must precede the refresh.
+    await vscode.commands.executeCommand(`${BooksViewProvider.viewId}.focus`).then(undefined, () => undefined);
+    const folderUri = folder.toString();
+    const rootUri = folderUri.endsWith('/') ? folderUri.slice(0, -1) : folderUri;
+    // Set BEFORE refreshing: whichever refresh lands first (this one, the watcher's
+    // onDidCreate, or the post-start fill) re-pushes the open detail once enumerated.
+    this.openDetailUri = `${rootUri}/${fileName}`;
+    await this.refresh();
+    if (this.entryOf(this.openDetailUri) === undefined) {
+      const entry = this.books.find(
+        (b) => b.rootUri === rootUri && b.fileRel.normalize('NFC') === fileName.normalize('NFC'),
+      );
+      if (entry === undefined) {
+        return;
+      }
+      this.openDetailUri = entry.uri;
+      this.applyDetailChrome();
+    }
+    // reveal: the webview sits on the list screen and would drop a plain re-push.
+    await this.postDetail(this.openDetailUri, true);
   }
 
   dispose(): void {
@@ -226,7 +279,8 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       case 'ready':
         this.postState();
         if (this.openDetailUri !== undefined) {
-          await this.postDetail(this.openDetailUri);
+          // reveal: a fresh script starts on the list screen and would drop a plain push.
+          await this.postDetail(this.openDetailUri, true);
         }
         break;
       case 'toggle':
@@ -261,11 +315,13 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       case 'openDetail':
         if (typeof msg.uri === 'string') {
           this.openDetailUri = msg.uri;
+          this.applyDetailChrome();
           await this.postDetail(msg.uri);
         }
         break;
       case 'closeDetail':
         this.openDetailUri = undefined;
+        this.applyDetailChrome();
         break;
       case 'openFile':
         if (typeof msg.uri === 'string') {
@@ -350,7 +406,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   /** Runs an empty-state welcome-link action (create book / open guide / open folder). */
   private dispatchWelcome(action: unknown): void {
     if (action === 'createBook') {
-      void vscode.commands.executeCommand('workbench.action.files.newUntitledFile', { languageId: 'jpbook' });
+      void vscode.commands.executeCommand('jpbook.createBook');
     } else if (action === 'openGuide') {
       void vscode.commands.executeCommand('jpnov.openGuide');
     } else if (action === 'openFolder') {
@@ -393,8 +449,12 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     void view.webview.postMessage(message);
   }
 
-  /** Parse one book and push its chapters (with missing-file flags) + metadata rows to the webview. */
-  private async postDetail(uri: string): Promise<void> {
+  /**
+   * Parse one book and push its chapters (with missing-file flags) + metadata rows to the
+   * webview. `reveal` marks a host-initiated open — without it the webview drops the push
+   * unless its detail screen is already the user's intent.
+   */
+  private async postDetail(uri: string, reveal = false): Promise<void> {
     const view = this.view;
     const entry = this.entryOf(uri);
     if (view === undefined || entry === undefined) {
@@ -439,20 +499,22 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     if (this.openDetailUri !== uri) {
       return; // navigated away during the async stats
     }
-    const message: DetailMessage = { type: 'detail', uri, title: bookTitle(entry), chapters, meta };
+    const message: DetailMessage = {
+      type: 'detail',
+      uri,
+      title: bookTitle(entry),
+      chapters,
+      meta,
+      ...(reveal ? { reveal } : {}),
+    };
     void view.webview.postMessage(message);
   }
 
-  /**
-   * The localized "built N {label} file(s)" success toast. l10n.t has no plural support, so the
-   * singular/plural bundle pair lives here (Japanese maps both to one number-invariant string).
-   */
+  /** The localized "built {N} file(s)" success toast (Japanese is number-invariant). */
   private reportBuilt(count: number, label: string): void {
     // showInformationMessage never rejects, so void is safe.
     void vscode.window.showInformationMessage(
-      count === 1
-        ? vscode.l10n.t('Japanese Novel: built 1 {0} file.', label)
-        : vscode.l10n.t('Japanese Novel: built {0} {1} files.', String(count), label),
+      vscode.l10n.t('Japanese Novel: built {0} {1} file(s).', String(count), label),
     );
   }
 
@@ -495,9 +557,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: books.length === 1
-            ? vscode.l10n.t('Japanese Novel: building 1 book to {0}…', label)
-            : vscode.l10n.t('Japanese Novel: building {0} books to {1}…', String(books.length), label),
+          title: vscode.l10n.t('Japanese Novel: building {0} book(s) to {1}…', String(books.length), label),
           cancellable: action === 'pdf',
         },
         async (progress, token) => {
@@ -573,9 +633,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
             this.reportBuilt(written.length, label);
             if (substitutions > 0) {
               void vscode.window.showWarningMessage(
-                substitutions === 1
-                  ? vscode.l10n.t('Japanese Novel: 1 character became 〓 in the text output.')
-                  : vscode.l10n.t('Japanese Novel: {0} characters became 〓 in the text output.', String(substitutions)),
+                vscode.l10n.t('Japanese Novel: {0} character(s) became 〓 in the text output.', String(substitutions)),
               );
             }
           } else if (errors.length === 0) {

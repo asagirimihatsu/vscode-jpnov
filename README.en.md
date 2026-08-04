@@ -53,7 +53,8 @@ one-command HTML / PDF / EPUB / text builds. No AI anywhere in the writing path
 2. **Make a book.** Create a `.jpbook` (e.g. `volume1.jpbook`) and list your
    chapter files, one per line, in reading order — paths count from the
    workspace folder, so moving the `.jpbook` never breaks them. One `.jpbook`
-   is one book.
+   is one book. The Books panel's **Create a Book** button (`+`) writes this
+   file for you — enter a title and pick the chapters.
    An optional `---`-fenced front-matter block at the top carries the book's
    own metadata (title, running head, page-number style — see
    [Per-book metadata](#per-book-metadata-front-matter)).

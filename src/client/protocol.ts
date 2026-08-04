@@ -65,6 +65,9 @@ export interface DetailMessage {
   readonly title: string;
   readonly chapters: readonly ChapterVM[];
   readonly meta: readonly MetaVM[];
+  /** Host-initiated open (create-book reveal, ready re-hydration): the webview adopts the
+   *  intent instead of dropping the push as a stale race. Refresh re-pushes omit it. */
+  readonly reveal?: boolean;
 }
 
 /** Host → webview: a vanished open book returns the webview to the list. */
