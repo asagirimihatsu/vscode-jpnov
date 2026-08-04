@@ -4,7 +4,7 @@
 
 Write, proofread, and typeset Japanese novels in Visual Studio Code — vertical
 layout, [Aozora Bunko](https://www.aozora.gr.jp/annotation/index.html) markup,
-one-command HTML / PDF / text builds. No AI anywhere in the writing path
+one-command HTML / PDF / EPUB / text builds. No AI anywhere in the writing path
 (see [No-AI policy](#no-ai-policy)).
 
 ![A vertically typeset novel page with ruby glosses, a running head, and a folio](docs/images/hero-page.png)
@@ -20,7 +20,7 @@ one-command HTML / PDF / text builds. No AI anywhere in the writing path
 - **Auto indent** — every Enter starts the new line with a full-width space;
   open it with `「` or `『` and the space is removed.
 - **Book builds** — collect chapters into a paginated vertical HTML file, a
-  print-ready PDF, or a concatenated Aozora-format text.
+  print-ready PDF, an EPUB for e-readers, or a concatenated Aozora-format text.
 - **Proofreading** — hygiene checks on by default, opt-in manuscript-convention
   lints, quick fixes and a fix-all action.
 - **Cast & keyword highlighting** — semantic colouring of character names and
@@ -59,8 +59,8 @@ one-command HTML / PDF / text builds. No AI anywhere in the writing path
    [Per-book metadata](#per-book-metadata-front-matter)).
 3. **Build it.** Save everything (builds read from disk), open the **Japanese
    Novel** view in the Activity Bar (the book icon), tick the books you want,
-   and use **Build to HTML**, **Build to PDF**, or **Build to Text** from the
-   view's title bar.
+   and use **Build to HTML**, **Build to PDF**, **Build to EPUB**, or **Build to
+   Text** with the buttons at the bottom of the view.
 
 Chapters and book files can live anywhere in the workspace folder; subfolders are
 mirrored into the output (`src/volume1.jpbook` builds to
@@ -200,7 +200,7 @@ are toggled under **Japanese Novel — Layout & Output**.
 
 The **Japanese Novel** Activity Bar view lists every discovered `.jpbook` as
 a book with a checkbox (labelled by its front-matter `title` when it declares
-one). The view's title bar builds the checked books:
+one). The buttons at the bottom of the view build the checked books:
 
 - **Build to HTML** — one standalone, paginated vertical `.html` per book
   (inline CSS, no external assets).
@@ -212,8 +212,12 @@ one). The view's title bar builds the checked books:
 - **Build to Text** — the chapters concatenated as Aozora-format `.txt`
   (auto-tate-chū-yoko is materialised as explicit annotations, so the text
   round-trips).
+- **Build to EPUB** — a reflowable EPUB 3 per book: vertical writing and
+  right-to-left page turning carry over into the reader, while font size and
+  line wrapping follow the reading device. One spine file per chapter, split again
+  at ［＃改ページ］.
 
-Outputs land in `<outDir>/<book path>.{html,pdf,txt}` with `outDir`
+Outputs land in `<outDir>/<book path>.{html,pdf,epub,txt}` with `outDir`
 defaulting to `dist`. Two book files that resolve to the same output path fail
 the build with a diagnostic instead of overwriting each other.
 
@@ -235,7 +239,7 @@ clicking an Info row edits the title, header, or page number in place. Every
 action rewrites the `.jpbook` text itself, so the panel and code mode always
 agree.
 
-![The Books view: expanded to its chapter list and Book Info rows, with the build buttons in the view title bar](docs/images/vscode-books-panel.png)
+![The Books view: expanded to its chapter list and Book Info rows, with the build buttons at the bottom](docs/images/vscode-books-panel.png)
 
 Renaming or moving a chapter (or a folder of chapters) inside VS Code offers
 to update every `.jpbook` that references it —
@@ -264,14 +268,15 @@ divider: ＊　＊　＊
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `title` | — | Display name in the Books view (the output path still derives from the file name) |
+| `title` | — | Display name in the Books view and the EPUB title (the output path still derives from the file name) |
+| `author` | — | Author name; becomes the EPUB creator metadata |
 | `header` | `""` | Running head centered at the top of every page; omit for none |
 | `pageNumber` | `right` | Folio placement: pinned (`right`, `left`) or alternating per page (`rightLeft`, `leftRight`), or `none` |
 | `pageNumberFormat` | `{page} / {totalPage}` | Folio text; blank suppresses it |
 | `divider` | — | Chapter divider inserted between chapters that do not open with a heading (e.g. `＊　＊　＊`); a bare mark is centred along the line at build time, a `［＃３字下げ］` prefix indents it instead; omit for a single blank line |
 
 Every key is optional; unknown keys warn and are ignored, so future keys stay
-forward-compatible. The same five keys are also editable from the Books
+forward-compatible. The same six keys are also editable from the Books
 panel's Book Info rows.
 
 ## Character & keyword highlighting
@@ -405,7 +410,7 @@ All under the **Japanese Novel** category.
 | --- | --- |
 | Open Preview to the Side | Editor title bar on `.jpnov`, Command Palette |
 | Open Preview | Command Palette |
-| Build to HTML / Build to PDF / Build to Text | Books view title bar |
+| Build to HTML / Build to PDF / Build to Text / Build to EPUB | Buttons at the bottom of the Books view |
 | Select All Books / Deselect All Books / Refresh Books | Books view title bar |
 
 There are no default keybindings.

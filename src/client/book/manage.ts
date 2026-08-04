@@ -27,6 +27,8 @@ export function metaLabel(key: MetaKey): string {
   switch (key) {
     case 'title':
       return vscode.l10n.t('Title');
+    case 'author':
+      return vscode.l10n.t('Author');
     case 'header':
       return vscode.l10n.t('Header');
     case 'pageNumber':
@@ -65,8 +67,8 @@ export function metaValueParts(key: MetaKey, value: string | undefined): { value
   if (value !== undefined) {
     return { value: display(value), note: '' };
   }
-  if (key === 'title' || key === 'divider') {
-    return { value: '', note: vscode.l10n.t('(not set)') }; // no default: absent = no divider / no title
+  if (key === 'title' || key === 'author' || key === 'divider') {
+    return { value: '', note: vscode.l10n.t('(not set)') }; // no default: absent = simply not set
   }
   const fallback =
     key === 'header'

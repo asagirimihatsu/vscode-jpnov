@@ -166,6 +166,7 @@ test('chapterLines and metaRows project the panel model in fixed order', () => {
   assert.deepEqual(chapterLines(parsed.lines), [3, 5]);
   assert.deepEqual(metaRows(text), [
     { key: 'title', value: undefined },
+    { key: 'author', value: undefined },
     { key: 'header', value: '柱' },
     { key: 'pageNumber', value: undefined },
     { key: 'pageNumberFormat', value: undefined },

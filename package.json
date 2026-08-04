@@ -2,8 +2,8 @@
   "name": "jpnov",
   "displayName": "Japanese Novel",
   "publisher": "asagirimihatsu",
-  "version": "0.2.0",
-  "description": "VS Code を小説の執筆環境に変える拡張機能。書いた文章はすぐ隣に縦書きで表示され、章をまとめて HTML・PDF・テキストの本として出力できます。記法は青空文庫の注記そのまま。",
+  "version": "0.3.0",
+  "description": "VS Code を小説の執筆環境に変える拡張機能。書いた文章はすぐ隣に縦書きで表示され、章をまとめて HTML・PDF・EPUB・テキストの本として出力できます。記法は青空文庫の注記そのまま。",
   "icon": "resources/icon.png",
   "keywords": [
     "小説",
@@ -503,6 +503,12 @@
         "icon": "$(file-pdf)"
       },
       {
+        "command": "jpbook.buildEpub",
+        "category": "%command.category%",
+        "title": "%command.books.buildEpub.title%",
+        "icon": "$(book)"
+      },
+      {
         "command": "jpbook.selectAll",
         "category": "%command.category%",
         "title": "%command.books.selectAll.title%",
@@ -613,6 +619,10 @@
           "when": "false"
         },
         {
+          "command": "jpbook.buildEpub",
+          "when": "false"
+        },
+        {
           "command": "jpbook.selectAll",
           "when": "false"
         },
@@ -697,7 +707,8 @@
             "completionEvents": [
               "onCommand:jpbook.buildHtml",
               "onCommand:jpbook.buildTxt",
-              "onCommand:jpbook.buildPdf"
+              "onCommand:jpbook.buildPdf",
+              "onCommand:jpbook.buildEpub"
             ]
           },
           {
@@ -752,6 +763,7 @@
     "@textlint-rule/textlint-rule-no-unmatched-pair": "^2.0.4",
     "@textlint/kernel": "^15.7.1",
     "@textlint/textlint-plugin-text": "^15.7.1",
+    "fflate": "^0.8.3",
     "textlint-rule-general-novel-style-ja": "^1.3.0",
     "textlint-rule-ja-no-mixed-period": "^3.0.2",
     "textlint-rule-ja-unnatural-alphabet": "^2.0.1",

@@ -36,7 +36,7 @@ const ARGS: Record<MsgCode, readonly (string | number)[]> = {
   'jpbook.entryIsDirectory': ['adir.jpnov'],
   'jpbook.fileNotFound': ['missing.jpnov'],
   'jpbook.metaNotKeyValue': ['just text'],
-  'jpbook.metaUnknownKey': ['author', 'title, header, pageNumber, pageNumberFormat'],
+  'jpbook.metaUnknownKey': ['publisher', 'title, author, header, pageNumber, pageNumberFormat'],
   'jpbook.metaDuplicateKey': ['title'],
   'jpbook.metaBadEnum': ['pageNumber', 'middle', 'right, left, rightLeft, leftRight, none'],
   'jpbook.metaUnterminated': [],

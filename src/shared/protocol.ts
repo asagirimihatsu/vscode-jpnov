@@ -191,8 +191,8 @@ export interface HtmlSettings extends LayoutSettings {
 
 export const BuildRequest = 'jpnov/build';
 
-/** Which artifact kind a build emits when narrowed to one. */
-export type BuildFormat = 'html' | 'txt';
+/** The artifact kind one build request emits. */
+export type BuildFormat = 'html' | 'txt' | 'epub';
 
 /**
  * The `jpnov.layout.outDir` snapshot for ONE workspace folder: a RAW relative string exactly as
@@ -217,7 +217,7 @@ export type ProjectDirsMap = Readonly<Record<string, ProjectDirs>>;
  *                   with `books` instead.
  * - `books`       — restrict to these `.jpbook` URIs. ABSENT = every discovered book;
  *                   PRESENT-BUT-EMPTY (`[]`) = build NOTHING. The two are deliberately distinct.
- * - `format`      — emit only this kind. ABSENT = BOTH `.txt` and `.html`.
+ * - `format`      — the artifact kind to emit (always stated; there is no both-kinds request).
  * - `settings`    — the client's render-settings snapshot (required; client and server ship
  *                   together, so there is no legacy sender to tolerate).
  * - `projectDirs` — the per-root output dir (see {@link ProjectDirsMap}).
@@ -225,7 +225,7 @@ export type ProjectDirsMap = Readonly<Record<string, ProjectDirs>>;
 export interface BuildParams {
   readonly root?: string;
   readonly books?: readonly string[];
-  readonly format?: BuildFormat;
+  readonly format: BuildFormat;
   readonly settings: HtmlSettings;
   readonly projectDirs: ProjectDirsMap;
 }
@@ -240,6 +240,23 @@ export interface BuildArtifact {
   readonly content: string;
 }
 
+/** One text member of an EPUB container: its path inside the archive + full content. */
+export interface EpubMember {
+  readonly name: string;
+  readonly content: string;
+}
+
+/**
+ * One book's EPUB as its member FILES — the wire stays text-only (see {@link BuildArtifact}),
+ * so the server ships the container's parts and the CLIENT zips them and writes `path`.
+ * The constant `mimetype` member is added at zip time, never carried here.
+ */
+export interface EpubArtifact {
+  /** Workspace-relative-or-absolute output path string; the CLIENT writes it. */
+  readonly path: string;
+  readonly members: readonly EpubMember[];
+}
+
 export interface BuildError extends LocalizableMessage {
   /** Book identity (e.g. the book dir relative to the workspace folder root). */
   readonly book: string;
@@ -248,6 +265,8 @@ export interface BuildError extends LocalizableMessage {
 export interface BuildResult {
   readonly ok: boolean;
   readonly artifacts?: readonly BuildArtifact[];
+  /** Populated by `format: 'epub'` builds only. */
+  readonly epubs?: readonly EpubArtifact[];
   readonly errors?: readonly BuildError[];
 }
 

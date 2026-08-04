@@ -55,7 +55,7 @@ test('diagnoseJpbook flags an entry escaping the workspace folder root', async (
 test('diagnoseJpbook surfaces front-matter warnings/errors with the metadata severities', async () => {
   await using ws = await makeTmpWorkspace();
   await writeUnder(ws.dir, 'ok.jpnov', 'x');
-  const text = ['---', 'title: 一', 'author: x', 'title: 二', 'no colon here', '---', 'ok.jpnov'].join('\n');
+  const text = ['---', 'title: 一', 'publisher: x', 'title: 二', 'no colon here', '---', 'ok.jpnov'].join('\n');
 
   const diags = await diagnoseJpbook(ws.uri, parseJpbook(text));
   const byCode = new Map(diags.map((d) => [(d.data as { code: string }).code, d]));

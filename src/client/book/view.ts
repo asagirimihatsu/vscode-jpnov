@@ -3,7 +3,7 @@
  * (`contributes.views.jpnov`, `"type": "webview"`, see package.json). It lists every buildable
  * book — one `*.jpbook` discovered under each workspace folder root — each with a checkbox, and
  * drills into a per-book DETAIL screen (chapters + Book Info). The bottom build bar renders ONLY
- * the checked books, to ONE format: "Build to PDF" (primary), "txt", or "HTML".
+ * the checked books, to ONE format: "Build to PDF" (primary), "txt", "HTML", or "EPUB".
  *
  * Split of concerns: the SERVER enumerates books
  * (`jpnov/listBooks`) and renders them (`jpnov/build`); this provider owns the VS Code UI and the
@@ -36,6 +36,7 @@ import {
 import { chapterLines, metaRows, moveChapterTo } from '#/shared/book/edits.ts';
 import { META_KEYS, parseJpbook, type MetaKey } from '#/shared/book/jpbook.ts';
 import { encodeTxt, TXT_ENCODING_DEFAULT, type TxtEncoding } from '#/shared/encoding.ts';
+import { ocfZip } from '#/shared/epub.ts';
 
 import type { BookVM, BuildAction, ChapterVM, DetailMessage, MetaVM, StateMessage } from '../protocol.ts';
 
@@ -247,7 +248,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         this.deselectAll();
         break;
       case 'build':
-        if (msg.format === 'html' || msg.format === 'txt' || msg.format === 'pdf') {
+        if (msg.format === 'html' || msg.format === 'txt' || msg.format === 'pdf' || msg.format === 'epub') {
           if (typeof msg.uri === 'string') {
             if (this.entryOf(msg.uri) !== undefined) {
               await this.buildSelected(msg.format, [msg.uri]);
@@ -457,16 +458,19 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
   /**
    * The build driver behind the panel's build actions (`jpbook.buildHtml`/`buildTxt`/
-   * `buildPdf`): render the CHECKED books (or exactly `only`, when given) to `action`'s one
-   * format (`pdf` = `.html` on the wire, converted client-side), write the returned artifacts
-   * (the client owns all filesystem writes), and report results. An empty selection is a
-   * no-op with a nudge rather than a silent "built 0".
+   * `buildPdf`/`buildEpub`): render the CHECKED books (or exactly `only`, when given) to
+   * `action`'s one format (`pdf` = `.html` on the wire, converted client-side; `epub` comes
+   * back as member files the client zips), write the results (the client owns all filesystem
+   * writes), and report. An empty selection is a no-op with a nudge rather than a silent
+   * "built 0".
    */
   async buildSelected(action: BuildAction, only?: readonly string[]): Promise<void> {
     const books = only ?? [...this.checked];
-    // 'HTML' / 'PDF' are proper nouns (not localized); 'text' translates. The label is passed
-    // already-localized into the count templates below.
-    const label = action === 'pdf' ? 'PDF' : action === 'html' ? 'HTML' : vscode.l10n.t('text');
+    // 'HTML' / 'PDF' / 'EPUB' are proper nouns (not localized); 'text' translates. The label
+    // is passed already-localized into the count templates below.
+    const label = action === 'txt'
+      ? vscode.l10n.t('text')
+      : { pdf: 'PDF', html: 'HTML', epub: 'EPUB' }[action];
     if (books.length === 0) {
       void vscode.window.showInformationMessage(
         vscode.l10n.t('Japanese Novel: no books selected. Check a book in the Books panel, then build.'),
@@ -520,6 +524,19 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
             .get<TxtEncoding>('jpnov.layout.txt.encoding', TXT_ENCODING_DEFAULT);
           const written: string[] = [];
           let substitutions = 0;
+          // One write shape for every artifact kind: success lands in `written`, failure
+          // toasts and moves on (a bad path never aborts the batch).
+          const write = async (path: string, bytes: Uint8Array): Promise<void> => {
+            try {
+              await vscode.workspace.fs.writeFile(vscode.Uri.parse(path), bytes);
+              written.push(path);
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              void vscode.window.showErrorMessage(
+                vscode.l10n.t("Japanese Novel: couldn't write {0}. {1}", path, message),
+              );
+            }
+          };
           for (const artifact of result.artifacts ?? []) {
             let bytes: Uint8Array;
             if (artifact.path.endsWith('.txt')) {
@@ -529,15 +546,11 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
             } else {
               bytes = Buffer.from(artifact.content, 'utf8');
             }
-            try {
-              await vscode.workspace.fs.writeFile(vscode.Uri.parse(artifact.path), bytes);
-              written.push(artifact.path);
-            } catch (err) {
-              const message = err instanceof Error ? err.message : String(err);
-              void vscode.window.showErrorMessage(
-                vscode.l10n.t("Japanese Novel: couldn't write {0}. {1}", artifact.path, message),
-              );
-            }
+            await write(artifact.path, bytes);
+          }
+          // EPUB: the server ships member files; the zip step (mimetype-first OCF) is local.
+          for (const epub of result.epubs ?? []) {
+            await write(epub.path, ocfZip(epub.members));
           }
 
           // Per-book build errors (each isolated server-side; never aborts the rest). The server

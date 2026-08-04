@@ -16,12 +16,15 @@ export function escapeHtml(s: string): string {
 }
 
 /**
- * Neutralizes a string for safe inclusion inside an HTML comment body
- * (`<!-- ... -->`). The double-hyphen `--` is illegal inside comments (it can close
- * the comment early or trip parsers), so it is broken with a space (`- -`); a stray
- * `>` is also defused to keep the output well-formed. The text is otherwise left
- * verbatim (comments are not HTML-escaped).
+ * Neutralizes a string for safe inclusion inside an HTML/XML comment body
+ * (`<!-- ... -->`). Every `-` directly followed by another is broken with a space
+ * (lookahead, so `----` cannot reconstitute a `--` the way a pairwise replace does),
+ * a trailing `-` is padded (XML forbids a comment ending in `-`), and a stray `>` is
+ * defused. The text is otherwise left verbatim (comments are not HTML-escaped).
  */
 export function escapeComment(s: string): string {
-  return s.replace(/--/g, '- -').replace(/>/g, '&gt;');
+  return s
+    .replace(/-(?=-)/g, '- ')
+    .replace(/-$/, '- ')
+    .replace(/>/g, '&gt;');
 }

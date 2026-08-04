@@ -1,0 +1,10 @@
+/* Reflow (EPUB) base: the reading system owns line breaking, pagination and page chrome, so
+   there is no geometry here. 縦書き uses the 電書協 triple spelling so older reading systems
+   still rotate (https://ebpaj.jp/counsel/guide). line-height keeps headroom for the ruby
+   lanes (class.ruby-*.css offsets reach ±0.75em past the line box). */
+html{-epub-writing-mode:vertical-rl;-webkit-writing-mode:vertical-rl;writing-mode:vertical-rl}
+body{margin:0;font-family:serif;line-height:1.8;text-align:justify}
+p{margin:0}
+/* 見出し: same-size gothic bold, mirroring class.midashi.css (the 文庫 convention). Real hN
+   here — the reading system's navigation reads document structure. */
+h1,h2,h3{margin:0;font-size:1em;font-family:sans-serif;font-weight:bold}

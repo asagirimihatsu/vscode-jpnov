@@ -141,21 +141,27 @@ test('jpnov/listBooks + jpnov/build round-trip a real workspace over the wire', 
   assert.equal(book.title, '試験本');
 
   const result = await conn().request<BuildResult>('jpnov/build', {
+    format: 'html',
     settings: HTML_SETTINGS,
     projectDirs,
   });
   assert.equal(result.ok, true);
   assert.ok(result.artifacts);
-  assert.equal(result.artifacts.length, 2);
+  assert.equal(result.artifacts.length, 1);
 
-  const htmlArtifact = result.artifacts.find((a) => a.path.endsWith('.html'));
+  const htmlArtifact = result.artifacts[0];
   assert.ok(htmlArtifact);
   assert.equal(htmlArtifact.path, `${wsUri}/dist/hon.html`);
   assert.ok(htmlArtifact.content.includes('class="page"'), 'built HTML must paginate');
   assert.ok(htmlArtifact.content.includes('class="line"'), 'built HTML must emit line columns');
   assert.ok(htmlArtifact.content.includes('<ruby'), 'built HTML must keep the ruby markup');
 
-  const txtArtifact = result.artifacts.find((a) => a.path.endsWith('.txt'));
+  const txtResult = await conn().request<BuildResult>('jpnov/build', {
+    format: 'txt',
+    settings: HTML_SETTINGS,
+    projectDirs,
+  });
+  const txtArtifact = txtResult.artifacts?.[0];
   assert.ok(txtArtifact);
   assert.equal(txtArtifact.path, `${wsUri}/dist/hon.txt`);
   assert.ok(txtArtifact.content.includes('夜霧'), 'the .txt artifact carries the raw Aozora source');

@@ -73,7 +73,7 @@ export interface ParsedLine {
  * (`renderBook`/`concatBookText`) for BODY content like `divider`, which is never chrome;
  * the unknown-key message derives its list from here.
  */
-export const META_KEYS = ['title', 'header', 'pageNumber', 'pageNumberFormat', 'divider'] as const;
+export const META_KEYS = ['title', 'author', 'header', 'pageNumber', 'pageNumberFormat', 'divider'] as const;
 export type MetaKey = (typeof META_KEYS)[number];
 
 /** The key portion of a front-matter line's trimmed content, or null when key-less. */
@@ -90,6 +90,8 @@ export function metaKeyOf(value: string): string | null {
  */
 export interface JpbookMeta {
   readonly title?: string;
+  /** 著者 — display metadata (the EPUB package's dc:creator); never affects the output path. */
+  readonly author?: string;
   readonly header?: string;
   readonly pageNumber?: PageNumberPosition;
   readonly pageNumberFormat?: string;

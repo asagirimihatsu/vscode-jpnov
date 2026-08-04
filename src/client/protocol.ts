@@ -76,7 +76,7 @@ export interface CloseDetailMessage {
 export type BooksInbound = StateMessage | DetailMessage | CloseDetailMessage;
 
 /** A build action fired from the footer (`pdf` is the client-only PDF post-process). */
-export type BuildAction = 'pdf' | 'txt' | 'html';
+export type BuildAction = 'pdf' | 'txt' | 'html' | 'epub';
 
 /** An empty-state welcome-link action. */
 export type WelcomeAction = 'createBook' | 'openGuide' | 'openFolder';
@@ -111,6 +111,7 @@ export interface Labels {
   readonly buildPdf: string;
   readonly buildTxt: string;
   readonly buildHtml: string;
+  readonly buildEpub: string;
   readonly back: string;
   readonly openChapter: string;
   readonly chapters: string;

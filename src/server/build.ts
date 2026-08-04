@@ -4,17 +4,18 @@
  * `*.jpbook` anywhere under the workspace folder root (skipping dot-folders, `node_modules`,
  * and the resolved output folder), reads the `.jpnov` files each one lists (in order, resolved
  * relative to the WORKSPACE FOLDER ROOT, the same base the live editor features use), and
- * emits one `.txt` (the concatenated Aozora source via `concatBookText`) plus one `.html`
- * (the paginated render via `renderBook`) per
- * book, returning the artifacts for the CLIENT to write. The output path is derived from
+ * emits the requested {@link BuildParams.format} per book (`.txt` = the concatenated Aozora
+ * source via `concatBookText`; `.html` = the paginated render via `renderBook`; `.epub` = the
+ * reflowable container members via `epubMembers`, zipped and written client-side),
+ * returning the artifacts for the CLIENT to write. The output path is derived from
  * the `.jpbook`'s name/location (`jpbookOutRel`, mirroring the tree under the folder root);
  * two distinct book files that derive the same path are a build error and neither is emitted.
  * Page furniture (ヘッダー/ノンブル) comes from each book's OWN front matter (`composeBookChrome`),
  * so one build renders per-volume headers; the settings snapshot carries only the shared
  * layout + proofing chrome.
  *
- * A build may be narrowed by {@link BuildParams.books} (a subset of `.jpbook` URIs) and/or
- * {@link BuildParams.format} (only `.txt` or only `.html`). The companion {@link handleListBooks}
+ * A build may be narrowed by {@link BuildParams.books} (a subset of `.jpbook` URIs); every
+ * request states its {@link BuildParams.format}. The companion {@link handleListBooks}
  * enumerates those same book files as {@link BookEntry}s WITHOUT building, to populate the
  * client's Books selection panel.
  *
@@ -36,6 +37,7 @@ import { composeBookChrome, jpbookOutRel, parseJpbook } from '#/shared/book/jpbo
 import type { ParsedLine } from '#/shared/book/jpbook.ts';
 import { concatBookText, renderBook } from '#/shared/compiler/document.ts';
 import type { BookInput } from '#/shared/compiler/document.ts';
+import { epubMembers } from '#/shared/epub.ts';
 import { LocalizedError } from '#/shared/messages.ts';
 import { resolveHtmlSettings } from '#/shared/config/settings.ts';
 import { resolveContained } from '#/shared/config/validate.ts';
@@ -47,6 +49,7 @@ import type {
   BuildFormat,
   BuildParams,
   BuildResult,
+  EpubArtifact,
   HtmlSettings,
   ListBooksParams,
   ListBooksResult,
@@ -76,15 +79,15 @@ interface ProjectRoot {
 }
 
 /**
- * How one build is narrowed. Fields are required-but-`| undefined` (not optional) on purpose:
- * under `exactOptionalPropertyTypes` that lets `handleBuild` forward `params.format` (a
- * `BuildFormat | undefined`) straight through without an omit-when-undefined dance.
+ * How one build is narrowed. `books` is required-but-`| undefined` (not optional) on purpose:
+ * under `exactOptionalPropertyTypes` that keeps the always-constructed literal in
+ * `handleBuild` free of an omit-when-undefined dance.
  */
 interface BuildSelection {
   /** When set, only book files whose URI is in the set are built; `undefined` = every book. */
   readonly books: ReadonlySet<string> | undefined;
-  /** When set, emit only that kind; `undefined` = BOTH `.txt` and `.html`. */
-  readonly format: BuildFormat | undefined;
+  /** The artifact kind this build emits. */
+  readonly format: BuildFormat;
   /** The re-resolved render settings the `.html` artifacts use (grid geometry + proofing chrome). */
   readonly settings: HtmlSettings;
 }
@@ -198,6 +201,7 @@ async function buildRoot(
   target: ProjectRoot,
   selection: BuildSelection,
   artifacts: BuildArtifact[],
+  epubs: EpubArtifact[],
   errors: BuildError[],
 ): Promise<void> {
   const jpbooks = await discoverJpbooks(target.rootUri, target.outDirUri);
@@ -256,27 +260,48 @@ async function buildRoot(
 
     void ctx.connection.sendDiagnostics({ uri: fl.uri, diagnostics: lineDiags });
 
-    // Emit only the requested kind(s); `format` absent => BOTH. renderBook (the paginator) is
-    // the expensive step, so a txt-only build skips it entirely.
-    if (selection.format !== 'html') {
-      artifacts.push({
-        path: childUri(target.outDirUri, `${outRel}.txt`),
-        content: concatBookText(input, selection.settings.autoTcy, selection.settings.charsPerLine),
-      });
-    }
-    if (selection.format !== 'txt') {
-      // Grid geometry, 禁則, and 自動縦中横 come from the request's settings snapshot; the
-      // page furniture is composed per book from its own front matter (this is what lets
-      // one batch build carry a different header per volume).
-      const html = renderBook({
-        books: [input],
-        charsPerLine: selection.settings.charsPerLine,
-        linesPerPage: selection.settings.linesPerPage,
-        kinsoku: selection.settings.kinsoku,
-        autoTcy: selection.settings.autoTcy,
-        chrome: composeBookChrome(selection.settings, parsed.meta),
-      });
-      artifacts.push({ path: childUri(target.outDirUri, `${outRel}.html`), content: html });
+    // Emit exactly the requested kind. renderBook (the paginator) is the expensive step, so
+    // a `.txt` build never runs it.
+    switch (selection.format) {
+      case 'txt':
+        artifacts.push({
+          path: childUri(target.outDirUri, `${outRel}.txt`),
+          content: concatBookText(input, selection.settings.autoTcy, selection.settings.charsPerLine),
+        });
+        break;
+      case 'html': {
+        // Grid geometry, 禁則, and 自動縦中横 come from the request's settings snapshot; the
+        // page furniture is composed per book from its own front matter (this is what lets
+        // one batch build carry a different header per volume).
+        const html = renderBook({
+          books: [input],
+          charsPerLine: selection.settings.charsPerLine,
+          linesPerPage: selection.settings.linesPerPage,
+          kinsoku: selection.settings.kinsoku,
+          autoTcy: selection.settings.autoTcy,
+          chrome: composeBookChrome(selection.settings, parsed.meta),
+        });
+        artifacts.push({ path: childUri(target.outDirUri, `${outRel}.html`), content: html });
+        break;
+      }
+      case 'epub':
+        epubs.push({
+          path: childUri(target.outDirUri, `${outRel}.epub`),
+          members: epubMembers({
+            book: input,
+            meta: parsed.meta,
+            outRel,
+            kinsoku: selection.settings.kinsoku,
+            autoTcy: selection.settings.autoTcy,
+            // dcterms:modified wants CCYY-MM-DDThh:mm:ssZ — second precision, no milliseconds.
+            modified: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+          }),
+        });
+        break;
+      default: {
+        const exhaustive: never = selection.format;
+        throw new Error(`buildRoot: unhandled format ${JSON.stringify(exhaustive)}`);
+      }
     }
   }
 }
@@ -326,6 +351,7 @@ export async function handleBuild(
 ): Promise<BuildResult> {
   const roots = targetRoots(params.projectDirs, params.root);
   const artifacts: BuildArtifact[] = [];
+  const epubs: EpubArtifact[] = [];
   const errors: BuildError[] = [];
 
   // `books` ABSENT => build every discovered book; PRESENT (even empty `[]`, which is truthy)
@@ -345,7 +371,7 @@ export async function handleBuild(
   let done = 0;
   for (const target of roots) {
     try {
-      await buildRoot(ctx, target, selection, artifacts, errors);
+      await buildRoot(ctx, target, selection, artifacts, epubs, errors);
     } catch (cause) {
       errors.push({ book: target.rootUri, ...toBuildMessage(cause) });
     }
@@ -357,7 +383,9 @@ export async function handleBuild(
 
   progress?.done();
 
-  return { ok: errors.length === 0, artifacts, errors };
+  const base: BuildResult = { ok: errors.length === 0, artifacts, errors };
+  // `epubs` exists only on an epub build; text-format results carry no such key.
+  return params.format === 'epub' ? { ...base, epubs } : base;
 }
 
 /**
