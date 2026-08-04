@@ -20,7 +20,7 @@ const base = {
   format: 'esm',
   platform: 'node',
   // The VS Code extension host (and the forked Node language server) run their own
-  // bundled Node; the engines floor (VS Code ^1.129) bundles Node 24.
+  // bundled Node; the engines floor (VS Code ^1.131) bundles Node 24.
   target: 'node24',
   // `vscode` is injected into the client by the host at runtime and has no npm
   // package to bundle. (The server never imports it.)
