@@ -1,3 +1,5 @@
 /* 縦中横: combine the cell's chars upright in one square. Media-independent (pure text
-   combination, no geometry), so the one rule serves preview and build alike. */
-.tcy{text-combine-upright:all}
+   combination, no geometry), so the one rule serves preview, build and the reflow EPUB alike;
+   the legacy -webkit-/-epub- spellings are for older EPUB reading systems (the standard
+   property, last, wins wherever both are known). */
+.tcy{-webkit-text-combine:horizontal;-epub-text-combine:horizontal;text-combine-upright:all}

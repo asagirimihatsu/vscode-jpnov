@@ -11,4 +11,5 @@ final-chapter.jpnov
 dist/volume1.html  … 縦書き・ページ組版
 dist/volume1.pdf   … 印刷用 PDF
 dist/volume1.txt   … 青空文庫形式テキスト
+dist/volume1.epub  … 電子書籍
 ```

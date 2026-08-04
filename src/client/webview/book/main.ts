@@ -125,6 +125,45 @@ function icon(name: IconName, extraCls?: string): HTMLSpanElement {
   const cls = 'codicon codicon-' + CODICON[name] + (extraCls === undefined ? '' : ' ' + extraCls);
   return h('span', { class: cls, 'aria-hidden': true });
 }
+/**
+ * Inline-SVG brand marks for the format buttons — the webview CSP loads no external images,
+ * and currentColor keeps them right in every theme. Mark-only cuts of the official logos
+ * (both usage guides allow the bare mark): the EPUB "e" (https://www.w3.org/publishing/groups/epub-wg/)
+ * and the HTML5 shield (https://www.w3.org/html/logo/, CC BY 3.0); viewBoxes are the marks'
+ * measured bounds.
+ */
+const BRAND = {
+  epub: {
+    viewBox: '97.1 135.5 401.2 401.2',
+    d: [
+      'M297.63,462.07,171.58,336l126-126,42,42-84.05,84,42,42L423.69,252,313.88,142.17a23,23,0,0,0-32.48,0L103.79,319.78a23,23,0,0,0,0,32.48L281.4,529.86a23,23,0,0,0,32.48,0l177.61-177.6a23,23,0,0,0,0-32.48L465.7,294Z',
+    ],
+  },
+  html: {
+    viewBox: '88.7 112 334.6 379.7',
+    d: [
+      'M200.662,266.676H256v-42.92h-59.169L200.662,266.676z M88.686,111.982l30.47,341.74l136.762,37.966 l136.891-37.948l30.507-341.758H88.686z M366.694,431.981L256,462.668v-43.494l-0.067,0.02l-85.858-23.835l-6.004-67.298h42.075 l3.116,34.914l46.68,12.607l0.059-0.019V308.59h-93.669l-11.306-126.749H256v-41.914h136.766L366.694,431.981z',
+      'M307.592,308.59H256v66.974l46.728-12.613L307.592,308.59z M256,139.927v41.914h104.975 l-3.754,41.915H256v42.92h97.406l-11.499,128.683L256,419.174v43.494l110.694-30.687l26.071-292.055H256z',
+    ],
+  },
+} as const;
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+/** An h()-composable brand mark; SVG needs createElementNS, which h() (HTML-only) cannot do. */
+function brandIcon(name: keyof typeof BRAND): SVGSVGElement {
+  const mark = BRAND[name];
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', mark.viewBox);
+  svg.setAttribute('fill', 'currentColor');
+  svg.setAttribute('aria-hidden', 'true');
+  for (const d of mark.d) {
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', d);
+    svg.append(path);
+  }
+  return svg;
+}
+
 /** `data-fk` is required — every icon button participates in the focus-restore system. */
 interface BtnExtra {
   readonly 'data-fk': string;
@@ -230,7 +269,7 @@ function applyControls(): void {
       el.disabled = off.selall;
     } else if (k === 'deselall') {
       el.disabled = off.deselall;
-    } else if (k === 'bpdf' || k === 'btxt' || k === 'bhtml') {
+    } else if (k === 'bpdf' || k === 'btxt' || k === 'bhtml' || k === 'bepub') {
       el.disabled = off.build;
     }
   }
@@ -343,9 +382,18 @@ function footer(buildUri?: string): HTMLElement {
         h('button', { class: 'link', 'data-fk': 'deselall', onClick: poster({ type: 'deselectAll' }) }, L.deselectAll),
         h('button', { class: 'link', 'data-fk': 'selall', onClick: poster({ type: 'selectAll' }) }, L.selectAll)),
     h('button', { class: 'btn primary', 'data-fk': 'bpdf', onClick: poster(build('pdf')) }, L.buildPdf),
+    // The text button keeps the row's growing flex (double width); HTML/EPUB are icon
+    // buttons whose accessible name doubles as the hover tooltip.
     h('div', { class: 'btnrow' },
       h('button', { class: 'btn', 'data-fk': 'btxt', onClick: poster(build('txt')) }, L.buildTxt),
-      h('button', { class: 'btn', 'data-fk': 'bhtml', onClick: poster(build('html')) }, L.buildHtml)));
+      h('button', {
+        class: 'btn icon', 'data-fk': 'bhtml', title: L.buildHtml, 'aria-label': L.buildHtml,
+        onClick: poster(build('html')),
+      }, brandIcon('html')),
+      h('button', {
+        class: 'btn icon', 'data-fk': 'bepub', title: L.buildEpub, 'aria-label': L.buildEpub,
+        onClick: poster(build('epub')),
+      }, brandIcon('epub'))));
 }
 
 function renderDetail(): void {

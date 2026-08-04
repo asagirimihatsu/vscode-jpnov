@@ -28,6 +28,7 @@
  * Pure + vscode-free.
  */
 
+import type { KinsokuMode } from '../config/types.ts';
 import type { BuildChrome, EdgeLineStyle, PreviewChrome } from './chrome.ts';
 import { styleRule } from './emphasis.ts';
 import {
@@ -73,6 +74,8 @@ function classRule(name: string): string {
       return S.classDash;
     case 'hang':
       return S.classHang;
+    case 'insep':
+      return S.classInsep;
     case 'rr':
       return S.classRubyRr;
     case 'lr':
@@ -188,4 +191,20 @@ export function stylesheet(opts: StylesheetOptions): string {
     rootVars(vars),
     ...tail,
   ].join('');
+}
+
+/**
+ * Renders the stylesheet for the REFLOW (EPUB) output: no geometry variables, no chrome
+ * fragments, no `@page` — the reading system owns line breaking, pagination and page
+ * furniture. 禁則 maps onto the reader's own JIS line breaking via `line-break`
+ * (https://drafts.csswg.org/css-text/#line-break-property): none→`loose`, the least
+ * restrictive JAPANESE-aware value (`anywhere` would also break Latin words); normal/strict
+ * pass through. ぶら下げ rides along as hanging-punctuation while kinsoku is active
+ * (WebKit-only; other engines ignore it).
+ */
+export function reflowStylesheet(kinsoku: KinsokuMode, usedClasses: readonly string[]): string {
+  const kinsokuRule = kinsoku === 'none'
+    ? 'body{line-break:loose}'
+    : `body{line-break:${kinsoku};hanging-punctuation:allow-end}`;
+  return [S.reflowBase, kinsokuRule, ...usedClasses.map(classRule)].join('');
 }

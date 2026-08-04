@@ -1,0 +1,4 @@
+/* 分離禁止 runs (cl-08, https://www.w3.org/TR/jlreq/#character_classes): ——/…… must not split.
+   The layout engine binds them as atomic units when it owns wrapping; in the reflow output the
+   reading system wraps, and CSS line-break does not reliably bind these pairs — nowrap does. */
+.insep{white-space:nowrap}

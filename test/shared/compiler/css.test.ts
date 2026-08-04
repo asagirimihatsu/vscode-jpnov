@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { BuildChrome, PreviewChrome } from '../../../src/shared/compiler/chrome.ts';
-import { stylesheet } from '../../../src/shared/compiler/css.ts';
+import { reflowStylesheet, stylesheet } from '../../../src/shared/compiler/css.ts';
 
 /**
  * The single 80%-alpha edge recipe (base-INDEPENDENT — the base colour rides the `--edge`
@@ -186,7 +186,9 @@ test('太字/斜体 rules come through classRule → styleRule forwarding', () =
 });
 
 test('縦中横 .tcy rule is on-demand and identical in both media', () => {
-  const rule = '.tcy{text-combine-upright:all}';
+  // Legacy spellings first, standard last (wins where both are known) — the EPUB reading
+  // systems that need -epub-/-webkit- share this one fragment.
+  const rule = '.tcy{-webkit-text-combine:horizontal;-epub-text-combine:horizontal;text-combine-upright:all}';
   assert.ok(preview({ usedClasses: ['tcy'] }).includes(rule));
   assert.ok(build({ usedClasses: ['tcy'] }).includes(rule));
   assert.doesNotMatch(preview(), /\.tcy\b/); // zero dead rules
@@ -472,4 +474,30 @@ test('edgeLine none draws no frame in either medium (preview/build cohesion)', (
   // never moves a glyph within its segment/page.
   assert.match(preview(), /\.segment\{position:relative;padding-inline:0\.35rem;\}/);
   assert.match(build(), /\.page\{[^}]*padding-inline-start:calc\(var\(--htop\)\*1em\)/);
+});
+
+test('reflow stylesheet has no geometry, no chrome, no @page — the reading system owns those', () => {
+  const css = reflowStylesheet('normal', []);
+  assert.match(css, /html\{[^}]*writing-mode:vertical-rl\}/);
+  assert.ok(css.includes('-epub-writing-mode:vertical-rl'), 'legacy spelling for older readers');
+  assert.doesNotMatch(css, /--cpl|--lpp|--htop|--edge/);
+  assert.doesNotMatch(css, /@page|\.page\b|\.segment\b|\.line\b|\.ln\b|\.hd\b|\.pn\b/);
+  assert.doesNotMatch(css, /white-space:pre/); // the reader wraps; pre would defeat it
+});
+
+test('reflow kinsoku maps onto the reader line breaker: none→loose, normal/strict pass through', () => {
+  assert.ok(reflowStylesheet('none', []).includes('body{line-break:loose}'));
+  assert.ok(reflowStylesheet('normal', []).includes('body{line-break:normal;hanging-punctuation:allow-end}'));
+  assert.ok(reflowStylesheet('strict', []).includes('body{line-break:strict;hanging-punctuation:allow-end}'));
+  // ぶら下げ mirrors the engine: canHang is active for normal+strict, never for none.
+  assert.ok(!reflowStylesheet('none', []).includes('hanging-punctuation'));
+});
+
+test('reflow used-class tail rides the same on-demand pipe (insep/tcy/indent/emphasis)', () => {
+  const css = reflowStylesheet('strict', ['emph-fs', 'indent-3', 'insep', 'tcy']);
+  assert.ok(css.includes('.insep{white-space:nowrap}'));
+  assert.ok(css.includes('.indent-3{padding-inline-start:3em}'));
+  assert.match(css, /\.tcy\{[^}]*text-combine-upright:all\}/);
+  assert.match(css, /\.emph-fs\{/);
+  assert.doesNotMatch(reflowStylesheet('strict', []), /\.insep|\.tcy|\.indent-/); // zero dead rules
 });

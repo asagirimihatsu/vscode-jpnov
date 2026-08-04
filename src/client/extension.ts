@@ -286,6 +286,7 @@ export function activate(context: vscode.ExtensionContext): void {
     serverCommand('jpbook.buildHtml', () => booksView?.buildSelected('html')),
     serverCommand('jpbook.buildTxt', () => booksView?.buildSelected('txt')),
     serverCommand('jpbook.buildPdf', () => booksView?.buildSelected('pdf')),
+    serverCommand('jpbook.buildEpub', () => booksView?.buildSelected('epub')),
     serverCommand('jpbook.selectAll', () => booksView?.selectAll()),
     serverCommand('jpbook.deselectAll', () => booksView?.deselectAll()),
     serverCommand('jpbook.refresh', () => booksView?.refresh()),

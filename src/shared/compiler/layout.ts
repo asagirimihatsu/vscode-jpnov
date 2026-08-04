@@ -34,7 +34,7 @@ export const DASH_CHARS = new Set<string>(Object.values(DASH_BY_MODE));
  * One laid-out glyph group: a char (1 cell), a ruby unit (base char count, atomic), or a
  * 縦中横 cell (ALWAYS 1 cell however many half-width chars it combines, atomic).
  */
-interface Unit {
+export interface Unit {
   cells: number;
   html: string;
   /** Plain text for postfix-emphasis matching; '' for zero-width units (comments). */
@@ -220,6 +220,21 @@ function rubyLane(
   const stretch = cells > Array.from(r.base).length ? ` rh-${String(cells)}` : '';
   const side = r.left === undefined ? 'rr' : r.right === undefined ? 'lr' : 'br';
   return side + stretch;
+}
+
+/**
+ * A ruby unit's markup for the REFLOW (EPUB) output. Right-only ruby is native `<ruby>` — the
+ * reading system owns spacing and overhang there. A left/both-side ruby keeps the lane markup:
+ * reader engines have the same broken double-sided ruby as Chrome (see {@link rubyHtml}) —
+ * minus the grid-derived `rh-N` stretch, which is meaningless without the whole-cell grid.
+ */
+export function reflowRubyHtml(
+  r: { base: string; right?: string | undefined; left?: string | undefined },
+): string {
+  if (r.left === undefined) {
+    return `<ruby>${escapeHtml(r.base)}<rt>${escapeHtml(r.right ?? '')}</rt></ruby>`;
+  }
+  return rubyHtml(r, Array.from(r.base).length);
 }
 
 /**
@@ -781,7 +796,7 @@ function lastReal(units: readonly Unit[], start: number, before: number): number
  * them as two cells (full-width ！？ need no binding: they are 行頭禁則, so the 追い出し cascade
  * already moves a split pair whole).
  */
-const INSEP_LEADER = new Set('…‥'); // U+2026 U+2025
+export const INSEP_LEADER = new Set('…‥'); // U+2026 U+2025
 const INSEP_BANG = new Set('!?'); // half-width; exactly-2 runs only
 
 /** The 分離禁止 class a unit binds under, or undefined (classed / ruby / multi-char / zero-width). */
@@ -1023,20 +1038,28 @@ function unitKey(u: Unit): string {
   return k; // e.g. "emph-fs dec-solid-l b"
 }
 
-function emitLine(line: DisplayLine, used?: Set<string>, anchor = true, head = ''): string {
-  // On-demand class sink: cssClass (tcy / rr / lr / br / rh-N, baked inside u.html) and
-  // channel keys both land here so css.ts emits exactly the rules present.
-  const sink = (classes: string | undefined): void => {
-    if (used && classes !== undefined && classes !== '') {
-      for (const c of classes.split(' ')) {
-        used.add(c);
-      }
+/**
+ * On-demand class sink: cssClass (tcy / rr / lr / br / rh-N, baked inside `u.html`) and
+ * channel keys both land in `used` so css.ts emits exactly the rules present.
+ */
+function sinkInto(used: Set<string> | undefined, classes: string | undefined): void {
+  if (used && classes !== undefined && classes !== '') {
+    for (const c of classes.split(' ')) {
+      used.add(c);
     }
-  };
+  }
+}
+
+/**
+ * Emits a unit run, merging adjacent units with EQUAL channel sets into one `<span>` — the
+ * channel-run merging the paginated build and the reflow (EPUB) output share, so their inline
+ * markup can never drift.
+ */
+export function emitUnits(units: readonly Unit[], used?: Set<string>): string {
   let html = '';
   let open = ''; // '' sentinel (a real key is never '')
-  for (const u of line.units) {
-    sink(u.cssClass);
+  for (const u of units) {
+    sinkInto(used, u.cssClass);
     const key = unitKey(u);
     if (key !== open) {
       if (open !== '') {
@@ -1044,7 +1067,7 @@ function emitLine(line: DisplayLine, used?: Set<string>, anchor = true, head = '
       }
       open = key;
       if (open !== '') {
-        sink(open);
+        sinkInto(used, open);
         html += `<span class="${open}">`;
       }
     }
@@ -1053,6 +1076,14 @@ function emitLine(line: DisplayLine, used?: Set<string>, anchor = true, head = '
   if (open !== '') {
     html += '</span>';
   }
+  return html;
+}
+
+function emitLine(line: DisplayLine, used?: Set<string>, anchor = true, head = ''): string {
+  const sink = (classes: string | undefined): void => {
+    sinkInto(used, classes);
+  };
+  let html = emitUnits(line.units, used);
   if (line.hang !== undefined) {
     // The hung 句読点 lands after the last cell; its channel span cannot join a neighbour's
     // (that span just closed above), so it carries its own.

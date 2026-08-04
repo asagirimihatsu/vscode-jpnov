@@ -37,7 +37,7 @@ function preview(
 test('renderPreview: autoTcy=punctuationPairs combines pairs exactly like the build', () => {
   const on = preview('えっ!?', { autoTcy: 'punctuationPairs' });
   assert.match(on, /<span class="tcy">!\?<\/span>/);
-  assert.match(on, /\.tcy\{text-combine-upright:all\}/); // the on-demand rule rides along
+  assert.match(on, /\.tcy\{[^}]*text-combine-upright:all\}/); // the on-demand rule rides along
   const off = preview('えっ!?');
   assert.doesNotMatch(off, /tcy/); // none: the pair stays plain rotated text, zero dead rules
 });

@@ -30,7 +30,8 @@ function cspMeta(nonce: string, webview: vscode.Webview): string {
 
 /**
  * Localized UI strings baked into the `__INIT` bootstrap. Keys mirror the {@link Labels} contract
- * one-to-one. (HTML is a proper noun, left literal; txt and everything else localize.)
+ * one-to-one. (buildHtml/buildEpub are the icon buttons' tooltip + accessible name — full
+ * sentences; buildPdf/buildTxt stay button texts.)
  */
 function labels(): Labels {
   return {
@@ -40,7 +41,8 @@ function labels(): Labels {
     selectBook: vscode.l10n.t('Include in build'),
     buildPdf: vscode.l10n.t('Build to PDF'),
     buildTxt: vscode.l10n.t('txt'),
-    buildHtml: 'HTML',
+    buildHtml: vscode.l10n.t('Build to HTML'),
+    buildEpub: vscode.l10n.t('Build to EPUB'),
     back: vscode.l10n.t('Back'),
     openChapter: vscode.l10n.t('Open chapter'),
     chapters: vscode.l10n.t('Chapters'),

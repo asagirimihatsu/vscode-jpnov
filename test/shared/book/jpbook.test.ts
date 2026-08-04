@@ -122,12 +122,12 @@ test('parseJpbook: blank lines inside the front matter are skipped', () => {
 });
 
 test('parseJpbook warns on an unknown key (with the known-key list) and ignores it', () => {
-  const got = parseJpbook('---\nauthor: 誰か\n---\n');
+  const got = parseJpbook('---\npublisher: 誰か\n---\n');
   assert.deepEqual(got.meta, {});
   assert.deepEqual(got.lines[1]?.kind, {
     warning: {
       code: 'jpbook.metaUnknownKey',
-      args: ['author', 'title, header, pageNumber, pageNumberFormat, divider'],
+      args: ['publisher', 'title, author, header, pageNumber, pageNumberFormat, divider'],
     },
   });
 });
@@ -307,7 +307,7 @@ test('completeEntryLine respects the cap', () => {
 
 test('completeMetaLine offers every key on an empty line, inserted as "key: "', () => {
   const got = completeMetaLine('');
-  assert.deepEqual(got.map((c) => c.label), ['title', 'header', 'pageNumber', 'pageNumberFormat', 'divider']);
+  assert.deepEqual(got.map((c) => c.label), ['title', 'author', 'header', 'pageNumber', 'pageNumberFormat', 'divider']);
   const first = got[0];
   assert.ok(first);
   assert.equal(first.insertText, 'title: ');

@@ -268,7 +268,7 @@ test('openDetail posts chapters (missing flagged) and the five metadata rows', a
   assert.ok(ch2);
   assert.equal(ch2.missing, true);
   assert.equal(ch2.folder, 'sub');
-  assert.equal(detail.meta.length, 5);
+  assert.equal(detail.meta.length, 6);
   // A set value carries no status note; the note is separate from the value (rendered by the label).
   const titleRow = detail.meta.find((m) => m.key === 'title');
   assert.ok(titleRow);
@@ -400,4 +400,26 @@ test('dispose is idempotent and does not throw', async () => {
   const { provider } = await setup([entry('file:///ws', 'a')]);
   provider.dispose();
   provider.dispose();
+});
+
+test('an epub build zips member files client-side and writes one .epub per book', async () => {
+  const root = 'file:///ws';
+  const epubs = [
+    {
+      path: `${root}/dist/a.epub`,
+      members: [
+        { name: 'META-INF/container.xml', content: '<container/>' },
+        { name: 'OEBPS/package.opf', content: '<package/>' },
+      ],
+    },
+  ];
+  const { view, client } = await setup([entry(root, 'a')], { ok: true, epubs });
+  view.webview.receive({ type: 'build', format: 'epub' });
+  await tick();
+  await tick();
+  assert.equal(client.calls.build?.format, 'epub');
+  const written = state.writtenFiles.find((f) => f.uri === `${root}/dist/a.epub`);
+  assert.ok(written, 'the client wrote the .epub');
+  assert.ok(written.content.startsWith('PK'), 'what it wrote is a ZIP container');
+  assert.ok(state.infoMessages.some((m) => m.includes('EPUB')), 'the toast names the format');
 });
