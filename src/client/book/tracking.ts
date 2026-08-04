@@ -61,11 +61,10 @@ async function askUser(bookCount: number): Promise<boolean> {
   const update = vscode.l10n.t('Update');
   const always = vscode.l10n.t('Always Update');
   const never = vscode.l10n.t('Never Update');
-  // l10n.t has no plural support, so branch into a singular/plural pair of bundle keys;
-  // Japanese maps both to one (number-invariant) string.
-  const message = bookCount === 1
-    ? vscode.l10n.t('Japanese Novel: a chapter file was renamed or moved — update the paths in 1 book file?')
-    : vscode.l10n.t('Japanese Novel: chapter files were renamed or moved — update the paths in {0} book files?', String(bookCount));
+  const message = vscode.l10n.t(
+    'Japanese Novel: chapter files were renamed or moved — update the paths in {0} book file(s)?',
+    String(bookCount),
+  );
   const pick = await vscode.window.showInformationMessage(message, update, always, never);
   if (pick === always) {
     await persistMode('always');

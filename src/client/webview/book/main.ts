@@ -77,7 +77,7 @@ let screen: 'list' | 'detail' = 'list';
 let lastDetailUri: string | null = null;
 let infoOpen = false;
 let dragLine: number | null = null;
-let detailWanted = false; // true only while the user intends to be on the detail screen
+let detailWanted = false; // true while the detail screen is intended (user click, or an adopted host reveal)
 
 /** The attributes/handlers this panel sets; keys mirror the DOM attribute names, so a grep for
  * `data-fk` / `aria-expanded` finds every writer. Extend only as call sites need. */
@@ -549,9 +549,10 @@ window.addEventListener('message', (e: MessageEvent) => {
       }
       break;
     case 'detail': {
-      if (!detailWanted) {
+      if (!detailWanted && msg.reveal !== true) {
         return; // a late push arriving after the user navigated back is ignored
       }
+      detailWanted = true; // a reveal adopts the intent, so later plain re-pushes render too
       // A re-push of the SAME open book (after an edit saved -> watcher -> refresh) preserves
       // focus/scroll; opening a book fresh moves focus to the Back button.
       const reentry = screen === 'detail' && detail !== null && detail.uri === msg.uri;

@@ -40,6 +40,7 @@ import {
   type ServerErrorParams,
 } from '#/shared/protocol.ts';
 
+import { createBook } from './book/create.ts';
 import { registerBookCommands } from './book/manage.ts';
 import { BooksViewProvider } from './book/view.ts';
 import { command } from './commands.ts';
@@ -290,6 +291,7 @@ export function activate(context: vscode.ExtensionContext): void {
     serverCommand('jpbook.selectAll', () => booksView?.selectAll()),
     serverCommand('jpbook.deselectAll', () => booksView?.deselectAll()),
     serverCommand('jpbook.refresh', () => booksView?.refresh()),
+    serverCommand('jpbook.createBook', () => createBook(booksView)),
     serverCommand('jpnov.preview', () => preview?.open(false)),
     serverCommand('jpnov.previewToSide', () => preview?.open(true)),
     // Plain command (no server needed): the Books panel's welcome views link here. The id

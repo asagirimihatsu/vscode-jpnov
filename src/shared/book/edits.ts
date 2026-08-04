@@ -33,7 +33,7 @@ function at(line: number, character: number): { line: number; character: number 
 }
 
 /** Single-line values only: a pasted newline would break the line-per-entry grammar. */
-function sanitizeValue(value: string): string {
+export function sanitizeValue(value: string): string {
   return value.replace(/[\r\n]+/g, ' ').trim();
 }
 

@@ -365,9 +365,30 @@ test('welcome actions run the create-book / open-folder / guide commands', async
   view.webview.receive({ type: 'welcome', action: 'openGuide' });
   await tick();
   const cmds = state.executedCommands.map((c) => c.command);
-  assert.ok(cmds.includes('workbench.action.files.newUntitledFile'));
+  assert.ok(cmds.includes('jpbook.createBook'));
   assert.ok(cmds.includes('workbench.action.files.openFolder'));
   assert.ok(cmds.includes('jpnov.openGuide'));
+});
+
+test('the view chrome mirrors the open detail: book title + the create-book gating context', async () => {
+  const root = 'file:///ws';
+  const bookUri = `${root}/src/a.jpbook`;
+  state.textDocuments.push(doc(bookUri, 'jpbook', '---\ntitle: A\n---\n'));
+  const { view } = await setup([entry(root, 'a', 'A')]);
+  const ctx = (): unknown[] => state.executedCommands
+    .filter((c) => c.command === 'setContext' && c.args[0] === 'jpnov.booksDetail')
+    .map((c) => c.args[1]);
+  const title = (): string | undefined => (view as { title?: string }).title;
+
+  view.webview.receive({ type: 'openDetail', uri: bookUri });
+  await tick();
+  assert.equal(title(), 'A');
+  assert.equal(ctx().at(-1), true);
+
+  view.webview.receive({ type: 'closeDetail' });
+  await tick();
+  assert.equal(title(), undefined); // the fake view carries no contributed title to restore
+  assert.equal(ctx().at(-1), false);
 });
 
 // --- lifecycle --------------------------------------------------------------
