@@ -2,7 +2,7 @@
   "name": "jpnov",
   "displayName": "Japanese Novel",
   "publisher": "asagirimihatsu",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "VS Code を小説の執筆環境に変える拡張機能。書いた文章はすぐ隣に縦書きで表示され、章をまとめて HTML・PDF・テキストの本として出力できます。記法は青空文庫の注記そのまま。",
   "icon": "resources/icon.png",
   "keywords": [
