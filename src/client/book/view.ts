@@ -45,7 +45,7 @@ import type { BookNode } from './nodes.ts';
 import { booksHtml } from './webviewHtml.ts';
 import { resolveBrowserExecutable } from '../browser.ts';
 import { renderMessage } from '../messages.ts';
-import { lastPathSegment, splitRelPath } from '../paths.ts';
+import { chapterUri, lastPathSegment, splitRelPath } from '../paths.ts';
 import { convertHtmlToPdf } from '../pdf.ts';
 import { buildProjectDirs } from '../projectConfig.ts';
 import { buildHtmlSettings } from '../renderConfig.ts';
@@ -54,10 +54,8 @@ function compareStr(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-/** A chapter's file URI from its root-relative entry (joinPath handles the encoding). */
-function chapterUri(rootUri: string, rel: string): vscode.Uri {
-  return vscode.Uri.joinPath(vscode.Uri.parse(rootUri), ...rel.split('/'));
-}
+/** Trailing-edge delay for chapter-file event bursts (matches the preview's render debounce). */
+const REPOST_DEBOUNCE_MS = 120;
 
 /** The book's display label: its front-matter title, else the last segment of the output name. */
 function bookTitle(entry: BookEntry): string {
@@ -90,6 +88,8 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private pdfBuilding = false;
   /** The book whose DETAIL screen is currently open, so edits/refreshes re-push it. */
   private openDetailUri: string | undefined;
+  /** Trailing-edge timer coalescing chapter-file events into one detail re-post per burst. */
+  private repostTimer: ReturnType<typeof setTimeout> | undefined;
   /** The contributed view title captured at resolve, restored when the detail closes. */
   private defaultTitle: string | undefined;
 
@@ -101,6 +101,22 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     // front-matter title (a book label) or chapters (the open detail), so create/delete/change
     // all re-list. The watcher only fires onDidChange for on-disk writes — not per keystroke.
     const watcher = vscode.workspace.createFileSystemWatcher('**/*.jpbook');
+    // Chapter existence backs the detail's missing flags, so a `.jpnov` appearing/disappearing
+    // re-stats the open detail. Content saves don't move the panel — change events stay ignored.
+    const chapterWatcher = vscode.workspace.createFileSystemWatcher('**/*.jpnov', false, true, false);
+    // Debounced: a bulk operation (branch switch, folder paste) fires one event per file,
+    // and each re-post stats every listed chapter — one run per burst is enough.
+    const repostDetail = (): void => {
+      if (this.openDetailUri === undefined) {
+        return;
+      }
+      clearTimeout(this.repostTimer);
+      this.repostTimer = setTimeout(() => {
+        if (this.openDetailUri !== undefined) {
+          void this.postDetail(this.openDetailUri);
+        }
+      }, REPOST_DEBOUNCE_MS);
+    };
 
     this.disposables.push(
       vscode.window.registerWebviewViewProvider(BooksViewProvider.viewId, this, {
@@ -114,6 +130,13 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       watcher.onDidCreate(() => void this.refresh()),
       watcher.onDidDelete(() => void this.refresh()),
       watcher.onDidChange(() => void this.refresh()),
+      chapterWatcher,
+      chapterWatcher.onDidCreate(repostDetail),
+      chapterWatcher.onDidDelete(repostDetail),
+      // Deleting/creating a FOLDER emits one watcher event for the folder path — no `.jpnov`
+      // match — so Explorer-driven folder operations re-stat through the workspace events.
+      vscode.workspace.onDidCreateFiles(repostDetail),
+      vscode.workspace.onDidDeleteFiles(repostDetail),
     );
   }
 
@@ -224,7 +247,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   /**
-   * Post-create hand-off from `jpbook.createBook`: focus the view and open the new book's
+   * Post-create hand-off from `jpbook.createFile`: focus the view and open the new book's
    * detail. The detail key must match the server's enumeration, which composes URIs by
    * plain string concatenation (`childUri`) — `Uri.joinPath().toString()` percent-encodes
    * non-ASCII names and would never match a Japanese title — so the key is composed the
@@ -255,6 +278,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   dispose(): void {
+    clearTimeout(this.repostTimer);
     this.messageSub?.dispose();
     this.messageSub = undefined;
     for (const d of this.disposables) {
@@ -331,14 +355,12 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       case 'editMeta':
         await this.dispatchEditMeta(msg.uri, msg.metaKey);
         break;
-      case 'addChapters': {
-        const entry = this.entryOf(msg.uri);
-        if (entry !== undefined) {
-          const node: BookNode = { kind: 'book', entry };
-          await vscode.commands.executeCommand('jpbook.addChapters', node);
-        }
+      case 'addChapters':
+        await this.dispatchBook('jpbook.addChapters', msg.uri);
         break;
-      }
+      case 'createChapter':
+        await this.dispatchBook('jpbook.createFile', msg.uri);
+        break;
       case 'removeChapter':
         await this.dispatchChapter('jpbook.removeChapter', msg.uri, msg.line);
         break;
@@ -369,6 +391,15 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     const node: BookNode = { kind: 'meta', entry, metaKey: metaKey as MetaKey, value };
     await vscode.commands.executeCommand('jpbook.editMeta', node);
+  }
+
+  /** Dispatch a book command (add / create) with a synthesized book node. */
+  private async dispatchBook(command: string, uri: unknown): Promise<void> {
+    const entry = this.entryOf(uri);
+    if (entry !== undefined) {
+      const node: BookNode = { kind: 'book', entry };
+      await vscode.commands.executeCommand(command, node);
+    }
   }
 
   /** Dispatch a chapter command (remove / move) with a synthesized node — `manage.ts` keys off `line`. */
@@ -406,7 +437,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   /** Runs an empty-state welcome-link action (create book / open guide / open folder). */
   private dispatchWelcome(action: unknown): void {
     if (action === 'createBook') {
-      void vscode.commands.executeCommand('jpbook.createBook');
+      void vscode.commands.executeCommand('jpbook.createFile');
     } else if (action === 'openGuide') {
       void vscode.commands.executeCommand('jpnov.openGuide');
     } else if (action === 'openFolder') {

@@ -315,18 +315,25 @@ test('chapter actions dispatch the matching jpbook command carrying the line', a
   view.webview.receive({ type: 'moveChapter', uri: bookUri, line: 4, dir: 1 });
   view.webview.receive({ type: 'removeChapter', uri: bookUri, line: 4 });
   view.webview.receive({ type: 'addChapters', uri: bookUri });
+  view.webview.receive({ type: 'createChapter', uri: bookUri });
   await tick();
   const cmds = state.executedCommands.map((c) => c.command);
   assert.ok(cmds.includes('jpbook.moveChapterUp'));
   assert.ok(cmds.includes('jpbook.moveChapterDown'));
   assert.ok(cmds.includes('jpbook.removeChapter'));
   assert.ok(cmds.includes('jpbook.addChapters'));
+  assert.ok(cmds.includes('jpbook.createFile'));
   const rm = state.executedCommands.find((c) => c.command === 'jpbook.removeChapter');
   assert.ok(rm);
   const node = rm.args[0] as { kind: string; line: number; entry: { uri: string } };
   assert.equal(node.kind, 'chapter');
   assert.equal(node.line, 4);
   assert.equal(node.entry.uri, bookUri);
+  const create = state.executedCommands.find((c) => c.command === 'jpbook.createFile');
+  assert.ok(create);
+  const bookArg = create.args[0] as { kind: string; entry: { uri: string } };
+  assert.equal(bookArg.kind, 'book');
+  assert.equal(bookArg.entry.uri, bookUri);
 });
 
 test('openFile opens the given uri', async () => {
@@ -365,7 +372,7 @@ test('welcome actions run the create-book / open-folder / guide commands', async
   view.webview.receive({ type: 'welcome', action: 'openGuide' });
   await tick();
   const cmds = state.executedCommands.map((c) => c.command);
-  assert.ok(cmds.includes('jpbook.createBook'));
+  assert.ok(cmds.includes('jpbook.createFile'));
   assert.ok(cmds.includes('workbench.action.files.openFolder'));
   assert.ok(cmds.includes('jpnov.openGuide'));
 });

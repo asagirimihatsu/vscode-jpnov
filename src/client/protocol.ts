@@ -97,6 +97,7 @@ export type BooksOutbound =
   | { readonly type: 'openFile'; readonly uri: string }
   | { readonly type: 'editMeta'; readonly uri: string; readonly metaKey: string }
   | { readonly type: 'addChapters'; readonly uri: string }
+  | { readonly type: 'createChapter'; readonly uri: string }
   | { readonly type: 'removeChapter'; readonly uri: string; readonly line: number }
   | { readonly type: 'moveChapter'; readonly uri: string; readonly line: number; readonly dir: -1 | 1 }
   | { readonly type: 'moveChapterTo'; readonly uri: string; readonly line: number; readonly before: number | null }
@@ -120,6 +121,7 @@ export interface Labels {
   readonly chapters: string;
   readonly bookInfo: string;
   readonly addChapters: string;
+  readonly newChapter: string;
   readonly moveUp: string;
   readonly moveDown: string;
   readonly remove: string;

@@ -1,27 +1,46 @@
 /**
- * Pure composition for the guided new-book wizard (`jpbook.createBook`): the file-name
- * stem derived from a title, and the initial `.jpbook` text. vscode-free.
+ * Pure input normalization for the panel's create-file command (`jpbook.createFile`):
+ * one typed path becomes a root-relative `.jpnov` / `.jpbook` entry. vscode-free.
  */
-import { sanitizeValue } from './edits.ts';
+import { isAbsoluteLocation } from '../config/validate.ts';
+
+/** Why a typed path is unusable; the command maps each code to a localized message. */
+export type FileInputError = 'empty' | 'absolute' | 'escapes' | 'badName';
 
 /**
- * The title reduced to a usable file-name stem: path-hostile characters (the Windows
- * forbidden set) and control characters are dropped, then leading/trailing dots and
- * whitespace (incl. U+3000) are trimmed. '' = the title cannot name a file.
+ * A typed path (`src/my-chapter`, either separator) normalized into a root-relative file
+ * path: segments collapsed, `suffix` appended when missing, NFC. Rejects what the `.jpbook`
+ * grammar or a filesystem would: absolute/home/scheme locations, `..` segments, and
+ * per-segment the Windows-forbidden character set or leading/trailing dots and
+ * whitespace (dotfiles would be invisible to the chapter picker).
  */
-export function sanitizeBookStem(title: string): string {
-  return title
-    .replace(/[\p{Cc}/\\:*?"<>|]/gu, '')
-    .replace(/^[\s.]+/u, '')
-    .replace(/[\s.]+$/u, '');
-}
-
-/**
- * The initial `.jpbook` text: a title-only front-matter block, then one root-relative
- * chapter path per line. LF with a trailing newline; round-trips through `parseJpbook`.
- */
-export function newBookText(title: string, chapterRels: readonly string[]): string {
-  const clean = sanitizeValue(title);
-  const entry = clean === '' ? 'title:' : `title: ${clean}`;
-  return ['---', entry, '---', ...chapterRels, ''].join('\n');
+export function normalizeFileInput(
+  raw: string,
+  suffix: string,
+): { ok: true; rel: string } | { ok: false; error: FileInputError } {
+  const trimmed = raw.trim().normalize('NFC');
+  if (trimmed === '') {
+    return { ok: false, error: 'empty' };
+  }
+  if (trimmed.startsWith('~') || isAbsoluteLocation(trimmed)) {
+    return { ok: false, error: 'absolute' };
+  }
+  const segments = trimmed.split(/[\\/]/u).filter((s) => s !== '' && s !== '.');
+  if (segments.some((s) => s === '..')) {
+    return { ok: false, error: 'escapes' };
+  }
+  const last = segments.pop();
+  if (last === undefined) {
+    return { ok: false, error: 'empty' };
+  }
+  const stem = last.endsWith(suffix) ? last.slice(0, -suffix.length) : last;
+  if (stem === '') {
+    return { ok: false, error: 'empty' };
+  }
+  for (const part of [...segments, stem]) {
+    if (/[\p{Cc}:*?"<>|]/u.test(part) || /^[\s.]|[\s.]$/u.test(part)) {
+      return { ok: false, error: 'badName' };
+    }
+  }
+  return { ok: true, rel: [...segments, `${stem}${suffix}`].join('/') };
 }

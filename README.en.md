@@ -50,18 +50,20 @@ one-command HTML / PDF / EPUB / text builds. No AI anywhere in the writing path
    and start writing. Aozora Bunko annotations are highlighted as you type;
    click the preview icon in the editor title bar (**Japanese Novel: Open
    Preview to the Side**) to see the vertical layout.
-2. **Make a book.** Create a `.jpbook` (e.g. `volume1.jpbook`) and list your
-   chapter files, one per line, in reading order — paths count from the
-   workspace folder, so moving the `.jpbook` never breaks them. One `.jpbook`
-   is one book. The Books panel's **Create a Book** button (`+`) writes this
-   file for you — enter a title and pick the chapters.
-   An optional `---`-fenced front-matter block at the top carries the book's
-   own metadata (title, running head, page-number style — see
-   [Per-book metadata](#per-book-metadata-front-matter)).
-3. **Build it.** Save everything (builds read from disk), open the **Japanese
-   Novel** view in the Activity Bar (the book icon), tick the books you want,
-   and use **Build to HTML**, **Build to PDF**, **Build to EPUB**, or **Build to
-   Text** with the buttons at the bottom of the view.
+2. **Make a book.** Open the **Japanese Novel** view in the Activity Bar (the
+   book icon) and click the **Create a Book** button (`+`): type a file name,
+   then add chapters in reading order and edit the title right there. One
+   `.jpbook` is one book.
+   It's a plain text file — chapter paths one per line (counted from the
+   workspace folder, so moving the `.jpbook` never breaks them), plus an
+   optional `---`-fenced front-matter block for the book's own metadata
+   (title, running head, page-number style — see
+   [Per-book metadata](#per-book-metadata-front-matter)) — so hand-editing
+   works the same.
+3. **Build it.** Save everything (builds read from disk), tick the books you
+   want in the Books view, and use **Build to HTML**, **Build to PDF**,
+   **Build to EPUB**, or **Build to Text** with the buttons at the bottom of
+   the view.
 
 Chapters and book files can live anywhere in the workspace folder; subfolders are
 mirrored into the output (`src/volume1.jpbook` builds to
