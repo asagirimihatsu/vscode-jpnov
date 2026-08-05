@@ -26,7 +26,9 @@ one-command HTML / PDF / EPUB / text builds. No AI anywhere in the writing path
 - **Cast & keyword highlighting** — semantic colouring of character names and
   coined terms in narration.
 
-![VS Code with an annotated chapter on the left and the vertical preview on the right](docs/images/vscode-side-by-side.png)
+![VS Code while writing: the Books view on the left, an annotated chapter in the middle, the vertical preview on the right](docs/images/vscode-workspace.png)
+
+*The everyday writing layout: the book's table of contents, the manuscript, and the vertical preview in one window.*
 
 ## Design stance
 
@@ -46,24 +48,26 @@ one-command HTML / PDF / EPUB / text builds. No AI anywhere in the writing path
 
 ## Quick start
 
-1. **Write a chapter.** Create a file ending in `.jpnov` (e.g. `chapter1.jpnov`)
-   and start writing. Aozora Bunko annotations are highlighted as you type;
+1. **Make a book.** Open the **Books** view in the Activity Bar (the
+   **Japanese Novel** book icon) and click **Create a Book…** (`+`): the
+   input box comes with `.jpbook` already in place, so type just the name in
+   front of it. The new book opens right there with its **Book Info** and
+   **Chapters** sections. One `.jpbook` is one book: a plain text file with
+   one chapter path per line, each relative to the workspace folder, so
+   moving the `.jpbook` never breaks them. An optional `---`-fenced block at
+   the top carries the book's own metadata — title, running head,
+   page-number style (see
+   [Per-book metadata](#per-book-metadata-front-matter)). Editing the file
+   by hand does the same thing the view does.
+2. **Write chapters.** Click **New chapter…** under **Chapters** and name
+   the chapter the same way: the `.jpnov` file is created, listed in the
+   book, and opened in the editor. Aozora Bunko annotations are highlighted as you type;
    click the preview icon in the editor title bar (**Japanese Novel: Open
-   Preview to the Side**) to see the vertical layout.
-2. **Make a book.** Open the **Japanese Novel** view in the Activity Bar (the
-   book icon) and click the **Create a Book** button (`+`): type a file name,
-   then add chapters in reading order and edit the title right there. One
-   `.jpbook` is one book.
-   It's a plain text file — chapter paths one per line (counted from the
-   workspace folder, so moving the `.jpbook` never breaks them), plus an
-   optional `---`-fenced front-matter block for the book's own metadata
-   (title, running head, page-number style — see
-   [Per-book metadata](#per-book-metadata-front-matter)) — so hand-editing
-   works the same.
-3. **Build it.** Save everything (builds read from disk), tick the books you
-   want in the Books view, and use **Build to HTML**, **Build to PDF**,
-   **Build to EPUB**, or **Build to Text** with the buttons at the bottom of
-   the view.
+   Preview to the Side**) to write beside the vertical layout.
+3. **Build it.** Save everything (builds read from disk) and hit **Build to
+   PDF** at the bottom of the view; the text, HTML, and EPUB buttons sit
+   beside it. With a book open, the buttons build just that book; back in
+   the list, they build every ticked book.
 
 Chapters and book files can live anywhere in the workspace folder; subfolders are
 mirrored into the output (`src/volume1.jpbook` builds to
@@ -201,9 +205,10 @@ are toggled under **Japanese Novel — Layout & Output**.
 
 ## Building books
 
-The **Japanese Novel** Activity Bar view lists every discovered `.jpbook` as
+The **Books** view in the Activity Bar lists every discovered `.jpbook` as
 a book with a checkbox (labelled by its front-matter `title` when it declares
-one). The buttons at the bottom of the view build the checked books:
+one). The buttons at the bottom of the view build the checked books (HTML
+and EPUB are icon buttons):
 
 - **Build to HTML** — one standalone, paginated vertical `.html` per book
   (inline CSS, no external assets).
@@ -236,13 +241,16 @@ and enum values), diagnostics (missing files, duplicates, escaping the
 workspace, unknown metadata keys…), and document links — Cmd/Ctrl-click an
 entry to open the chapter.
 
-The panel manages books, too: expand one for its Book Info rows and chapter
-list — [+] adds chapters, drag (or the context menu) reorders them, and
-clicking an Info row edits the title, header, or page number in place. Every
-action rewrites the `.jpbook` text itself, so the panel and code mode always
-agree.
+The Books view edits books, too. Open one to see its **Book Info** and
+**Chapters** sections: **New chapter…** creates a chapter file and adds it
+to the book, **Add chapters…** brings in files you already have, dragging
+(or the arrow buttons) reorders them, and **×** takes an entry out of the
+book while keeping the file. Expand **Book Info** and click a row to edit
+that value in place; the buttons at the bottom build only the open book.
+Every action rewrites the `.jpbook` text itself, so the view and
+hand-editing always agree.
 
-![The Books view: expanded to its chapter list and Book Info rows, with the build buttons at the bottom](docs/images/vscode-books-panel.png)
+![The Books view with a book open: its Book Info rows and chapter list](docs/images/vscode-books-panel.png)
 
 Renaming or moving a chapter (or a folder of chapters) inside VS Code offers
 to update every `.jpbook` that references it —
@@ -279,8 +287,8 @@ divider: ＊　＊　＊
 | `divider` | — | Chapter divider inserted between chapters that do not open with a heading (e.g. `＊　＊　＊`); a bare mark is centred along the line at build time, a `［＃３字下げ］` prefix indents it instead; omit for a single blank line |
 
 Every key is optional; unknown keys warn and are ignored, so future keys stay
-forward-compatible. The same six keys are also editable from the Books
-panel's Book Info rows.
+forward-compatible. The same six keys are also editable from the **Book
+Info** rows in the Books view.
 
 ## Character & keyword highlighting
 
@@ -450,7 +458,7 @@ npm run build:dev   # bundle to dist/ (ESM)
 
 The rendered images in this README are generated straight from the compiler —
 see [docs/SCREENSHOTS.md](./docs/SCREENSHOTS.md) to regenerate them or to
-capture the pending UI shots.
+retake the VS Code captures.
 
 ## License
 

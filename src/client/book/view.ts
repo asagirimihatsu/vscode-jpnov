@@ -566,7 +566,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       : { pdf: 'PDF', html: 'HTML', epub: 'EPUB' }[action];
     if (books.length === 0) {
       void vscode.window.showInformationMessage(
-        vscode.l10n.t('Japanese Novel: no books selected. Check a book in the Books panel, then build.'),
+        vscode.l10n.t('Japanese Novel: no books selected. Check a book in the Books view, then build.'),
       );
       return;
     }

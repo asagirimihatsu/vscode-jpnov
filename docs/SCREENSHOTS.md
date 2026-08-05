@@ -4,7 +4,22 @@
 from the compiler (section A) and **manual VS Code UI captures** (section B).
 Nothing under `docs/` ships in the VSIX — the Marketplace loads these images from
 the GitHub repository via the manifest's `repository` field, so the repo must be
-public by publish time.
+public by publish time. Both READMEs reference the same files.
+
+Inventory:
+
+| File | Kind | Shows |
+| --- | --- | --- |
+| `hero-page.png` | generated (A) | real "Build to PDF" page 1 |
+| `genkoyoshi.png` | generated (A) | same, line numbers + red rules |
+| `notation.png` | generated (A) | annotation specimen |
+| `kinsoku-off.png` / `kinsoku-on.png` | generated (A) | kinsoku comparison |
+| `vscode-workspace.png` | capture 1, whole window (B) | the writing screen: Books view + editor + preview |
+| `vscode-highlight.png` | crop of capture 1 (B) | cast/keyword colouring in narration |
+| `vscode-books-panel.png` | crop of capture 2 (B) | open book: Book Info + 目次 |
+| `vscode-lint-quickfix.png` | crop of capture 2 (B) | lint squiggle + quick-fix menu |
+| `vscode-settings.png` | crop of capture 3 (B) | settings search `jpnov` |
+| `vscode-encoding-statusbar.png` / `vscode-encoding-reopen.png` | ad-hoc crops | FAQ: Shift JIS reopen; UI-stable, retake only if that VS Code flow changes |
 
 ## A. Generated renders
 
@@ -299,9 +314,9 @@ for (const shot of shots) {
 
 ## B. Manual VS Code captures
 
-Five shots need a real VS Code window. Retake one by overwriting its PNG in
-`docs/images/` under the same filename (both READMEs reference the same
-files).
+Five images come from **one window arrangement and three whole-window
+captures**; four of the five are crops of those captures. Retake by
+overwriting the PNGs in `docs/images/` under the same filenames.
 
 Common setup:
 
@@ -395,37 +410,60 @@ divider: ＊　＊　＊
 　次のシーン「焼肉、やっぱうまくね？」
 ```
 
-### `vscode-side-by-side.png` — editor + vertical preview
+### Arrangement (once)
 
-Open `第一章.jpnov`, click the editor-title 「プレビューを横に開く」 icon.
-Must show: annotated source with syntax highlighting on the left, the vertical
-preview on the right, cursor somewhere mid-text.
+Open `第一章.jpnov` and click the editor-title 「プレビューを横に開く」 icon.
+In the activity-bar 「小説」 view, open My 作品集 (click its title row) so the
+sidebar shows 「本の情報」 and 「目次」. Cursor somewhere mid-text. Leave
+`jpnov.lint.narration.generalNovelStyle` **off** for the first capture.
 
-### `vscode-books-panel.png` — Books panel, expanded
+### Capture 1 — the writing screen (clean editor)
 
-Open the activity-bar 「小説」 icon and expand My 作品集 and its 「本の情報」
-group. One shot serves both stories (finding the view + building, and editing
-a book in place), so keep the activity bar in frame — a full window with the
-editor and preview behind is fine. Must show: My 作品集 checked (labelled by
-its front-matter title), the view title-bar build buttons with the
-「PDF に出力」 tooltip under the pointer, the two chapter rows, and all five
-本の情報 rows with their values (題名・ヘッダー・章区切り set, the ページ番号
-rows at their defaults).
+Whole window, saved as `vscode-workspace.png`; one editor crop from the
+same PNG becomes `vscode-highlight.png`.
 
-### `vscode-highlight.png` — cast & keyword highlighting
+- `vscode-workspace.png` must show: 目次 with the two chapter rows in the
+  sidebar, annotated source with syntax highlighting in the middle, the
+  vertical preview on the right.
+- `vscode-highlight.png` (crop around lines 1–21) must show: `林は` /
+  `神木林は` coloured as subjects, `境無` bold, dialogue lines left in body
+  colour. **Check the colours at 1:1 before cropping** — they are the whole
+  point of this image. If nothing is coloured, the workspace highlight
+  settings didn't load; fix that before capturing.
 
-Frame a narration paragraph containing 「林は境無を構えた。」. Must show:
-`林は` / `神木林は` coloured as a subject, `境無` bold, dialogue lines left in body colour.
+### Capture 2 — book management + quick fix
 
-### `vscode-lint-quickfix.png` — lint quick fix
+Expand 「本の情報」, enable `jpnov.lint.narration.generalNovelStyle` (the
+line-2 sample text is its bait), and open the lightbulb menu on the squiggle.
+Whole window, then two crops:
 
-Enable `jpnov.lint.narration.generalNovelStyle`, write a narration line without
-the leading full-width indent, open the lightbulb menu on the squiggle. Must
-show: the squiggle and the open quick-fix menu.
+- `vscode-books-panel.png` (sidebar incl. activity bar): from the view header
+  down through the 「新しい章…」 row. Must show all six 本の情報 rows
+  (題名・ヘッダー・章区切り filled in; 著者 and the ページ番号 rows at their
+  defaults), the chapter rows, and the 目次 header's 「章を追加…」 button.
+  The build buttons are deliberately outside this crop — they are visible in
+  `vscode-workspace.png`.
+- `vscode-lint-quickfix.png` (editor area): the squiggle, its hover, and the
+  open quick-fix menu, plus a few lines of context.
 
-### `vscode-settings.png` — settings UI
+### Capture 3 — settings
 
 Settings (<kbd>⌘,</kbd>) → search `jpnov` (settings search matches the key
 prefix; it does not index the localized group titles, so 「小説」 finds
-nothing). Must show: the 「小説 — 組版と出力」 group with the 40 × 34 defaults
-visible.
+nothing). Whole window, cropped to the settings editor. Must show: the three
+小説 groups in the tree on the left, and the 「小説 — 組版と出力」 items with
+the 40 × 34 defaults visible.
+
+### Crop commands
+
+The rects used this round (ffmpeg, physical px on a 3204×2004 capture with
+the sidebar at ≈425 logical px). Bounds shift with your window and sidebar
+size — re-aim by eye, or crop in Preview.app; nothing depends on exact
+pixels.
+
+```sh
+ffmpeg -i cap1.png -vf "crop=1088:766:706:182"  docs/images/vscode-highlight.png
+ffmpeg -i cap2.png -vf "crop=682:762:0:76"      docs/images/vscode-books-panel.png
+ffmpeg -i cap2.png -vf "crop=1104:368:706:134"  docs/images/vscode-lint-quickfix.png
+ffmpeg -i cap3.png -vf "crop=2544:1452:644:80"  docs/images/vscode-settings.png
+```
