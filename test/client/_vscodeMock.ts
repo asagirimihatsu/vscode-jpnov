@@ -204,6 +204,16 @@ export interface FakeWebviewPanel {
 }
 
 /** Mutable test harness backing the mocked `vscode` namespace. */
+/** The InputBoxOptions fields the extension's prompts set, typed once for assertions. */
+export interface RecordedInputBox {
+  prompt?: string;
+  value?: string;
+  valueSelection?: [number, number];
+  ignoreFocusOut?: boolean;
+  placeHolder?: string;
+  validateInput?: (value: string) => string | null | Promise<string | null>;
+}
+
 export interface MockState {
   textDocuments: FakeTextDocument[];
   panels: FakeWebviewPanel[];
@@ -228,7 +238,7 @@ export interface MockState {
   quickPickQueue: unknown[];
   quickPickCalls: { items: unknown; options: unknown }[];
   inputBoxQueue: (string | undefined)[];
-  inputBoxCalls: { options: unknown }[];
+  inputBoxCalls: { options: RecordedInputBox | undefined }[];
   /** Folders the init command may scaffold into; undefined = no folder open. */
   workspaceFolders: { uri: Uri; name: string; index: number }[] | undefined;
   workspaceFolderPickResult: { uri: Uri } | undefined;
@@ -383,7 +393,7 @@ export function buildVscode(state: MockState): Record<string, unknown> {
       state.quickPickCalls.push({ items, options });
       return Promise.resolve(state.quickPickQueue.shift());
     },
-    showInputBox(options?: unknown): Promise<string | undefined> {
+    showInputBox(options?: RecordedInputBox): Promise<string | undefined> {
       state.inputBoxCalls.push({ options });
       return Promise.resolve(state.inputBoxQueue.shift());
     },
@@ -456,6 +466,15 @@ export function buildVscode(state: MockState): Record<string, unknown> {
       return { onDidCreate: on, onDidDelete: on, onDidChange: on, dispose() { /* no-op */ } };
     },
     onDidChangeTextDocument: state.onDidChangeDoc.event,
+    // File-operation events (Explorer gestures): registration-only, like the watcher above.
+    onDidCreateFiles(listener: Listener<unknown>): Disposable {
+      void listener;
+      return new Disposable(() => { /* no-op */ });
+    },
+    onDidDeleteFiles(listener: Listener<unknown>): Disposable {
+      void listener;
+      return new Disposable(() => { /* no-op */ });
+    },
     // Settings reads. Bare getConfiguration() + full keys (renderConfig.ts) resolves from
     // `state.config` as before; the section/scope form (highlightConfig.ts, probe.ts)
     // consults `state.scopedConfig` first — keyed `${scopeUri}|${section ? section + '.' : ''}${key}`

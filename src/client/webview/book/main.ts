@@ -30,7 +30,7 @@ import type {
 
 /** Every glyph the panel draws; `cbOff`/`cbOn` are the selection checkbox's two states. */
 type IconName =
-  | 'chevR' | 'chevL' | 'up' | 'down' | 'warn' | 'add' | 'close' | 'edit' | 'grip' | 'cbOff' | 'cbOn';
+  | 'chevR' | 'chevL' | 'up' | 'down' | 'warn' | 'pick' | 'newFile' | 'close' | 'edit' | 'grip' | 'cbOff' | 'cbOn';
 
 /** Codicon suffix per icon; the element gets `class="codicon codicon-<suffix>"`. */
 const CODICON: Record<IconName, string> = {
@@ -39,7 +39,8 @@ const CODICON: Record<IconName, string> = {
   up: 'chevron-up',
   down: 'chevron-down',
   warn: 'warning',
-  add: 'add',
+  pick: 'checklist',
+  newFile: 'new-file',
   close: 'close',
   edit: 'edit',
   grip: 'gripper',
@@ -428,14 +429,19 @@ function renderDetail(): void {
     icon(infoOpen ? 'down' : 'chevR', 'caret'),
     h('span', { class: 'stitle' }, L.bookInfo)),
     ...(infoOpen ? d.meta.map((mi) => metaRow(d, mi)) : []));
-  // Table of contents (chapters): always expanded; add + per-row move/remove.
+  // Table of contents (chapters): always expanded; pick/create actions + per-row move/remove.
   const chs = d.chapters;
   const toc = h('div', { class: 'section' },
     h('div', { class: 'shead' },
       h('span', { class: 'stitle' }, L.chapters),
-      iconBtn('add', L.addChapters, poster({ type: 'addChapters', uri: d.uri }), { 'data-fk': 'add' })),
+      iconBtn('pick', L.addChapters, poster({ type: 'addChapters', uri: d.uri }), { 'data-fk': 'add' })),
     chs.length === 0 && h('div', { class: 'empty' }, L.noChapters),
-    ...chs.map((ch, i) => chapterRow(d, ch, i, chs.length)));
+    ...chs.map((ch, i) => chapterRow(d, ch, i, chs.length)),
+    h('button', {
+      class: 'row action',
+      'data-fk': 'newch',
+      onClick: poster({ type: 'createChapter', uri: d.uri }),
+    }, icon('newFile'), L.newChapter));
   app.replaceChildren(scrollPane(hdr, info, toc), footer(d.uri));
 }
 
@@ -452,8 +458,9 @@ function chapterRow(d: DetailMessage, ch: ChapterVM, idx: number, count: number)
     },
     ch.missing && icon('warn', 'warn'),
     h('div', { class: 'maincol' },
-      h('div', { class: 'title' }, ch.name),
-      ch.folder !== '' && h('div', { class: 'sub' }, ch.folder))),
+      h('div', { class: 'title' },
+        ch.folder !== '' && h('span', { class: 'dir' }, ch.folder + '/'),
+        ch.name))),
     // Focus keys use the chapter's fileUri (stable across a move) so keyboard focus follows the row.
     h('div', { class: 'acts' },
       iconBtn('up', L.moveUp, poster({ type: 'moveChapter', uri: d.uri, line: ch.line, dir: -1 }),

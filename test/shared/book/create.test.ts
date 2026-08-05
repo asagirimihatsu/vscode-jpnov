@@ -1,60 +1,57 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { newBookText, sanitizeBookStem } from '../../../src/shared/book/create.ts';
-import { chapterLines } from '../../../src/shared/book/edits.ts';
-import { parseJpbook } from '../../../src/shared/book/jpbook.ts';
+import { normalizeFileInput } from '../../../src/shared/book/create.ts';
 
-// --- sanitizeBookStem ---------------------------------------------------------
-
-test('sanitizeBookStem drops the path-hostile character set', () => {
-  assert.equal(sanitizeBookStem('a/b\\c:d*e?f"g<h>i|j'), 'abcdefghij');
+test('normalizeFileInput appends the suffix and normalizes separators', () => {
+  const cases: readonly (readonly [string, string])[] = [
+    ['my-chapter', 'my-chapter.jpnov'],
+    ['my-chapter.jpnov', 'my-chapter.jpnov'],
+    ['src/my-chapter', 'src/my-chapter.jpnov'],
+    ['src\\my-chapter', 'src/my-chapter.jpnov'],
+    ['src//my-chapter', 'src/my-chapter.jpnov'],
+    ['./src/./my-chapter/', 'src/my-chapter.jpnov'],
+    ['第一章', '第一章.jpnov'],
+    // The suffix is exact-case; any other spelling is part of the stem.
+    ['x.JPNOV', 'x.JPNOV.jpnov'],
+    ['  src/ch  ', 'src/ch.jpnov'],
+  ];
+  for (const [raw, rel] of cases) {
+    assert.deepEqual(normalizeFileInput(raw, '.jpnov'), { ok: true, rel }, raw);
+  }
 });
 
-test('sanitizeBookStem drops control characters', () => {
-  const title = `a${String.fromCharCode(0)}b${String.fromCharCode(31)}c${String.fromCharCode(127)}d`;
-  assert.equal(sanitizeBookStem(title), 'abcd');
+test('normalizeFileInput handles the .jpbook suffix the same way', () => {
+  assert.deepEqual(normalizeFileInput('作品名', '.jpbook'), { ok: true, rel: '作品名.jpbook' });
+  assert.deepEqual(normalizeFileInput('books\\vol1.jpbook', '.jpbook'), { ok: true, rel: 'books/vol1.jpbook' });
+  assert.deepEqual(normalizeFileInput('.jpbook', '.jpbook'), { ok: false, error: 'empty' });
 });
 
-test('sanitizeBookStem trims leading/trailing dots and whitespace, incl. U+3000', () => {
-  assert.equal(sanitizeBookStem('　.作品名　第一巻.　'), '作品名　第一巻');
+test('normalizeFileInput normalizes decomposed input to NFC', () => {
+  assert.deepEqual(normalizeFileInput('か\u3099', '.jpnov'), { ok: true, rel: 'が.jpnov' });
 });
 
-test('sanitizeBookStem keeps interior spaces and dots', () => {
-  assert.equal(sanitizeBookStem('vol 1.2'), 'vol 1.2');
-});
-
-test('sanitizeBookStem leaves an ordinary Japanese title untouched', () => {
-  assert.equal(sanitizeBookStem('作品名　第一巻'), '作品名　第一巻');
-});
-
-test('sanitizeBookStem returns the empty string when nothing usable remains', () => {
-  assert.equal(sanitizeBookStem('***'), '');
-  assert.equal(sanitizeBookStem('...'), '');
-  assert.equal(sanitizeBookStem('　　'), '');
-});
-
-// --- newBookText --------------------------------------------------------------
-
-test('newBookText composes front matter + chapters with a trailing newline', () => {
-  assert.equal(
-    newBookText('My Book', ['ch1.jpnov', 'sub/ch2.jpnov']),
-    '---\ntitle: My Book\n---\nch1.jpnov\nsub/ch2.jpnov\n',
-  );
-});
-
-test('newBookText with no chapters is a bare front-matter block', () => {
-  assert.equal(newBookText('X', []), '---\ntitle: X\n---\n');
-});
-
-test('newBookText single-lines a pasted multi-line title', () => {
-  assert.equal(newBookText('a\nb', []), '---\ntitle: a b\n---\n');
-});
-
-test('newBookText round-trips through parseJpbook', () => {
-  const parsed = parseJpbook(newBookText('作品名　第一巻', ['a.jpnov', 'b.jpnov']));
-  assert.deepEqual(parsed.meta, { title: '作品名　第一巻' });
-  const lines = chapterLines(parsed.lines);
-  assert.equal(lines.length, 2);
-  assert.deepEqual(lines.map((l) => parsed.lines[l]?.value), ['a.jpnov', 'b.jpnov']);
+test('normalizeFileInput rejects unusable paths with a typed code', () => {
+  const cases: readonly (readonly [string, string])[] = [
+    ['', 'empty'],
+    ['   ', 'empty'],
+    ['.jpnov', 'empty'],
+    ['src/.jpnov', 'empty'],
+    ['./', 'empty'],
+    ['/abs/ch', 'absolute'],
+    ['C:\\ch', 'absolute'],
+    ['\\\\server\\ch', 'absolute'],
+    ['~/ch', 'absolute'],
+    ['file:ch', 'absolute'],
+    ['../ch', 'escapes'],
+    ['src/../ch', 'escapes'],
+    ['a\u0000b', 'badName'],
+    ['src/a*b', 'badName'],
+    ['.hidden/ch', 'badName'],
+    ['src/ch.', 'badName'],
+    ['sp ace /ch', 'badName'],
+  ];
+  for (const [raw, error] of cases) {
+    assert.deepEqual(normalizeFileInput(raw, '.jpnov'), { ok: false, error }, raw === '' ? '(empty)' : raw);
+  }
 });

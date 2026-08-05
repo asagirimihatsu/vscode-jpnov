@@ -9,6 +9,7 @@
  */
 import * as vscode from 'vscode';
 
+import { normalizeFileInput } from '#/shared/book/create.ts';
 import { appendChapters, chapterLines, listedChapters, moveChapterTo, removeChapter, upsertMeta } from '#/shared/book/edits.ts';
 import type { TextReplace } from '#/shared/book/edits.ts';
 import { composeDividerValue, DIVIDER_PRESETS, parseDividerValue, parseJpbook, type MetaKey } from '#/shared/book/jpbook.ts';
@@ -19,9 +20,10 @@ import type { BookEntry } from '#/shared/protocol.ts';
 
 import { command } from '../commands.ts';
 import { renderMessage } from '../messages.ts';
-import { FIND_FILES_EXCLUDE, splitRelPath } from '../paths.ts';
+import { chapterUri, FIND_FILES_EXCLUDE, splitRelPath } from '../paths.ts';
 import { normalizeFsPath } from './rename.ts';
 import type { BookNode } from './nodes.ts';
+import type { BooksViewProvider } from './view.ts';
 
 /** Localized display name of a metadata key (the meta row's label and edit prompt). */
 export function metaLabel(key: MetaKey): string {
@@ -105,20 +107,26 @@ function nodeOf(arg: unknown): BookNode | null {
   return typeof arg === 'object' && arg !== null && 'kind' in arg ? (arg as BookNode) : null;
 }
 
+async function fileExists(uri: vscode.Uri): Promise<boolean> {
+  try {
+    await vscode.workspace.fs.stat(uri);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** The folder's `.jpnov` files as sorted root-relative paths (book entries are root-relative). */
-export async function findChapterCandidates(rootUri: vscode.Uri): Promise<string[]> {
+async function findChapterCandidates(rootUri: vscode.Uri): Promise<string[]> {
   const found = await vscode.workspace.findFiles(new vscode.RelativePattern(rootUri, '**/*.jpnov'), FIND_FILES_EXCLUDE);
   return found.map((uri) => normalizeFsPath(vscode.workspace.asRelativePath(uri, false))).sort();
 }
 
 /**
- * The shared multi-select chapter picker (add-chapters and the new-book wizard). Preserves
- * the QuickPick distinction the callers rely on: Esc = undefined, OK with none ticked = [].
+ * The multi-select chapter picker (add-chapters). Preserves the QuickPick distinction:
+ * Esc = undefined, OK with none ticked = [].
  */
-export async function pickChapterFiles(
-  rels: readonly string[],
-  extra?: { ignoreFocusOut?: boolean },
-): Promise<string[] | undefined> {
+async function pickChapterFiles(rels: readonly string[]): Promise<string[] | undefined> {
   type ChapterItem = vscode.QuickPickItem & { rel: string };
   const items = rels.map((rel): ChapterItem => {
     const { name, dir } = splitRelPath(rel);
@@ -128,7 +136,6 @@ export async function pickChapterFiles(
     canPickMany: true,
     matchOnDescription: true,
     placeHolder: vscode.l10n.t('Select chapter files to add'),
-    ...(extra ?? {}),
   });
   return picked?.map((p) => p.rel);
 }
@@ -166,6 +173,128 @@ async function addChapters(arg: unknown): Promise<void> {
     return;
   }
   await applyBookEdits(uri, [edit]);
+}
+
+/** The book-mode target folder: the single workspace folder, or a pick between several. */
+async function pickFolder(): Promise<vscode.WorkspaceFolder | undefined> {
+  const folders = vscode.workspace.workspaceFolders ?? [];
+  if (folders.length === 1) {
+    return folders[0];
+  }
+  return vscode.window.showWorkspaceFolderPick({
+    placeHolder: vscode.l10n.t('Select a folder for the new book'),
+    ignoreFocusOut: true,
+  });
+}
+
+/**
+ * The parked-suffix input box. Caret at 0, `suffix` after it: typing (IME composition
+ * included) inserts before the suffix, so the value is never rewritten mid-composition.
+ * Returns the normalized root-relative path; undefined = dismissed or unusable.
+ */
+async function promptNewFile(rootUri: string, suffix: string, prompt: string): Promise<string | undefined> {
+  const raw = await vscode.window.showInputBox({
+    prompt,
+    value: suffix,
+    valueSelection: [0, 0],
+    ignoreFocusOut: true,
+    validateInput: async (value) => {
+      const parsed = normalizeFileInput(value, suffix);
+      if (!parsed.ok) {
+        return parsed.error === 'empty'
+          ? vscode.l10n.t('Enter a file name')
+          : vscode.l10n.t('This file name cannot be used');
+      }
+      return (await fileExists(chapterUri(rootUri, parsed.rel)))
+        ? vscode.l10n.t('{0} already exists', parsed.rel)
+        : null;
+    },
+  });
+  if (raw === undefined) {
+    return undefined;
+  }
+  // The validator is advisory: re-derive here (writeNewFile re-probes the target too).
+  const parsed = normalizeFileInput(raw, suffix);
+  if (!parsed.ok) {
+    void vscode.window.showErrorMessage(vscode.l10n.t('Japanese Novel: this file name cannot be used; creation was cancelled.'));
+    return undefined;
+  }
+  return parsed.rel;
+}
+
+/** Creates `rel` (empty, parent folders included) under the root; null = exists / write failed (toasted). */
+async function writeNewFile(rootUri: string, rel: string): Promise<vscode.Uri | null> {
+  const root = vscode.Uri.parse(rootUri);
+  const segments = rel.split('/');
+  const target = vscode.Uri.joinPath(root, ...segments);
+  if (await fileExists(target)) {
+    void vscode.window.showErrorMessage(vscode.l10n.t('Japanese Novel: {0} already exists; creation was cancelled.', rel));
+    return null;
+  }
+  try {
+    await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(root, ...segments.slice(0, -1)));
+    await vscode.workspace.fs.writeFile(target, new Uint8Array());
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    void vscode.window.showErrorMessage(vscode.l10n.t("Japanese Novel: couldn't write {0}. {1}", rel, message));
+    return null;
+  }
+  return target;
+}
+
+/** Chapter mode: create the typed `.jpnov` under the book's root, list it in the book, open it. */
+async function createChapter(entry: BookEntry): Promise<void> {
+  const rel = await promptNewFile(entry.rootUri, '.jpnov', vscode.l10n.t('File name of the new chapter'));
+  if (rel === undefined) {
+    return;
+  }
+  const target = await writeNewFile(entry.rootUri, rel);
+  if (target === null) {
+    return;
+  }
+  const { uri, text } = await bookText(entry);
+  const edit = appendChapters(text, [rel]);
+  if (edit !== null) {
+    // null = already listed (re-creating a missing chapter's file) — nothing to append then.
+    await applyBookEdits(uri, [edit]);
+  }
+  await vscode.commands.executeCommand('vscode.open', target);
+}
+
+/** Book mode: create an empty `.jpbook` in the chosen folder and reveal its detail screen. */
+async function createBook(view: BooksViewProvider | undefined): Promise<void> {
+  if ((vscode.workspace.workspaceFolders ?? []).length === 0) {
+    // The `+` and the palette entry hide without a folder (workspaceFolderCount); the
+    // walkthrough's command link can still land here, so open the folder picker instead.
+    void vscode.commands.executeCommand('workbench.action.files.openFolder');
+    return;
+  }
+  const folder = await pickFolder();
+  if (folder === undefined) {
+    return;
+  }
+  const root = folder.uri.toString();
+  const rel = await promptNewFile(root, '.jpbook', vscode.l10n.t('File name of the new book'));
+  if (rel === undefined) {
+    return;
+  }
+  if (await writeNewFile(root, rel) !== null) {
+    await view?.revealNewBook(folder.uri, rel);
+  }
+}
+
+/**
+ * `jpbook.createFile` — one input creates a file, the parked suffix trailing what's typed.
+ * A book node makes a `.jpnov` chapter; no node (title bar, welcome, palette) makes an
+ * empty `.jpbook`, revealed in the panel — chapters and metadata are then added right there.
+ */
+export async function createFile(view: BooksViewProvider | undefined, arg?: unknown): Promise<void> {
+  const node = nodeOf(arg);
+  if (node === null) {
+    await createBook(view);
+  } else if (node.kind === 'book') {
+    await createChapter(node.entry);
+  }
 }
 
 async function removeChapterCmd(arg: unknown): Promise<void> {

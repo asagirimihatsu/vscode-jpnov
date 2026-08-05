@@ -23,6 +23,20 @@ export interface ContainmentError {
  * - absolute paths (`/foo`, `C:\foo`, `\\server\share`, or a `scheme:` URI)
  * - a leading `~` (home-relative)
  */
+/**
+ * True when the value names an absolute location a root-relative field must reject:
+ * a POSIX `/…` path, a Windows drive or UNC path, or a full `scheme:` URI. Shared with
+ * the panel's file-name input so the two ends of the pipeline can't drift.
+ */
+export function isAbsoluteLocation(value: string): boolean {
+  return (
+    value.startsWith('/') ||
+    value.startsWith('\\') ||
+    /^[A-Za-z]:[\\/]/.test(value) ||
+    /^[A-Za-z][A-Za-z\d+.-]*:/.test(value)
+  );
+}
+
 export function resolveContained(
   rootUri: string,
   rel: string,
@@ -40,13 +54,7 @@ export function resolveContained(
     return { ok: false, code: 'path.homeRelative', args: [label] };
   }
 
-  // Reject absolute POSIX paths, Windows drive/UNC paths, and full URIs (scheme:).
-  if (
-    trimmed.startsWith('/') ||
-    trimmed.startsWith('\\') ||
-    /^[A-Za-z]:[\\/]/.test(trimmed) ||
-    /^[A-Za-z][A-Za-z\d+.-]*:/.test(trimmed)
-  ) {
+  if (isAbsoluteLocation(trimmed)) {
     return { ok: false, code: 'path.absolute', args: [label] };
   }
 

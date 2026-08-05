@@ -48,6 +48,7 @@ function labels(): Labels {
     chapters: vscode.l10n.t('Chapters'),
     bookInfo: vscode.l10n.t('Book Info'),
     addChapters: vscode.l10n.t('Add chapters…'),
+    newChapter: vscode.l10n.t('New chapter…'),
     moveUp: vscode.l10n.t('Move up'),
     moveDown: vscode.l10n.t('Move down'),
     remove: vscode.l10n.t('Remove from book'),

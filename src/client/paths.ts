@@ -10,6 +10,14 @@ import * as vscode from 'vscode';
  */
 export const FIND_FILES_EXCLUDE = '**/{node_modules,.*}/**';
 
+/**
+ * A file URI from a root-relative entry — segments spread so a slash-bearing path never
+ * reaches joinPath as one encodable segment.
+ */
+export function chapterUri(rootUri: string, rel: string): vscode.Uri {
+  return vscode.Uri.joinPath(vscode.Uri.parse(rootUri), ...rel.split('/'));
+}
+
 /** Splits a root-relative path into filename and containing directory (`''` at the root). */
 export function splitRelPath(rel: string): { name: string; dir: string } {
   const cut = rel.lastIndexOf('/');

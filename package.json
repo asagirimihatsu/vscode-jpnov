@@ -527,9 +527,9 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "jpbook.createBook",
+        "command": "jpbook.createFile",
         "category": "%command.category%",
-        "title": "%command.books.createBook.title%",
+        "title": "%command.books.createFile.title%",
         "icon": "$(add)"
       },
       {
@@ -541,7 +541,7 @@
         "command": "jpbook.addChapters",
         "category": "%command.category%",
         "title": "%command.book.addChapters.title%",
-        "icon": "$(add)"
+        "icon": "$(checklist)"
       },
       {
         "command": "jpbook.removeChapter",
@@ -591,9 +591,9 @@
     "menus": {
       "view/title": [
         {
-          "command": "jpbook.createBook",
+          "command": "jpbook.createFile",
           "group": "navigation@0",
-          "when": "view == jpnov.books && !jpnov.booksDetail"
+          "when": "view == jpnov.books && !jpnov.booksDetail && workspaceFolderCount != 0"
         },
         {
           "command": "jpbook.refresh",
@@ -648,6 +648,10 @@
         {
           "command": "jpbook.addChapters",
           "when": "false"
+        },
+        {
+          "command": "jpbook.createFile",
+          "when": "workspaceFolderCount != 0"
         },
         {
           "command": "jpbook.removeChapter",
