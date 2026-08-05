@@ -2,7 +2,7 @@
   "Japanese Novel Language Server": "小説のプレビューサービス",
   "Japanese Novel: couldn't start the language server. {0}": "小説: プレビューサービスを起動できませんでした。{0}",
   "text": "テキスト",
-  "Japanese Novel: no books selected. Check a book in the Books panel, then build.": "小説: 本が選択されていません。「小説」パネルで本にチェックを入れてから出力してください。",
+  "Japanese Novel: no books selected. Check a book in the Books view, then build.": "小説: 本が選択されていません。「本の一覧」で本にチェックを入れてから出力してください。",
   "Japanese Novel: building {0} book(s) to {1}…": "小説: {0} 冊を {1} で出力中…",
   "Japanese Novel: build failed. {0}": "小説: 出力に失敗しました。{0}",
   "Japanese Novel: couldn't write {0}. {1}": "小説: {0} を書き込めませんでした。{1}",

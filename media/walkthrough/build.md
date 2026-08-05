@@ -6,7 +6,7 @@ header: 作品名　一
 ---
 first-chapter.jpnov
 final-chapter.jpnov
-        │  「小説」パネルでチェック → 出力
+        │  「本の一覧」でチェック → 出力
         ▼
 dist/volume1.html  … 縦書き・ページ組版
 dist/volume1.pdf   … 印刷用 PDF
