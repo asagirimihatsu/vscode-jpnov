@@ -1,0 +1,9 @@
+/* Reflow-only ruby class: NATIVE nested ruby for a left/both-side reading. ruby.ru moves its
+   own <rt> to the under side — the LEFT of a vertical-rl column — and the inner ruby of a
+   both-side pair resets its <rt> back to over (ruby-position inherits). Nesting is the HTML
+   double-sided ruby pattern (https://html.spec.whatwg.org/multipage/text-level-semantics.html#the-ruby-element);
+   -epub-/-webkit- spellings cover older reading systems. The paginated build's absolute lanes
+   cannot serve here: Apple Books neutralizes position:absolute in reflowable EPUB, dropping the
+   readings into the text flow. Verified in Chromium and WebKit. */
+ruby.ru{-epub-ruby-position:under;-webkit-ruby-position:after;ruby-position:under}
+ruby.ru>ruby{-epub-ruby-position:over;-webkit-ruby-position:before;ruby-position:over}

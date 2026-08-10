@@ -29,6 +29,7 @@ const SERVER_MODULE = fileURLToPath(new URL('../../dist/server/server.js', impor
 const BASE_SETTINGS: HtmlSettings = {
   charsPerLine: 40,
   linesPerPage: 34,
+  linePitch: 2,
   kinsoku: 'normal',
   autoTcy: 'punctuationPairs',
   lineNumbers: false,
@@ -192,6 +193,7 @@ test('the printed PDF is true A4 (auto → landscape), one PDF page per rendered
   const fit = fitPaper({
     charsPerLine: BASE_SETTINGS.charsPerLine,
     linesPerPage: BASE_SETTINGS.linesPerPage,
+    linePitch: BASE_SETTINGS.linePitch,
     hTop: HEADER_BAND,
     size: BASE_SETTINGS.paperSize,
     orientation: BASE_SETTINGS.paperOrientation,
@@ -209,6 +211,7 @@ test('the printed PDF follows paper size and forced orientation (A6 portrait)', 
   const fit = fitPaper({
     charsPerLine: settings.charsPerLine,
     linesPerPage: settings.linesPerPage,
+    linePitch: settings.linePitch,
     hTop: HEADER_BAND,
     size: settings.paperSize,
     orientation: settings.paperOrientation,

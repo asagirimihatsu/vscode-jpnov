@@ -277,6 +277,7 @@ async function buildRoot(
           books: [input],
           charsPerLine: selection.settings.charsPerLine,
           linesPerPage: selection.settings.linesPerPage,
+          linePitch: selection.settings.linePitch,
           kinsoku: selection.settings.kinsoku,
           autoTcy: selection.settings.autoTcy,
           paperSize: selection.settings.paperSize,

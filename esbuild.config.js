@@ -80,17 +80,18 @@ const stylesCodegen = {
 };
 
 /**
- * The CLIENT counterpart of stylesCodegen: the webview bundles (browser IIFE strings) that
- * `book/webviewHtml.ts` and `preview/preview.ts` inline. Loading a `webviewBundle.generated.ts`
- * re-runs the codegen (which bundles the webview TS via a nested esbuild) and registers the
- * webview sources as watch deps, so a `--watch` edit to a webview `.ts`/`.css` re-bundles and
- * re-triggers the client rebuild. Non-watch builds are covered by the up-front call above.
+ * The browser-program counterpart of stylesCodegen: the IIFE-string bundles that
+ * `book/webviewHtml.ts` / `preview/preview.ts` inline into their webviews and css.ts's
+ * emrProbe() inlines into the paginated outputs. Loading any of the generated modules
+ * re-runs the codegen (which bundles the browser TS via a nested esbuild) and registers the
+ * browser sources as watch deps, so a `--watch` edit to a webview `.ts`/`.css` re-bundles and
+ * re-triggers the dependent rebuild. Non-watch builds are covered by the up-front call above.
  * @type {import('esbuild').Plugin}
  */
 const webviewCodegen = {
   name: 'webview-codegen',
   setup(build) {
-    build.onLoad({ filter: /webviewBundle\.generated\.ts$/ }, async (args) => {
+    build.onLoad({ filter: /(?:webviewBundle|emrProbe)\.generated\.ts$/ }, async (args) => {
       // The up-front writeWebviewModules() already produced these; only --watch needs to re-run on a
       // source change (bundling the webview TS via nested esbuild is the costly step — skip it in
       // one-shot builds, where it would only re-bundle to an identical result).

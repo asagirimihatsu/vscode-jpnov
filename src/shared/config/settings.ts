@@ -16,7 +16,7 @@ import type { PaperOrientation, PaperSize } from '../compiler/geometry.ts';
 import { PAPER_ORIENTATIONS, PAPER_SIZES } from '../compiler/geometry.ts';
 import type { HtmlSettings, PreviewSettings } from '../protocol.ts';
 import type { LayoutSettings } from './types.ts';
-import { AUTO_TCY_MODES, CHARS_MAX, CHARS_MIN, KINSOKU_MODES, LAYOUT_DEFAULT } from './types.ts';
+import { AUTO_TCY_MODES, CHARS_MAX, CHARS_MIN, KINSOKU_MODES, LAYOUT_DEFAULT, LINE_PITCHES } from './types.ts';
 
 export const PREVIEW_CHROME_DEFAULT = {
   lineNumbers: true,
@@ -65,8 +65,9 @@ function boolOr(value: unknown, fallback: boolean): boolean {
 }
 
 /** `value` when it is a member of `allowed`, else `fallback`. */
-function enumOr<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
-  return typeof value === 'string' && (allowed as readonly string[]).includes(value)
+function enumOr<T extends string | number>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return (typeof value === 'string' || typeof value === 'number') &&
+      (allowed as readonly (string | number)[]).includes(value)
     ? (value as T)
     : fallback;
 }
@@ -76,6 +77,7 @@ function resolveLayout(s: LayoutSettings): LayoutSettings {
   return {
     charsPerLine: clampChars(s.charsPerLine, LAYOUT_DEFAULT.charsPerLine),
     linesPerPage: clampChars(s.linesPerPage, LAYOUT_DEFAULT.linesPerPage),
+    linePitch: enumOr(s.linePitch, LINE_PITCHES, LAYOUT_DEFAULT.linePitch),
     kinsoku: enumOr(s.kinsoku, KINSOKU_MODES, LAYOUT_DEFAULT.kinsoku),
     autoTcy: enumOr(s.autoTcy, AUTO_TCY_MODES, LAYOUT_DEFAULT.autoTcy),
   };

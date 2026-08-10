@@ -62,22 +62,23 @@ test('right-only ruby is native <ruby> — no lane spans, no rr class sunk', () 
   assert.ok(!used.has('rr'));
 });
 
-test('left/both-side ruby keep the lane markup minus rh-N, side class sunk', () => {
+test('left/both-side ruby are NATIVE nested ruby under .ru, class sunk', () => {
   const used = new Set<string>();
   const both = reflowSegments(
     rows('英雄《えいゆう》［＃「英雄」の左に「ひーろー」のルビ］'),
     used,
   );
-  const b = both[0]?.body ?? '';
-  assert.match(b, /<ruby class="br"><span>英<\/span><span>雄<\/span>/);
-  assert.match(b, /<rt><span>え<\/span>/);
-  assert.match(b, /<rt class="rt-l"><span>ひ<\/span>/);
-  assert.ok(used.has('br'));
+  // The both-side form nests: inner ruby carries the right reading, the outer <rt> is the left.
+  assert.equal(
+    both[0]?.body,
+    '<p><ruby class="ru"><ruby>英雄<rt>えいゆう</rt></ruby><rt>ひーろー</rt></ruby></p>',
+  );
+  assert.ok(used.has('ru'));
+  assert.ok(!used.has('br'));
 
-  // A reading far longer than the base would stretch rh-N in the paginated build; not here.
+  // Left-only stays a single ruby; no lane spans, no rh-N stretch (grid-only concepts).
   const left = segs('字［＃「字」の左に「ながいよみ」のルビ］');
-  assert.match(left[0]?.body ?? '', /<ruby class="lr">/);
-  assert.doesNotMatch(left[0]?.body ?? '', /rh-\d/);
+  assert.equal(left[0]?.body, '<p><ruby class="ru">字<rt>ながいよみ</rt></ruby></p>');
 });
 
 test('dash units are unwrapped to raw glyphs; runs bind under .insep nowrap', () => {

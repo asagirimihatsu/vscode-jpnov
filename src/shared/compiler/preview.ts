@@ -1,7 +1,7 @@
 import type { LayoutSettings } from '../config/types.ts';
 import { applyAutoTcy } from './autoTcy.ts';
 import type { PreviewChrome } from './chrome.ts';
-import { stylesheet } from './css.ts';
+import { emrProbe, stylesheet } from './css.ts';
 import { buildRows, flowToHtml } from './layout.ts';
 import { tokenize } from './tokenizer.ts';
 
@@ -40,9 +40,10 @@ export function renderPreview(
   const css = stylesheet({
     paginate: false,
     charsPerLine: opts.charsPerLine,
+    linePitch: opts.linePitch,
     linesPerPage: opts.linesPerPage,
     chrome: opts.chrome,
     usedClasses: [...used].sort(),
   });
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${css}</style></head><body>${body}</body></html>`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${css}</style></head><body>${body}${emrProbe(used)}</body></html>`;
 }

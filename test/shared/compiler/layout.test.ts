@@ -99,8 +99,8 @@ test('emphasis span groups consecutive units and re-opens across a wrap', () => 
   assert.equal(
     html('［＃傍点］一二三［＃傍点終わり］', 2),
     '<div class="book"><div class="page" data-page="0">' +
-      '<div class="line" data-line="0"><span class="emph-fs">一二</span></div>' +
-      '<div class="line" data-line="0"><span class="emph-fs">三</span></div></div></div>',
+      '<div class="line emr" data-line="0"><span class="emph-fs">一二</span></div>' +
+      '<div class="line emr" data-line="0"><span class="emph-fs">三</span></div></div></div>',
   );
 });
 
@@ -458,9 +458,15 @@ test('emit: an emphasis span re-opens on the next source line', () => {
   assert.equal(
     html('これは［＃傍点］強調\nされる文［＃傍点終わり］です'),
     '<div class="book"><div class="page" data-page="0">' +
-      '<div class="line" data-line="0">これは<span class="emph-fs">強調</span></div>' +
-      '<div class="line" data-line="1"><span class="emph-fs">される文</span>です</div></div></div>',
+      '<div class="line emr" data-line="0">これは<span class="emph-fs">強調</span></div>' +
+      '<div class="line emr" data-line="1"><span class="emph-fs">される文</span>です</div></div></div>',
   );
+});
+
+test('emit: right-side 傍点 stamps .emr on its line; left-side and 傍線 do not', () => {
+  assert.match(html('言葉［＃「言葉」に傍点］'), /<div class="line emr"/);
+  assert.doesNotMatch(html('言葉［＃「言葉」の左に傍点］'), /emr/);
+  assert.doesNotMatch(html('言葉［＃「言葉」に傍線］'), /emr/); // decorations are paint-only
 });
 
 test('emit: escapes & < > " in text', () => {

@@ -18,7 +18,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { resolveBrowserExecutable } from '../../src/client/browser.ts';
-import { HEADER_BAND, LINE_PITCH, fitPaper } from '../../src/shared/compiler/geometry.ts';
+import { HEADER_BAND, fitPaper } from '../../src/shared/compiler/geometry.ts';
+import { LINE_PITCHES } from '../../src/shared/config/types.ts';
 import type {
   BuildResult,
   HtmlSettings,
@@ -34,6 +35,7 @@ const SERVER_MODULE = fileURLToPath(new URL('../../dist/server/server.js', impor
 const PREVIEW_SETTINGS: PreviewSettings = {
   charsPerLine: 40,
   linesPerPage: 34,
+  linePitch: 2,
   kinsoku: 'normal',
   autoTcy: 'punctuationPairs',
   lineNumbers: true,
@@ -43,6 +45,7 @@ const PREVIEW_SETTINGS: PreviewSettings = {
 const HTML_SETTINGS: HtmlSettings = {
   charsPerLine: 40,
   linesPerPage: 34,
+  linePitch: 2,
   kinsoku: 'normal',
   autoTcy: 'punctuationPairs',
   lineNumbers: false,
@@ -189,12 +192,28 @@ const MEASURE_SCRIPT = `<script>
     range.selectNodeContents(line);
     painted = Math.round(range.getBoundingClientRect().height);
   }
+  // 傍点 lattice deviation: with line 0 plain and line 1 carrying .emr (both opening on the
+  // SAME canary glyph), the first glyphs must sit exactly one pitch apart — the emr
+  // counter-shift holding the grid against Chromium's emphasis-mark baseline push.
+  const lines = document.querySelectorAll('.line');
+  let emphDev = null;
+  if (lines.length >= 2 && lines[1].classList.contains('emr')) {
+    const gx = (el) => {
+      const r = document.createRange();
+      const tn = document.createTreeWalker(el, NodeFilter.SHOW_TEXT).nextNode();
+      r.setStart(tn, 0); r.setEnd(tn, 1);
+      return r.getBoundingClientRect().x;
+    };
+    emphDev = gx(lines[1]) - (gx(lines[0]) - lines[0].getBoundingClientRect().width);
+  }
   document.documentElement.setAttribute('${MARKER}', JSON.stringify({
+    emphDev,
     writingMode: page ? getComputedStyle(page).writingMode : 'missing',
     rootFontSize: parseFloat(getComputedStyle(document.documentElement).fontSize),
     pageWidth: pageRect.width,
     pageHeight: pageRect.height,
     lineCount: document.querySelectorAll('.line').length,
+    linePitchPx: line ? line.getBoundingClientRect().width : 0,
     paintedExtent: painted,
     rubyCount: document.querySelectorAll('ruby').length,
     tcyCount: document.querySelectorAll('.tcy').length,
@@ -203,11 +222,15 @@ const MEASURE_SCRIPT = `<script>
 </script>`;
 
 interface VerifyMetrics {
+  /** 傍点 glyph-lattice deviation in px, or null when line 1 carries no `.emr`. */
+  readonly emphDev: number | null;
   readonly writingMode: string;
   readonly rootFontSize: number;
   readonly pageWidth: number;
   readonly pageHeight: number;
   readonly lineCount: number;
+  /** Rendered width of one .line column — the 行送り in device px. */
+  readonly linePitchPx: number;
   readonly paintedExtent: number;
   readonly rubyCount: number;
   readonly tcyCount: number;
@@ -296,6 +319,7 @@ test('the built page renders vertically in a headless Chromium', BROWSER_SKIP, a
   const fit = fitPaper({
     charsPerLine: HTML_SETTINGS.charsPerLine,
     linesPerPage: HTML_SETTINGS.linesPerPage,
+    linePitch: HTML_SETTINGS.linePitch,
     hTop: HEADER_BAND, // lineNumbers off in HTML_SETTINGS
     size: HTML_SETTINGS.paperSize,
     orientation: HTML_SETTINGS.paperOrientation,
@@ -305,11 +329,22 @@ test('the built page renders vertically in a headless Chromium', BROWSER_SKIP, a
     Math.abs(metrics.rootFontSize - fit.fontMm * MM_TO_PX) < 0.05,
     `root font must be the fitted physical size (${String(metrics.rootFontSize)}px vs ${String(fit.fontMm * MM_TO_PX)}px)`,
   );
+  // Never larger than the paper (an overflowing sheet would spill onto a second printed
+  // page); up to ~4.5px smaller — Chromium floors fractional border widths to whole CSS px
+  // (the paper inset is a border), on top of the 0.02–0.04em emission slack.
+  for (const [measured, paperPx] of [
+    [metrics.pageWidth, fit.widthMm * MM_TO_PX],
+    [metrics.pageHeight, fit.heightMm * MM_TO_PX],
+  ] as const) {
+    assert.ok(
+      measured <= paperPx + 0.5 && measured >= paperPx - 4.5,
+      `the page border box must be the paper (${String(metrics.pageWidth)}×${String(metrics.pageHeight)}px` +
+        ` vs ${String(fit.widthMm)}×${String(fit.heightMm)}mm)`,
+    );
+  }
   assert.ok(
-    Math.abs(metrics.pageWidth - fit.widthMm * MM_TO_PX) < 2 &&
-      Math.abs(metrics.pageHeight - fit.heightMm * MM_TO_PX) < 2,
-    `the page border box must be the paper (${String(metrics.pageWidth)}×${String(metrics.pageHeight)}px` +
-      ` vs ${String(fit.widthMm)}×${String(fit.heightMm)}mm)`,
+    Math.abs(metrics.linePitchPx - HTML_SETTINGS.linePitch * metrics.rootFontSize) < 0.25,
+    `a line column must be exactly one 行送り wide (${String(metrics.linePitchPx)}px vs ${String(HTML_SETTINGS.linePitch * metrics.rootFontSize)}px)`,
   );
   assert.ok(metrics.lineCount >= 2, `expected multiple line columns, saw ${String(metrics.lineCount)}`);
   assert.ok(
@@ -318,6 +353,70 @@ test('the built page renders vertically in a headless Chromium', BROWSER_SKIP, a
   );
   assert.ok(metrics.rubyCount >= 1, 'the ruby annotation must reach the DOM');
   assert.ok(metrics.tcyCount >= 2, 'both 縦中横 units must reach the DOM');
+});
+
+test('the built page follows every 行送り tier (column width and fitted font track it)', BROWSER_SKIP, async () => {
+  assert.ok(browser, 'JPNOV_E2E_REQUIRE_BROWSER=1 but no Chromium-family browser was found');
+  const wsDir = await mkdtemp(join(tmpdir(), 'jpnov-e2e-pitch-'));
+  cleanups.push(wsDir);
+  const wsUri = pathToFileURL(wsDir).href.replace(/\/$/, '');
+  // Line 0 plain, line 1 with 傍点, both opening on the same canary glyph — feeds the
+  // measure script's emphDev lattice check.
+  const pitchText = '中の本文。\n中傍点行［＃「傍点行」に傍点］。\n';
+  await writeFile(join(wsDir, 'hon.jpnov'), pitchText, 'utf8');
+  await writeFile(join(wsDir, 'hon.jpbook'), '---\ntitle: 試験本\n---\nhon.jpnov\n', 'utf8');
+  const projectDirs = { [wsUri]: { outDir: 'dist' } };
+  const MM_TO_PX = 96 / 25.4;
+
+  for (const linePitch of LINE_PITCHES) {
+    const result = await conn().request<BuildResult>('jpnov/build', {
+      format: 'html',
+      settings: { ...HTML_SETTINGS, linePitch },
+      projectDirs,
+    });
+    assert.equal(result.ok, true, `@${String(linePitch)}: build must succeed`);
+    const artifact = result.artifacts?.[0];
+    assert.ok(artifact, `@${String(linePitch)}: build must emit the HTML artifact`);
+
+    const fit = fitPaper({
+      charsPerLine: HTML_SETTINGS.charsPerLine,
+      linesPerPage: HTML_SETTINGS.linesPerPage,
+      linePitch,
+      hTop: HEADER_BAND,
+      size: HTML_SETTINGS.paperSize,
+      orientation: HTML_SETTINGS.paperOrientation,
+    });
+    const prefix = `pitch-${String(linePitch).replace('.', '_')}`;
+    const m = JSON.parse(await measurePage(browser, artifact.content, MEASURE_SCRIPT, prefix)) as VerifyMetrics;
+    assert.ok(
+      Math.abs(m.rootFontSize - fit.fontMm * MM_TO_PX) < 0.05,
+      `@${String(linePitch)}: root font must track the pitch-fitted size (${String(m.rootFontSize)}px vs ${String(fit.fontMm * MM_TO_PX)}px)`,
+    );
+    // Same bound as the default-leg test: never past the paper, ≤ ~4.5px under it (border
+    // widths snap down to whole CSS px on screen).
+    for (const [measured, paperPx] of [
+      [m.pageWidth, fit.widthMm * MM_TO_PX],
+      [m.pageHeight, fit.heightMm * MM_TO_PX],
+    ] as const) {
+      assert.ok(
+        measured <= paperPx + 0.5 && measured >= paperPx - 4.5,
+        `@${String(linePitch)}: the page border box must stay the paper` +
+          ` (${String(m.pageWidth)}×${String(m.pageHeight)}px vs ${String(fit.widthMm)}×${String(fit.heightMm)}mm)`,
+      );
+    }
+    assert.ok(
+      Math.abs(m.linePitchPx - linePitch * m.rootFontSize) < 0.25,
+      `@${String(linePitch)}: a line column must be exactly one 行送り wide (${String(m.linePitchPx)}px vs ${String(linePitch * m.rootFontSize)}px)`,
+    );
+    // The .emr counter-shift must hold a 傍点 line on the glyph lattice at every tier ON ANY
+    // FONT: the emitted probe measures the machine's real mark-band metrics (the CSS closed
+    // form alone is exact only for a+d = 1em fonts — CI's fallback serif is not one).
+    // Uncompensated, the 1.5 tier is off by ≈0.25em+ here.
+    assert.ok(
+      m.emphDev !== null && Math.abs(m.emphDev) < 0.75,
+      `@${String(linePitch)}: a 傍点 line must stay on the glyph lattice (dev ${String(m.emphDev)}px)`,
+    );
+  }
 });
 
 /** Same parse-time trick as MEASURE_SCRIPT, for the drawn ダッシュ rules. */
@@ -396,7 +495,7 @@ const EDGE_MEASURE_SCRIPT = `<script>
     lineCount: seg ? seg.querySelectorAll('.line').length : 0,
     segWidth: seg ? seg.getBoundingClientRect().width : 0,
     frameWidth: cs ? parseFloat(cs.width) : 0,
-    ruled: cs ? cs.backgroundImage.includes('repeating-linear-gradient') : false,
+    ruleLayers: cs ? cs.backgroundImage.split('linear-gradient').length - 1 : 0,
   }));
 })();
 </script>`;
@@ -406,32 +505,40 @@ interface EdgeMetrics {
   readonly lineCount: number;
   readonly segWidth: number;
   readonly frameWidth: number;
-  readonly ruled: boolean;
+  /** Background layers on the frame — edgeRules() emits one per interior column boundary. */
+  readonly ruleLayers: number;
 }
 
-test('a ［＃改ページ］-shortened preview segment still frames and rules a full page', BROWSER_SKIP, async () => {
+test('a ［＃改ページ］-shortened preview segment frames and rules a full page at every 行送り', BROWSER_SKIP, async () => {
   assert.ok(browser, 'JPNOV_E2E_REQUIRE_BROWSER=1 but no Chromium-family browser was found');
-  const { html } = await conn().request<RenderFileResult>('jpnov/renderFile', {
-    uri: 'file:///e2e/edge.jpnov',
-    text: CHAPTER_TEXT,
-    settings: { ...PREVIEW_SETTINGS, edgeLine: 'red' },
-  });
+  for (const linePitch of LINE_PITCHES) {
+    const { html } = await conn().request<RenderFileResult>('jpnov/renderFile', {
+      uri: 'file:///e2e/edge.jpnov',
+      text: CHAPTER_TEXT,
+      settings: { ...PREVIEW_SETTINGS, edgeLine: 'red', linePitch },
+    });
 
-  const m = JSON.parse(await measurePage(browser, html, EDGE_MEASURE_SCRIPT, 'edge')) as EdgeMetrics;
+    const prefix = `edge-${String(linePitch).replace('.', '_')}`;
+    const m = JSON.parse(await measurePage(browser, html, EDGE_MEASURE_SCRIPT, prefix)) as EdgeMetrics;
 
-  assert.ok(m.ruled, 'the inter-column rules must ride the frame background');
-  assert.ok(
-    m.lineCount >= 1 && m.lineCount < PREVIEW_SETTINGS.linesPerPage,
-    `the corpus must under-fill the page for this test (saw ${String(m.lineCount)} lines)`,
-  );
-  const fullPage = PREVIEW_SETTINGS.linesPerPage * LINE_PITCH * m.rootFontSize;
-  assert.ok(
-    Math.abs(m.segWidth - fullPage) < 2,
-    `a short segment must reserve the full page width (${String(m.segWidth)}px vs ${String(fullPage)}px)`,
-  );
-  // The frame (whose background carries the rules) must span it (−2px of its own borders).
-  assert.ok(
-    m.frameWidth > 0 && m.segWidth - m.frameWidth < 4,
-    `the frame must span the reserved width (frame ${String(m.frameWidth)}px, segment ${String(m.segWidth)}px)`,
-  );
+    assert.equal(
+      m.ruleLayers,
+      PREVIEW_SETTINGS.linesPerPage - 1,
+      `@${String(linePitch)}: one rule layer per interior column boundary must ride the frame background`,
+    );
+    assert.ok(
+      m.lineCount >= 1 && m.lineCount < PREVIEW_SETTINGS.linesPerPage,
+      `@${String(linePitch)}: the corpus must under-fill the page for this test (saw ${String(m.lineCount)} lines)`,
+    );
+    const fullPage = PREVIEW_SETTINGS.linesPerPage * linePitch * m.rootFontSize;
+    assert.ok(
+      Math.abs(m.segWidth - fullPage) < 2,
+      `@${String(linePitch)}: a short segment must reserve the full page width (${String(m.segWidth)}px vs ${String(fullPage)}px)`,
+    );
+    // The frame (whose background carries the rules) must span it (−2px of its own borders).
+    assert.ok(
+      m.frameWidth > 0 && m.segWidth - m.frameWidth < 4,
+      `@${String(linePitch)}: the frame must span the reserved width (frame ${String(m.frameWidth)}px, segment ${String(m.segWidth)}px)`,
+    );
+  }
 });

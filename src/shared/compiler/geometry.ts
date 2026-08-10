@@ -3,26 +3,17 @@
  * generator (css.ts's `paperRules` via {@link fitPaper}) and the `--htop` band variable are
  * computed from these, so they cannot live only in the static stylesheets.
  *
- * Three of them (LINE_PITCH, FOLIO_BAND, SIDE_PAD) are ALSO written as plain literals in
- * `styles/*.css` (`2.25em` column pitch, `3em` folio band, `1.5em` side pads): that
- * double home is deliberate — `@page` cannot read `var()` portably (ruling: build output
- * stays portable) — and is guarded by `test/shared/compiler/styles-codegen.test.ts`, which
- * asserts the `.css` literals equal these constants. Change a value here WITHOUT updating the
- * fragments (or vice versa) and that test fails loudly.
+ * Two of them (FOLIO_BAND, SIDE_PAD) are ALSO written as plain literals in `styles/*.css`
+ * (`3em` folio band, `1.5em` side pads): that double home is deliberate — `@page` cannot
+ * read `var()` portably (ruling: build output stays portable) — and is guarded by
+ * `test/shared/compiler/styles-codegen.test.ts`, which asserts the `.css` literals equal
+ * these constants. Change a value here WITHOUT updating the fragments (or vice versa) and
+ * that test fails loudly. The line pitch is NOT a constant: the `jpnov.layout.linePitch`
+ * setting (LINE_PITCHES in config/types.ts) reaches the fragments as `--pitch` and this
+ * fit math as `opts.linePitch`.
  *
  * Pure + vscode-free.
  */
-
-/**
- * Inter-line (column) pitch as a multiple of 1em; also the CSS line-height. ONE constant,
- * edge rules on or off (the uniform-layout contract: every column is the same width
- * whether the 枠 is drawn or not, so toggling edgeLine never moves a glyph within its
- * segment/page). A ruby
- * annotation (rt at 0.5em) needs pitch ≥ 2em to stay inside its own line box (glyph half
- * 0.5 + rt 0.5 on the over side); 2.25 keeps a 0.125em clearance on each side, so the
- * inter-column rules — when drawn — never strike through the 注音.
- */
-export const LINE_PITCH = 2.25;
 
 // Build-only chrome bands, in em (the same unit system as the charsPerLine-em grid).
 // The header and folio bands are ALWAYS allocated — the sheet keeps stable top/bottom
@@ -105,6 +96,8 @@ function inset(paperMm: number, fontMm: number, sheetEm: number): number {
 export function fitPaper(opts: {
   readonly charsPerLine: number;
   readonly linesPerPage: number;
+  /** 行送り in em — the same value css.ts injects as `--pitch`. */
+  readonly linePitch: number;
   readonly hTop: number;
   readonly size: PaperSize;
   readonly orientation: PaperOrientation;
@@ -115,7 +108,7 @@ export function fitPaper(opts: {
   const paper = PAPER_MM[opts.size];
   const widthMm = landscape ? paper.h : paper.w;
   const heightMm = landscape ? paper.w : paper.h;
-  const sheetBlockEm = opts.linesPerPage * LINE_PITCH + 2 * SIDE_PAD;
+  const sheetBlockEm = opts.linesPerPage * opts.linePitch + 2 * SIDE_PAD;
   const sheetInlineEm = opts.charsPerLine + opts.hTop + FOLIO_BAND;
   const fontMm = Math.floor(Math.min(
     widthMm / (sheetBlockEm + 2 * PRINT_MARGIN),

@@ -1,8 +1,10 @@
 /**
- * Guards the deliberate DOUBLE HOME of the sheet geometry: LINE_PITCH / FOLIO_BAND / SIDE_PAD
- * live in geometry.ts (the TS paper-fit generator consumes them — `@page` cannot read `var()`
+ * Guards the deliberate DOUBLE HOME of the sheet geometry: FOLIO_BAND / SIDE_PAD live in
+ * geometry.ts (the TS paper-fit generator consumes them — `@page` cannot read `var()`
  * portably) AND as plain literals in the authored `styles/*.css` fragments. If either side moves
- * alone, this fails loudly (see geometry.ts's module header).
+ * alone, this fails loudly (see geometry.ts's module header). The line pitch is NOT double-homed:
+ * it is the `jpnov.layout.linePitch` setting, so every fragment site must read `var(--pitch)` —
+ * pinned as exact strings below, with a no-literal tripwire.
  *
  * (There is no committed-vs-generated drift test: `styles.generated.ts` is gitignored and
  * regenerated on demand by `npm run gen`, so there is no stale artifact to guard.)
@@ -18,7 +20,6 @@ import { fileURLToPath } from 'node:url';
 
 import {
   FOLIO_BAND,
-  LINE_PITCH,
   SIDE_PAD,
 } from '../../../src/shared/compiler/geometry.ts';
 
@@ -60,14 +61,7 @@ function cssValue(css: string, selector: string, prop: string, within?: string):
 }
 
 test('the .css geometry literals equal the geometry.ts constants (paper-fit double-home guard)', () => {
-  const previewBase = read('preview.base.css');
   const buildBase = read('build.base.css');
-
-  // LINE_PITCH: the column pitch literal, everywhere it appears as a plain value.
-  assert.equal(cssValue(previewBase, 'html', 'line-height'), LINE_PITCH);
-  assert.equal(cssValue(previewBase, '.line', 'block-size'), LINE_PITCH);
-  assert.equal(cssValue(buildBase, '.page', 'line-height'), LINE_PITCH);
-  assert.equal(cssValue(buildBase, '.line', 'block-size'), LINE_PITCH);
 
   // FOLIO_BAND: the always-reserved bottom band.
   assert.equal(cssValue(buildBase, '.page', 'padding-inline-end'), FOLIO_BAND);
@@ -92,17 +86,36 @@ test('the .css geometry literals equal the geometry.ts constants (paper-fit doub
   assert.equal(cssValue(read('build.folio.css'), '.pn.l', 'left'), SIDE_PAD + 0.35);
 });
 
-test('the edge fragments carry the LINE_PITCH gradient and page-extent literals', () => {
-  // These LINE_PITCH derivations live inside gradient stops / calc(), where cssValue()
-  // deliberately does not read — lock the full strings instead.
-  const edgeGradient = (unit: string): string =>
-    `repeating-linear-gradient(to left,transparent 0,transparent calc(${String(LINE_PITCH)}${unit} - 1px),color-mix(in srgb,var(--edge) 80%,transparent) calc(${String(LINE_PITCH)}${unit} - 1px),color-mix(in srgb,var(--edge) 80%,transparent) ${String(LINE_PITCH)}${unit})`;
-  assert.ok(read('build.edge.css').includes(edgeGradient('em')), 'build.edge.css gradient drifted from LINE_PITCH');
-  assert.ok(read('preview.edge.css').includes(edgeGradient('rem')), 'preview.edge.css gradient drifted from LINE_PITCH');
+test('the pitch-bearing fragment sites all read var(--pitch), and no literal pitch remains', () => {
+  // The pitch sites live inside calc(), where cssValue() deliberately does not read — lock
+  // the full var(--pitch) strings instead (the .line sizing and the 罫線 offsets MUST read
+  // the same variable: the uniform-layout contract; the 罫線 themselves are emitted by
+  // css.ts's edgeRules(), pinned in css.test.ts).
   assert.ok(
-    read('preview.edge.css').includes(`min-block-size:calc(var(--lpp)*${String(LINE_PITCH)}rem)`),
-    'preview.edge.css page extent drifted from LINE_PITCH',
+    read('preview.edge.css').includes('min-block-size:calc(var(--lpp)*var(--pitch)*1rem)'),
+    'preview.edge.css page extent must read var(--pitch)',
   );
+  assert.ok(read('preview.base.css').includes('line-height:var(--pitch);'), 'preview html line-height must read var(--pitch)');
+  assert.ok(read('preview.base.css').includes('.line{block-size:calc(var(--pitch)*1em);'), 'preview .line must read var(--pitch)');
+  assert.ok(read('build.base.css').includes('line-height:var(--pitch);'), 'build .page line-height must read var(--pitch)');
+  assert.ok(read('build.base.css').includes('block-size:calc(var(--lpp)*var(--pitch)*1em);'), 'build .page extent must read var(--pitch)');
+  assert.ok(read('build.base.css').includes('.line{block-size:calc(var(--pitch)*1em);'), 'build .line must read var(--pitch)');
+  // Tripwire: a bare pitch number sneaking back into a pitch-bearing fragment would silently
+  // detach that site from the setting (comments excepted — they may name the tiers).
+  for (const file of ['preview.base.css', 'build.base.css', 'preview.edge.css', 'build.edge.css']) {
+    const rules = read(file).replace(/\/\*[\s\S]*?\*\//g, '');
+    assert.ok(!rules.includes('2.25'), `${file} regrew a literal pitch`);
+  }
+});
+
+test('the edge fragments paint NO background of their own (edgeRules owns the 罫線)', () => {
+  // The 罫線 are css.ts edgeRules() per-boundary layers — the no-repeating-gradient ruling
+  // (print tiling drifts) lives there; a fragment-side background would be a second home.
+  for (const file of ['build.edge.css', 'preview.edge.css']) {
+    const rules = read(file).replace(/\/\*[\s\S]*?\*\//g, '');
+    assert.ok(!rules.includes('background-image'), `${file} must not paint its own background`);
+    assert.ok(!rules.includes('repeating-linear-gradient'), `${file} revived the tiled-gradient 罫線`);
+  }
 });
 
 test('the base fragments carry NO ruby rules (the css.ts classRule lanes own rt sizing)', () => {

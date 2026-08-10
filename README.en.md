@@ -115,8 +115,9 @@ but not Japanese typesetting:
 
 - **Genkō yōshi（原稿用紙）** — the manuscript grid Japanese prose is drafted
   on. The default page of **40 characters × 34 lines** mirrors common
-  submission requirements; turn on line numbers and column rules for the classic
-  manuscript-paper look:
+  submission requirements, and the line pitch comes in four steps
+  (`jpnov.layout.linePitch`); turn on line numbers and column
+  rules for the classic manuscript-paper look:
 
   ![A page with red column rules and line numbers, resembling manuscript paper](docs/images/genkoyoshi.png)
 
@@ -172,8 +173,11 @@ synthesising an oblique for Japanese fonts.
 ordinary right ruby for 両側ルビ (`青空文庫《あおぞらぶんこ》［＃「青空文庫」の左に
 「aozora bunko」のルビ］` — the annotation names the base only, never the `《》`
 part). Left readings are exempt from the ruby-kana lint, since they are often
-Latin. **縦中横** stands a short run upright in one square — keep it to 3
-characters or fewer (longer squishes and raises a Warning). **自動縦中横**
+Latin. Left ruby needs room to the left of the line — set
+`jpnov.layout.linePitch` to `2` or wider. At tighter pitches the reading
+overlaps the neighboring line. **縦中横** stands a short run upright in one
+square — keep it to 3 characters or fewer (longer squishes and raises a
+Warning). **自動縦中横**
 (`jpnov.layout.autoTcy`, default `punctuationPairs`) auto-combines the
 half-width pairs `!!` `!?` `?!` `??` with no markup — runs of three or more are
 never touched — and the text build writes the explicit markers out, so the
@@ -366,6 +370,7 @@ highlighting lists are per workspace folder; the browser path is per machine.
 | --- | --- | --- |
 | `jpnov.layout.charsPerLine` | `40` | Characters per line (16–64), preview and builds |
 | `jpnov.layout.linesPerPage` | `34` | Lines per page in builds (16–64) |
+| `jpnov.layout.linePitch` | `1.5` | Line pitch as a multiple of the character size: `1.5` / `1.75` / `2` / `2.25`; preview and built pages |
 | `jpnov.layout.kinsoku` | `normal` | Line-breaking rules: `none` / `normal` / `strict` |
 | `jpnov.layout.autoTcy` | `punctuationPairs` | Auto-combine `!!` `!?` `?!` `??`; `none` to disable |
 | `jpnov.layout.preview.lineNumbers` | `true` | Line numbers in the preview, restarting per page break |

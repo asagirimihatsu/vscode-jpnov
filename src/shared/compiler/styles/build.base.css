@@ -5,7 +5,7 @@ html{font-family:serif;}
 body{margin:0;}
 .book{display:block;}
 
-/* One sheet: linesPerPage columns (block axis, LINE_PITCH 2.25em each) × charsPerLine chars
+/* One sheet: linesPerPage columns (block axis, var(--pitch) em each) × charsPerLine chars
    (inline axis, 1em each). The bands are padding OUTSIDE the content box, so the grid keeps its
    exact size and the sheet grows instead; overflow's clip box is the padding box, so band
    content stays visible while anything past it is cut. --htop = header band 3 + on-demand
@@ -17,10 +17,11 @@ body{margin:0;}
    css.ts adds a white BORDER (the sheet→paper inset from fitPaper): the border box IS the
    physical paper in both media, while clipping and the furniture offsets stay on the
    padding box. */
-.page{writing-mode:vertical-rl;line-height:2.25;inline-size:calc(var(--cpl)*1em);block-size:calc(var(--lpp)*2.25em);padding-inline-start:calc(var(--htop)*1em);padding-inline-end:3em;padding-block-start:1.5em;padding-block-end:1.5em;position:relative;margin:2.5em auto;background:#fff;box-sizing:content-box;overflow:hidden;break-after:page;page-break-after:always;}
+.page{writing-mode:vertical-rl;line-height:var(--pitch);inline-size:calc(var(--cpl)*1em);block-size:calc(var(--lpp)*var(--pitch)*1em);padding-inline-start:calc(var(--htop)*1em);padding-inline-end:3em;padding-block-start:1.5em;padding-block-end:1.5em;position:relative;margin:2.5em auto;background:#fff;box-sizing:content-box;overflow:hidden;break-after:page;page-break-after:always;}
 
-/* Each line is one fixed-thickness column (2.25em = LINE_PITCH, ruby-safe). */
-.line{block-size:2.25em;margin:0;white-space:pre;}
+/* Each line is one fixed-thickness column of the configured 行送り (--pitch em; the
+   ruby-clearance ladder lives on LINE_PITCHES in config/types.ts). */
+.line{block-size:calc(var(--pitch)*1em);margin:0;white-space:pre;}
 /* No ruby rules here: every <rt> lives inside a classed ruby (rr/lr/br), whose on-demand
    classRule (css.ts) owns the lane layout INCLUDING the 0.5em rt size — the single home. */
 

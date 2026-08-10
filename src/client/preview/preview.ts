@@ -337,11 +337,14 @@ export class Preview {
     const meta = this.cspMeta(nonce, webview);
 
     let out = html;
-    // Add the nonce to the inline <style> tag(s) the compiler emits.
-    out = out.replace(/<style(\s[^>]*)?>/gi, (_m, attrs: string | undefined) => {
-      const existing = attrs ?? '';
-      return `<style${existing} nonce="${nonce}">`;
-    });
+    // Nonce the compiler's own inline <style>/<script> (the stylesheet and the 傍点 probe):
+    // document text is HTML-escaped upstream, so these tags are always the server's own.
+    for (const tag of ['style', 'script'] as const) {
+      out = out.replace(
+        new RegExp(`<${tag}(\\s[^>]*)?>`, 'gi'),
+        (_m, attrs: string | undefined) => `<${tag}${attrs ?? ''} nonce="${nonce}">`,
+      );
+    }
 
     // If for some reason there is no <head>, fall back to wrapping in our own shell.
     if (!/<head(\s[^>]*)?>/i.test(out)) {

@@ -223,10 +223,11 @@ function rubyLane(
 }
 
 /**
- * A ruby unit's markup for the REFLOW (EPUB) output. Right-only ruby is native `<ruby>` — the
- * reading system owns spacing and overhang there. A left/both-side ruby keeps the lane markup:
- * reader engines have the same broken double-sided ruby as Chrome (see {@link rubyHtml}) —
- * minus the grid-derived `rh-N` stretch, which is meaningless without the whole-cell grid.
+ * A ruby unit's markup for the REFLOW (EPUB) output: NATIVE `<ruby>` in every form — the
+ * reading system owns spacing and overhang. A left-side reading rides `ruby.ru`
+ * (class.ruby-u.css moves it to the under side); a both-side ruby nests, the HTML double-sided
+ * pattern. The paginated lanes cannot serve here: Apple Books neutralizes position:absolute in
+ * reflowable EPUB, dropping the absolutely positioned readings into the text flow.
  */
 export function reflowRubyHtml(
   r: { base: string; right?: string | undefined; left?: string | undefined },
@@ -234,7 +235,11 @@ export function reflowRubyHtml(
   if (r.left === undefined) {
     return `<ruby>${escapeHtml(r.base)}<rt>${escapeHtml(r.right ?? '')}</rt></ruby>`;
   }
-  return rubyHtml(r, Array.from(r.base).length);
+  const left = `<rt>${escapeHtml(r.left)}</rt>`;
+  if (r.right === undefined) {
+    return `<ruby class="ru">${escapeHtml(r.base)}${left}</ruby>`;
+  }
+  return `<ruby class="ru"><ruby>${escapeHtml(r.base)}<rt>${escapeHtml(r.right)}</rt></ruby>${left}</ruby>`;
 }
 
 /**
@@ -1105,13 +1110,21 @@ function emitLine(line: DisplayLine, used?: Set<string>, anchor = true, head = '
   if (used && line.heading !== undefined) {
     used.add('midashi');
   }
+  // Right-side 傍点 anywhere on the line: Chromium displaces the whole line's baseline for the
+  // mark band at pitch < 2, so the line carries the counter-shift class (class.emr.css).
+  const rightEmph = (u: Unit): boolean => u.emph !== undefined && !u.emph.endsWith('-l');
+  const emrClass =
+    line.units.some(rightEmph) || (line.hang !== undefined && rightEmph(line.hang)) ? ' emr' : '';
+  if (used && emrClass !== '') {
+    used.add('emr');
+  }
   // `anchor` lets the continuous preview suppress data-line on a source line's wrapped
   // continuation columns (first-display-line-only); the paginated build keeps the default
   // (anchor=true → every line), so its output is unchanged. `head` is out-of-flow line
   // furniture (the preview's number span) emitted before the column content.
   const dataLine =
     anchor && line.srcLine >= 0 ? ` data-line="${String(line.srcLine)}"` : '';
-  return `<div class="line${indentClass}${headingClass}"${dataLine}>${head}${html}</div>`;
+  return `<div class="line${indentClass}${headingClass}${emrClass}"${dataLine}>${head}${html}</div>`;
 }
 
 /** The folio's physical side on page `pi` (0-based), or null for no folio. */
