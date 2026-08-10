@@ -23,6 +23,7 @@ const render = (
     books: [book({ files: [{ name: 'a.jpnov', src }] })],
     charsPerLine: opts.charsPerLine ?? 40,
     linesPerPage: opts.linesPerPage ?? 34,
+    linePitch: 2,
     kinsoku: 'none',
     autoTcy: 'none',
     paperSize: 'a4',
@@ -43,6 +44,13 @@ test('renderBook emits a paginated page/line skeleton document', () => {
   );
 });
 
+test('a right-side 傍点 emits the --emr-shift probe script; otherwise no script at all', () => {
+  const emph = render('語［＃「語」に傍点］');
+  assert.match(emph, /<script>[^]*--emr-shift[^]*<\/script><\/body>/);
+  assert.doesNotMatch(render('語［＃「語」の左に傍点］'), /<script/);
+  assert.doesNotMatch(render('語［＃「語」に傍線］'), /<script/);
+});
+
 test('renderBook joins files[] in order with one blank separator line', () => {
   const html = renderBook({
     books: [
@@ -55,6 +63,7 @@ test('renderBook joins files[] in order with one blank separator line', () => {
     ],
     charsPerLine: 40,
     linesPerPage: 34,
+    linePitch: 2,
     kinsoku: 'none',
     autoTcy: 'none',
     paperSize: 'a4',
@@ -205,6 +214,7 @@ test('renderBook inserts the divider line + one blank as synthetic (anchor-less)
     books: [two('第一', '第二', '＊')],
     charsPerLine: 4,
     linesPerPage: 34,
+    linePitch: 2,
     kinsoku: 'none',
     autoTcy: 'none',
     paperSize: 'a4',
@@ -228,6 +238,7 @@ test('dual invariant: per-file render + glue == rendering the concatenated .txt'
   const opts = {
     charsPerLine: 8,
     linesPerPage: 5,
+    linePitch: 2,
     kinsoku: 'none',
     autoTcy: 'none',
     paperSize: 'a4',

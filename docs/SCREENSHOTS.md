@@ -124,6 +124,7 @@ const PAPER = 'html{background:#fff;color:#1a1a1a}body{padding-block:24px}';
 const bookOpts = {
   charsPerLine: 40,
   linesPerPage: 34,
+  linePitch: 1.5, // 既定値のまま撮る
   kinsoku: 'normal',
   autoTcy: 'punctuationPairs',
   paperSize: 'a4',
@@ -184,6 +185,7 @@ const shots: Shot[] = [
     mode: 'screenshot',
     html: renderPreview(NOTATION, {
       charsPerLine: 9,
+      linePitch: 2, // 見本に左ルビがある — 既定 1.5 では隣の行に重なる
       kinsoku: 'normal',
       autoTcy: 'punctuationPairs',
       chrome: { lineNumbers: false, edgeLine: 'none' },
@@ -198,6 +200,7 @@ const shots: Shot[] = [
     mode: 'screenshot',
     html: renderPreview(KINSOKU, {
       charsPerLine: 20,
+      linePitch: 1.5,
       kinsoku: 'none',
       autoTcy: 'punctuationPairs',
       chrome: { lineNumbers: false, edgeLine: 'none' },
@@ -212,6 +215,7 @@ const shots: Shot[] = [
     mode: 'screenshot',
     html: renderPreview(KINSOKU, {
       charsPerLine: 20,
+      linePitch: 1.5,
       kinsoku: 'normal',
       autoTcy: 'punctuationPairs',
       chrome: { lineNumbers: false, edgeLine: 'none' },

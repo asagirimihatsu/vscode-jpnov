@@ -6,7 +6,7 @@
    column, so (100vh − 2·16px pad) / (charsPerLine + 2·EDGE_INSET) makes a full line PLUS the
    always-reserved frame gaps fill the pane top to bottom; vh re-evaluates on panel resize, so
    no script is involved. --cpl is the only dynamic input; 0.7 = 2 × EDGE_INSET (0.35). */
-html{writing-mode:vertical-rl;font-family:serif;line-height:2.25;font-size:calc((100vh - 32px) / (var(--cpl) + 0.7));}
+html{writing-mode:vertical-rl;font-family:serif;line-height:var(--pitch);font-size:calc((100vh - 32px) / (var(--cpl) + 0.7));}
 
 /* The inline axis is vertical here: padding-inline is the top/bottom breathing room the
    fit formula subtracts (32px = 2 × this pad). The bottom half also keeps the horizontal
@@ -23,8 +23,9 @@ body{margin:0;padding-inline:16px;}
 
 /* Re-pin the manuscript to the scaled root (1rem) on .line, so a host/webview-injected
    body{font-size} can't desync the glyph advance from the em-based line pitch.
-   block-size 2.25em = LINE_PITCH (see geometry.ts — ruby-safe column pitch). */
-.line{block-size:2.25em;margin:0;white-space:pre;font-size:1rem;font-family:serif;}
+   block-size = the configured 行送り (--pitch em; the ruby-clearance ladder lives on
+   LINE_PITCHES in config/types.ts). */
+.line{block-size:calc(var(--pitch)*1em);margin:0;white-space:pre;font-size:1rem;font-family:serif;}
 /* No ruby rules here: every <rt> lives inside a classed ruby (rr/lr/br), whose on-demand
    classRule (css.ts) owns the lane layout INCLUDING the 0.5em rt size — the single home. */
 

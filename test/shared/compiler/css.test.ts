@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import type { BuildChrome, PreviewChrome } from '../../../src/shared/compiler/chrome.ts';
 import { reflowStylesheet, stylesheet } from '../../../src/shared/compiler/css.ts';
 import type { PaperOrientation, PaperSize } from '../../../src/shared/compiler/geometry.ts';
+import type { LinePitch } from '../../../src/shared/config/types.ts';
+import { LINE_PITCHES } from '../../../src/shared/config/types.ts';
 
 /**
  * The single 80%-alpha edge recipe (base-INDEPENDENT — the base colour rides the `--edge`
@@ -11,10 +13,20 @@ import type { PaperOrientation, PaperSize } from '../../../src/shared/compiler/g
 const EDGE_MIX = 'color-mix(in srgb,var(--edge) 80%,transparent)';
 /** A match pattern: raw regex source with the escaped recipe appended. */
 const edgeMixRe = (raw: string): RegExp => new RegExp(raw + EDGE_MIX.replace(/[()]/g, '\\$&'));
-/** The inter-column rules: the frame's own repeating background (em in build, rem in preview);
- *  each pitch period inks its last 1px, independent of the .line count. */
-const EDGE_GRAD = (u: 'em' | 'rem'): string =>
-  `background-image:repeating-linear-gradient(to left,transparent 0,transparent calc(2.25${u} - 1px),${EDGE_MIX} calc(2.25${u} - 1px),${EDGE_MIX} 2.25${u});background-origin:border-box;background-clip:padding-box`;
+/** The inter-column rules: css.ts edgeRules() — one 1px background layer per interior column
+ *  boundary, each an independent `right calc(k*pitch)` offset (em in build, rem in preview;
+ *  the no-repeating-gradient ruling lives on edgeRules). */
+const EDGE_RULES = (selector: string, u: 'em' | 'rem', linesPerPage = 34): string => {
+  const images: string[] = [];
+  const positions: string[] = [];
+  for (let k = 1; k < linesPerPage; k++) {
+    images.push(`linear-gradient(${EDGE_MIX},${EDGE_MIX})`);
+    positions.push(`right calc(${String(k)}*var(--pitch)*1${u} - 1px) top`);
+  }
+  return `${selector}{background-image:${images.join(',')};` +
+    `background-position:${positions.join(',')};` +
+    'background-size:1px 100%;background-repeat:no-repeat;}';
+};
 
 const PREVIEW_OFF: PreviewChrome = { lineNumbers: false, edgeLine: 'none' };
 const BUILD_OFF: BuildChrome = {
@@ -30,6 +42,7 @@ function preview(
   o: {
     charsPerLine?: number;
     linesPerPage?: number;
+    linePitch?: LinePitch;
     chrome?: PreviewChrome;
     usedClasses?: readonly string[];
   } = {},
@@ -38,6 +51,7 @@ function preview(
     paginate: false,
     charsPerLine: o.charsPerLine ?? 40,
     linesPerPage: o.linesPerPage ?? 34,
+    linePitch: o.linePitch ?? 2,
     chrome: o.chrome ?? PREVIEW_OFF,
     usedClasses: o.usedClasses ?? [],
   });
@@ -48,6 +62,7 @@ function build(
   o: {
     charsPerLine?: number;
     linesPerPage?: number;
+    linePitch?: LinePitch;
     paperSize?: PaperSize;
     paperOrientation?: PaperOrientation;
     chrome?: BuildChrome;
@@ -58,6 +73,7 @@ function build(
     paginate: true,
     charsPerLine: o.charsPerLine ?? 40,
     linesPerPage: o.linesPerPage ?? 34,
+    linePitch: o.linePitch ?? 2,
     paperSize: o.paperSize ?? 'a4',
     paperOrientation: o.paperOrientation ?? 'auto',
     chrome: o.chrome ?? BUILD_OFF,
@@ -71,17 +87,18 @@ test('stylesheet renders vertical-rl writing mode', () => {
 
 test('paginated stylesheet sizes the page grid + fits the paper', () => {
   // vertical-rl: the static calc() geometry reads the :root variables (page block = lpp ×
-  // 2.25em columns; page inline = cpl × 1em chars); the paper rules stay TS-computed
+  // pitch columns; page inline = cpl × 1em chars); the paper rules stay TS-computed
   // (var() is not portable inside @page). 25 > 30/2 → auto picks landscape A4.
   const css = build({ charsPerLine: 30, linesPerPage: 25 });
   assert.match(css, /\.page\{[^}]*inline-size:calc\(var\(--cpl\)\*1em\)/);
-  assert.match(css, /\.page\{[^}]*block-size:calc\(var\(--lpp\)\*2\.25em\)/);
+  assert.match(css, /\.page\{[^}]*block-size:calc\(var\(--lpp\)\*var\(--pitch\)\*1em\)/);
   assert.match(css, /:root\{[^}]*--cpl:30/);
+  assert.match(css, /:root\{[^}]*--pitch:2[;}]/);
   assert.match(css, /:root\{[^}]*--lpp:25/);
   assert.match(css, /@page\{size:297mm 210mm;margin:0;\}/);
-  // The smaller grid scales UP onto the same paper: font 4.622mm, sheet→paper border.
-  assert.match(css, /html\{font-size:4\.622mm;\}/);
-  assert.match(css, /\.page\{border:solid #fff;border-width:4\.70em 2\.49em;\}/);
+  // The smaller grid scales UP onto the same paper: font 5.120mm, sheet→paper border.
+  assert.match(css, /html\{font-size:5\.120mm;\}/);
+  assert.match(css, /\.page\{border:solid #fff;border-width:2\.49em 2\.49em;\}/);
 });
 
 test('paginated stylesheet breaks each .page onto its own sheet', () => {
@@ -114,14 +131,14 @@ test('non-paginated (preview) stylesheet fits the root font-size to the viewport
   // advance from the em-based pitch.
   const css = preview({ charsPerLine: 25 });
   assert.match(css, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ \(var\(--cpl\) \+ 0\.7\)\)/);
-  assert.match(css, /:root\{--cpl:25\}/);
+  assert.match(css, /:root\{--cpl:25;--pitch:2\}/);
   assert.match(css, /\.line\{[^}]*font-size:1rem/);
 });
 
 test('preview fit formula at the standard 40 chars per line pads the columns', () => {
   const css = preview();
   assert.match(css, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ \(var\(--cpl\) \+ 0\.7\)\)/);
-  assert.match(css, /:root\{--cpl:40\}/);
+  assert.match(css, /:root\{--cpl:40;--pitch:2\}/);
   // The padding the formula subtracts (top/bottom = inline axis in vertical-rl).
   assert.match(css, /body\{[^}]*padding-inline:16px/);
   // The matching text inset the denominator pays for — reserved with or without a frame.
@@ -167,12 +184,12 @@ test('字下げ padding is inline-start, never block-start (axis lock)', () => {
 
 test('base fill rules stay untouched by decoration/indent classes', () => {
   const p = build({ usedClasses: ['dec-wavy', 'b', 'i', 'indent-5'] });
-  assert.match(p, /\.line\{block-size:2\.25em;margin:0;white-space:pre;\}/);
+  assert.match(p, /\.line\{block-size:calc\(var\(--pitch\)\*1em\);margin:0;white-space:pre;\}/);
   assert.match(p, /@page\{size:297mm 210mm;margin:0;\}/); // 34 > 40/2 → auto lands on landscape A4
   const v = preview({ usedClasses: ['indent-5'] });
   assert.match(v, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ \(var\(--cpl\) \+ 0\.7\)\)/);
-  assert.match(v, /:root\{--cpl:40\}/);
-  assert.match(v, /\.line\{[^}]*block-size:2\.25em[^}]*font-size:1rem/);
+  assert.match(v, /:root\{--cpl:40;--pitch:2\}/);
+  assert.match(v, /\.line\{[^}]*block-size:calc\(var\(--pitch\)\*1em\)[^}]*font-size:1rem/);
 });
 
 test('傍線 rules carry an explicit text-underline-position (right default / left variant)', () => {
@@ -265,6 +282,29 @@ test('ruby rr/lr/br rule sets are on-demand, self-contained and media-identical'
   }
 });
 
+test('傍点 .emr counter-shift is on-demand, probe-driven with a closed-form fallback', () => {
+  for (const make of [preview, build]) {
+    assert.match(
+      make({ usedClasses: ['emr'] }),
+      /\.emr\{translate:var\(--emr-shift,max\(0em,\(2 - var\(--pitch\)\)\*0\.5em\)\) 0\}/,
+    );
+    assert.doesNotMatch(make(), /\.emr\{/);
+  }
+});
+
+test('reflow ruby.ru rule is native ruby-position (under + nested-over reset), on demand', () => {
+  const css = reflowStylesheet('normal', ['ru']);
+  assert.match(
+    css,
+    /ruby\.ru\{-epub-ruby-position:under;-webkit-ruby-position:after;ruby-position:under\}/,
+  );
+  assert.match(
+    css,
+    /ruby\.ru>ruby\{-epub-ruby-position:over;-webkit-ruby-position:before;ruby-position:over\}/,
+  );
+  assert.doesNotMatch(reflowStylesheet('normal', []), /ruby\.ru/);
+});
+
 test('.indent-N rules generate on demand; malformed suffixes are ignored', () => {
   const css = preview({ usedClasses: ['indent-2', 'indent-10'] });
   assert.match(css, /\.indent-2\{padding-inline-start:2em\}/);
@@ -306,34 +346,34 @@ test('preview line numbers: fixed-px out-of-flow .ln rule (numbers are JS-emitte
   assert.doesNotMatch(css, /::after/); // no edge rules leak into the lineNumbers-only sheet
 });
 
-test('preview edge: frame + full-page background rules on the ruby-safe pitch', () => {
+test('preview edge: frame + full-page background rules on the shared pitch', () => {
   const red = preview({ chrome: { lineNumbers: false, edgeLine: 'red' } });
   assert.match(red, /\.line\{position:relative;\}/); // paint order: text above the frame pseudo
   // The rules ride the frame's own background — independent of the .line count.
-  assert.ok(red.includes(EDGE_GRAD('rem')));
+  assert.ok(red.includes(EDGE_RULES('.segment::before', 'rem')));
   assert.match(red, edgeMixRe(String.raw`\.segment::before\{[^}]*border:1px solid `));
   assert.match(red, /:root\{[^}]*--edge:#cc0000\}/); // the recipe's base colour rides --edge
   assert.doesNotMatch(red, /::after/);
   assert.doesNotMatch(red, /border-left|border-right/);
   // While the frame is drawn, a segment reserves the full linesPerPage page width; the
   // --lpp it reads is gated in WITH the edge variables (none ⇒ neither appears).
-  assert.match(red, /\.segment\{min-block-size:calc\(var\(--lpp\)\*2\.25rem\);\}/);
+  assert.match(red, /\.segment\{min-block-size:calc\(var\(--lpp\)\*var\(--pitch\)\*1rem\);\}/);
   assert.match(red, /:root\{[^}]*--lpp:34;--edge:#cc0000\}/);
   // The frame is full-band-high and starts at top:0 (containing block = the segment band).
   assert.match(red, /\.segment::before\{[^}]*top:0;[^}]*height:calc\(100vh - 32px\)/);
   assert.match(red, /\.segment\{position:relative;padding-inline:0\.35rem;\}/);
   assert.doesNotMatch(red, /\.book/); // the one-frame-around-everything recipe is gone
-  // The pitch is the SAME 2.25em with rules on or off (uniform-layout contract); it is
-  // wide enough that the boundary lines clear ruby annotations.
-  assert.match(red, /html\{[^}]*line-height:2\.25/);
-  assert.match(red, /\.line\{[^}]*block-size:2\.25em/);
+  // The pitch is the SAME --pitch value with rules on or off (uniform-layout contract):
+  // the .line sizing and the 罫線 period read the one variable.
+  assert.match(red, /html\{[^}]*line-height:var\(--pitch\)/);
+  assert.match(red, /\.line\{[^}]*block-size:calc\(var\(--pitch\)\*1em\)/);
   const text = preview({ chrome: { lineNumbers: false, edgeLine: 'text' } });
-  assert.ok(text.includes(EDGE_GRAD('rem')));
+  assert.ok(text.includes(EDGE_RULES('.segment::before', 'rem')));
   assert.match(text, edgeMixRe(String.raw`\.segment::before\{[^}]*border:1px solid `));
   assert.match(text, /:root\{[^}]*--edge:currentColor\}/);
   // Rules off ⇒ the SAME pitch — toggling edgeLine never moves a glyph within its segment
   // (the frame look also reserves the full page extent for short segments).
-  assert.match(preview(), /html\{[^}]*line-height:2\.25/);
+  assert.match(preview(), /html\{[^}]*line-height:var\(--pitch\)/);
 });
 
 test('preview all-off chrome emits no .ln rule, no edge rules, no frame', () => {
@@ -344,7 +384,7 @@ test('preview all-off chrome emits no .ln rule, no edge rules, no frame', () => 
   // …but the text inset stays reserved, so turning a frame on moves nothing.
   assert.match(css, /\.segment\{position:relative;padding-inline:0\.35rem;\}/);
   // Zero dead payload: the frame's page extent (and its --lpp) rides ONLY the edge fragment.
-  assert.doesNotMatch(css, /--lpp|min-block-size|repeating-linear-gradient/);
+  assert.doesNotMatch(css, /--lpp|min-block-size|linear-gradient/);
   assert.doesNotMatch(css, /counter/);
   assert.match(css, /\.pb-label\{/); // the page-break label is unconditional
 });
@@ -388,14 +428,15 @@ test('build all-on chrome: bands, outset frame, counters, rules, furniture style
   // border is the invisible white paper inset from the paper rules.
   assert.doesNotMatch(css, /\.page\{[^}]*border:1px/);
   assert.match(css, /\.page\{border:solid #fff;/);
-  // The pitch is the same 2.25em with rules on or off; it keeps the rules clear of ruby.
-  assert.match(css, /\.page\{[^}]*line-height:2\.25/);
-  assert.match(css, /\.page\{[^}]*block-size:calc\(var\(--lpp\)\*2\.25em\)/);
+  // The pitch is the same --pitch value with rules on or off (uniform-layout contract).
+  assert.match(css, /\.page\{[^}]*line-height:var\(--pitch\)/);
+  assert.match(css, /\.page\{[^}]*block-size:calc\(var\(--lpp\)\*var\(--pitch\)\*1em\)/);
+  assert.match(css, /:root\{[^}]*--pitch:2[;}]/);
   assert.match(css, /:root\{[^}]*--lpp:34/);
-  assert.match(css, /\.line\{[^}]*block-size:2\.25em/);
+  assert.match(css, /\.line\{[^}]*block-size:calc\(var\(--pitch\)\*1em\)/);
   // 罫線 ride the frame's own background (full page extent, independent of the .line count);
   // print-color-adjust keeps them in print/PDF (borders print, backgrounds are omitted).
-  assert.ok(css.includes(EDGE_GRAD('em')));
+  assert.ok(css.includes(EDGE_RULES('.page::before', 'em')));
   assert.match(css, /\.page::before\{[^}]*-webkit-print-color-adjust:exact;print-color-adjust:exact/);
   assert.doesNotMatch(css, /::after/);
   assert.doesNotMatch(css, /\.line[^{]*\{[^}]*box-shadow/);
@@ -417,7 +458,7 @@ test('build all-on chrome: bands, outset frame, counters, rules, furniture style
   // The line-number band widens the sheet (hTop 4), which narrows only the top/bottom
   // paper inset — same paper, same font (the block axis stays the binding one).
   assert.match(css, /@page\{size:297mm 210mm;margin:0;\}/);
-  assert.match(css, /\.page\{border:solid #fff;border-width:6\.37em 2\.49em;\}/);
+  assert.match(css, /\.page\{border:solid #fff;border-width:3\.36em 2\.49em;\}/);
 });
 
 test('build all-off chrome keeps a plain sheet with the reserved bands, no chrome rules', () => {
@@ -429,12 +470,12 @@ test('build all-off chrome keeps a plain sheet with the reserved bands, no chrom
   assert.match(css, /\.page\{[^}]*padding-inline-start:calc\(var\(--htop\)\*1em\)/);
   assert.match(css, /:root\{[^}]*--htop:3/); // header band only — no line-number band
   assert.match(css, /\.page\{[^}]*padding-inline-end:3em/);
-  assert.match(css, /\.page\{[^}]*line-height:2\.25/); // the SAME pitch without edge rules
+  assert.match(css, /\.page\{[^}]*line-height:var\(--pitch\)/); // the SAME pitch without edge rules
   // The paper rules: 投稿書式 40×34 on auto-landscape A4 — exact mm @page, the root font
   // that scales the em sheet onto it, and the sheet→paper inset as a white border.
   assert.match(css, /@page\{size:297mm 210mm;margin:0;\}/);
-  assert.match(css, /html\{font-size:3\.514mm;\}/);
-  assert.match(css, /\.page\{border:solid #fff;border-width:6\.87em 2\.49em;\}/);
+  assert.match(css, /html\{font-size:3\.907mm;\}/);
+  assert.match(css, /\.page\{border:solid #fff;border-width:3\.86em 2\.49em;\}/);
   // The screen-only paper look (grey backdrop + paper shadow + the cosmetic 2.5em gap)
   // is chrome-independent — present even with every feature off — and print resets it.
   assert.match(css, /@media screen\{html\{background:#e8e8e8;\}\.page\{box-shadow:0 1px 4px rgba\(0,0,0,0\.25\);\}\}/);
@@ -460,9 +501,9 @@ test('build red edge lines colour both the frame and the inter-column rules', ()
     /\.page::before\{[^}]*top:calc\(var\(--htop\)\*1em - 0\.35em\);right:1\.5em;bottom:2\.65em;left:1\.5em/,
   );
   assert.match(css, /:root\{[^}]*--htop:3/);
-  assert.ok(css.includes(EDGE_GRAD('em')));
+  assert.ok(css.includes(EDGE_RULES('.page::before', 'em')));
   assert.match(css, /\.line\{[^}]*position:relative/); // paint order: text above the frame pseudo
-  assert.match(css, /\.line\{[^}]*block-size:2\.25em/); // the constant ruby-safe pitch
+  assert.match(css, /\.line\{[^}]*block-size:calc\(var\(--pitch\)\*1em\)/); // the one --pitch value
 });
 
 test('build bands: header/folio bands are constant; only line numbers add geometry', () => {
@@ -477,7 +518,7 @@ test('build bands: header/folio bands are constant; only line numbers add geomet
     assert.match(css, /\.page\{[^}]*padding-inline-start:calc\(var\(--htop\)\*1em\)/);
     assert.match(css, /\.page\{[^}]*padding-inline-end:3em/);
     assert.match(css, /@page\{size:297mm 210mm/); // same paper whatever the furniture
-    assert.match(css, /html\{font-size:3\.514mm;\}/); // …and the same fit
+    assert.match(css, /html\{font-size:3\.907mm;\}/); // …and the same fit
   }
   const lnOnly = build({ chrome: { ...BUILD_OFF, lineNumbers: true } });
   assert.match(lnOnly, /:root\{[^}]*--htop:4/); // header 3 + numbers 1
@@ -489,18 +530,39 @@ test('paper settings pick the box: A6, forced orientation, auto portrait', () =>
   // The default grid on A6 (文庫判) — auto still lands landscape.
   const a6 = build({ paperSize: 'a6' });
   assert.match(a6, /@page\{size:148mm 105mm;margin:0;\}/);
-  assert.match(a6, /html\{font-size:1\.751mm;\}/);
-  assert.match(a6, /\.page\{border:solid #fff;border-width:6\.97em 2\.50em;\}/);
+  assert.match(a6, /html\{font-size:1\.947mm;\}/);
+  assert.match(a6, /\.page\{border:solid #fff;border-width:3\.95em 2\.49em;\}/);
   // Forced portrait turns the paper, not the grid — the surplus goes top/bottom.
   const portrait = build({ paperOrientation: 'portrait' });
   assert.match(portrait, /@page\{size:210mm 297mm;margin:0;\}/);
-  assert.match(portrait, /html\{font-size:2\.485mm;\}/);
-  assert.match(portrait, /\.page\{border:solid #fff;border-width:36\.74em 2\.49em;\}/);
+  assert.match(portrait, /html\{font-size:2\.763mm;\}/);
+  assert.match(portrait, /\.page\{border:solid #fff;border-width:30\.73em 2\.49em;\}/);
   // A tall grid picks portrait on its own (18 > 40/2 is false).
   const tall = build({ linesPerPage: 18 });
   assert.match(tall, /@page\{size:210mm 297mm;margin:0;\}/);
-  assert.match(tall, /html\{font-size:4\.329mm;\}/);
-  assert.match(tall, /\.page\{border:solid #fff;border-width:11\.29em 2\.49em;\}/);
+  assert.match(tall, /html\{font-size:4\.772mm;\}/);
+  assert.match(tall, /\.page\{border:solid #fff;border-width:8\.10em 2\.49em;\}/);
+});
+
+test('every linePitch tier rides :root{--pitch}, identical with edge rules on or off', () => {
+  // The acceptance contract: one --pitch value per document, injected unconditionally in both
+  // media, unchanged by edgeLine (the uniform-layout contract) — the .line sizing, the html/.page
+  // line-height and the 罫線 layer offsets all read this one variable.
+  for (const linePitch of LINE_PITCHES) {
+    const probe = new RegExp(`:root\\{[^}]*--pitch:${String(linePitch).replace('.', '\\.')}[;}]`);
+    for (const edgeLine of ['none', 'red'] as const) {
+      assert.match(
+        preview({ linePitch, chrome: { lineNumbers: false, edgeLine } }),
+        probe,
+        `preview @${String(linePitch)} edge=${edgeLine}`,
+      );
+      assert.match(
+        build({ linePitch, chrome: { ...BUILD_OFF, edgeLine } }),
+        probe,
+        `build @${String(linePitch)} edge=${edgeLine}`,
+      );
+    }
+  }
 });
 
 test('preview carries no paper rules (screen fit stays viewport-based)', () => {
@@ -525,7 +587,7 @@ test('reflow stylesheet has no geometry, no chrome, no @page — the reading sys
   const css = reflowStylesheet('normal', []);
   assert.match(css, /html\{[^}]*writing-mode:vertical-rl\}/);
   assert.ok(css.includes('-epub-writing-mode:vertical-rl'), 'legacy spelling for older readers');
-  assert.doesNotMatch(css, /--cpl|--lpp|--htop|--edge/);
+  assert.doesNotMatch(css, /--cpl|--lpp|--pitch|--htop|--edge/);
   assert.doesNotMatch(css, /@page|\.page\b|\.segment\b|\.line\b|\.ln\b|\.hd\b|\.pn\b/);
   assert.doesNotMatch(css, /white-space:pre/); // the reader wraps; pre would defeat it
 });

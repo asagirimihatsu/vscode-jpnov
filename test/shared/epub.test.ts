@@ -103,7 +103,7 @@ test('styles.css is built from the whole book’s used classes, kinsoku mapped t
   const css = members(book).find((m) => m.name === 'OEBPS/styles.css')?.content ?? '';
   assert.ok(css.includes('writing-mode:vertical-rl'));
   assert.ok(css.includes('body{line-break:normal;hanging-punctuation:allow-end}'));
-  assert.match(css, /\.br\{/); // the both-side lane used in chapter 2 only still lands
+  assert.match(css, /ruby\.ru\{/); // the both-side class used in chapter 2 only still lands
 });
 
 test('an empty chapter source contributes nothing; an all-empty book still gets a spine', () => {

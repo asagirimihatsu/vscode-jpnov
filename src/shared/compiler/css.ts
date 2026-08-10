@@ -3,12 +3,13 @@
  * fragments authored in `styles/*.css` (compiled to strings in `styles.generated.ts` by
  * `scripts/gen-styles.ts`) plus the small dynamic residue TypeScript still owns:
  *
- * - the `:root{}` variable block (`--cpl`/`--lpp`/`--htop` numbers, `--edge` base colour) the
- *   fragments' static `calc(var())` geometry reads — a RULE inside the document's one
+ * - the `:root{}` variable block (`--cpl`/`--pitch`/`--lpp`/`--htop` numbers, `--edge` base
+ *   colour) the fragments' static `calc(var())` geometry reads — a RULE inside the document's one
  *   `<style>`, never a `style=` attribute (the webview CSP strips those);
  * - the paper rules (BUILD): the `@page` box in mm, the root font size and the sheet→paper
  *   border, all computed from geometry.ts's fitPaper because `@page` cannot read `var()`
  *   portably (the build artifact must stay portable);
+ * - the 罫線 layers ({@link edgeRules}) — one per interior column boundary, count = lpp − 1;
  * - the on-demand `indent-N` (字下げ — unbounded N) and emphasis class rules (usedClasses).
  *
  * Mode and chrome conditionality is FRAGMENT INCLUSION — zero dead rules: a disabled
@@ -19,9 +20,9 @@
  *   the SAME `.line` columns grouped into per-break `.segment` blocks, fit-to-viewport, with
  *   ［＃改ページ］ as a labelled marker between segments.
  *
- * In BOTH modes the EDGE_INSET gap is reserved and the pitch is LINE_PITCH whether edgeLine
- * is on or off, so toggling it never moves a glyph within its segment/page; the preview frame
- * look reserves a full --lpp page extent for short segments (preview.edge.css).
+ * In BOTH modes the EDGE_INSET gap is reserved and the pitch is the one `--pitch` value whether
+ * edgeLine is on or off, so toggling it never moves a glyph within its segment/page; the
+ * preview frame look reserves a full --lpp page extent for short segments (preview.edge.css).
  * Chrome sub-elements (`.pn` / `.hd` / `.ln` / `.line::before`)
  * are horizontal-tb INSIDE a vertical-rl container and are positioned with PHYSICAL
  * properties only — the per-rule rationale lives as comments on the owning fragment.
@@ -29,7 +30,7 @@
  * Pure + vscode-free.
  */
 
-import type { KinsokuMode } from '../config/types.ts';
+import type { KinsokuMode, LinePitch } from '../config/types.ts';
 import type { BuildChrome, EdgeLineStyle, PreviewChrome } from './chrome.ts';
 import { styleRule } from './emphasis.ts';
 import type { PaperFit, PaperOrientation, PaperSize } from './geometry.ts';
@@ -39,16 +40,18 @@ import {
   LINENUM_BAND,
   fitPaper,
 } from './geometry.ts';
+import { EMR_PROBE_JS } from './emrProbe.generated.ts';
 import * as S from './styles/styles.generated.ts';
 
 /**
  * The CSS rule for one used class name, or '' for an unknown one (keeps the "no stray rules"
  * invariant). These are layout geometry / line furniture, not style-table entries: `indent-N`
  * (字下げ) and `rh-N` (stretched ruby) are generated here (unbounded N); `tcy` (縦中横), `midashi`
- * (見出し), `dash` (ダッシュ), `hang` (ぶら下げ) and the ruby lanes come from the static
- * `styles/class.*.css` fragments. The indent suffix check is defence in depth (emitLine only ever
- * emits positive N_eff). Every other class (emph-* / dec-* / b / i) is forwarded to emphasis.ts's
- * {@link styleRule}, the single home of the style CSS values.
+ * (見出し), `dash` (ダッシュ), `hang` (ぶら下げ), `emr` (傍点 line compensation) and the ruby
+ * classes come from the static `styles/class.*.css` fragments. The indent suffix check is
+ * defence in depth (emitLine only ever emits positive N_eff). Every other class
+ * (emph-* / dec-* / b / i) is forwarded to emphasis.ts's {@link styleRule}, the single home of
+ * the style CSS values.
  */
 function classRule(name: string): string {
   if (name.startsWith('indent-')) {
@@ -81,6 +84,10 @@ function classRule(name: string): string {
       return S.classRubyLr;
     case 'br':
       return S.classRubyBr;
+    case 'ru':
+      return S.classRubyU;
+    case 'emr':
+      return S.classEmr;
   }
   return styleRule(name);
 }
@@ -112,6 +119,36 @@ function rootVars(vars: Record<string, string | number>): string {
 }
 
 /**
+ * The 罫線 (inter-column rules): one 1px background layer per interior column boundary on the
+ * frame pseudo-element, each anchored an independent `k × var(--pitch)` from the frame's right
+ * edge. NEVER a repeating gradient — Chromium's print rasterizer tiles those on a
+ * device-pixel-snapped period, drifting off the vector-placed glyph columns (~half a column
+ * across an A4 page) and dropping some repetitions. `em` on the build sheet, `rem` in the
+ * preview (see preview.edge.css on the rem pinning).
+ */
+function edgeRules(selector: string, linesPerPage: number, unit: 'em' | 'rem'): string {
+  const mix = 'color-mix(in srgb,var(--edge) 80%,transparent)';
+  const images: string[] = [];
+  const positions: string[] = [];
+  for (let k = 1; k < linesPerPage; k++) {
+    images.push(`linear-gradient(${mix},${mix})`);
+    positions.push(`right calc(${String(k)}*var(--pitch)*1${unit} - 1px) top`);
+  }
+  return `${selector}{background-image:${images.join(',')};` +
+    `background-position:${positions.join(',')};` +
+    'background-size:1px 100%;background-repeat:no-repeat;}';
+}
+
+/**
+ * The 傍点 probe (source: src/client/webview/probe/emr.ts), inlined by both paginated
+ * emitters iff a right-side 傍点 line put `emr` in the used sink. Mechanism and geometry:
+ * class.emr.css.
+ */
+export function emrProbe(used: ReadonlySet<string>): string {
+  return used.has('emr') ? `<script>${EMR_PROBE_JS}</script>` : '';
+}
+
+/**
  * The dynamic paper rules (BUILD), from geometry.ts's {@link fitPaper}. `@page` margins stay
  * 0 — browsers render their own print header/footer into `@page` margin boxes. The font size
  * goes on `html` ONLY, so the one build rem (build.ln.css) keeps equalling the page em. The
@@ -131,6 +168,8 @@ type StylesheetOptions =
     readonly paginate: true;
     readonly charsPerLine: number;
     readonly linesPerPage: number;
+    /** 行送り in em — injected as `--pitch` and fed to {@link fitPaper}. */
+    readonly linePitch: LinePitch;
     /** Physical output paper (`jpnov.layout.paper.size` / `.orientation`). */
     readonly paperSize: PaperSize;
     readonly paperOrientation: PaperOrientation;
@@ -140,6 +179,8 @@ type StylesheetOptions =
   | {
     readonly paginate: false;
     readonly charsPerLine: number;
+    /** 行送り in em — injected as `--pitch`. */
+    readonly linePitch: LinePitch;
     /** Page extent (columns) for the edge frame; injected as --lpp only while edge is on. */
     readonly linesPerPage: number;
     readonly chrome: PreviewChrome;
@@ -163,6 +204,7 @@ export function stylesheet(opts: StylesheetOptions): string {
     const hTop = HEADER_BAND + (chrome.lineNumbers ? LINENUM_BAND : 0);
     const vars: Record<string, string | number> = {
       '--cpl': opts.charsPerLine,
+      '--pitch': opts.linePitch,
       '--lpp': opts.linesPerPage,
       '--htop': hTop,
     };
@@ -172,6 +214,7 @@ export function stylesheet(opts: StylesheetOptions): string {
     const fit = fitPaper({
       charsPerLine: opts.charsPerLine,
       linesPerPage: opts.linesPerPage,
+      linePitch: opts.linePitch,
       hTop,
       size: opts.paperSize,
       orientation: opts.paperOrientation,
@@ -185,11 +228,15 @@ export function stylesheet(opts: StylesheetOptions): string {
       chrome.pageNumber !== 'none' ? S.buildFolio : '',
       rootVars(vars),
       paperRules(fit),
+      edge !== null ? edgeRules('.page::before', opts.linesPerPage, 'em') : '',
       ...tail,
     ].join('');
   }
 
-  const vars: Record<string, string | number> = { '--cpl': opts.charsPerLine };
+  const vars: Record<string, string | number> = {
+    '--cpl': opts.charsPerLine,
+    '--pitch': opts.linePitch,
+  };
   if (edge !== null) {
     vars['--lpp'] = opts.linesPerPage; // read only by the edge fragment's .segment min-block-size
     vars['--edge'] = edge;
@@ -200,6 +247,7 @@ export function stylesheet(opts: StylesheetOptions): string {
     opts.chrome.lineNumbers ? S.previewLn : '',
     edge !== null ? S.previewEdge : '',
     rootVars(vars),
+    edge !== null ? edgeRules('.segment::before', opts.linesPerPage, 'rem') : '',
     ...tail,
   ].join('');
 }

@@ -21,6 +21,19 @@ export const KINSOKU_MODES = ['none', 'normal', 'strict'] as const;
 export type KinsokuMode = (typeof KINSOKU_MODES)[number];
 
 /**
+ * `jpnov.layout.linePitch` members: 行送り as a multiple of the character size — the CSS
+ * line-height, injected as `--pitch`, and fitPaper's block-axis quantum. A ruby reading's
+ * outer edge sits 1.0em off its column centre (0.5em glyph half + 0.5em lane), the drawn
+ * rule at pitch/2, an opposing left-side reading at pitch−1.0, the neighboring glyphs at
+ * pitch−0.5. So: 2.25 keeps 0.125em clear of rules and opposing readings; 2.0 sits exactly
+ * flush with both; below 2.0 a reading crosses a drawn rule / an opposing left-side reading;
+ * plain right-side ruby touches the neighboring glyphs only at 1.5. The author's tradeoff,
+ * deliberately unguarded.
+ */
+export const LINE_PITCHES = [1.5, 1.75, 2, 2.25] as const;
+export type LinePitch = (typeof LINE_PITCHES)[number];
+
+/**
  * The `jpnov.layout.*` slice shared verbatim by both wire snapshots — preview and build stay
  * same-source. `linesPerPage`: the build grid's page depth; the preview edge frame reserves
  * the same extent per segment while drawn.
@@ -28,6 +41,8 @@ export type KinsokuMode = (typeof KINSOKU_MODES)[number];
 export interface LayoutSettings {
   readonly charsPerLine: number;
   readonly linesPerPage: number;
+  /** 行送り in character-size multiples. */
+  readonly linePitch: LinePitch;
   /** 禁則処理 mode. */
   readonly kinsoku: KinsokuMode;
   /** 自動縦中横 mode. */
@@ -35,13 +50,15 @@ export interface LayoutSettings {
 }
 
 /**
- * `jpnov.layout.*` defaults (投稿書式 40×34, 禁則 normal, 自動縦中横 punctuationPairs) — the single source
- * for the schema defaults and the settings resolver's fallbacks; the config-codegen test locks
- * package.json to these values.
+ * `jpnov.layout.*` defaults (投稿書式 40×34, 行送り 1.5 — the pitch print books and e-book readers
+ * settle on, 禁則 normal, 自動縦中横 punctuationPairs) — the single source for the schema defaults
+ * and the settings resolver's fallbacks; the config-codegen test locks package.json to these
+ * values.
  */
 export const LAYOUT_DEFAULT: LayoutSettings = {
   charsPerLine: 40,
   linesPerPage: 34,
+  linePitch: 1.5,
   kinsoku: 'normal',
   autoTcy: 'punctuationPairs',
 };

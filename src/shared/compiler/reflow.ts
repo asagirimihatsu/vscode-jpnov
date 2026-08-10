@@ -6,7 +6,8 @@
  * boundary the container turns into a spine-level file split.
  *
  * Inline markup differences against the paginated build:
- * - right-only ruby is native `<ruby>` ({@link reflowRubyHtml} — the reader owns spacing);
+ * - ruby is native `<ruby>` in every form ({@link reflowRubyHtml} — the reader owns spacing;
+ *   left/both-side readings ride `ruby-position`, not the paginated absolute lanes);
  * - dash units are unwrapped to their raw glyphs — the drawn-rule trick hides the glyph via
  *   `-webkit-text-fill-color:transparent` and repaints it in a `::before`, so a reader that
  *   honors the hide but strips the repaint would show NOTHING (fails-open data loss);
@@ -47,13 +48,13 @@ function sameChannels(a: Unit, b: Unit): boolean {
 }
 
 /**
- * Rewrites one unit for the reflow output: ruby markup is regenerated (native right-only, or
- * the lane markup minus the grid-derived `rh-N`), dash units are unwrapped to raw glyphs.
+ * Rewrites one unit for the reflow output: ruby markup is regenerated (native in every form;
+ * `ru` marks a left/both-side unit for class.ruby-u.css), dash units are unwrapped to raw
+ * glyphs.
  */
 function reflowUnit(u: Unit): Unit {
   if (u.ruby !== undefined) {
-    const side = u.ruby.left === undefined ? undefined : u.ruby.right === undefined ? 'lr' : 'br';
-    return { ...u, html: reflowRubyHtml(u.ruby), cssClass: side };
+    return { ...u, html: reflowRubyHtml(u.ruby), cssClass: u.ruby.left === undefined ? undefined : 'ru' };
   }
   if (u.cssClass === 'dash') {
     return { ...u, html: escapeHtml(u.text), cssClass: undefined };

@@ -1,7 +1,7 @@
-import type { AutoTcyMode, KinsokuMode } from '../config/types.ts';
+import type { AutoTcyMode, KinsokuMode, LinePitch } from '../config/types.ts';
 import { applyAutoTcy } from './autoTcy.ts';
 import type { BuildChrome } from './chrome.ts';
-import { stylesheet } from './css.ts';
+import { emrProbe, stylesheet } from './css.ts';
 import type { PaperOrientation, PaperSize } from './geometry.ts';
 import { buildRows, paginate, pagesToHtml, type Row } from './layout.ts';
 import { indentAnnotation, tokenize } from './tokenizer.ts';
@@ -149,6 +149,7 @@ export function renderBook(opts: {
   books: readonly BookInput[];
   charsPerLine: number;
   linesPerPage: number;
+  linePitch: LinePitch;
   kinsoku: KinsokuMode;
   autoTcy: AutoTcyMode;
   paperSize: PaperSize;
@@ -193,13 +194,14 @@ export function renderBook(opts: {
     paginate: true,
     charsPerLine: opts.charsPerLine,
     linesPerPage: opts.linesPerPage,
+    linePitch: opts.linePitch,
     paperSize: opts.paperSize,
     paperOrientation: opts.paperOrientation,
     chrome,
     usedClasses: [...used].sort(),
   });
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${css}</style></head><body>${body}</body></html>`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${css}</style></head><body>${body}${emrProbe(used)}</body></html>`;
 }
 
 /**

@@ -10,8 +10,9 @@ import { renderPreview } from '../../../src/shared/compiler/preview.ts';
 const EDGE_MIX = 'color-mix(in srgb,var(--edge) 80%,transparent)';
 /** A match pattern: raw regex source with the escaped recipe for `base` appended. */
 const edgeMixRe = (raw: string): RegExp => new RegExp(raw + EDGE_MIX.replace(/[()]/g, '\\$&'));
-// Full recipe pinned by css.test.ts / styles-codegen.test.ts; here only a shipped-fragment probe.
-const EDGE_GRAD_PROBE = /\.segment::before\{[^}]*repeating-linear-gradient\(to left/;
+// Full recipe pinned by css.test.ts / styles-codegen.test.ts; here only a shipped-rule probe
+// (css.ts edgeRules(): per-boundary layers on a dedicated .segment::before rule).
+const EDGE_GRAD_PROBE = /\.segment::before\{background-image:linear-gradient\(/;
 
 /** renderPreview with explicit resolved options (the compiler has no defaults); chrome all-off. */
 function preview(
@@ -27,6 +28,7 @@ function preview(
   return renderPreview(src, {
     charsPerLine: 40,
     linesPerPage: 34,
+    linePitch: 2,
     kinsoku: 'none',
     autoTcy: 'none',
     chrome: { lineNumbers: false, edgeLine: 'none' },
@@ -92,6 +94,11 @@ test('renderPreview emits the used emphasis rule in the <style>, omits unused (o
   assert.doesNotMatch(html, /style="text-emphasis/); // no inline emphasis styles remain
 });
 
+test('renderPreview emits the --emr-shift probe only for a right-side 傍点', () => {
+  assert.match(preview('語［＃「語」に傍点］'), /<script>[^]*--emr-shift[^]*<\/script><\/body>/);
+  assert.doesNotMatch(preview('語［＃「語」の左に傍点］'), /<script/);
+});
+
 test('renderPreview emits per-line data-line anchors (for cursor-follow)', () => {
   const html = preview('一\n二\n三');
   assert.match(
@@ -154,7 +161,7 @@ test('renderPreview scales the root font so a full line fills the pane height', 
   // gaps measures exactly 100vh − padding.
   const html = preview('本文', { charsPerLine: 20 });
   assert.match(html, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ \(var\(--cpl\) \+ 0\.7\)\)/);
-  assert.match(html, /:root\{--cpl:20\}/);
+  assert.match(html, /:root\{--cpl:20;--pitch:2\}/);
 });
 
 test('renderPreview: 傍線 postfix emits a dec-solid span + its on-demand rule (right side)', () => {
@@ -202,7 +209,7 @@ test('renderPreview edge lines ride the stylesheet only: red and text, both at 8
   const red = preview('一', { chrome: { lineNumbers: false, edgeLine: 'red' } });
   assert.match(red, EDGE_GRAD_PROBE); // full-page rules on the frame's own background
   assert.match(red, edgeMixRe(String.raw`\.segment::before\{[^}]*border:1px solid `));
-  assert.match(red, /\.segment\{min-block-size:calc\(var\(--lpp\)\*2\.25rem\);\}/);
+  assert.match(red, /\.segment\{min-block-size:calc\(var\(--lpp\)\*var\(--pitch\)\*1rem\);\}/);
   assert.match(red, /:root\{[^}]*--lpp:34;--edge:#cc0000\}/);
   const text = preview('一', { chrome: { lineNumbers: false, edgeLine: 'text' } });
   assert.match(text, EDGE_GRAD_PROBE);
