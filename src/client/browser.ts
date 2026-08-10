@@ -96,9 +96,10 @@ function resolveOnPath(names: string[], env: NodeJS.ProcessEnv): string[] {
 /**
  * The headless print-to-PDF invocation for any Chromium-family browser. A fresh `--user-data-dir`
  * is mandatory: it forces a standalone instance (never joining the user's running Chrome) and
- * sidesteps the SingletonLock a shared profile leaves behind. The built HTML already keeps the
- * browser's own header/footer off the paper via `@page{margin:0}`; `--no-pdf-header-footer` is
- * belt-and-braces.
+ * sidesteps the SingletonLock a shared profile leaves behind. `--use-mock-keychain` keeps the
+ * fresh profile's first run from touching the macOS Keychain, whose (invisible) unlock prompt
+ * stalls a headless browser. The built HTML already keeps the browser's own header/footer off
+ * the paper via `@page{margin:0}`; `--no-pdf-header-footer` is belt-and-braces.
  */
 export function printToPdfArgs(htmlFileUrl: string, outPdfPath: string, userDataDir: string): string[] {
   return [
@@ -106,6 +107,7 @@ export function printToPdfArgs(htmlFileUrl: string, outPdfPath: string, userData
     '--disable-gpu',
     '--no-first-run',
     '--no-default-browser-check',
+    '--use-mock-keychain',
     `--user-data-dir=${userDataDir}`,
     '--no-pdf-header-footer',
     `--print-to-pdf=${outPdfPath}`,
