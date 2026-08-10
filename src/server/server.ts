@@ -278,7 +278,7 @@ function scheduleJpbookDiagnostics(doc: TextDocument): void {
 // driver returns synchronously (a plain []), so the common case still publishes at once. The short
 // debounce keeps typing snappy on long chapters.
 const proseDebounce = new Map<string, ReturnType<typeof setTimeout>>();
-const PROSE_DEBOUNCE_MS = 200;
+const PROSE_DEBOUNCE_MS = 300;
 
 // Last published findings per open .jpnov (uri -> {version, findings}); the code-action handler reuses
 // them so it never re-lints when the cache is current. Kept in lockstep with what is published.

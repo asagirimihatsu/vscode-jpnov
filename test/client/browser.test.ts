@@ -110,6 +110,7 @@ test('printToPdfArgs ends with the file URL and carries the print flag', () => {
     '--disable-gpu',
     '--no-first-run',
     '--no-default-browser-check',
+    '--use-mock-keychain',
     '--user-data-dir=/tmp/profile',
     '--no-pdf-header-footer',
     '--print-to-pdf=/out/book.pdf',

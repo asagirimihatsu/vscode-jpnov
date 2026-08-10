@@ -22,7 +22,7 @@ import { pathToFileURL } from 'node:url';
 
 import { printToPdfArgs } from './browser.ts';
 
-const POLL_MS = 200;
+const POLL_MS = 300;
 
 /**
  * Kills the browser's whole process GROUP (the spawn is detached, so the child is its group
@@ -62,12 +62,14 @@ export async function convertHtmlToPdf(
   browserExe: string,
   htmlPath: string,
   pdfPath: string,
-  timeoutMs = 60_000,
+  timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<void> {
-  const userDataDir = await mkdtemp(join(tmpdir(), 'jpnov-pdf-'));
   // Drop any stale output so a settled non-empty file unambiguously means "freshly written".
-  await rm(pdfPath, { force: true }).catch(() => undefined);
+  // An undeletable stale file (open in another app on Windows) must reject here — its stable
+  // size would otherwise read as a fresh build.
+  await rm(pdfPath, { force: true });
+  const userDataDir = await mkdtemp(join(tmpdir(), 'jpnov-pdf-'));
   const child = spawn(browserExe, printToPdfArgs(pathToFileURL(htmlPath).href, pdfPath, userDataDir), {
     stdio: 'ignore',
     detached: true,
@@ -78,7 +80,9 @@ export async function convertHtmlToPdf(
   } finally {
     killBrowser(child);
     inFlight.delete(child);
-    await rm(userDataDir, { recursive: true, force: true }).catch(() => undefined);
+    // Fire-and-forget: the just-killed browser may still be dying inside this directory, and
+    // cleanup must never gate the conversion's outcome.
+    void rm(userDataDir, { recursive: true, force: true }).catch(() => undefined);
   }
 }
 
@@ -87,14 +91,17 @@ export async function convertHtmlToPdf(
  * file in one pass, so a settled size means the write finished). Rejects on abort, on the browser
  * failing to spawn or exiting before any output, or when the deadline passes with no settled file.
  */
-function waitForOutput(
+export function waitForOutput(
   pdfPath: string,
   child: ChildProcess,
   timeoutMs: number,
   signal: AbortSignal | undefined,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const deadline = Date.now() + timeoutMs;
+    if (signal?.aborted) {
+      reject(new Error('cancelled'));
+      return;
+    }
     let lastSize = -1;
     let exited = false;
     let settled = false;
@@ -104,6 +111,7 @@ function waitForOutput(
         return;
       }
       settled = true;
+      clearTimeout(cap);
       clearInterval(timer);
       signal?.removeEventListener('abort', onAbort);
       child.removeListener('exit', onExit);
@@ -124,14 +132,15 @@ function waitForOutput(
       done(err);
     };
 
-    if (signal?.aborted) {
-      done(new Error('cancelled'));
-      return;
-    }
     signal?.addEventListener('abort', onAbort);
     child.on('exit', onExit);
     child.on('error', onError);
 
+    // The deadline is a plain timer, independent of the poll below: a stat() that blocks
+    // (wedged filesystem, saturated threadpool) must not be able to postpone the failure.
+    const cap = setTimeout(() => {
+      done(new Error('the browser produced no PDF output'));
+    }, timeoutMs);
     const timer = setInterval(() => {
       void (async (): Promise<void> => {
         const size = await stat(pdfPath).then(
@@ -143,9 +152,7 @@ function waitForOutput(
           return;
         }
         lastSize = size;
-        if (Date.now() > deadline) {
-          done(new Error('the browser produced no PDF output'));
-        } else if (exited && size <= 0) {
+        if (exited && size <= 0) {
           done(new Error('the browser exited before writing a PDF'));
         }
       })();
