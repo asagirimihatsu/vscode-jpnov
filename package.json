@@ -833,6 +833,8 @@
     "test:integration": "node --import ./test/register.mjs --test --experimental-test-module-mocks \"test/client/bookCreate.test.ts\" \"test/client/bookManage.test.ts\" \"test/client/booksView.test.ts\" \"test/client/highlightConfig.test.ts\" \"test/client/messages.test.ts\" \"test/client/preview.test.ts\" \"test/client/probe.test.ts\" \"test/server/build.test.ts\" \"test/server/jpbook.test.ts\"",
     "pretest:e2e": "npm run build:dev",
     "test:e2e": "node --import ./test/register.mjs --test \"test/e2e/**/*.test.ts\"",
+    "prescreenshots": "npm run gen:styles",
+    "screenshots": "node scripts/screenshots.ts",
     "vscode:prepublish": "npm run gen && npm run type-check && npm run lint && npm run build",
     "package": "vsce package"
   },
