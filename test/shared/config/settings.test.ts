@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   BUILD_CHROME_DEFAULT,
+  BUILD_PAPER_DEFAULT,
   PREVIEW_CHROME_DEFAULT,
   resolveHtmlSettings,
   resolvePreviewSettings,
@@ -15,6 +16,7 @@ const HTML_BASE: HtmlSettings = {
   ...LAYOUT_DEFAULT,
   lineNumbers: BUILD_CHROME_DEFAULT.lineNumbers,
   edgeLine: BUILD_CHROME_DEFAULT.edgeLine,
+  ...BUILD_PAPER_DEFAULT,
 };
 const PREVIEW_BASE: PreviewSettings = {
   ...LAYOUT_DEFAULT,
@@ -97,12 +99,31 @@ test('bogus enum and boolean values coerce to their defaults', () => {
   );
 });
 
+test('paper size/orientation ride the html snapshot: kept when known, defaulted otherwise', () => {
+  assert.equal(resolveHtmlSettings({ ...HTML_BASE, paperSize: 'a6' }).paperSize, 'a6');
+  assert.equal(
+    resolveHtmlSettings({ ...HTML_BASE, paperOrientation: 'portrait' }).paperOrientation,
+    'portrait',
+  );
+  assert.equal(resolveHtmlSettings(badHtml({ paperSize: 'b5' })).paperSize, BUILD_PAPER_DEFAULT.paperSize);
+  assert.equal(
+    resolveHtmlSettings(badHtml({ paperOrientation: 'sideways' })).paperOrientation,
+    BUILD_PAPER_DEFAULT.paperOrientation,
+  );
+  assert.equal(resolveHtmlSettings(badHtml({ paperSize: true })).paperSize, BUILD_PAPER_DEFAULT.paperSize);
+  assert.equal(
+    resolveHtmlSettings(badHtml({ paperOrientation: false })).paperOrientation,
+    BUILD_PAPER_DEFAULT.paperOrientation,
+  );
+});
+
 test('the wire settings carry NO page furniture — that is jpbook front-matter territory', () => {
   // Junk furniture fields on the payload must be dropped, not forwarded: the resolver's
-  // output is EXACTLY the six wire fields, whatever a stale or hostile sender ships.
-  const WIRE_KEYS = ['autoTcy', 'charsPerLine', 'edgeLine', 'kinsoku', 'lineNumbers', 'linesPerPage'];
+  // output is EXACTLY the wire fields of each shape, whatever a stale or hostile sender ships.
+  const PREVIEW_WIRE_KEYS = ['autoTcy', 'charsPerLine', 'edgeLine', 'kinsoku', 'lineNumbers', 'linesPerPage'];
+  const HTML_WIRE_KEYS = [...PREVIEW_WIRE_KEYS, 'paperOrientation', 'paperSize'].sort();
   const resolved = resolveHtmlSettings(badHtml({ header: '柱', pageNumber: 'none' }));
-  assert.deepEqual(Object.keys(resolved).sort(), WIRE_KEYS);
+  assert.deepEqual(Object.keys(resolved).sort(), HTML_WIRE_KEYS);
   const resolvedPreview = resolvePreviewSettings(badPreview({ header: '柱', pageNumber: 'none' }));
-  assert.deepEqual(Object.keys(resolvedPreview).sort(), WIRE_KEYS);
+  assert.deepEqual(Object.keys(resolvedPreview).sort(), PREVIEW_WIRE_KEYS);
 });

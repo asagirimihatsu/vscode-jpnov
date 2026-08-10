@@ -32,9 +32,9 @@ Two pipelines, both driving the product's own code:
   pipeline: `renderBook()` HTML → headless Chrome `--print-to-pdf` with the
   exact flags of `src/client/browser.ts` `printToPdfArgs()` → page 1
   rasterized by `qlmanage` (macOS built-in). The white margin around the text
-  grid is the product's own `PRINT_MARGIN` (2.5em, `@media print`), not
-  post-processing — the PNGs are unretouched "Build to PDF" output apart from
-  the grey mat ffmpeg pads around the sheet.
+  grid is the product's own paper inset (the `fitPaper` border that makes the
+  page exactly A4), not post-processing — the PNGs are unretouched "Build to
+  PDF" output apart from the grey mat ffmpeg pads around the sheet.
 - **Specimen shots** (`notation`, `kinsoku-*`) use `renderPreview()` +
   `--screenshot`. The real preview is horizontally flush against the pane
   edge, so the injected `PAPER` style adds paper colour + a 24px side mat.
@@ -72,7 +72,7 @@ Hard-won facts baked into the script — keep them if you rewrite it:
 // README 用スクリーンショット生成器。
 // ページ物 (hero/genkoyoshi) は本物の PDF 印刷パイプライン（フラグは
 // src/client/browser.ts printToPdfArgs と同一）で出力し、1 ページ目を qlmanage で
-// ラスタライズする — PRINT_MARGIN (2.5em) 含め「PDF に出力」の結果そのまま。
+// ラスタライズする — 用紙余白含め「PDF に出力」の結果そのまま（A4 横）。
 // 見本 (notation/kinsoku) はプレビューレンダラー + headless --screenshot。
 // 使い方: node shots.ts   （出力: <このファイルの隣>/shots/*.png）
 import { spawn, spawnSync } from 'node:child_process';
@@ -126,6 +126,8 @@ const bookOpts = {
   linesPerPage: 34,
   kinsoku: 'normal',
   autoTcy: 'punctuationPairs',
+  paperSize: 'a4',
+  paperOrientation: 'auto',
 } as const;
 const folio = {
   pageNumber: 'right',
@@ -137,7 +139,7 @@ interface PdfShot {
   name: string;
   html: string;
   mode: 'pdf';
-  /** qlmanage -s（長辺の物理 px。ページ 1304 css px の 2 倍 = 2608 で 2x 相当） */
+  /** qlmanage -s（長辺の物理 px。A4 横のページ長辺 297mm ≈ 1122.5 css px の 2 倍 ≈ 2245 で 2x 相当） */
   rasterSize: number;
   /** ffmpeg pad の台紙幅（物理 px）— 白い紙が GitHub のライトテーマに溶けないように */
   mat: number;
@@ -163,7 +165,7 @@ const shots: Shot[] = [
       ...bookOpts,
       chrome: { lineNumbers: false, edgeLine: 'none', ...folio },
     }),
-    rasterSize: 2608,
+    rasterSize: 2245,
     mat: 40,
   },
   {
@@ -174,7 +176,7 @@ const shots: Shot[] = [
       ...bookOpts,
       chrome: { lineNumbers: true, edgeLine: 'red', ...folio },
     }),
-    rasterSize: 2608,
+    rasterSize: 2245,
     mat: 40,
   },
   {

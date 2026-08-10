@@ -215,13 +215,52 @@
             "order": 6,
             "markdownDescription": "%jpnov.layout.preview.edgeLine.description%"
           },
-          "jpnov.layout.html.lineNumbers": {
+          "jpnov.layout.paper.size": {
+            "type": "string",
+            "enum": [
+              "a4",
+              "a6"
+            ],
+            "default": "a4",
+            "enumItemLabels": [
+              "%jpnov.layout.paper.size.a4.label%",
+              "%jpnov.layout.paper.size.a6.label%"
+            ],
+            "enumDescriptions": [
+              "%jpnov.layout.paper.size.a4.description%",
+              "%jpnov.layout.paper.size.a6.description%"
+            ],
+            "order": 7,
+            "markdownDescription": "%jpnov.layout.paper.size.description%"
+          },
+          "jpnov.layout.paper.orientation": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "landscape",
+              "portrait"
+            ],
+            "default": "auto",
+            "enumItemLabels": [
+              "%jpnov.layout.paper.orientation.auto.label%",
+              "%jpnov.layout.paper.orientation.landscape.label%",
+              "%jpnov.layout.paper.orientation.portrait.label%"
+            ],
+            "enumDescriptions": [
+              "%jpnov.layout.paper.orientation.auto.description%",
+              "%jpnov.layout.paper.orientation.landscape.description%",
+              "%jpnov.layout.paper.orientation.portrait.description%"
+            ],
+            "order": 8,
+            "markdownDescription": "%jpnov.layout.paper.orientation.description%"
+          },
+          "jpnov.layout.paper.lineNumbers": {
             "type": "boolean",
             "default": false,
-            "order": 7,
-            "markdownDescription": "%jpnov.layout.html.lineNumbers.description%"
+            "order": 9,
+            "markdownDescription": "%jpnov.layout.paper.lineNumbers.description%"
           },
-          "jpnov.layout.html.edgeLine": {
+          "jpnov.layout.paper.edgeLine": {
             "type": "string",
             "enum": [
               "none",
@@ -230,17 +269,17 @@
             ],
             "default": "none",
             "enumItemLabels": [
-              "%jpnov.layout.html.edgeLine.none.label%",
-              "%jpnov.layout.html.edgeLine.text.label%",
-              "%jpnov.layout.html.edgeLine.red.label%"
+              "%jpnov.layout.paper.edgeLine.none.label%",
+              "%jpnov.layout.paper.edgeLine.text.label%",
+              "%jpnov.layout.paper.edgeLine.red.label%"
             ],
             "enumDescriptions": [
-              "%jpnov.layout.html.edgeLine.none.description%",
-              "%jpnov.layout.html.edgeLine.text.description%",
-              "%jpnov.layout.html.edgeLine.red.description%"
+              "%jpnov.layout.paper.edgeLine.none.description%",
+              "%jpnov.layout.paper.edgeLine.text.description%",
+              "%jpnov.layout.paper.edgeLine.red.description%"
             ],
-            "order": 8,
-            "markdownDescription": "%jpnov.layout.html.edgeLine.description%"
+            "order": 10,
+            "markdownDescription": "%jpnov.layout.paper.edgeLine.description%"
           },
           "jpnov.layout.txt.encoding": {
             "type": "string",
@@ -260,21 +299,21 @@
               "%jpnov.layout.txt.encoding.utf8.description%",
               "%jpnov.layout.txt.encoding.utf8Bom.description%"
             ],
-            "order": 9,
+            "order": 11,
             "markdownDescription": "%jpnov.layout.txt.encoding.description%"
           },
           "jpnov.layout.outDir": {
             "type": "string",
             "default": "dist",
             "scope": "resource",
-            "order": 10,
+            "order": 12,
             "markdownDescription": "%jpnov.layout.outDir.description%"
           },
           "jpnov.layout.browserPath": {
             "type": "string",
             "default": "",
             "scope": "machine-overridable",
-            "order": 11,
+            "order": 13,
             "markdownDescription": "%jpnov.layout.browserPath.description%"
           }
         }

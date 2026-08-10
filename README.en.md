@@ -370,8 +370,10 @@ highlighting lists are per workspace folder; the browser path is per machine.
 | `jpnov.layout.autoTcy` | `punctuationPairs` | Auto-combine `!!` `!?` `?!` `??`; `none` to disable |
 | `jpnov.layout.preview.lineNumbers` | `true` | Line numbers in the preview, restarting per page break |
 | `jpnov.layout.preview.edgeLine` | `none` | Column rules in the preview: `none` / `text` / `red` |
-| `jpnov.layout.html.lineNumbers` | `false` | Line numbers in built pages, restarting per page |
-| `jpnov.layout.html.edgeLine` | `none` | Column rules + page frame in built HTML: `none` / `text` / `red` |
+| `jpnov.layout.paper.size` | `a4` | Paper of built HTML/PDF pages: `a4` / `a6`; the grid scales to fill it, centered |
+| `jpnov.layout.paper.orientation` | `auto` | Paper orientation: `auto` (follows the page grid) / `landscape` / `portrait` |
+| `jpnov.layout.paper.lineNumbers` | `false` | Line numbers in built pages, restarting per page |
+| `jpnov.layout.paper.edgeLine` | `none` | Column rules + page frame in built pages: `none` / `text` / `red` |
 | `jpnov.layout.txt.encoding` | `shiftJis` | Encoding of built `.txt`: `shiftJis` / `utf8` / `utf8Bom` |
 | `jpnov.layout.outDir` | `dist` | Output folder (per workspace folder), never scanned for books |
 | `jpnov.layout.browserPath` | `""` | Chromium-family executable for PDF export (per machine) |

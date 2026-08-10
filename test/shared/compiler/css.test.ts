@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { BuildChrome, PreviewChrome } from '../../../src/shared/compiler/chrome.ts';
 import { reflowStylesheet, stylesheet } from '../../../src/shared/compiler/css.ts';
+import type { PaperOrientation, PaperSize } from '../../../src/shared/compiler/geometry.ts';
 
 /**
  * The single 80%-alpha edge recipe (base-INDEPENDENT — the base colour rides the `--edge`
@@ -47,6 +48,8 @@ function build(
   o: {
     charsPerLine?: number;
     linesPerPage?: number;
+    paperSize?: PaperSize;
+    paperOrientation?: PaperOrientation;
     chrome?: BuildChrome;
     usedClasses?: readonly string[];
   } = {},
@@ -55,6 +58,8 @@ function build(
     paginate: true,
     charsPerLine: o.charsPerLine ?? 40,
     linesPerPage: o.linesPerPage ?? 34,
+    paperSize: o.paperSize ?? 'a4',
+    paperOrientation: o.paperOrientation ?? 'auto',
     chrome: o.chrome ?? BUILD_OFF,
     usedClasses: o.usedClasses ?? [],
   });
@@ -64,16 +69,19 @@ test('stylesheet renders vertical-rl writing mode', () => {
   assert.match(preview(), /writing-mode:vertical-rl/);
 });
 
-test('paginated stylesheet sizes the page + @page by charsPerLine x linesPerPage', () => {
+test('paginated stylesheet sizes the page grid + fits the paper', () => {
   // vertical-rl: the static calc() geometry reads the :root variables (page block = lpp ×
-  // 2.25em columns; page inline = cpl × 1em chars); @page stays TS-computed (var() is not
-  // portable inside @page), so its size is still literal numbers.
+  // 2.25em columns; page inline = cpl × 1em chars); the paper rules stay TS-computed
+  // (var() is not portable inside @page). 25 > 30/2 → auto picks landscape A4.
   const css = build({ charsPerLine: 30, linesPerPage: 25 });
   assert.match(css, /\.page\{[^}]*inline-size:calc\(var\(--cpl\)\*1em\)/);
   assert.match(css, /\.page\{[^}]*block-size:calc\(var\(--lpp\)\*2\.25em\)/);
   assert.match(css, /:root\{[^}]*--cpl:30/);
   assert.match(css, /:root\{[^}]*--lpp:25/);
-  assert.match(css, /@page\{size:64\.25em 41em;margin:0;\}/); // + reserved header/folio bands + paper margin
+  assert.match(css, /@page\{size:297mm 210mm;margin:0;\}/);
+  // The smaller grid scales UP onto the same paper: font 4.622mm, sheet→paper border.
+  assert.match(css, /html\{font-size:4\.622mm;\}/);
+  assert.match(css, /\.page\{border:solid #fff;border-width:4\.70em 2\.49em;\}/);
 });
 
 test('paginated stylesheet breaks each .page onto its own sheet', () => {
@@ -160,7 +168,7 @@ test('字下げ padding is inline-start, never block-start (axis lock)', () => {
 test('base fill rules stay untouched by decoration/indent classes', () => {
   const p = build({ usedClasses: ['dec-wavy', 'b', 'i', 'indent-5'] });
   assert.match(p, /\.line\{block-size:2\.25em;margin:0;white-space:pre;\}/);
-  assert.match(p, /@page\{size:84\.5em 51em;margin:0;\}/); // 34×2.25em + 40 chars + reserved bands + paper margin
+  assert.match(p, /@page\{size:297mm 210mm;margin:0;\}/); // 34 > 40/2 → auto lands on landscape A4
   const v = preview({ usedClasses: ['indent-5'] });
   assert.match(v, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ \(var\(--cpl\) \+ 0\.7\)\)/);
   assert.match(v, /:root\{--cpl:40\}/);
@@ -376,7 +384,10 @@ test('build all-on chrome: bands, outset frame, counters, rules, furniture style
   );
   assert.match(css, edgeMixRe(String.raw`\.page::before\{[^}]*border:1px solid `));
   assert.match(css, /:root\{[^}]*--edge:currentColor\}/);
-  assert.doesNotMatch(css, /\.page\{[^}]*border:/); // the sheet box itself has no border
+  // The sheet box draws no VISIBLE border — the frame lives on ::before; the only .page
+  // border is the invisible white paper inset from the paper rules.
+  assert.doesNotMatch(css, /\.page\{[^}]*border:1px/);
+  assert.match(css, /\.page\{border:solid #fff;/);
   // The pitch is the same 2.25em with rules on or off; it keeps the rules clear of ruby.
   assert.match(css, /\.page\{[^}]*line-height:2\.25/);
   assert.match(css, /\.page\{[^}]*block-size:calc\(var\(--lpp\)\*2\.25em\)/);
@@ -403,8 +414,10 @@ test('build all-on chrome: bands, outset frame, counters, rules, furniture style
   assert.match(css, /\.pn\{[^}]*line-height:1;/);
   assert.match(css, /\.pn\.r\{right:1\.85em;\}/);
   assert.match(css, /\.pn\.l\{left:1\.85em;\}/);
-  // Sheet grows by the bands: 40 + 4 + 3 + 2×2.5 = 52em on the inline (char) axis.
-  assert.match(css, /@page\{size:84\.5em 52em;margin:0;\}/);
+  // The line-number band widens the sheet (hTop 4), which narrows only the top/bottom
+  // paper inset — same paper, same font (the block axis stays the binding one).
+  assert.match(css, /@page\{size:297mm 210mm;margin:0;\}/);
+  assert.match(css, /\.page\{border:solid #fff;border-width:6\.37em 2\.49em;\}/);
 });
 
 test('build all-off chrome keeps a plain sheet with the reserved bands, no chrome rules', () => {
@@ -417,15 +430,20 @@ test('build all-off chrome keeps a plain sheet with the reserved bands, no chrom
   assert.match(css, /:root\{[^}]*--htop:3/); // header band only — no line-number band
   assert.match(css, /\.page\{[^}]*padding-inline-end:3em/);
   assert.match(css, /\.page\{[^}]*line-height:2\.25/); // the SAME pitch without edge rules
-  assert.match(css, /@page\{size:84\.5em 51em;margin:0;\}/);
-  // The screen-only paper look (grey backdrop + sheet shadow + the shared 2.5em surround)
+  // The paper rules: 投稿書式 40×34 on auto-landscape A4 — exact mm @page, the root font
+  // that scales the em sheet onto it, and the sheet→paper inset as a white border.
+  assert.match(css, /@page\{size:297mm 210mm;margin:0;\}/);
+  assert.match(css, /html\{font-size:3\.514mm;\}/);
+  assert.match(css, /\.page\{border:solid #fff;border-width:6\.87em 2\.49em;\}/);
+  // The screen-only paper look (grey backdrop + paper shadow + the cosmetic 2.5em gap)
   // is chrome-independent — present even with every feature off — and print resets it.
   assert.match(css, /@media screen\{html\{background:#e8e8e8;\}\.page\{box-shadow:0 1px 4px rgba\(0,0,0,0\.25\);\}\}/);
   assert.match(css, /\.page\{[^}]*margin:2\.5em auto/);
   // Print keeps sheets one-per-page (vertical-rl root — Chromium splits orthogonal-flow
-  // sheets onto two papers) with the paper inset on the SHEET; @page margins stay 0 so
-  // the browser's own header/footer (its page numbers, URL, date) has nowhere to render.
-  assert.match(css, /@media print\{html\{writing-mode:vertical-rl;background:none;\}\.page\{margin:2\.5em;box-shadow:none;\}\}/);
+  // sheets onto two papers) with margin pinned to ZERO on all four sides: the border box
+  // already IS the paper. @page margins stay 0 so the browser's own header/footer (its
+  // page numbers, URL, date) has nowhere to render.
+  assert.match(css, /@media print\{html\{writing-mode:vertical-rl;background:none;\}\.page\{margin:0;box-shadow:none;\}\}/);
   assert.doesNotMatch(css, /\.line[^{]*\{[^}]*box-shadow/);
   assert.doesNotMatch(css, /::after/); // no inter-column rules without edge lines
   assert.doesNotMatch(css, /counter/);
@@ -458,12 +476,39 @@ test('build bands: header/folio bands are constant; only line numbers add geomet
     assert.match(css, /:root\{[^}]*--htop:3/); // the top band is furniture-independent
     assert.match(css, /\.page\{[^}]*padding-inline-start:calc\(var\(--htop\)\*1em\)/);
     assert.match(css, /\.page\{[^}]*padding-inline-end:3em/);
-    assert.match(css, /@page\{size:84\.5em 51em/); // 40 + 3 + 3 + 2×2.5
+    assert.match(css, /@page\{size:297mm 210mm/); // same paper whatever the furniture
+    assert.match(css, /html\{font-size:3\.514mm;\}/); // …and the same fit
   }
   const lnOnly = build({ chrome: { ...BUILD_OFF, lineNumbers: true } });
   assert.match(lnOnly, /:root\{[^}]*--htop:4/); // header 3 + numbers 1
   assert.match(lnOnly, /\.page\{[^}]*padding-inline-start:calc\(var\(--htop\)\*1em\)/);
   assert.match(lnOnly, /\.page\{[^}]*padding-inline-end:3em/);
+});
+
+test('paper settings pick the box: A6, forced orientation, auto portrait', () => {
+  // The default grid on A6 (文庫判) — auto still lands landscape.
+  const a6 = build({ paperSize: 'a6' });
+  assert.match(a6, /@page\{size:148mm 105mm;margin:0;\}/);
+  assert.match(a6, /html\{font-size:1\.751mm;\}/);
+  assert.match(a6, /\.page\{border:solid #fff;border-width:6\.97em 2\.50em;\}/);
+  // Forced portrait turns the paper, not the grid — the surplus goes top/bottom.
+  const portrait = build({ paperOrientation: 'portrait' });
+  assert.match(portrait, /@page\{size:210mm 297mm;margin:0;\}/);
+  assert.match(portrait, /html\{font-size:2\.485mm;\}/);
+  assert.match(portrait, /\.page\{border:solid #fff;border-width:36\.74em 2\.49em;\}/);
+  // A tall grid picks portrait on its own (18 > 40/2 is false).
+  const tall = build({ linesPerPage: 18 });
+  assert.match(tall, /@page\{size:210mm 297mm;margin:0;\}/);
+  assert.match(tall, /html\{font-size:4\.329mm;\}/);
+  assert.match(tall, /\.page\{border:solid #fff;border-width:11\.29em 2\.49em;\}/);
+});
+
+test('preview carries no paper rules (screen fit stays viewport-based)', () => {
+  // The physical-paper trio (mm font, sheet→paper border) is build-only; the preview keeps
+  // its fit-to-viewport root font and borderless segments. @page absence is asserted above.
+  const css = preview();
+  assert.doesNotMatch(css, /font-size:[\d.]+mm/);
+  assert.doesNotMatch(css, /border-width/);
 });
 
 test('edgeLine none draws no frame in either medium (preview/build cohesion)', () => {

@@ -18,7 +18,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { resolveBrowserExecutable } from '../../src/client/browser.ts';
-import { LINE_PITCH } from '../../src/shared/compiler/geometry.ts';
+import { HEADER_BAND, LINE_PITCH, fitPaper } from '../../src/shared/compiler/geometry.ts';
 import type {
   BuildResult,
   HtmlSettings,
@@ -47,6 +47,8 @@ const HTML_SETTINGS: HtmlSettings = {
   autoTcy: 'punctuationPairs',
   lineNumbers: false,
   edgeLine: 'none',
+  paperSize: 'a4',
+  paperOrientation: 'auto',
 };
 
 /** Exercises ruby, explicit + automatic (half-width pair) 縦中横, and 改ページ in one pass. */
@@ -179,6 +181,7 @@ const MARKER = 'data-verify';
 const MEASURE_SCRIPT = `<script>
 (() => {
   const page = document.querySelector('.page');
+  const pageRect = page ? page.getBoundingClientRect() : { width: 0, height: 0 };
   const line = document.querySelector('.line');
   let painted = 0;
   if (line) {
@@ -189,6 +192,8 @@ const MEASURE_SCRIPT = `<script>
   document.documentElement.setAttribute('${MARKER}', JSON.stringify({
     writingMode: page ? getComputedStyle(page).writingMode : 'missing',
     rootFontSize: parseFloat(getComputedStyle(document.documentElement).fontSize),
+    pageWidth: pageRect.width,
+    pageHeight: pageRect.height,
     lineCount: document.querySelectorAll('.line').length,
     paintedExtent: painted,
     rubyCount: document.querySelectorAll('ruby').length,
@@ -200,6 +205,8 @@ const MEASURE_SCRIPT = `<script>
 interface VerifyMetrics {
   readonly writingMode: string;
   readonly rootFontSize: number;
+  readonly pageWidth: number;
+  readonly pageHeight: number;
   readonly lineCount: number;
   readonly paintedExtent: number;
   readonly rubyCount: number;
@@ -284,7 +291,26 @@ test('the built page renders vertically in a headless Chromium', BROWSER_SKIP, a
   const metrics = JSON.parse(await measurePage(browser, builtHtml, MEASURE_SCRIPT, 'hon')) as VerifyMetrics;
 
   assert.equal(metrics.writingMode, 'vertical-rl', 'pages must flow vertical-rl');
-  assert.ok(metrics.rootFontSize > 0);
+  // Paper fit: on screen the page border box IS the physical paper (root font in mm) —
+  // the same fitPaper numbers the PDF leg asserts in pt.
+  const fit = fitPaper({
+    charsPerLine: HTML_SETTINGS.charsPerLine,
+    linesPerPage: HTML_SETTINGS.linesPerPage,
+    hTop: HEADER_BAND, // lineNumbers off in HTML_SETTINGS
+    size: HTML_SETTINGS.paperSize,
+    orientation: HTML_SETTINGS.paperOrientation,
+  });
+  const MM_TO_PX = 96 / 25.4;
+  assert.ok(
+    Math.abs(metrics.rootFontSize - fit.fontMm * MM_TO_PX) < 0.05,
+    `root font must be the fitted physical size (${String(metrics.rootFontSize)}px vs ${String(fit.fontMm * MM_TO_PX)}px)`,
+  );
+  assert.ok(
+    Math.abs(metrics.pageWidth - fit.widthMm * MM_TO_PX) < 2 &&
+      Math.abs(metrics.pageHeight - fit.heightMm * MM_TO_PX) < 2,
+    `the page border box must be the paper (${String(metrics.pageWidth)}×${String(metrics.pageHeight)}px` +
+      ` vs ${String(fit.widthMm)}×${String(fit.heightMm)}mm)`,
+  );
   assert.ok(metrics.lineCount >= 2, `expected multiple line columns, saw ${String(metrics.lineCount)}`);
   assert.ok(
     metrics.paintedExtent >= metrics.rootFontSize,

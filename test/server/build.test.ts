@@ -15,7 +15,7 @@ import {
   type FakeConnection,
 } from './helpers.ts';
 import type { ServerContext } from '../../src/server/roots.ts';
-import { BUILD_CHROME_DEFAULT } from '../../src/shared/config/settings.ts';
+import { BUILD_CHROME_DEFAULT, BUILD_PAPER_DEFAULT } from '../../src/shared/config/settings.ts';
 import { LAYOUT_DEFAULT } from '../../src/shared/config/types.ts';
 import type {
   BuildResult,
@@ -30,6 +30,7 @@ const SETTINGS: HtmlSettings = {
   ...LAYOUT_DEFAULT,
   lineNumbers: BUILD_CHROME_DEFAULT.lineNumbers,
   edgeLine: BUILD_CHROME_DEFAULT.edgeLine,
+  ...BUILD_PAPER_DEFAULT,
 };
 
 /** The per-root `jpnov.layout.outDir` map a request carries; defaults unless overridden. */

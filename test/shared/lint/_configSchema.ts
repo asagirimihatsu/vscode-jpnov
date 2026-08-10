@@ -8,8 +8,10 @@
  * Layout & Output(1) > Lint(2) > Editor(3). Every property carries an explicit in-section `order`.
  */
 import { EDGE_LINE_STYLES } from '../../../src/shared/compiler/chrome.ts';
+import { PAPER_ORIENTATIONS, PAPER_SIZES } from '../../../src/shared/compiler/geometry.ts';
 import {
   BUILD_CHROME_DEFAULT,
+  BUILD_PAPER_DEFAULT,
   PREVIEW_CHROME_DEFAULT,
 } from '../../../src/shared/config/settings.ts';
 import {
@@ -74,7 +76,7 @@ function propertyFor(rule: RuleMeta, order: number): Record<string, unknown> {
   };
 }
 
-/** An `edgeLine` enum property (shared shape between the preview and html slices). */
+/** An `edgeLine` enum property (shared shape between the preview and paper slices). */
 function edgeLineProperty(keyPrefix: string, order: number): Record<string, unknown> {
   return {
     type: 'string',
@@ -88,7 +90,7 @@ function edgeLineProperty(keyPrefix: string, order: number): Record<string, unkn
 }
 
 /**
- * The Layout & Output section: the shared layout core, then the preview / html render slices
+ * The Layout & Output section: the shared layout core, then the preview / paper render slices
  * (derived from the same constants the resolver uses — the codegen deepEqual is what locks
  * package.json's defaults to them), then the two output-side paths. `outDir` is per-folder
  * (`scope: resource`); `browserPath` is machine-specific and client-only (never sent to the
@@ -142,13 +144,33 @@ function layoutSection(): unknown {
       'jpnov.layout.preview.edgeLine': edgeLineProperty('jpnov.layout.preview.edgeLine', 6),
       // Page furniture (ヘッダー/ノンブル) is deliberately NOT here: it is book identity, carried
       // by each `.jpbook`'s front matter (parsed in shared/book/jpbook.ts), never a setting.
-      'jpnov.layout.html.lineNumbers': {
+      // The `paper.*` slice governs the paper-format outputs (built HTML and the PDF printed
+      // from it): the physical paper first, then the proofing chrome drawn on it.
+      'jpnov.layout.paper.size': {
+        type: 'string',
+        enum: [...PAPER_SIZES],
+        default: BUILD_PAPER_DEFAULT.paperSize,
+        enumItemLabels: PAPER_SIZES.map((v) => `%jpnov.layout.paper.size.${v}.label%`),
+        enumDescriptions: PAPER_SIZES.map((v) => `%jpnov.layout.paper.size.${v}.description%`),
+        order: 7,
+        markdownDescription: '%jpnov.layout.paper.size.description%',
+      },
+      'jpnov.layout.paper.orientation': {
+        type: 'string',
+        enum: [...PAPER_ORIENTATIONS],
+        default: BUILD_PAPER_DEFAULT.paperOrientation,
+        enumItemLabels: PAPER_ORIENTATIONS.map((v) => `%jpnov.layout.paper.orientation.${v}.label%`),
+        enumDescriptions: PAPER_ORIENTATIONS.map((v) => `%jpnov.layout.paper.orientation.${v}.description%`),
+        order: 8,
+        markdownDescription: '%jpnov.layout.paper.orientation.description%',
+      },
+      'jpnov.layout.paper.lineNumbers': {
         type: 'boolean',
         default: BUILD_CHROME_DEFAULT.lineNumbers,
-        order: 7,
-        markdownDescription: '%jpnov.layout.html.lineNumbers.description%',
+        order: 9,
+        markdownDescription: '%jpnov.layout.paper.lineNumbers.description%',
       },
-      'jpnov.layout.html.edgeLine': edgeLineProperty('jpnov.layout.html.edgeLine', 8),
+      'jpnov.layout.paper.edgeLine': edgeLineProperty('jpnov.layout.paper.edgeLine', 10),
       // The `.txt` slice: one setting, because the Aozora deliverable is plain text and only its
       // encoding is a choice. HTML carries no counterpart — the HTML standard fixes it to UTF-8.
       'jpnov.layout.txt.encoding': {
@@ -157,21 +179,21 @@ function layoutSection(): unknown {
         default: TXT_ENCODING_DEFAULT,
         enumItemLabels: TXT_ENCODINGS.map((v) => `%jpnov.layout.txt.encoding.${v}.label%`),
         enumDescriptions: TXT_ENCODINGS.map((v) => `%jpnov.layout.txt.encoding.${v}.description%`),
-        order: 9,
+        order: 11,
         markdownDescription: '%jpnov.layout.txt.encoding.description%',
       },
       'jpnov.layout.outDir': {
         type: 'string',
         default: PROJECT_DEFAULT.outDir,
         scope: 'resource',
-        order: 10,
+        order: 12,
         markdownDescription: '%jpnov.layout.outDir.description%',
       },
       'jpnov.layout.browserPath': {
         type: 'string',
         default: '',
         scope: 'machine-overridable',
-        order: 11,
+        order: 13,
         markdownDescription: '%jpnov.layout.browserPath.description%',
       },
     },
@@ -263,9 +285,13 @@ function staticNlsKeys(): string[] {
     'jpnov.layout.preview.lineNumbers.description',
     'jpnov.layout.preview.edgeLine.description',
     ...EDGE_LINE_STYLES.flatMap((v) => enumChoiceKeys(`jpnov.layout.preview.edgeLine.${v}`)),
-    'jpnov.layout.html.lineNumbers.description',
-    'jpnov.layout.html.edgeLine.description',
-    ...EDGE_LINE_STYLES.flatMap((v) => enumChoiceKeys(`jpnov.layout.html.edgeLine.${v}`)),
+    'jpnov.layout.paper.size.description',
+    ...PAPER_SIZES.flatMap((v) => enumChoiceKeys(`jpnov.layout.paper.size.${v}`)),
+    'jpnov.layout.paper.orientation.description',
+    ...PAPER_ORIENTATIONS.flatMap((v) => enumChoiceKeys(`jpnov.layout.paper.orientation.${v}`)),
+    'jpnov.layout.paper.lineNumbers.description',
+    'jpnov.layout.paper.edgeLine.description',
+    ...EDGE_LINE_STYLES.flatMap((v) => enumChoiceKeys(`jpnov.layout.paper.edgeLine.${v}`)),
     'jpnov.layout.txt.encoding.description',
     ...TXT_ENCODINGS.flatMap((v) => enumChoiceKeys(`jpnov.layout.txt.encoding.${v}`)),
     'jpnov.layout.outDir.description',
