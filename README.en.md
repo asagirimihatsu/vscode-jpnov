@@ -106,7 +106,7 @@ but not Japanese typesetting:
 
   | kinsoku `none` | kinsoku `normal` (default) |
   | :---: | :---: |
-  | <img src="docs/images/kinsoku-off.png" width="250" alt="Without kinsoku: a full stop opens a line and an opening bracket ends one"> | <img src="docs/images/kinsoku-on.png" width="250" alt="With kinsoku: the full stop hangs at the end of the previous line and the bracket moves inline"> |
+  | <img src="docs/images/kinsoku-off.png" width="180" alt="Without kinsoku: a full stop opens a line and an opening bracket ends one"> | <img src="docs/images/kinsoku-on.png" width="180" alt="With kinsoku: the full stop hangs at the end of the previous line and the bracket moves inline"> |
 
 - **Dashes（ダッシュ）** — Japanese novels write a dash as a doubled pair
   (`――`), and it is typeset as one unbroken dash. Pick the
@@ -117,7 +117,7 @@ but not Japanese typesetting:
   on. The default page of **40 characters × 34 lines** mirrors common
   submission requirements, and the line pitch comes in four steps
   (`jpnov.layout.linePitch`); turn on line numbers and column
-  rules for the classic manuscript-paper look:
+  rules for the classic manuscript-paper look, shown here at the 2× pitch:
 
   ![A page with red column rules and line numbers, resembling manuscript paper](docs/images/genkoyoshi.png)
 
@@ -148,7 +148,8 @@ Most annotations take a **forward-ref** form that points back at the target text
 
 <img src="docs/images/notation.png" width="800" alt="A rendered specimen showing ruby, both-side ruby, emphasis dots, a wavy side line, bold, and tate-chu-yoko">
 
-The specimen's source — paste it into a `.jpnov` to try:
+The specimen is typeset at 2× line pitch for the left ruby. Its source —
+paste it into a `.jpnov` to try:
 
 ```text
 　物語《ものがたり》が始まる。
