@@ -2,6 +2,7 @@ import type { AutoTcyMode, KinsokuMode } from '../config/types.ts';
 import { applyAutoTcy } from './autoTcy.ts';
 import type { BuildChrome } from './chrome.ts';
 import { stylesheet } from './css.ts';
+import type { PaperOrientation, PaperSize } from './geometry.ts';
 import { buildRows, paginate, pagesToHtml, type Row } from './layout.ts';
 import { indentAnnotation, tokenize } from './tokenizer.ts';
 
@@ -150,6 +151,8 @@ export function renderBook(opts: {
   linesPerPage: number;
   kinsoku: KinsokuMode;
   autoTcy: AutoTcyMode;
+  paperSize: PaperSize;
+  paperOrientation: PaperOrientation;
   chrome: BuildChrome;
 }): string {
   const rows: Row[] = [];
@@ -190,6 +193,8 @@ export function renderBook(opts: {
     paginate: true,
     charsPerLine: opts.charsPerLine,
     linesPerPage: opts.linesPerPage,
+    paperSize: opts.paperSize,
+    paperOrientation: opts.paperOrientation,
     chrome,
     usedClasses: [...used].sort(),
   });

@@ -30,3 +30,17 @@ test('every referenced nls key is defined in both the EN and JA bundles', () => 
     assert.ok(key in ja, `missing JA nls key: ${key}`);
   }
 });
+
+test('no orphaned configuration nls keys linger in either bundle', () => {
+  // The reverse direction: a renamed/removed setting must take its bundle strings with it,
+  // or stale keys (invisible in the UI) accumulate. Scoped to the configuration prefixes —
+  // command/view/walkthrough keys have other owners.
+  const expected = new Set(expectedNlsKeys());
+  for (const bundle of ['package.nls.json', 'package.nls.ja.json']) {
+    for (const key of Object.keys(readJson(bundle))) {
+      if (/^jpnov\.(layout|lint|editor)\./.test(key)) {
+        assert.ok(expected.has(key), `orphaned nls key in ${bundle}: ${key}`);
+      }
+    }
+  }
+});

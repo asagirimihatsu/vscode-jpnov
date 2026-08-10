@@ -25,6 +25,8 @@ const render = (
     linesPerPage: opts.linesPerPage ?? 34,
     kinsoku: 'none',
     autoTcy: 'none',
+    paperSize: 'a4',
+    paperOrientation: 'auto',
     chrome: { ...OFF, ...opts.chrome },
   });
 
@@ -55,6 +57,8 @@ test('renderBook joins files[] in order with one blank separator line', () => {
     linesPerPage: 34,
     kinsoku: 'none',
     autoTcy: 'none',
+    paperSize: 'a4',
+    paperOrientation: 'auto',
     chrome: OFF,
   });
   // The glue's blank column is synthetic (srcLine −1): no data-line anchor.
@@ -203,6 +207,8 @@ test('renderBook inserts the divider line + one blank as synthetic (anchor-less)
     linesPerPage: 34,
     kinsoku: 'none',
     autoTcy: 'none',
+    paperSize: 'a4',
+    paperOrientation: 'auto',
     chrome: OFF,
   });
   // cpl 4 → the centring annotation is ［＃１字下げ］: the glue line carries indent-1.
@@ -224,6 +230,8 @@ test('dual invariant: per-file render + glue == rendering the concatenated .txt'
     linesPerPage: 5,
     kinsoku: 'none',
     autoTcy: 'none',
+    paperSize: 'a4',
+    paperOrientation: 'auto',
     chrome: OFF,
   } as const;
   const matrix: BookInput[] = [

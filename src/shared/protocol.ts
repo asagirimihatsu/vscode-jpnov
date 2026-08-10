@@ -10,6 +10,7 @@
  * (structured-clone over the forked-process channel) without vscode value types.
  */
 import type { EdgeLineStyle, PreviewChrome } from './compiler/chrome.ts';
+import type { PaperOrientation, PaperSize } from './compiler/geometry.ts';
 import type { LayoutSettings } from './config/types.ts';
 import type { LintCode } from './lint/catalog.ts';
 
@@ -172,7 +173,7 @@ export interface HighlightChangedParams {
 export interface PreviewSettings extends LayoutSettings, PreviewChrome {}
 
 /**
- * The layout-core / `jpnov.layout.html.*` snapshot the client ships on every `jpnov/build`
+ * The layout-core / `jpnov.layout.paper.*` snapshot the client ships on every `jpnov/build`
  * request. Only the `.html` artifact consumes it (`.txt` is the raw Aozora source; its encoding is
  * a client-side setting, never part of this snapshot).
  * Page furniture (ヘッダー/ノンブル) is deliberately ABSENT: it is book identity, carried by each
@@ -183,6 +184,10 @@ export interface HtmlSettings extends LayoutSettings {
   readonly lineNumbers: boolean;
   /** Inter-column rules + page frame (proofing chrome — workspace preference, not book identity). */
   readonly edgeLine: EdgeLineStyle;
+  /** Physical output paper (device concern — workspace preference, not book identity). */
+  readonly paperSize: PaperSize;
+  /** Physical paper orientation; `auto` follows the page grid. Unrelated to 縦書き. */
+  readonly paperOrientation: PaperOrientation;
 }
 
 // ---------------------------------------------------------------------------

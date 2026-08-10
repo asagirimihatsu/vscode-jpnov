@@ -279,6 +279,8 @@ async function buildRoot(
           linesPerPage: selection.settings.linesPerPage,
           kinsoku: selection.settings.kinsoku,
           autoTcy: selection.settings.autoTcy,
+          paperSize: selection.settings.paperSize,
+          paperOrientation: selection.settings.paperOrientation,
           chrome: composeBookChrome(selection.settings, parsed.meta),
         });
         artifacts.push({ path: childUri(target.outDirUri, `${outRel}.html`), content: html });

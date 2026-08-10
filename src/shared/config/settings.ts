@@ -1,7 +1,7 @@
 /**
- * Resolves the wire settings payload (`jpnov.layout/preview/html.*`) into fully-clamped,
+ * Resolves the wire settings payload (`jpnov.layout/preview/paper.*`) into fully-clamped,
  * enum-checked {@link PreviewSettings} / {@link HtmlSettings}. This is the SINGLE home of
- * the product defaults ({@link LAYOUT_DEFAULT} + the two chrome default tables); the
+ * the product defaults ({@link LAYOUT_DEFAULT} + the chrome/paper default tables); the
  * config-codegen test locks the package.json `default`s to these constants.
  *
  * The input types are the full wire shapes (the client always sends every field), but the
@@ -12,6 +12,8 @@
  */
 import type { EdgeLineStyle, PageNumberPosition } from '../compiler/chrome.ts';
 import { EDGE_LINE_STYLES } from '../compiler/chrome.ts';
+import type { PaperOrientation, PaperSize } from '../compiler/geometry.ts';
+import { PAPER_ORIENTATIONS, PAPER_SIZES } from '../compiler/geometry.ts';
 import type { HtmlSettings, PreviewSettings } from '../protocol.ts';
 import type { LayoutSettings } from './types.ts';
 import { AUTO_TCY_MODES, CHARS_MAX, CHARS_MIN, KINSOKU_MODES, LAYOUT_DEFAULT } from './types.ts';
@@ -22,7 +24,16 @@ export const PREVIEW_CHROME_DEFAULT = {
 } as const satisfies { lineNumbers: boolean; edgeLine: EdgeLineStyle };
 
 /**
- * `lineNumbers`/`edgeLine` default the `jpnov.layout.html.*` settings; the page-furniture fields
+ * Defaults for the `jpnov.layout.paper.size`/`.orientation` settings: the physical output
+ * paper — a device concern, never page furniture or book identity.
+ */
+export const BUILD_PAPER_DEFAULT = {
+  paperSize: 'a4',
+  paperOrientation: 'auto',
+} as const satisfies { paperSize: PaperSize; paperOrientation: PaperOrientation };
+
+/**
+ * `lineNumbers`/`edgeLine` default the `jpnov.layout.paper.*` settings; the page-furniture fields
  * (`pageNumber`/`pageNumberFormat`/`header`) are NOT settings — they default a
  * `.jpbook`'s front matter when it omits the key (see `composeBookChrome`).
  */
@@ -83,5 +94,7 @@ export function resolveHtmlSettings(s: HtmlSettings): HtmlSettings {
     ...resolveLayout(s),
     lineNumbers: boolOr(s.lineNumbers, BUILD_CHROME_DEFAULT.lineNumbers),
     edgeLine: enumOr(s.edgeLine, EDGE_LINE_STYLES, BUILD_CHROME_DEFAULT.edgeLine),
+    paperSize: enumOr(s.paperSize, PAPER_SIZES, BUILD_PAPER_DEFAULT.paperSize),
+    paperOrientation: enumOr(s.paperOrientation, PAPER_ORIENTATIONS, BUILD_PAPER_DEFAULT.paperOrientation),
   };
 }

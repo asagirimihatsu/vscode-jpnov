@@ -6,8 +6,9 @@
  * - the `:root{}` variable block (`--cpl`/`--lpp`/`--htop` numbers, `--edge` base colour) the
  *   fragments' static `calc(var())` geometry reads — a RULE inside the document's one
  *   `<style>`, never a `style=` attribute (the webview CSP strips those);
- * - the `@page` at-rule (BUILD): its size is computed from geometry.ts numbers because
- *   `@page` cannot read `var()` portably (the build artifact must stay portable);
+ * - the paper rules (BUILD): the `@page` box in mm, the root font size and the sheet→paper
+ *   border, all computed from geometry.ts's fitPaper because `@page` cannot read `var()`
+ *   portably (the build artifact must stay portable);
  * - the on-demand `indent-N` (字下げ — unbounded N) and emphasis class rules (usedClasses).
  *
  * Mode and chrome conditionality is FRAGMENT INCLUSION — zero dead rules: a disabled
@@ -31,14 +32,12 @@
 import type { KinsokuMode } from '../config/types.ts';
 import type { BuildChrome, EdgeLineStyle, PreviewChrome } from './chrome.ts';
 import { styleRule } from './emphasis.ts';
+import type { PaperFit, PaperOrientation, PaperSize } from './geometry.ts';
 import {
   EDGE_RED,
-  FOLIO_BAND,
   HEADER_BAND,
   LINENUM_BAND,
-  LINE_PITCH,
-  PRINT_MARGIN,
-  SIDE_PAD,
+  fitPaper,
 } from './geometry.ts';
 import * as S from './styles/styles.generated.ts';
 
@@ -113,16 +112,18 @@ function rootVars(vars: Record<string, string | number>): string {
 }
 
 /**
- * The one dynamic at-rule (BUILD): one print sheet = the column grid grown by the chrome
- * bands plus a uniform paper margin, computed here from the geometry.ts constants. The
- * margin lives on the SHEET (`@media print` in build.base.css), never on `@page`: browsers
- * render their own print header/footer (date, URL, their page numbers) into the `@page`
- * margin boxes, so zero `@page` margins are what keeps that furniture off the paper.
+ * The dynamic paper rules (BUILD), from geometry.ts's {@link fitPaper}. `@page` margins stay
+ * 0 — browsers render their own print header/footer into `@page` margin boxes. The font size
+ * goes on `html` ONLY, so the one build rem (build.ln.css) keeps equalling the page em. The
+ * sheet→paper inset is a white BORDER: it paints outside the padding box, so the `.page`
+ * border box IS the paper in both media while `overflow:hidden` clipping and the furniture
+ * offsets stay on the padding box. border-width is PHYSICAL two-value: top/bottom = the
+ * inline-axis inset, left/right = the block-axis inset (.page is vertical-rl).
  */
-function atPage(charsPerLine: number, linesPerPage: number, hTop: number): string {
-  const block = linesPerPage * LINE_PITCH + 2 * SIDE_PAD + 2 * PRINT_MARGIN;
-  const inline = charsPerLine + hTop + FOLIO_BAND + 2 * PRINT_MARGIN;
-  return `@page{size:${String(block)}em ${String(inline)}em;margin:0;}`;
+function paperRules(fit: PaperFit): string {
+  return `@page{size:${String(fit.widthMm)}mm ${String(fit.heightMm)}mm;margin:0;}` +
+    `html{font-size:${fit.fontMm.toFixed(3)}mm;}` +
+    `.page{border:solid #fff;border-width:${fit.insetInlineEm.toFixed(2)}em ${fit.insetBlockEm.toFixed(2)}em;}`;
 }
 
 type StylesheetOptions =
@@ -130,6 +131,9 @@ type StylesheetOptions =
     readonly paginate: true;
     readonly charsPerLine: number;
     readonly linesPerPage: number;
+    /** Physical output paper (`jpnov.layout.paper.size` / `.orientation`). */
+    readonly paperSize: PaperSize;
+    readonly paperOrientation: PaperOrientation;
     readonly chrome: BuildChrome;
     readonly usedClasses?: readonly string[];
   }
@@ -146,7 +150,7 @@ type StylesheetOptions =
  * Renders the stylesheet for one document. `usedClasses` is the on-demand class sink
  * (callers pass it pre-sorted, lexicographic by class name, for deterministic output);
  * chrome features select their fragment in a fixed order (anchor → line numbers → edge →
- * header → folio), followed by the `:root` variables and (BUILD) the `@page` rule, so the
+ * header → folio), followed by the `:root` variables and (BUILD) the paper rules, so the
  * output stays deterministic.
  */
 export function stylesheet(opts: StylesheetOptions): string {
@@ -165,6 +169,13 @@ export function stylesheet(opts: StylesheetOptions): string {
     if (edge !== null) {
       vars['--edge'] = edge;
     }
+    const fit = fitPaper({
+      charsPerLine: opts.charsPerLine,
+      linesPerPage: opts.linesPerPage,
+      hTop,
+      size: opts.paperSize,
+      orientation: opts.paperOrientation,
+    });
     return [
       S.buildBase,
       anchor ? S.buildAnchor : '',
@@ -173,7 +184,7 @@ export function stylesheet(opts: StylesheetOptions): string {
       chrome.header !== '' ? S.buildHeader : '',
       chrome.pageNumber !== 'none' ? S.buildFolio : '',
       rootVars(vars),
-      atPage(opts.charsPerLine, opts.linesPerPage, hTop),
+      paperRules(fit),
       ...tail,
     ].join('');
   }

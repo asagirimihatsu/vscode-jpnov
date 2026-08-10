@@ -1,6 +1,6 @@
 /**
- * Guards the deliberate DOUBLE HOME of the @page geometry: LINE_PITCH / FOLIO_BAND / PRINT_MARGIN
- * live in geometry.ts (the TS `@page` generator consumes them — `@page` cannot read `var()`
+ * Guards the deliberate DOUBLE HOME of the sheet geometry: LINE_PITCH / FOLIO_BAND / SIDE_PAD
+ * live in geometry.ts (the TS paper-fit generator consumes them — `@page` cannot read `var()`
  * portably) AND as plain literals in the authored `styles/*.css` fragments. If either side moves
  * alone, this fails loudly (see geometry.ts's module header).
  *
@@ -19,7 +19,6 @@ import { fileURLToPath } from 'node:url';
 import {
   FOLIO_BAND,
   LINE_PITCH,
-  PRINT_MARGIN,
   SIDE_PAD,
 } from '../../../src/shared/compiler/geometry.ts';
 
@@ -60,7 +59,7 @@ function cssValue(css: string, selector: string, prop: string, within?: string):
   return Number.parseFloat(value);
 }
 
-test('the .css geometry literals equal the geometry.ts constants (@page double-home guard)', () => {
+test('the .css geometry literals equal the geometry.ts constants (paper-fit double-home guard)', () => {
   const previewBase = read('preview.base.css');
   const buildBase = read('build.base.css');
 
@@ -77,13 +76,12 @@ test('the .css geometry literals equal the geometry.ts constants (@page double-h
   // silently leave it behind — guard it here.
   assert.equal(cssValue(read('build.edge.css'), '.page::before', 'bottom'), FOLIO_BAND - 0.35);
 
-  // PRINT_MARGIN: the sheet's paper inset under @media print…
-  assert.equal(cssValue(buildBase, '.page', 'margin', '@media print'), PRINT_MARGIN);
-  // …and the screen sheet's vertical surround, deliberately the SAME value (the on-screen
-  // proof breathes like the paper one; the base rule is the first `.page{` in the file).
-  assert.equal(cssValue(buildBase, '.page', 'margin'), PRINT_MARGIN);
+  // Print margin: pinned to ZERO on all four sides — the paper inset rides the TS-emitted
+  // border (geometry.ts fitPaper), so any non-zero print margin would push the border box
+  // (== the paper) past the @page box. PRINT_MARGIN lives only in the fit math now.
+  assert.equal(cssValue(buildBase, '.page', 'margin', '@media print'), 0);
 
-  // SIDE_PAD: the sheet's physical left/right padding (@page grows by 2×SIDE_PAD), the
+  // SIDE_PAD: the sheet's physical left/right padding (fitPaper's block-axis sheet size), the
   // outset frame's side insets (flush with the grid's side columns), and its one derived
   // literal — the folio corners at SIDE_PAD + 0.35 EDGE_INSET (0.35em inside the frame line).
   assert.equal(cssValue(buildBase, '.page', 'padding-block-start'), SIDE_PAD);
