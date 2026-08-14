@@ -22,6 +22,12 @@ jobs:
       - run: npm ci
       - name: Integration suites (vscode-mock client + fs-fixture server)
         run: npm run test:integration
+      - name: Warm up headless Chrome (first-launch font/profile caches)
+        run: >-
+          timeout 120 google-chrome --headless=new --no-sandbox --disable-gpu
+          --disable-dev-shm-usage --user-data-dir=/tmp/chrome-warmup --dump-dom
+          'data:text/html;charset=utf-8,<html lang=ja><body>組版あア亜……縦書き</body></html>'
+          > /dev/null 2>&1 || true
       - name: E2E smoke (bundled server over stdio + headless Chrome)
         run: npm run test:e2e
         env:

@@ -121,7 +121,7 @@ async function printPdf(browserPath: string, html: string, prefix: string): Prom
     [...printToPdfArgs(pathToFileURL(htmlPath).href, pdfPath, profileDir), ...ciFlags],
     { stdio: 'ignore', detached: true },
   );
-  const deadline = Date.now() + 30_000;
+  const deadline = Date.now() + 90_000;
   let lastSize = -1;
   try {
     while (Date.now() < deadline) {
@@ -144,7 +144,7 @@ async function printPdf(browserPath: string, html: string, prefix: string): Prom
       }
     }
   }
-  throw new Error(`no PDF written within 30s for ${prefix}`);
+  throw new Error(`no PDF written within timeout for ${prefix}`);
 }
 
 /**
