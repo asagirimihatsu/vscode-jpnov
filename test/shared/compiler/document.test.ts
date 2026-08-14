@@ -2,6 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { BuildChrome } from '../../../src/shared/compiler/chrome.ts';
 import { chapterGlue, concatBookText, renderBook, type BookInput } from '../../../src/shared/compiler/document.ts';
+import { FOLIO_BAND, HEADER_BAND } from '../../../src/shared/compiler/geometry.ts';
+
+// Band totals come from the tunable geometry constants — never write them out as literals.
+const HTOP_RE = new RegExp(String.raw`:root\{[^}]*--htop:` + String(HEADER_BAND) + '[;}]');
+const FOLIO_PAD_RE = new RegExp(String.raw`\.page\{[^}]*padding-inline-end:` + String(FOLIO_BAND) + 'em');
 
 const book = (over: Pick<BookInput, 'files' | 'divider'>): BookInput => ({ ...over });
 
@@ -334,7 +339,7 @@ test('folio blank-template suppression: a blank template drops the folio, keeps 
       chrome: { pageNumber: 'rightLeft', pageNumberFormat: tpl },
     });
     assert.doesNotMatch(html, /class="pn/);
-    assert.match(html, /\.page\{[^}]*padding-inline-end:3em/); // element goes, band stays reserved
+    assert.match(html, FOLIO_PAD_RE); // element goes, band stays reserved
   }
   // "{page}" renders non-blank, so it is NOT suppressed; literal spaces are kept as-is.
   const kept = render('本文', {
@@ -346,13 +351,13 @@ test('folio blank-template suppression: a blank template drops the folio, keeps 
 test('header: centered furniture div, escaped, absent (with its band) when empty', () => {
   const on = render('本文', { chrome: { header: '第一章' } });
   assert.match(on, /<div class="hd">第一章<\/div>/);
-  assert.match(on, /:root\{[^}]*--htop:3/);
+  assert.match(on, HTOP_RE);
   const escaped = render('本文', { chrome: { header: 'a<b' } });
   assert.match(escaped, /<div class="hd">a&lt;b<\/div>/);
   const off = render('本文');
   assert.doesNotMatch(off, /class="hd"/);
   // No element, but the band stays reserved — sheet geometry is header-independent.
-  assert.match(off, /:root\{[^}]*--htop:3/);
+  assert.match(off, HTOP_RE);
   assert.match(off, /\.page\{[^}]*padding-inline-start:calc\(var\(--htop\)\*1em\)/);
 });
 

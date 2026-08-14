@@ -5,7 +5,7 @@
 
 /* The frame floats EDGE_INSET off the text grid, borrowed from the bands, so the glyphs never
    touch the stroke while line numbers, header and folio still sit OUTSIDE it — like the printed
-   枠 of 原稿用紙. Insets: top = --htop band − 0.35em; bottom:2.65em = FOLIO_BAND 3 −
+   枠 of 原稿用紙. Insets: top = --htop band − 0.35em; bottom:1.65em = FOLIO_BAND 2 −
    EDGE_INSET 0.35 (a folio-band derivation); left/right:1.5em = SIDE_PAD, hugging the grid's
    side columns flush (no EDGE_INSET sideways — at every pitch the glyph's ≥0.25em column-side
    slack clears the stroke). All guarded against drift by styles-codegen.test.ts.
@@ -14,4 +14,4 @@
    background-clip:padding-box keeps the 80%-alpha stripes off the frame's own border;
    print-color-adjust:exact keeps the background in print/PDF (borders print, backgrounds are
    omitted). Longhand background-* only: the shorthand resets origin/clip. */
-.page::before{content:"";position:absolute;top:calc(var(--htop)*1em - 0.35em);right:1.5em;bottom:2.65em;left:1.5em;border:1px solid color-mix(in srgb,var(--edge) 80%,transparent);background-origin:border-box;background-clip:padding-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;pointer-events:none;}
+.page::before{content:"";position:absolute;top:calc(var(--htop)*1em - 0.35em);right:1.5em;bottom:1.65em;left:1.5em;border:1px solid color-mix(in srgb,var(--edge) 80%,transparent);background-origin:border-box;background-clip:padding-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;pointer-events:none;}

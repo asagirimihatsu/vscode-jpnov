@@ -17,7 +17,7 @@ body{margin:0;}
    css.ts adds a white BORDER (the sheet→paper inset from fitPaper): the border box IS the
    physical paper in both media, while clipping and the furniture offsets stay on the
    padding box. */
-.page{writing-mode:vertical-rl;line-height:var(--pitch);inline-size:calc(var(--cpl)*1em);block-size:calc(var(--lpp)*var(--pitch)*1em);padding-inline-start:calc(var(--htop)*1em);padding-inline-end:3em;padding-block-start:1.5em;padding-block-end:1.5em;position:relative;margin:2.5em auto;background:#fff;box-sizing:content-box;overflow:hidden;break-after:page;page-break-after:always;}
+.page{writing-mode:vertical-rl;line-height:var(--pitch);inline-size:calc(var(--cpl)*1em);block-size:calc(var(--lpp)*var(--pitch)*1em);padding-inline-start:calc(var(--htop)*1em);padding-inline-end:2em;padding-block-start:1.5em;padding-block-end:1.5em;position:relative;margin:2.5em auto;background:#fff;box-sizing:content-box;overflow:hidden;break-after:page;page-break-after:always;}
 
 /* Each line is one fixed-thickness column of the configured 行送り (--pitch em; the
    ruby-clearance ladder lives on LINE_PITCHES in config/types.ts). */
