@@ -271,7 +271,7 @@ async function dumpMarker(browserPath: string, pageUrl: string, profileDir: stri
   });
 
   const marker = new RegExp(`${MARKER}="([^"]*)"`);
-  const deadline = Date.now() + 30_000;
+  const deadline = Date.now() + 90_000;
   try {
     while (Date.now() < deadline) {
       const found = marker.exec(out);
