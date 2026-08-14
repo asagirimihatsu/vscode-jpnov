@@ -1,4 +1,4 @@
-import type { AutoTcyMode, KinsokuMode, LinePitch } from '../config/types.ts';
+import type { AutoTcyMode, DashMode, KinsokuMode, LinePitch } from '../config/types.ts';
 import { applyAutoTcy } from './autoTcy.ts';
 import type { BuildChrome } from './chrome.ts';
 import { emrProbe, stylesheet } from './css.ts';
@@ -123,8 +123,8 @@ export function chapterGlue(
 }
 
 /** One junction's glue as rows; srcLine −1 = synthetic (emitLine emits no data-line anchor). */
-function glueRows(glue: string): Row[] {
-  return buildRows(tokenize(glue)).map((row) =>
+function glueRows(glue: string, dash: DashMode): Row[] {
+  return buildRows(tokenize(glue), { dash }).map((row) =>
     row.kind === 'line' ? { ...row, srcLine: -1 } : row,
   );
 }
@@ -152,6 +152,7 @@ export function renderBook(opts: {
   linePitch: LinePitch;
   kinsoku: KinsokuMode;
   autoTcy: AutoTcyMode;
+  dash: DashMode;
   paperSize: PaperSize;
   paperOrientation: PaperOrientation;
   /** Resolved `jpnov.layout.fontFamily`; '' = the built-in stack (css.ts DEFAULT_FONT_STACK). */
@@ -169,10 +170,11 @@ export function renderBook(opts: {
         rows.push(
           ...glueRows(
             chapterGlue(sources[fileIndex - 1] ?? '', src, book.divider ?? '', opts.charsPerLine),
+            opts.dash,
           ),
         );
       }
-      rows.push(...buildRows(tokenize(src)));
+      rows.push(...buildRows(tokenize(src), { dash: opts.dash }));
     });
   });
 

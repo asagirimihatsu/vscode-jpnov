@@ -22,7 +22,7 @@ import { escapeHtml } from './compiler/escape.ts';
 import { buildRows } from './compiler/layout.ts';
 import { reflowDocument, reflowSegments } from './compiler/reflow.ts';
 import { tokenize } from './compiler/tokenizer.ts';
-import type { AutoTcyMode, KinsokuMode } from './config/types.ts';
+import type { AutoTcyMode, DashMode, KinsokuMode } from './config/types.ts';
 import type { EpubMember } from './protocol.ts';
 
 /**
@@ -75,6 +75,7 @@ export function epubMembers(opts: {
   readonly outRel: string;
   readonly kinsoku: KinsokuMode;
   readonly autoTcy: AutoTcyMode;
+  readonly dash: DashMode;
   /** Build timestamp for `dcterms:modified`, CCYY-MM-DDThh:mm:ssZ — injected (the determinism seam). */
   readonly modified: string;
 }): EpubMember[] {
@@ -84,8 +85,8 @@ export function epubMembers(opts: {
   const navChapters: NavChapter[] = [];
 
   opts.book.files.forEach((file, index) => {
-    const rows = buildRows(tokenize(applyAutoTcy(file.src, opts.autoTcy)));
-    const segments = reflowSegments(rows, used);
+    const rows = buildRows(tokenize(applyAutoTcy(file.src, opts.autoTcy)), { dash: opts.dash });
+    const segments = reflowSegments(rows, used, opts.dash);
     if (segments.length === 0) {
       return; // an empty chapter source contributes no spine file and no nav row
     }

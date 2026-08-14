@@ -116,6 +116,16 @@ test('autoTcy rides both snapshots: kept when a known member, defaulted otherwis
   assert.equal(LAYOUT_DEFAULT.autoTcy, 'punctuationPairs'); // 自動縦中横 ships ON (auto-combines half-width !! !? ?! ??)
 });
 
+test('dash rides both snapshots: kept when known, defaulted otherwise — retired "off" included', () => {
+  assert.equal(resolveHtmlSettings({ ...HTML_BASE, dash: 'emDash' }).dash, 'emDash');
+  assert.equal(resolvePreviewSettings({ ...PREVIEW_BASE, dash: 'boxDrawing' }).dash, 'boxDrawing');
+  // A settings.json still carrying the retired 'off' member renders with the default glyph;
+  // the lint side keeps reading that spelling as disabled (select.ts).
+  assert.equal(resolveHtmlSettings(badHtml({ dash: 'off' })).dash, LAYOUT_DEFAULT.dash);
+  assert.equal(resolveHtmlSettings(badHtml({ dash: true })).dash, LAYOUT_DEFAULT.dash);
+  assert.equal(LAYOUT_DEFAULT.dash, 'horizontalBar'); // 常用ダッシュ ― is the shipped default
+});
+
 test('bogus enum and boolean values coerce to their defaults', () => {
   assert.equal(resolveHtmlSettings(badHtml({ edgeLine: 'blue' })).edgeLine, 'none');
   assert.equal(
@@ -149,7 +159,7 @@ test('paper size/orientation ride the html snapshot: kept when known, defaulted 
 test('the wire settings carry NO page furniture — that is jpbook front-matter territory', () => {
   // Junk furniture fields on the payload must be dropped, not forwarded: the resolver's
   // output is EXACTLY the wire fields of each shape, whatever a stale or hostile sender ships.
-  const PREVIEW_WIRE_KEYS = ['autoTcy', 'charsPerLine', 'edgeLine', 'fontFamily', 'kinsoku', 'lineNumbers', 'linePitch', 'linesPerPage'];
+  const PREVIEW_WIRE_KEYS = ['autoTcy', 'charsPerLine', 'dash', 'edgeLine', 'fontFamily', 'kinsoku', 'lineNumbers', 'linePitch', 'linesPerPage'];
   const HTML_WIRE_KEYS = [...PREVIEW_WIRE_KEYS, 'paperOrientation', 'paperSize'].sort();
   const resolved = resolveHtmlSettings(badHtml({ header: '柱', pageNumber: 'none' }));
   assert.deepEqual(Object.keys(resolved).sort(), HTML_WIRE_KEYS);

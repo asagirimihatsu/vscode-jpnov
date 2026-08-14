@@ -29,7 +29,7 @@ export function renderPreview(
   // front door as both build outputs, so the preview always agrees with them.
   const used = new Set<string>();
   const body = flowToHtml(
-    buildRows(tokenize(applyAutoTcy(src, opts.autoTcy))),
+    buildRows(tokenize(applyAutoTcy(src, opts.autoTcy)), { dash: opts.dash }),
     opts.charsPerLine,
     opts.kinsoku,
     used,

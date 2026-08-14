@@ -32,6 +32,7 @@ function preview(
     fontFamily: '',
     kinsoku: 'none',
     autoTcy: 'none',
+    dash: 'horizontalBar',
     chrome: { lineNumbers: false, edgeLine: 'none' },
     ...o,
   });

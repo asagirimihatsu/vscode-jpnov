@@ -136,7 +136,7 @@ test('dash fix pairs an odd run and rewrites a foreign glyph in place', async ()
   assert.equal(await applied('彼は——と', DASH_BAR), '彼は――と'); // same length, chosen glyph
   assert.equal(await applied('彼は―――と', DASH_BAR), '彼は――――と'); // odd rounds up
   assert.equal(await applied('彼は――と', { 'jpnov.lint.common.dash': 'boxDrawing' }), '彼は──と');
-  assert.equal(await applied('彼は―と', { 'jpnov.lint.common.dash': 'off' }), '彼は―と');
+  assert.equal(await applied('彼は―と', { 'jpnov.lint.common.dash': 'off' }), '彼は―と'); // retired spelling still reads as disabled
 });
 
 test('generalNovelStyle leaves dash parity to the dash rule (ellipsis parity stays its own)', async () => {

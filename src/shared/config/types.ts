@@ -21,6 +21,18 @@ export const KINSOKU_MODES = ['none', 'normal', 'strict'] as const;
 export type KinsokuMode = (typeof KINSOKU_MODES)[number];
 
 /**
+ * `jpnov.lint.common.dash` members: the dash character the manuscript uses. The catalog row in
+ * lint/catalog.ts spells the same list (it must stay import-free); catalog.test.ts locks the two.
+ */
+export const DASH_MODES = ['emDash', 'horizontalBar', 'boxDrawing'] as const;
+export type DashMode = (typeof DASH_MODES)[number];
+
+/** Narrows an untrusted string (e.g. the lint options' `mode`) to a {@link DashMode}. */
+export function isDashMode(value: string): value is DashMode {
+  return (DASH_MODES as readonly string[]).includes(value);
+}
+
+/**
  * `jpnov.layout.linePitch` members: 行送り as a multiple of the character size — the CSS
  * line-height, injected as `--pitch`, and fitPaper's block-axis quantum. A ruby reading's
  * outer edge sits 1.0em off its column centre (0.5em glyph half + 0.5em lane), the drawn
@@ -34,9 +46,9 @@ export const LINE_PITCHES = [1.5, 1.75, 2, 2.25] as const;
 export type LinePitch = (typeof LINE_PITCHES)[number];
 
 /**
- * The `jpnov.layout.*` slice shared verbatim by both wire snapshots — preview and build stay
- * same-source. `linesPerPage`: the build grid's page depth; the preview edge frame reserves
- * the same extent per segment while drawn.
+ * The `jpnov.layout.*` slice (plus the `jpnov.lint.common.dash` choice) shared verbatim by both
+ * wire snapshots — preview and build stay same-source. `linesPerPage`: the build grid's page
+ * depth; the preview edge frame reserves the same extent per segment while drawn.
  */
 export interface LayoutSettings {
   readonly charsPerLine: number;
@@ -49,13 +61,16 @@ export interface LayoutSettings {
   readonly kinsoku: KinsokuMode;
   /** 自動縦中横 mode. */
   readonly autoTcy: AutoTcyMode;
+  /** ダッシュ choice (`jpnov.lint.common.dash`) — the one lint key the render pipeline also reads. */
+  readonly dash: DashMode;
 }
 
 /**
  * `jpnov.layout.*` defaults (投稿書式 40×34, 行送り 1.5 — the pitch print books and e-book readers
- * settle on, 禁則 normal, 自動縦中横 punctuationPairs) — the single source for the schema defaults
- * and the settings resolver's fallbacks; the config-codegen test locks package.json to these
- * values.
+ * settle on, 禁則 normal, 自動縦中横 punctuationPairs, ダッシュ ―) — the single source for the
+ * schema defaults and the settings resolver's fallbacks; the config-codegen test locks
+ * package.json to these values (`dash` is owned by the lint catalog; catalog.test.ts locks the
+ * two defaults together).
  */
 export const LAYOUT_DEFAULT: LayoutSettings = {
   charsPerLine: 40,
@@ -64,6 +79,7 @@ export const LAYOUT_DEFAULT: LayoutSettings = {
   fontFamily: '',
   kinsoku: 'normal',
   autoTcy: 'punctuationPairs',
+  dash: 'horizontalBar',
 };
 
 /**
