@@ -76,6 +76,24 @@ test('linePitch rides both snapshots: kept on the four tiers, defaulted otherwis
   assert.equal(resolvePreviewSettings(badPreview({ linePitch: true })).linePitch, LAYOUT_DEFAULT.linePitch);
 });
 
+test('fontFamily rides both snapshots: any string kept verbatim, non-strings defaulted', () => {
+  assert.equal(LAYOUT_DEFAULT.fontFamily, ''); // blank = the built-in stack (css.ts emission)
+  assert.equal(
+    resolveHtmlSettings({ ...HTML_BASE, fontFamily: '"游明朝", serif' }).fontFamily,
+    '"游明朝", serif',
+  );
+  assert.equal(
+    resolvePreviewSettings({ ...PREVIEW_BASE, fontFamily: 'Yu Mincho' }).fontFamily,
+    'Yu Mincho',
+  );
+  // The resolver is type-only — sanitizing is css.ts's job at emission.
+  assert.equal(resolveHtmlSettings(badHtml({ fontFamily: 42 })).fontFamily, LAYOUT_DEFAULT.fontFamily);
+  assert.equal(
+    resolvePreviewSettings(badPreview({ fontFamily: null })).fontFamily,
+    LAYOUT_DEFAULT.fontFamily,
+  );
+});
+
 test('kinsoku rides both snapshots: kept when a known member, defaulted otherwise', () => {
   assert.equal(resolveHtmlSettings({ ...HTML_BASE, kinsoku: 'strict' }).kinsoku, 'strict');
   assert.equal(resolvePreviewSettings({ ...PREVIEW_BASE, kinsoku: 'none' }).kinsoku, 'none');
@@ -131,7 +149,7 @@ test('paper size/orientation ride the html snapshot: kept when known, defaulted 
 test('the wire settings carry NO page furniture — that is jpbook front-matter territory', () => {
   // Junk furniture fields on the payload must be dropped, not forwarded: the resolver's
   // output is EXACTLY the wire fields of each shape, whatever a stale or hostile sender ships.
-  const PREVIEW_WIRE_KEYS = ['autoTcy', 'charsPerLine', 'edgeLine', 'kinsoku', 'lineNumbers', 'linePitch', 'linesPerPage'];
+  const PREVIEW_WIRE_KEYS = ['autoTcy', 'charsPerLine', 'edgeLine', 'fontFamily', 'kinsoku', 'lineNumbers', 'linePitch', 'linesPerPage'];
   const HTML_WIRE_KEYS = [...PREVIEW_WIRE_KEYS, 'paperOrientation', 'paperSize'].sort();
   const resolved = resolveHtmlSettings(badHtml({ header: '柱', pageNumber: 'none' }));
   assert.deepEqual(Object.keys(resolved).sort(), HTML_WIRE_KEYS);

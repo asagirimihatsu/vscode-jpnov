@@ -282,6 +282,7 @@ async function buildRoot(
           autoTcy: selection.settings.autoTcy,
           paperSize: selection.settings.paperSize,
           paperOrientation: selection.settings.paperOrientation,
+          fontFamily: selection.settings.fontFamily,
           chrome: composeBookChrome(selection.settings, parsed.meta),
         });
         artifacts.push({ path: childUri(target.outDirUri, `${outRel}.html`), content: html });

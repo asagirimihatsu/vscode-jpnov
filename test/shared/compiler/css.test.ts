@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { BuildChrome, PreviewChrome } from '../../../src/shared/compiler/chrome.ts';
-import { reflowStylesheet, stylesheet } from '../../../src/shared/compiler/css.ts';
+import { DEFAULT_FONT_STACK, reflowStylesheet, stylesheet } from '../../../src/shared/compiler/css.ts';
 import type { PaperOrientation, PaperSize } from '../../../src/shared/compiler/geometry.ts';
 import type { LinePitch } from '../../../src/shared/config/types.ts';
 import { LINE_PITCHES } from '../../../src/shared/config/types.ts';
@@ -43,6 +43,7 @@ function preview(
     charsPerLine?: number;
     linesPerPage?: number;
     linePitch?: LinePitch;
+    fontFamily?: string;
     chrome?: PreviewChrome;
     usedClasses?: readonly string[];
   } = {},
@@ -52,6 +53,7 @@ function preview(
     charsPerLine: o.charsPerLine ?? 40,
     linesPerPage: o.linesPerPage ?? 34,
     linePitch: o.linePitch ?? 2,
+    fontFamily: o.fontFamily ?? '',
     chrome: o.chrome ?? PREVIEW_OFF,
     usedClasses: o.usedClasses ?? [],
   });
@@ -65,6 +67,7 @@ function build(
     linePitch?: LinePitch;
     paperSize?: PaperSize;
     paperOrientation?: PaperOrientation;
+    fontFamily?: string;
     chrome?: BuildChrome;
     usedClasses?: readonly string[];
   } = {},
@@ -76,6 +79,7 @@ function build(
     linePitch: o.linePitch ?? 2,
     paperSize: o.paperSize ?? 'a4',
     paperOrientation: o.paperOrientation ?? 'auto',
+    fontFamily: o.fontFamily ?? '',
     chrome: o.chrome ?? BUILD_OFF,
     usedClasses: o.usedClasses ?? [],
   });
@@ -131,18 +135,40 @@ test('non-paginated (preview) stylesheet fits the root font-size to the viewport
   // advance from the em-based pitch.
   const css = preview({ charsPerLine: 25 });
   assert.match(css, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ \(var\(--cpl\) \+ 0\.7\)\)/);
-  assert.match(css, /:root\{--cpl:25;--pitch:2\}/);
+  assert.ok(css.includes(`:root{--cpl:25;--pitch:2;--font-family:${DEFAULT_FONT_STACK}}`));
   assert.match(css, /\.line\{[^}]*font-size:1rem/);
 });
 
 test('preview fit formula at the standard 40 chars per line pads the columns', () => {
   const css = preview();
   assert.match(css, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ \(var\(--cpl\) \+ 0\.7\)\)/);
-  assert.match(css, /:root\{--cpl:40;--pitch:2\}/);
+  assert.ok(css.includes(`:root{--cpl:40;--pitch:2;--font-family:${DEFAULT_FONT_STACK}}`));
   // The padding the formula subtracts (top/bottom = inline axis in vertical-rl).
   assert.match(css, /body\{[^}]*padding-inline:16px/);
   // The matching text inset the denominator pays for — reserved with or without a frame.
   assert.match(css, /\.segment\{position:relative;padding-inline:0\.35rem;\}/);
+});
+
+test('--font-family: blank setting falls back to the built-in 明朝 stack in both media', () => {
+  // The named-JP-first stack is what keeps shared codepoints (… ‥ quotes) off Latin serif
+  // fonts — a bare generic `serif` stops per-codepoint fallback before any JP font.
+  const expected = `--font-family:${DEFAULT_FONT_STACK}}`;
+  assert.ok(preview().includes(expected));
+  assert.ok(build().includes(expected));
+  assert.match(preview(), /html\{[^}]*font-family:var\(--font-family\)/);
+  assert.match(build(), /html\{font-family:var\(--font-family\);\}/);
+  // EPUB is reader-controlled: the reflow sheet never carries the variable.
+  assert.doesNotMatch(reflowStylesheet('normal', []), /--font-family/);
+});
+
+test('--font-family: a custom stack passes through; breakout tokens are stripped', () => {
+  const css = preview({ fontFamily: '"游明朝", YuMincho, serif' });
+  assert.ok(css.includes('--font-family:"游明朝", YuMincho, serif}'));
+  // `;` `{` `}` `<` `>` `\` and `/*` cannot leave the declaration or the one <style> block.
+  const dirty = preview({ fontFamily: 'serif;}</style><script>/*' });
+  assert.ok(dirty.includes('--font-family:serif/stylescript}'));
+  // Whitespace-only means blank: the built-in stack, never an empty declaration.
+  assert.ok(preview({ fontFamily: '  ' }).includes(`--font-family:${DEFAULT_FONT_STACK}}`));
 });
 
 test('stylesheet emits ONLY the requested class rules (on-demand)', () => {
@@ -188,7 +214,7 @@ test('base fill rules stay untouched by decoration/indent classes', () => {
   assert.match(p, /@page\{size:297mm 210mm;margin:0;\}/); // 34 > 40/2 → auto lands on landscape A4
   const v = preview({ usedClasses: ['indent-5'] });
   assert.match(v, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ \(var\(--cpl\) \+ 0\.7\)\)/);
-  assert.match(v, /:root\{--cpl:40;--pitch:2\}/);
+  assert.ok(v.includes(`:root{--cpl:40;--pitch:2;--font-family:${DEFAULT_FONT_STACK}}`));
   assert.match(v, /\.line\{[^}]*block-size:calc\(var\(--pitch\)\*1em\)[^}]*font-size:1rem/);
 });
 

@@ -42,8 +42,9 @@ export function renderPreview(
     charsPerLine: opts.charsPerLine,
     linePitch: opts.linePitch,
     linesPerPage: opts.linesPerPage,
+    fontFamily: opts.fontFamily,
     chrome: opts.chrome,
     usedClasses: [...used].sort(),
   });
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${css}</style></head><body>${body}${emrProbe(used)}</body></html>`;
+  return `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><style>${css}</style></head><body>${body}${emrProbe(used)}</body></html>`;
 }

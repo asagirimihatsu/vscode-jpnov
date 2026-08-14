@@ -36,6 +36,7 @@ const PREVIEW_SETTINGS: PreviewSettings = {
   charsPerLine: 40,
   linesPerPage: 34,
   linePitch: 2,
+  fontFamily: '',
   kinsoku: 'normal',
   autoTcy: 'punctuationPairs',
   lineNumbers: true,
@@ -46,6 +47,7 @@ const HTML_SETTINGS: HtmlSettings = {
   charsPerLine: 40,
   linesPerPage: 34,
   linePitch: 2,
+  fontFamily: '',
   kinsoku: 'normal',
   autoTcy: 'punctuationPairs',
   lineNumbers: false,
@@ -483,6 +485,19 @@ test('a ダッシュ run renders as one drawn, centred rule', BROWSER_SKIP, asyn
     m.boldThickness > m.thickness,
     `太字 must thicken the rule (${String(m.boldThickness)}px vs ${String(m.thickness)}px)`,
   );
+});
+
+test('リーダー stays a font glyph — no drawn substitute markup', async () => {
+  // Leader dots must NOT be drawn in CSS: Chromium's Skia PDF backend quantizes sub-2pt
+  // geometry (~0.5pt) and double-blits it, so drawn dots smear in the printed PDF.
+  // Correct centred ellipses come from the JP-first default stack (css.ts DEFAULT_FONT_STACK).
+  const { html } = await conn().request<RenderFileResult>('jpnov/renderFile', {
+    uri: 'file:///e2e/ldr.jpnov',
+    text: '　沈黙が……続く。\n',
+    settings: PREVIEW_SETTINGS,
+  });
+  assert.match(html, /……/);
+  assert.doesNotMatch(html, /class="ldr/, 'leaders ride the font, never a drawn substitute');
 });
 
 /** Same parse-time trick as MEASURE_SCRIPT, for the preview's edge-frame geometry. */

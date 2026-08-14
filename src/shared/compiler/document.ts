@@ -154,6 +154,8 @@ export function renderBook(opts: {
   autoTcy: AutoTcyMode;
   paperSize: PaperSize;
   paperOrientation: PaperOrientation;
+  /** Resolved `jpnov.layout.fontFamily`; '' = the built-in stack (css.ts DEFAULT_FONT_STACK). */
+  fontFamily: string;
   chrome: BuildChrome;
 }): string {
   const rows: Row[] = [];
@@ -197,11 +199,12 @@ export function renderBook(opts: {
     linePitch: opts.linePitch,
     paperSize: opts.paperSize,
     paperOrientation: opts.paperOrientation,
+    fontFamily: opts.fontFamily,
     chrome,
     usedClasses: [...used].sort(),
   });
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${css}</style></head><body>${body}${emrProbe(used)}</body></html>`;
+  return `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><style>${css}</style></head><body>${body}${emrProbe(used)}</body></html>`;
 }
 
 /**

@@ -1,5 +1,6 @@
-/* 通常の見出し: same-size gothic bold (明朝 body + ゴシック heading, the 文庫 convention).
+/* 通常の見出し: same-size gothic bold (明朝 body + ゴシック heading, the 文庫 convention) —
+   deliberately NOT the configurable --font-family, which styles the body text only.
    Generic sans-serif keeps CJK glyphs full-width, so the 1字=1マス grid is untouched. The
-   preview's `.line{font-family:serif}` has EQUAL specificity — this wins by source order only
-   (used-class rules are appended after the fragments in stylesheet()). */
+   preview's `.line{font-family:var(--font-family)}` has EQUAL specificity — this wins by
+   source order only (used-class rules are appended after the fragments in stylesheet()). */
 .midashi{font-family:sans-serif;font-weight:bold}

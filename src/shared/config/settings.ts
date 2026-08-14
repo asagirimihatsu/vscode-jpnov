@@ -64,6 +64,11 @@ function boolOr(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
 
+/** Any string passes (css.ts sanitizes at emission); anything else → `fallback`. */
+function stringOr(value: unknown, fallback: string): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
 /** `value` when it is a member of `allowed`, else `fallback`. */
 function enumOr<T extends string | number>(value: unknown, allowed: readonly T[], fallback: T): T {
   return (typeof value === 'string' || typeof value === 'number') &&
@@ -78,6 +83,7 @@ function resolveLayout(s: LayoutSettings): LayoutSettings {
     charsPerLine: clampChars(s.charsPerLine, LAYOUT_DEFAULT.charsPerLine),
     linesPerPage: clampChars(s.linesPerPage, LAYOUT_DEFAULT.linesPerPage),
     linePitch: enumOr(s.linePitch, LINE_PITCHES, LAYOUT_DEFAULT.linePitch),
+    fontFamily: stringOr(s.fontFamily, LAYOUT_DEFAULT.fontFamily),
     kinsoku: enumOr(s.kinsoku, KINSOKU_MODES, LAYOUT_DEFAULT.kinsoku),
     autoTcy: enumOr(s.autoTcy, AUTO_TCY_MODES, LAYOUT_DEFAULT.autoTcy),
   };

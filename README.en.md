@@ -234,6 +234,13 @@ Outputs land in `<outDir>/<book path>.{html,pdf,epub,txt}` with `outDir`
 defaulting to `dist`. Two book files that resolve to the same output path fail
 the build with a diagnostic instead of overwriting each other.
 
+The built PDF embeds a subset of each font it uses. With the default stack,
+the result is fine to submit to a print shop and to sell: Hiragino Mincho
+(macOS) and Yu Mincho (Windows) are OS-bundled fonts whose licenses permit
+commercial use of rendered output and PDF embedding, and Noto Serif JP is
+openly licensed (SIL OFL). When `jpnov.layout.fontFamily` names a commercial
+font, check that its license allows PDF embedding.
+
 A `.jpbook` is a reading-order table of contents — file names and folder
 layout never decide what a book contains or in what order. That scales to long
 works: keep one `.jpbook` per volume and hand your editor only the newest
@@ -372,6 +379,7 @@ highlighting lists are per workspace folder; the browser path is per machine.
 | `jpnov.layout.charsPerLine` | `40` | Characters per line (16–64), preview and builds |
 | `jpnov.layout.linesPerPage` | `34` | Lines per page in builds (16–64) |
 | `jpnov.layout.linePitch` | `1.5` | Line pitch as a multiple of the character size: `1.5` / `1.75` / `2` / `2.25`; preview and built pages |
+| `jpnov.layout.fontFamily` | `""` | Body font as a CSS font-family list: blank uses the default Mincho stack; preview and built HTML/PDF |
 | `jpnov.layout.kinsoku` | `normal` | Line-breaking rules: `none` / `normal` / `strict` |
 | `jpnov.layout.autoTcy` | `punctuationPairs` | Auto-combine `!!` `!?` `?!` `??`; `none` to disable |
 | `jpnov.layout.preview.lineNumbers` | `true` | Line numbers in the preview, restarting per page break |

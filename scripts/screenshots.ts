@@ -47,8 +47,7 @@ const KINSOKU = `　長い夜がようやく終わりを告げていくのだ。
 
 // ---- ショット定義 --------------------------------------------------------
 
-// フォントだけは全ショットで固定する（製品 CSS は素の serif — マシン依存を断つ）
-const FONT = '*{font-family:"Hiragino Mincho ProN","YuMincho",serif !important}';
+// フォントは製品既定（css.ts DEFAULT_FONT_STACK — Hiragino 先頭）をそのまま使う。
 // プレビューは透明背景 + --vscode-* 変数なので、紙色を与える。
 // padding-block は vertical-rl では左右の余白（プレビュー自身は横方向フラッシュ）。
 const PAPER = 'html{background:#fff;color:#1a1a1a}body{padding-block:24px}';
@@ -57,6 +56,7 @@ const bookOpts = {
   charsPerLine: 40,
   linesPerPage: 34,
   linePitch: 1.5, // 既定値のまま撮る
+  fontFamily: '',
   kinsoku: 'normal',
   autoTcy: 'punctuationPairs',
   paperSize: 'a4',
@@ -128,6 +128,7 @@ const shots: Shot[] = [
       charsPerLine: 9,
       linesPerPage: 34,
       linePitch: 2, // 見本に左ルビがある — 既定 1.5 では隣の行に重なる
+      fontFamily: '',
       kinsoku: 'normal',
       autoTcy: 'punctuationPairs',
       chrome: { lineNumbers: false, edgeLine: 'none' },
@@ -144,6 +145,7 @@ const shots: Shot[] = [
       charsPerLine: 20,
       linesPerPage: 34,
       linePitch: 1.5,
+      fontFamily: '',
       kinsoku: 'none',
       autoTcy: 'punctuationPairs',
       chrome: { lineNumbers: false, edgeLine: 'none' },
@@ -160,6 +162,7 @@ const shots: Shot[] = [
       charsPerLine: 20,
       linesPerPage: 34,
       linePitch: 1.5,
+      fontFamily: '',
       kinsoku: 'normal',
       autoTcy: 'punctuationPairs',
       chrome: { lineNumbers: false, edgeLine: 'none' },
@@ -224,8 +227,10 @@ function printToPdfArgs(pdf: string, url: string): string[] {
 
 for (const shot of shots) {
   const htmlPath = join(OUT, `${shot.name}.html`);
-  const inject = shot.mode === 'pdf' ? FONT : FONT + shot.style;
-  writeFileSync(htmlPath, shot.html.replace('</head>', `<style>${inject}</style></head>`));
+  writeFileSync(
+    htmlPath,
+    shot.mode === 'pdf' ? shot.html : shot.html.replace('</head>', `<style>${shot.style}</style></head>`),
+  );
   const url = `file://${htmlPath}`;
   const png = join(OUT, `${shot.name}.png`);
 

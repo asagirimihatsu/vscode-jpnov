@@ -29,6 +29,7 @@ function preview(
     charsPerLine: 40,
     linesPerPage: 34,
     linePitch: 2,
+    fontFamily: '',
     kinsoku: 'none',
     autoTcy: 'none',
     chrome: { lineNumbers: false, edgeLine: 'none' },
@@ -46,7 +47,7 @@ test('renderPreview: autoTcy=punctuationPairs combines pairs exactly like the bu
 
 test('renderPreview wraps the body in a standalone HTML document', () => {
   const html = preview('本文です。');
-  assert.match(html, /^<!DOCTYPE html><html><head>/);
+  assert.match(html, /^<!DOCTYPE html><html lang="ja"><head>/);
   assert.match(html, /<meta charset="utf-8">/);
   assert.match(html, /<style>[^<]*writing-mode:vertical-rl/);
   assert.match(
@@ -161,7 +162,7 @@ test('renderPreview scales the root font so a full line fills the pane height', 
   // gaps measures exactly 100vh − padding.
   const html = preview('本文', { charsPerLine: 20 });
   assert.match(html, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ \(var\(--cpl\) \+ 0\.7\)\)/);
-  assert.match(html, /:root\{--cpl:20;--pitch:2\}/);
+  assert.match(html, /:root\{--cpl:20;--pitch:2;--font-family:/);
 });
 
 test('renderPreview: 傍線 postfix emits a dec-solid span + its on-demand rule (right side)', () => {
