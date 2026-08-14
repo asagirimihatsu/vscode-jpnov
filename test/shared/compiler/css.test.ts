@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import type { BuildChrome, PreviewChrome } from '../../../src/shared/compiler/chrome.ts';
 import { DEFAULT_FONT_STACK, reflowStylesheet, stylesheet } from '../../../src/shared/compiler/css.ts';
 import type { PaperOrientation, PaperSize } from '../../../src/shared/compiler/geometry.ts';
+import { FOLIO_BAND, HEADER_BAND, LINENUM_BAND, SIDE_PAD, fitPaper } from '../../../src/shared/compiler/geometry.ts';
 import type { LinePitch } from '../../../src/shared/config/types.ts';
 import { LINE_PITCHES } from '../../../src/shared/config/types.ts';
 
@@ -85,6 +86,47 @@ function build(
   });
 }
 
+/**
+ * The paper-rule strings css.ts must emit for these build inputs, computed from the same
+ * fitPaper the stylesheet consults (the geometry constants are tuning knobs — no values
+ * written out here). These lock the input routing (the hTop band composition, the paper
+ * pick) and the emission format, down to the border-width slot order (top, block, bottom,
+ * block).
+ */
+function paperStrings(o: {
+  charsPerLine?: number;
+  linesPerPage?: number;
+  linePitch?: LinePitch;
+  paperSize?: PaperSize;
+  paperOrientation?: PaperOrientation;
+  lineNumbers?: boolean;
+} = {}): { page: string; font: string; border: string } {
+  const fit = fitPaper({
+    charsPerLine: o.charsPerLine ?? 40,
+    linesPerPage: o.linesPerPage ?? 34,
+    linePitch: o.linePitch ?? 2,
+    hTop: HEADER_BAND + (o.lineNumbers ? LINENUM_BAND : 0),
+    size: o.paperSize ?? 'a4',
+    orientation: o.paperOrientation ?? 'auto',
+  });
+  const block = fit.insetBlockEm.toFixed(2);
+  return {
+    page: `@page{size:${String(fit.widthMm)}mm ${String(fit.heightMm)}mm;margin:0;}`,
+    font: `html{font-size:${fit.fontMm.toFixed(3)}mm;}`,
+    border: `.page{border:solid #fff;border-width:${fit.insetTopEm.toFixed(2)}em ${block}em ` +
+      `${fit.insetBottomEm.toFixed(2)}em ${block}em;}`,
+  };
+}
+
+const numRe = (n: number): string => String(n).replace('.', String.raw`\.`);
+/** `:root{…--htop:N…}` — the band total comes from the tunable constants, never a literal. */
+const htopRe = (bands: number): RegExp => new RegExp(String.raw`:root\{[^}]*--htop:` + numRe(bands) + '[;}]');
+/** `.page{…padding-inline-end:Nem…}` — the folio band's double-home, value from the TS side. */
+const folioPadRe = new RegExp(String.raw`\.page\{[^}]*padding-inline-end:` + numRe(FOLIO_BAND) + 'em');
+/** The outset frame's inset run: 0.35em off the band tops, SIDE_PAD on the sides. */
+const FRAME_INSETS = `top:calc(var(--htop)*1em - 0.35em);right:${String(SIDE_PAD)}em;` +
+  `bottom:${String(FOLIO_BAND - 0.35)}em;left:${String(SIDE_PAD)}em`;
+
 test('stylesheet renders vertical-rl writing mode', () => {
   assert.match(preview(), /writing-mode:vertical-rl/);
 });
@@ -99,10 +141,11 @@ test('paginated stylesheet sizes the page grid + fits the paper', () => {
   assert.match(css, /:root\{[^}]*--cpl:30/);
   assert.match(css, /:root\{[^}]*--pitch:2[;}]/);
   assert.match(css, /:root\{[^}]*--lpp:25/);
-  assert.match(css, /@page\{size:297mm 210mm;margin:0;\}/);
-  // The smaller grid scales UP onto the same paper: font 5.120mm, sheet→paper border.
-  assert.match(css, /html\{font-size:5\.120mm;\}/);
-  assert.match(css, /\.page\{border:solid #fff;border-width:2\.49em 2\.49em;\}/);
+  // The smaller grid scales UP onto the same paper — expected strings from the same fit.
+  const paper = paperStrings({ charsPerLine: 30, linesPerPage: 25 });
+  assert.ok(css.includes(paper.page));
+  assert.ok(css.includes(paper.font));
+  assert.ok(css.includes(paper.border));
 });
 
 test('paginated stylesheet breaks each .page onto its own sheet', () => {
@@ -438,16 +481,13 @@ test('build all-on chrome: bands, outset frame, counters, rules, furniture style
   const css = build({ chrome: BUILD_ON });
   // Bands: header 2.5 + line numbers 1 on top (--htop), folio 2.5 at the bottom (static).
   assert.match(css, /\.page\{[^}]*padding-inline-start:calc\(var\(--htop\)\*1em\)/);
-  assert.match(css, /:root\{[^}]*--htop:4/); // header 3 + line numbers 1
-  assert.match(css, /\.page\{[^}]*padding-inline-end:3em/);
+  assert.match(css, htopRe(HEADER_BAND + LINENUM_BAND)); // header band + line-number band
+  assert.match(css, folioPadRe);
   assert.match(css, /\.page\{[^}]*position:relative/);
   assert.match(css, /\.page\{[^}]*counter-reset:ln/); // per-page numbering
   // The frame floats EDGE_INSET off the text grid, into the bands (chrome renders
   // OUTSIDE it), and matches the rule colour.
-  assert.match(
-    css,
-    /\.page::before\{[^}]*top:calc\(var\(--htop\)\*1em - 0\.35em\);right:1\.5em;bottom:2\.65em;left:1\.5em/,
-  );
+  assert.ok(css.includes(FRAME_INSETS), 'frame insets must track the band constants');
   assert.match(css, edgeMixRe(String.raw`\.page::before\{[^}]*border:1px solid `));
   assert.match(css, /:root\{[^}]*--edge:currentColor\}/);
   // The sheet box draws no VISIBLE border — the frame lives on ::before; the only .page
@@ -474,17 +514,21 @@ test('build all-on chrome: bands, outset frame, counters, rules, furniture style
   // it clears the outset frame; line-height:1 keeps it inside the line-number band.
   assert.match(css, /\.line::before\{[^}]*translateY\(calc\(-100% - 0\.35rem\)\)/);
   assert.match(css, /\.line::before\{[^}]*line-height:1;/);
-  // The header floats 1em inside the sheet edge — the mirror of .pn{bottom:1em} below.
-  assert.match(css, /\.hd\{position:absolute;top:1em;left:0;right:0/);
+  // The furniture sits flush against the paper margin (the MARGIN_MM white stays
+  // furniture-free) in smaller-than-body type — .hd top:0 mirrors .pn bottom:0.
+  assert.match(css, /\.hd\{position:absolute;top:0;left:0;right:0/);
+  assert.match(css, /\.hd\{[^}]*font-size:0\.\d+em;/);
   assert.match(css, /\.hd\{[^}]*line-height:1;/);
-  assert.match(css, /\.pn\{position:absolute;bottom:1em/);
+  assert.match(css, /\.pn\{position:absolute;bottom:0/);
+  assert.match(css, /\.pn\{[^}]*font-size:0\.\d+em;/);
   assert.match(css, /\.pn\{[^}]*line-height:1;/);
-  assert.match(css, /\.pn\.r\{right:1\.85em;\}/);
-  assert.match(css, /\.pn\.l\{left:1\.85em;\}/);
-  // The line-number band widens the sheet (hTop 4), which narrows only the top/bottom
-  // paper inset — same paper, same font (the block axis stays the binding one).
-  assert.match(css, /@page\{size:297mm 210mm;margin:0;\}/);
-  assert.match(css, /\.page\{border:solid #fff;border-width:3\.36em 2\.49em;\}/);
+  assert.ok(css.includes(`.pn.r{right:${String(SIDE_PAD + 0.35)}em;}`));
+  assert.ok(css.includes(`.pn.l{left:${String(SIDE_PAD + 0.35)}em;}`));
+  // The line-number band widens the sheet, which the fit absorbs in the paper insets —
+  // expected strings computed with the band on.
+  const paper = paperStrings({ lineNumbers: true });
+  assert.ok(css.includes(paper.page));
+  assert.ok(css.includes(paper.border));
 });
 
 test('build all-off chrome keeps a plain sheet with the reserved bands, no chrome rules', () => {
@@ -494,14 +538,17 @@ test('build all-off chrome keeps a plain sheet with the reserved bands, no chrom
   assert.doesNotMatch(css, /\.page::before/);
   assert.doesNotMatch(css, /#444/); // no hard-coded grey — rule colours derive from the edge base (.pn is off here)
   assert.match(css, /\.page\{[^}]*padding-inline-start:calc\(var\(--htop\)\*1em\)/);
-  assert.match(css, /:root\{[^}]*--htop:3/); // header band only — no line-number band
-  assert.match(css, /\.page\{[^}]*padding-inline-end:3em/);
+  assert.match(css, htopRe(HEADER_BAND)); // header band only — no line-number band
+  assert.match(css, folioPadRe);
   assert.match(css, /\.page\{[^}]*line-height:var\(--pitch\)/); // the SAME pitch without edge rules
   // The paper rules: 投稿書式 40×34 on auto-landscape A4 — exact mm @page, the root font
-  // that scales the em sheet onto it, and the sheet→paper inset as a white border.
-  assert.match(css, /@page\{size:297mm 210mm;margin:0;\}/);
-  assert.match(css, /html\{font-size:3\.907mm;\}/);
-  assert.match(css, /\.page\{border:solid #fff;border-width:3\.86em 2\.49em;\}/);
+  // that scales the em sheet onto it, and the sheet→paper insets as a white border
+  // (physical T R B L; the bottom leads the top by the MARGIN_MM floor bias). Strings
+  // computed from the same fit, so tuning the geometry constants never stales them.
+  const paper = paperStrings();
+  assert.ok(css.includes(paper.page));
+  assert.ok(css.includes(paper.font));
+  assert.ok(css.includes(paper.border));
   // The screen-only paper look (grey backdrop + paper shadow + the cosmetic 2.5em gap)
   // is chrome-independent — present even with every feature off — and print resets it.
   assert.match(css, /@media screen\{html\{background:#e8e8e8;\}\.page\{box-shadow:0 1px 4px rgba\(0,0,0,0\.25\);\}\}/);
@@ -521,12 +568,9 @@ test('build red edge lines colour both the frame and the inter-column rules', ()
   const css = build({ chrome: { ...BUILD_OFF, edgeLine: 'red' } });
   assert.match(css, edgeMixRe(String.raw`\.page::before\{[^}]*border:1px solid `));
   assert.match(css, /:root\{[^}]*--edge:#cc0000\}/);
-  // No line-number band here (--htop:3), so the frame floats 0.35em off the header band.
-  assert.match(
-    css,
-    /\.page::before\{[^}]*top:calc\(var\(--htop\)\*1em - 0\.35em\);right:1\.5em;bottom:2\.65em;left:1\.5em/,
-  );
-  assert.match(css, /:root\{[^}]*--htop:3/);
+  // No line-number band here, so the frame floats 0.35em off the header band.
+  assert.ok(css.includes(FRAME_INSETS), 'frame insets must track the band constants');
+  assert.match(css, htopRe(HEADER_BAND));
   assert.ok(css.includes(EDGE_RULES('.page::before', 'em')));
   assert.match(css, /\.line\{[^}]*position:relative/); // paint order: text above the frame pseudo
   assert.match(css, /\.line\{[^}]*block-size:calc\(var\(--pitch\)\*1em\)/); // the one --pitch value
@@ -534,40 +578,42 @@ test('build red edge lines colour both the frame and the inter-column rules', ()
 
 test('build bands: header/folio bands are constant; only line numbers add geometry', () => {
   // Folio and header furniture change nothing geometric — those bands are always there.
+  const paper = paperStrings();
   for (const chrome of [
     BUILD_OFF,
     { ...BUILD_OFF, pageNumber: 'right' as const },
     { ...BUILD_OFF, header: 'X' },
   ]) {
     const css = build({ chrome });
-    assert.match(css, /:root\{[^}]*--htop:3/); // the top band is furniture-independent
+    assert.match(css, htopRe(HEADER_BAND)); // the top band is furniture-independent
     assert.match(css, /\.page\{[^}]*padding-inline-start:calc\(var\(--htop\)\*1em\)/);
-    assert.match(css, /\.page\{[^}]*padding-inline-end:3em/);
-    assert.match(css, /@page\{size:297mm 210mm/); // same paper whatever the furniture
-    assert.match(css, /html\{font-size:3\.907mm;\}/); // …and the same fit
+    assert.match(css, folioPadRe);
+    assert.ok(css.includes(paper.page)); // same paper whatever the furniture
+    assert.ok(css.includes(paper.font)); // …and the same fit
   }
   const lnOnly = build({ chrome: { ...BUILD_OFF, lineNumbers: true } });
-  assert.match(lnOnly, /:root\{[^}]*--htop:4/); // header 3 + numbers 1
+  assert.match(lnOnly, htopRe(HEADER_BAND + LINENUM_BAND)); // header band + line-number band
   assert.match(lnOnly, /\.page\{[^}]*padding-inline-start:calc\(var\(--htop\)\*1em\)/);
-  assert.match(lnOnly, /\.page\{[^}]*padding-inline-end:3em/);
+  assert.match(lnOnly, folioPadRe);
 });
 
 test('paper settings pick the box: A6, forced orientation, auto portrait', () => {
-  // The default grid on A6 (文庫判) — auto still lands landscape.
-  const a6 = build({ paperSize: 'a6' });
-  assert.match(a6, /@page\{size:148mm 105mm;margin:0;\}/);
-  assert.match(a6, /html\{font-size:1\.947mm;\}/);
-  assert.match(a6, /\.page\{border:solid #fff;border-width:3\.95em 2\.49em;\}/);
-  // Forced portrait turns the paper, not the grid — the surplus goes top/bottom.
-  const portrait = build({ paperOrientation: 'portrait' });
-  assert.match(portrait, /@page\{size:210mm 297mm;margin:0;\}/);
-  assert.match(portrait, /html\{font-size:2\.763mm;\}/);
-  assert.match(portrait, /\.page\{border:solid #fff;border-width:30\.73em 2\.49em;\}/);
-  // A tall grid picks portrait on its own (18 > 40/2 is false).
-  const tall = build({ linesPerPage: 18 });
-  assert.match(tall, /@page\{size:210mm 297mm;margin:0;\}/);
-  assert.match(tall, /html\{font-size:4\.772mm;\}/);
-  assert.match(tall, /\.page\{border:solid #fff;border-width:8\.10em 2\.49em;\}/);
+  // Expected strings from the same fit per case; @page locks the pick (148mm/210mm…).
+  const cases = [
+    // The default grid on A6 (文庫判) — auto still lands landscape.
+    { paperSize: 'a6' as const },
+    // Forced portrait turns the paper, not the grid — the surplus goes top/bottom.
+    { paperOrientation: 'portrait' as const },
+    // A tall grid picks portrait on its own (18 > 40/2 is false).
+    { linesPerPage: 18 },
+  ];
+  for (const c of cases) {
+    const css = build(c);
+    const paper = paperStrings(c);
+    assert.ok(css.includes(paper.page), `${JSON.stringify(c)}: @page`);
+    assert.ok(css.includes(paper.font), `${JSON.stringify(c)}: root font`);
+    assert.ok(css.includes(paper.border), `${JSON.stringify(c)}: paper border`);
+  }
 });
 
 test('every linePitch tier rides :root{--pitch}, identical with edge rules on or off', () => {

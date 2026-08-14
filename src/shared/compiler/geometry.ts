@@ -4,7 +4,7 @@
  * computed from these, so they cannot live only in the static stylesheets.
  *
  * Two of them (FOLIO_BAND, SIDE_PAD) are ALSO written as plain literals in `styles/*.css`
- * (`3em` folio band, `1.5em` side pads): that double home is deliberate — `@page` cannot
+ * (`2em` folio band, `1.5em` side pads): that double home is deliberate — `@page` cannot
  * read `var()` portably (ruling: build output stays portable) — and is guarded by
  * `test/shared/compiler/styles-codegen.test.ts`, which asserts the `.css` literals equal
  * these constants. Change a value here WITHOUT updating the fragments (or vice versa) and
@@ -16,16 +16,16 @@
  */
 
 // Build-only chrome bands, in em (the same unit system as the charsPerLine-em grid).
-// The header and folio bands are ALWAYS allocated — the sheet keeps stable top/bottom
-// margins no matter which furniture is enabled — while the line-number band is on demand.
-// The furniture floats 1em inside the sheet edge (.hd top / .pn bottom, kept symmetric),
-// leaving ~0.75em of air to the outset frame (the look of a print-margin header/footer).
+// The header and folio bands are ALWAYS allocated — the sheet keeps stable geometry no
+// matter which furniture is enabled — while the line-number band is on demand. The bands
+// are CONTENT: the MARGIN_MM paper margin stays furniture-free, and the furniture sits
+// flush against it (.hd top:0 / .pn bottom:0).
 /** Header band at the physical top of a sheet (reserved even with no header text). */
-export const HEADER_BAND = 3;
+export const HEADER_BAND = 2;
 /** Line-number band between the header band and the column heads. */
 export const LINENUM_BAND = 1;
 /** Page-number (folio) band at the physical bottom of a sheet (reserved even without one). */
-export const FOLIO_BAND = 3;
+export const FOLIO_BAND = 2;
 /**
  * Sheet padding on the physical left/right (the vertical-rl block axis): the text grid and
  * the outset frame never touch the paper's side cut. Doubly homed as fragment literals
@@ -34,10 +34,10 @@ export const FOLIO_BAND = 3;
  */
 export const SIDE_PAD = 1.5;
 /**
- * MINIMUM paper inset per side, in em: {@link fitPaper} caps the font size so the sheet keeps
- * at least this surround inside the paper (the tight axis lands at 2.48–2.49em after the
- * emission guard — ~8.7mm on A4, clear of typical printer dead zones). The screen sheet's
- * 2.5em inter-paper gap (build.base.css) is a cosmetic look-alike, no longer coupled.
+ * MINIMUM paper inset per side on the BLOCK axis (physical left/right), in em: {@link fitPaper}
+ * caps the font size so the sheet keeps at least this surround inside the paper. The physical
+ * top/bottom minimum is {@link MARGIN_MM} instead. The screen sheet's 2.5em inter-paper gap
+ * (build.base.css) is a cosmetic look-alike, no longer coupled.
  */
 export const PRINT_MARGIN = 2.5;
 
@@ -59,11 +59,23 @@ const PAPER_MM: Record<PaperSize, { readonly w: number; readonly h: number }> = 
 };
 
 /**
+ * MINIMUM physical top/bottom paper margin in mm — pure white, the header/folio bands
+ * EXCLUDED (the furniture is content and starts right below/above these): {@link fitPaper}
+ * caps the font size so the sheet clears them even at tight pitches. A tuning knob — the
+ * tests derive from it, so retuning needs no test edits.
+ */
+export const MARGIN_MM: Record<PaperSize, { readonly top: number; readonly bottom: number }> = {
+  a4: { top: 10, bottom: 12.5 },
+  a6: { top: 5, bottom: 6.5 },
+};
+
+/**
  * One build sheet fitted onto physical paper: the paper box (mm), the root font size that
  * scales the whole em-based sheet onto it, and the per-side sheet→paper insets css.ts emits
- * as a white border (border-box == paper, centered). Every value is pre-floored to its
- * emission quantum so the printed border-box lands strictly INSIDE the `@page` box —
- * Chromium would push an overflowing sheet onto a second PDF page.
+ * as a white border (border-box == paper; block axis centered, inline axis biased by
+ * {@link MARGIN_MM}). Every value is pre-floored to its emission quantum so the printed
+ * border-box lands strictly INSIDE the `@page` box — Chromium would push an overflowing
+ * sheet onto a second PDF page.
  */
 export interface PaperFit {
   /** Paper width in mm — the horizontal axis, which is the vertical-rl BLOCK axis. */
@@ -74,24 +86,29 @@ export interface PaperFit {
   readonly fontMm: number;
   /** Per-side inset on the block axis (physical left/right), em floored to 0.01. */
   readonly insetBlockEm: number;
-  /** Per-side inset on the inline axis (physical top/bottom), em floored to 0.01. */
-  readonly insetInlineEm: number;
+  /** Inset above the header band (physical top), em floored to 0.01. */
+  readonly insetTopEm: number;
+  /** Inset below the folio band (physical bottom), em floored to 0.01. */
+  readonly insetBottomEm: number;
 }
 
 /**
- * Per-side inset growing the sheet's border box to the paper box, floored to the 0.01em
- * emission quantum MINUS one extra quantum: each axis keeps a 0.02–0.04em slack over the
- * exact fit, which outweighs Chromium's 1/64px layout rounding (the fragmentation guard).
+ * Floors a per-side inset to the 0.01em emission quantum MINUS one extra quantum: each
+ * axis keeps up to ~0.04em slack over the exact fit, which outweighs Chromium's 1/64px
+ * layout rounding (the fragmentation guard).
  */
-function inset(paperMm: number, fontMm: number, sheetEm: number): number {
-  return (Math.floor(((paperMm / fontMm - sheetEm) / 2) * 100) - 1) / 100;
+function insetQuantum(insetEm: number): number {
+  return (Math.floor(insetEm * 100) - 1) / 100;
 }
 
 /**
- * Fits one sheet (grid + chrome bands + a {@link PRINT_MARGIN} minimum surround) onto the
- * selected paper. `auto` orientation is the product rule: `linesPerPage > charsPerLine / 2`
- * → landscape, else portrait. `hTop` is the same header/line-number band value css.ts
- * injects as `--htop`.
+ * Fits one sheet onto the selected paper: the grid plus chrome bands, keeping a
+ * {@link PRINT_MARGIN} em surround on the block axis and the {@link MARGIN_MM} mm floors on
+ * the inline axis (the whole sheet — bands included — sits between the margins). Leftover
+ * inline space is split evenly, so the bottom margin keeps its mm lead over the top at any
+ * size. `auto` orientation is the product rule: `linesPerPage > charsPerLine / 2` →
+ * landscape, else portrait. `hTop` is the same header/line-number band value css.ts injects
+ * as `--htop`.
  */
 export function fitPaper(opts: {
   readonly charsPerLine: number;
@@ -106,19 +123,24 @@ export function fitPaper(opts: {
     ? opts.linesPerPage > opts.charsPerLine / 2
     : opts.orientation === 'landscape';
   const paper = PAPER_MM[opts.size];
+  const margin = MARGIN_MM[opts.size];
   const widthMm = landscape ? paper.h : paper.w;
   const heightMm = landscape ? paper.w : paper.h;
   const sheetBlockEm = opts.linesPerPage * opts.linePitch + 2 * SIDE_PAD;
   const sheetInlineEm = opts.charsPerLine + opts.hTop + FOLIO_BAND;
   const fontMm = Math.floor(Math.min(
     widthMm / (sheetBlockEm + 2 * PRINT_MARGIN),
-    heightMm / (sheetInlineEm + 2 * PRINT_MARGIN),
+    (heightMm - margin.top - margin.bottom) / sheetInlineEm,
   ) * 1000) / 1000;
+  const needTopEm = margin.top / fontMm;
+  const needBottomEm = margin.bottom / fontMm;
+  const surplusEm = (heightMm / fontMm - sheetInlineEm - needTopEm - needBottomEm) / 2;
   return {
     widthMm,
     heightMm,
     fontMm,
-    insetBlockEm: inset(widthMm, fontMm, sheetBlockEm),
-    insetInlineEm: inset(heightMm, fontMm, sheetInlineEm),
+    insetBlockEm: insetQuantum((widthMm / fontMm - sheetBlockEm) / 2),
+    insetTopEm: insetQuantum(needTopEm + surplusEm),
+    insetBottomEm: insetQuantum(needBottomEm + surplusEm),
   };
 }

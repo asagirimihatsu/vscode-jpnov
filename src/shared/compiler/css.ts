@@ -175,13 +175,15 @@ export function emrProbe(used: ReadonlySet<string>): string {
  * goes on `html` ONLY, so the one build rem (build.ln.css) keeps equalling the page em. The
  * sheet→paper inset is a white BORDER: it paints outside the padding box, so the `.page`
  * border box IS the paper in both media while `overflow:hidden` clipping and the furniture
- * offsets stay on the padding box. border-width is PHYSICAL two-value: top/bottom = the
- * inline-axis inset, left/right = the block-axis inset (.page is vertical-rl).
+ * offsets stay on the padding box. border-width is PHYSICAL four-value (.page is
+ * vertical-rl): top/bottom carry the asymmetric inline-axis insets, left/right the centered
+ * block-axis inset.
  */
 function paperRules(fit: PaperFit): string {
   return `@page{size:${String(fit.widthMm)}mm ${String(fit.heightMm)}mm;margin:0;}` +
     `html{font-size:${fit.fontMm.toFixed(3)}mm;}` +
-    `.page{border:solid #fff;border-width:${fit.insetInlineEm.toFixed(2)}em ${fit.insetBlockEm.toFixed(2)}em;}`;
+    `.page{border:solid #fff;border-width:${fit.insetTopEm.toFixed(2)}em ${fit.insetBlockEm.toFixed(2)}em ` +
+    `${fit.insetBottomEm.toFixed(2)}em ${fit.insetBlockEm.toFixed(2)}em;}`;
 }
 
 type StylesheetOptions =
