@@ -1,7 +1,7 @@
 /* BUILD base — always included. Styles the explicit .book > .page > .line skeleton the layout
    engine emits; each .page is one printed sheet. Ink colours are LITERAL on purpose (standalone
    print document — no --vscode-* variables exist outside the webview). */
-html{font-family:serif;}
+html{font-family:var(--font-family);}
 body{margin:0;}
 .book{display:block;}
 

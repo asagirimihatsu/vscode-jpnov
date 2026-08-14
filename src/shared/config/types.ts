@@ -43,6 +43,8 @@ export interface LayoutSettings {
   readonly linesPerPage: number;
   /** 行送り in character-size multiples. */
   readonly linePitch: LinePitch;
+  /** 組版 font-family list; '' = the built-in 明朝 stack (css.ts DEFAULT_FONT_STACK). */
+  readonly fontFamily: string;
   /** 禁則処理 mode. */
   readonly kinsoku: KinsokuMode;
   /** 自動縦中横 mode. */
@@ -59,6 +61,7 @@ export const LAYOUT_DEFAULT: LayoutSettings = {
   charsPerLine: 40,
   linesPerPage: 34,
   linePitch: 1.5,
+  fontFamily: '',
   kinsoku: 'normal',
   autoTcy: 'punctuationPairs',
 };

@@ -20,6 +20,7 @@ function layoutSnapshot(c: vscode.WorkspaceConfiguration): LayoutSettings {
     charsPerLine: c.get<number>('jpnov.layout.charsPerLine', LAYOUT_DEFAULT.charsPerLine),
     linesPerPage: c.get<number>('jpnov.layout.linesPerPage', LAYOUT_DEFAULT.linesPerPage),
     linePitch: c.get<LinePitch>('jpnov.layout.linePitch', LAYOUT_DEFAULT.linePitch),
+    fontFamily: c.get<string>('jpnov.layout.fontFamily', LAYOUT_DEFAULT.fontFamily),
     kinsoku: c.get<KinsokuMode>('jpnov.layout.kinsoku', LAYOUT_DEFAULT.kinsoku),
     autoTcy: c.get<AutoTcyMode>('jpnov.layout.autoTcy', LAYOUT_DEFAULT.autoTcy),
   };

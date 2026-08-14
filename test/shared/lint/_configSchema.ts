@@ -127,13 +127,19 @@ function layoutSection(): unknown {
         order: 3,
         markdownDescription: '%jpnov.layout.linePitch.description%',
       },
+      'jpnov.layout.fontFamily': {
+        type: 'string',
+        default: LAYOUT_DEFAULT.fontFamily,
+        order: 4,
+        markdownDescription: '%jpnov.layout.fontFamily.description%',
+      },
       'jpnov.layout.kinsoku': {
         type: 'string',
         enum: [...KINSOKU_MODES],
         default: LAYOUT_DEFAULT.kinsoku,
         enumItemLabels: KINSOKU_MODES.map((v) => `%jpnov.layout.kinsoku.${v}.label%`),
         enumDescriptions: KINSOKU_MODES.map((v) => `%jpnov.layout.kinsoku.${v}.description%`),
-        order: 4,
+        order: 5,
         markdownDescription: '%jpnov.layout.kinsoku.description%',
       },
       'jpnov.layout.autoTcy': {
@@ -142,16 +148,16 @@ function layoutSection(): unknown {
         default: LAYOUT_DEFAULT.autoTcy,
         enumItemLabels: AUTO_TCY_MODES.map((v) => `%jpnov.layout.autoTcy.${v}.label%`),
         enumDescriptions: AUTO_TCY_MODES.map((v) => `%jpnov.layout.autoTcy.${v}.description%`),
-        order: 5,
+        order: 6,
         markdownDescription: '%jpnov.layout.autoTcy.description%',
       },
       'jpnov.layout.preview.lineNumbers': {
         type: 'boolean',
         default: PREVIEW_CHROME_DEFAULT.lineNumbers,
-        order: 6,
+        order: 7,
         markdownDescription: '%jpnov.layout.preview.lineNumbers.description%',
       },
-      'jpnov.layout.preview.edgeLine': edgeLineProperty('jpnov.layout.preview.edgeLine', 7),
+      'jpnov.layout.preview.edgeLine': edgeLineProperty('jpnov.layout.preview.edgeLine', 8),
       // Page furniture (ヘッダー/ノンブル) is deliberately NOT here: it is book identity, carried
       // by each `.jpbook`'s front matter (parsed in shared/book/jpbook.ts), never a setting.
       // The `paper.*` slice governs the paper-format outputs (built HTML and the PDF printed
@@ -162,7 +168,7 @@ function layoutSection(): unknown {
         default: BUILD_PAPER_DEFAULT.paperSize,
         enumItemLabels: PAPER_SIZES.map((v) => `%jpnov.layout.paper.size.${v}.label%`),
         enumDescriptions: PAPER_SIZES.map((v) => `%jpnov.layout.paper.size.${v}.description%`),
-        order: 8,
+        order: 9,
         markdownDescription: '%jpnov.layout.paper.size.description%',
       },
       'jpnov.layout.paper.orientation': {
@@ -171,16 +177,16 @@ function layoutSection(): unknown {
         default: BUILD_PAPER_DEFAULT.paperOrientation,
         enumItemLabels: PAPER_ORIENTATIONS.map((v) => `%jpnov.layout.paper.orientation.${v}.label%`),
         enumDescriptions: PAPER_ORIENTATIONS.map((v) => `%jpnov.layout.paper.orientation.${v}.description%`),
-        order: 9,
+        order: 10,
         markdownDescription: '%jpnov.layout.paper.orientation.description%',
       },
       'jpnov.layout.paper.lineNumbers': {
         type: 'boolean',
         default: BUILD_CHROME_DEFAULT.lineNumbers,
-        order: 10,
+        order: 11,
         markdownDescription: '%jpnov.layout.paper.lineNumbers.description%',
       },
-      'jpnov.layout.paper.edgeLine': edgeLineProperty('jpnov.layout.paper.edgeLine', 11),
+      'jpnov.layout.paper.edgeLine': edgeLineProperty('jpnov.layout.paper.edgeLine', 12),
       // The `.txt` slice: one setting, because the Aozora deliverable is plain text and only its
       // encoding is a choice. HTML carries no counterpart — the HTML standard fixes it to UTF-8.
       'jpnov.layout.txt.encoding': {
@@ -189,21 +195,21 @@ function layoutSection(): unknown {
         default: TXT_ENCODING_DEFAULT,
         enumItemLabels: TXT_ENCODINGS.map((v) => `%jpnov.layout.txt.encoding.${v}.label%`),
         enumDescriptions: TXT_ENCODINGS.map((v) => `%jpnov.layout.txt.encoding.${v}.description%`),
-        order: 12,
+        order: 13,
         markdownDescription: '%jpnov.layout.txt.encoding.description%',
       },
       'jpnov.layout.outDir': {
         type: 'string',
         default: PROJECT_DEFAULT.outDir,
         scope: 'resource',
-        order: 13,
+        order: 14,
         markdownDescription: '%jpnov.layout.outDir.description%',
       },
       'jpnov.layout.browserPath': {
         type: 'string',
         default: '',
         scope: 'machine-overridable',
-        order: 14,
+        order: 15,
         markdownDescription: '%jpnov.layout.browserPath.description%',
       },
     },
@@ -290,6 +296,7 @@ function staticNlsKeys(): string[] {
     'jpnov.layout.linesPerPage.description',
     'jpnov.layout.linePitch.description',
     ...LINE_PITCHES.flatMap((v) => enumChoiceKeys(`jpnov.layout.linePitch.${String(v)}`)),
+    'jpnov.layout.fontFamily.description',
     'jpnov.layout.kinsoku.description',
     ...KINSOKU_MODES.flatMap((v) => enumChoiceKeys(`jpnov.layout.kinsoku.${v}`)),
     'jpnov.layout.autoTcy.description',

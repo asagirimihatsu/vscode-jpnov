@@ -173,6 +173,12 @@
             "order": 3,
             "markdownDescription": "%jpnov.layout.linePitch.description%"
           },
+          "jpnov.layout.fontFamily": {
+            "type": "string",
+            "default": "",
+            "order": 4,
+            "markdownDescription": "%jpnov.layout.fontFamily.description%"
+          },
           "jpnov.layout.kinsoku": {
             "type": "string",
             "enum": [
@@ -191,7 +197,7 @@
               "%jpnov.layout.kinsoku.normal.description%",
               "%jpnov.layout.kinsoku.strict.description%"
             ],
-            "order": 4,
+            "order": 5,
             "markdownDescription": "%jpnov.layout.kinsoku.description%"
           },
           "jpnov.layout.autoTcy": {
@@ -209,13 +215,13 @@
               "%jpnov.layout.autoTcy.none.description%",
               "%jpnov.layout.autoTcy.punctuationPairs.description%"
             ],
-            "order": 5,
+            "order": 6,
             "markdownDescription": "%jpnov.layout.autoTcy.description%"
           },
           "jpnov.layout.preview.lineNumbers": {
             "type": "boolean",
             "default": true,
-            "order": 6,
+            "order": 7,
             "markdownDescription": "%jpnov.layout.preview.lineNumbers.description%"
           },
           "jpnov.layout.preview.edgeLine": {
@@ -236,7 +242,7 @@
               "%jpnov.layout.preview.edgeLine.text.description%",
               "%jpnov.layout.preview.edgeLine.red.description%"
             ],
-            "order": 7,
+            "order": 8,
             "markdownDescription": "%jpnov.layout.preview.edgeLine.description%"
           },
           "jpnov.layout.paper.size": {
@@ -254,7 +260,7 @@
               "%jpnov.layout.paper.size.a4.description%",
               "%jpnov.layout.paper.size.a6.description%"
             ],
-            "order": 8,
+            "order": 9,
             "markdownDescription": "%jpnov.layout.paper.size.description%"
           },
           "jpnov.layout.paper.orientation": {
@@ -275,13 +281,13 @@
               "%jpnov.layout.paper.orientation.landscape.description%",
               "%jpnov.layout.paper.orientation.portrait.description%"
             ],
-            "order": 9,
+            "order": 10,
             "markdownDescription": "%jpnov.layout.paper.orientation.description%"
           },
           "jpnov.layout.paper.lineNumbers": {
             "type": "boolean",
             "default": false,
-            "order": 10,
+            "order": 11,
             "markdownDescription": "%jpnov.layout.paper.lineNumbers.description%"
           },
           "jpnov.layout.paper.edgeLine": {
@@ -302,7 +308,7 @@
               "%jpnov.layout.paper.edgeLine.text.description%",
               "%jpnov.layout.paper.edgeLine.red.description%"
             ],
-            "order": 11,
+            "order": 12,
             "markdownDescription": "%jpnov.layout.paper.edgeLine.description%"
           },
           "jpnov.layout.txt.encoding": {
@@ -323,21 +329,21 @@
               "%jpnov.layout.txt.encoding.utf8.description%",
               "%jpnov.layout.txt.encoding.utf8Bom.description%"
             ],
-            "order": 12,
+            "order": 13,
             "markdownDescription": "%jpnov.layout.txt.encoding.description%"
           },
           "jpnov.layout.outDir": {
             "type": "string",
             "default": "dist",
             "scope": "resource",
-            "order": 13,
+            "order": 14,
             "markdownDescription": "%jpnov.layout.outDir.description%"
           },
           "jpnov.layout.browserPath": {
             "type": "string",
             "default": "",
             "scope": "machine-overridable",
-            "order": 14,
+            "order": 15,
             "markdownDescription": "%jpnov.layout.browserPath.description%"
           }
         }

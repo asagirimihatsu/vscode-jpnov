@@ -110,6 +110,27 @@ function edgeBase(edge: EdgeLineStyle): string | null {
   }
 }
 
+/**
+ * The built-in 明朝-first stack `--font-family` falls back to when `jpnov.layout.fontFamily`
+ * is blank. Named JP families must come FIRST: shared codepoints (… ‥ quotes) exist in Latin
+ * serif fonts too, so a bare `serif` stops per-codepoint fallback before any JP font — and a
+ * rotated (UAX#50 VO=R) Latin ellipsis then hugs the column edge. macOS → Windows (EN + JA
+ * localized names) → Linux Noto, generic serif last.
+ */
+export const DEFAULT_FONT_STACK =
+  '"Hiragino Mincho ProN","Hiragino Mincho Pro","Yu Mincho","YuMincho","游明朝","Noto Serif CJK JP","Noto Serif JP",serif';
+
+/**
+ * `jpnov.layout.fontFamily` → the `--font-family` value. The raw setting lands inside the
+ * document's one `<style>` block, so strip anything that could leave the declaration (`;` `}`),
+ * open a tag (`<`), escape (`\`), or comment out the rest of the sheet (`/*`); quotes and
+ * commas are legal font-list tokens and pass. Blank → {@link DEFAULT_FONT_STACK}.
+ */
+function fontFamilyValue(raw: string): string {
+  const clean = raw.replace(/\/\*|[;{}<>\\\p{Cc}]/gu, '').trim().slice(0, 256);
+  return clean === '' ? DEFAULT_FONT_STACK : clean;
+}
+
 /** The `:root{}` dynamic-values rule (insertion order — deterministic output). */
 function rootVars(vars: Record<string, string | number>): string {
   const decls = Object.entries(vars)
@@ -173,6 +194,8 @@ type StylesheetOptions =
     /** Physical output paper (`jpnov.layout.paper.size` / `.orientation`). */
     readonly paperSize: PaperSize;
     readonly paperOrientation: PaperOrientation;
+    /** Resolved `jpnov.layout.fontFamily`; '' = the built-in {@link DEFAULT_FONT_STACK}. */
+    readonly fontFamily: string;
     readonly chrome: BuildChrome;
     readonly usedClasses?: readonly string[];
   }
@@ -183,6 +206,8 @@ type StylesheetOptions =
     readonly linePitch: LinePitch;
     /** Page extent (columns) for the edge frame; injected as --lpp only while edge is on. */
     readonly linesPerPage: number;
+    /** Resolved `jpnov.layout.fontFamily`; '' = the built-in {@link DEFAULT_FONT_STACK}. */
+    readonly fontFamily: string;
     readonly chrome: PreviewChrome;
     readonly usedClasses?: readonly string[];
   };
@@ -197,6 +222,7 @@ type StylesheetOptions =
 export function stylesheet(opts: StylesheetOptions): string {
   const edge = edgeBase(opts.chrome.edgeLine); // null ⟺ no edge fragment, no --edge
   const anchor = opts.chrome.lineNumbers || edge !== null; // .line{position:relative} — rationale in *.anchor.css
+  const font = fontFamilyValue(opts.fontFamily);
   const tail = (opts.usedClasses ?? []).map(classRule);
 
   if (opts.paginate) {
@@ -207,6 +233,7 @@ export function stylesheet(opts: StylesheetOptions): string {
       '--pitch': opts.linePitch,
       '--lpp': opts.linesPerPage,
       '--htop': hTop,
+      '--font-family': font,
     };
     if (edge !== null) {
       vars['--edge'] = edge;
@@ -236,6 +263,7 @@ export function stylesheet(opts: StylesheetOptions): string {
   const vars: Record<string, string | number> = {
     '--cpl': opts.charsPerLine,
     '--pitch': opts.linePitch,
+    '--font-family': font,
   };
   if (edge !== null) {
     vars['--lpp'] = opts.linesPerPage; // read only by the edge fragment's .segment min-block-size
