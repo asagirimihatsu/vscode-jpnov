@@ -46,12 +46,13 @@ test('the ruby enum resolves a mode; off / unknown values stay off', () => {
   assert.ok(isSelectionEmpty(selectRules({ 'jpnov.lint.ruby.kana': 'romaji' })));
 });
 
-test('an enum whose off choice is listed last still resolves by the "off" spelling', () => {
+test('the dash enum has no off member, yet the retired "off" spelling still disables', () => {
   const expected = { id: 'dash', options: { mode: 'emDash' }, code: 'lint.common.dash' };
   const sel = selectRules({ 'jpnov.lint.common.dash': 'emDash' });
   assert.deepEqual(sel.narration, [expected]);
   assert.deepEqual(sel.dialogue, [expected]);
-  // 'off' is last in `values`, so enablement cannot key off the FIRST value
+  // A settings.json written before the member was retired: the literal 'off' guard runs ahead
+  // of the membership check, so the rule stays off instead of erroring or defaulting on.
   assert.ok(isSelectionEmpty(selectRules({ 'jpnov.lint.common.dash': 'off' })));
   assert.ok(isSelectionEmpty(selectRules({ 'jpnov.lint.common.dash': 'enDash' })));
 });

@@ -7,12 +7,12 @@ import { tokenize } from '../../../src/shared/compiler/tokenizer.ts';
 import { assertWellFormedXml } from '../xml.ts';
 
 function rows(src: string): Row[] {
-  return buildRows(tokenize(src));
+  return buildRows(tokenize(src), { dash: 'horizontalBar' });
 }
 
 /** Segments with a throwaway sink (most assertions only look at the markup). */
 function segs(src: string): ReturnType<typeof reflowSegments> {
-  return reflowSegments(rows(src), new Set());
+  return reflowSegments(rows(src), new Set(), 'horizontalBar');
 }
 
 /** The one segment a plain source produces. */
@@ -81,23 +81,29 @@ test('left/both-side ruby are NATIVE nested ruby under .ru, class sunk', () => {
   assert.equal(left[0]?.body, '<p><ruby class="ru">字<rt>ながいよみ</rt></ruby></p>');
 });
 
-test('dash units are unwrapped to raw glyphs; runs bind under .insep nowrap', () => {
+test('a dash run binds under .insep nowrap and carries the translated em dash', () => {
   const used = new Set<string>();
-  const out = reflowSegments(rows('間――だ'), used);
-  assert.equal(out[0]?.body, '<p>間<span class="insep">――</span>だ</p>');
+  const out = reflowSegments(rows('間――だ'), used, 'horizontalBar');
+  // The run html joins the MEMBER html (already translated) — rebuilding from `text` would
+  // smuggle the source glyphs back into the EPUB.
+  assert.equal(out[0]?.body, '<p>間<span class="insep">——</span>だ</p>');
   assert.ok(used.has('insep'));
-  assert.ok(!used.has('dash'));
 
   // A lone dash and a mixed dash/leader pair stay free (same-class runs only, length ≥ 2).
-  assert.equal(body('間―だ'), '<p>間―だ</p>');
-  assert.equal(body('間―…だ'), '<p>間―…だ</p>');
+  assert.equal(body('間―だ'), '<p>間—だ</p>');
+  assert.equal(body('間―…だ'), '<p>間—…だ</p>');
   assert.equal(body('間……だ'), '<p>間<span class="insep">……</span>だ</p>');
+});
+
+test('a 見出し nav label translates its dash like the body', () => {
+  const out = segs('第一章――序［＃「第一章――序」は大見出し］');
+  assert.equal(out[0]?.heading, '第一章——序');
 });
 
 test('an emphasis boundary splits an insep run (equal channels required)', () => {
   const b = body('――――［＃「――」に傍点］');
   // The trailing two dashes carry 傍点; the leading two do not — two separate nowrap runs.
-  assert.match(b, /<span class="insep">――<\/span><span class="emph-fs"><span class="insep">――<\/span><\/span>/);
+  assert.match(b, /<span class="insep">——<\/span><span class="emph-fs"><span class="insep">——<\/span><\/span>/);
 });
 
 test('縦中横 and emphasis channel runs ride through emitUnits unchanged', () => {

@@ -8,16 +8,16 @@
  * Inline markup differences against the paginated build:
  * - ruby is native `<ruby>` in every form ({@link reflowRubyHtml} — the reader owns spacing;
  *   left/both-side readings ride `ruby-position`, not the paginated absolute lanes);
- * - dash units are unwrapped to their raw glyphs — the drawn-rule trick hides the glyph via
- *   `-webkit-text-fill-color:transparent` and repaints it in a `::before`, so a reader that
- *   honors the hide but strips the repaint would show NOTHING (fails-open data loss);
  * - 分離禁止 runs (——/……) are bound by an `.insep` nowrap span instead of atomic units.
  *
  * Pure + vscode-free.
  */
+import type { DashMode } from '../config/types.ts';
 import { escapeHtml } from './escape.ts';
 import {
+  DASH_BY_MODE,
   DASH_CHARS,
+  DASH_GLYPH,
   emitUnits,
   INSEP_LEADER,
   reflowRubyHtml,
@@ -49,15 +49,11 @@ function sameChannels(a: Unit, b: Unit): boolean {
 
 /**
  * Rewrites one unit for the reflow output: ruby markup is regenerated (native in every form;
- * `ru` marks a left/both-side unit for class.ruby-u.css), dash units are unwrapped to raw
- * glyphs.
+ * `ru` marks a left/both-side unit for class.ruby-u.css).
  */
 function reflowUnit(u: Unit): Unit {
   if (u.ruby !== undefined) {
     return { ...u, html: reflowRubyHtml(u.ruby), cssClass: u.ruby.left === undefined ? undefined : 'ru' };
-  }
-  if (u.cssClass === 'dash') {
-    return { ...u, html: escapeHtml(u.text), cssClass: undefined };
   }
   return u;
 }
@@ -90,12 +86,14 @@ function bindInsepRuns(units: readonly Unit[]): Unit[] {
     }
     if (end - i >= 2) {
       // Channels spread from `head` — the run requires them equal, like the engine's mergeRun.
-      const text = units.slice(i, end).map((u) => u.text).join('');
+      // The run html joins member html (each one escaped glyph; a dash unit's is the translated
+      // em dash) — rebuilding it from `text` would smuggle the source glyphs back in.
+      const members = units.slice(i, end);
       out.push({
         ...head,
         cells: end - i,
-        html: `<span class="insep">${escapeHtml(text)}</span>`,
-        text,
+        html: `<span class="insep">${members.map((u) => u.html).join('')}</span>`,
+        text: members.map((u) => u.text).join(''),
         cssClass: 'insep',
       });
     } else {
@@ -113,8 +111,11 @@ function bindInsepRuns(units: readonly Unit[]): Unit[] {
  * heading spans rows, but Row carries no form, and merging could fuse two adjacent independent
  * headings). A row with no real cells (blank or comment-only line) becomes `<p>…<br/></p>` so
  * the blank column survives reader margin handling. `used` is the on-demand class sink.
+ * `dash` translates the configured dash inside nav labels too — the body units arrive already
+ * translated from {@link buildRows}.
  */
-export function reflowSegments(rows: readonly Row[], used: Set<string>): ReflowSegment[] {
+export function reflowSegments(rows: readonly Row[], used: Set<string>, dash?: DashMode): ReflowSegment[] {
+  const want = dash === undefined ? undefined : DASH_BY_MODE[dash];
   const segments: ReflowSegment[] = [];
   let body = '';
   let heading: string | null = null;
@@ -140,7 +141,8 @@ export function reflowSegments(rows: readonly Row[], used: Set<string>): ReflowS
     const inner = emitUnits(bindInsepRuns(row.units.map(reflowUnit)), used);
     if (row.heading !== undefined) {
       if (heading === null) {
-        const text = row.units.map((u) => u.text).join('');
+        const raw = row.units.map((u) => u.text).join('');
+        const text = want === undefined ? raw : raw.replaceAll(want, DASH_GLYPH);
         heading = text === '' ? null : text;
       }
       const tag = `h${String(row.heading)}`;

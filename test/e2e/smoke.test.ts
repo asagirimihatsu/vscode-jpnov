@@ -39,6 +39,7 @@ const PREVIEW_SETTINGS: PreviewSettings = {
   fontFamily: '',
   kinsoku: 'normal',
   autoTcy: 'punctuationPairs',
+  dash: 'horizontalBar',
   lineNumbers: true,
   edgeLine: 'none',
 };
@@ -50,6 +51,7 @@ const HTML_SETTINGS: HtmlSettings = {
   fontFamily: '',
   kinsoku: 'normal',
   autoTcy: 'punctuationPairs',
+  dash: 'horizontalBar',
   lineNumbers: false,
   edgeLine: 'none',
   paperSize: 'a4',
@@ -421,69 +423,52 @@ test('the built page follows every 行送り tier (column width and fitted font 
   }
 });
 
-/** Same parse-time trick as MEASURE_SCRIPT, for the drawn ダッシュ rules. */
+/** The fixture both ダッシュ tests share: a plain configured pair and a 太字 pair. */
+const DASH_TEXT = '　約束は――もう果たせない。\n　彼女は［＃太字］――［＃太字終わり］と黙った。\n';
+
+/** Same parse-time trick as MEASURE_SCRIPT, for the bare-glyph ダッシュ advance. */
 const DASH_MEASURE_SCRIPT = `<script>
 (() => {
-  const dashes = [...document.querySelectorAll('.dash')];
-  const plain = dashes.find((d) => !d.closest('.b, .midashi'));
-  const bold = dashes.find((d) => d.closest('.b'));
-  const cs = plain ? getComputedStyle(plain, '::before') : null;
-  const pair = plain && plain.nextElementSibling && plain.nextElementSibling.classList.contains('dash')
-    ? getComputedStyle(plain.nextElementSibling, '::before')
-    : null;
+  const b = document.querySelector('.b');
   document.documentElement.setAttribute('${MARKER}', JSON.stringify({
-    dashCount: dashes.length,
-    cellExtent: plain ? plain.getBoundingClientRect().height : 0,
     rootFontSize: parseFloat(getComputedStyle(document.documentElement).fontSize),
-    thickness: cs ? parseFloat(cs.blockSize) : 0,
-    boldThickness: bold ? parseFloat(getComputedStyle(bold, '::before').blockSize) : 0,
-    runStart: cs ? parseFloat(cs.insetInlineStart) : -1,
-    joinLeading: cs ? parseFloat(cs.insetInlineEnd) : -1,
-    joinTrailing: pair ? parseFloat(pair.insetInlineStart) : -1,
-    runEnd: pair ? parseFloat(pair.insetInlineEnd) : -1,
-    painted: cs ? cs.backgroundColor : 'none',
-    printSafe: cs ? (cs.printColorAdjust || cs.webkitPrintColorAdjust) : 'none',
+    pairExtent: b ? b.getBoundingClientRect().height : 0,
   }));
 })();
 </script>`;
 
 interface DashMetrics {
-  readonly dashCount: number;
-  readonly cellExtent: number;
   readonly rootFontSize: number;
-  readonly thickness: number;
-  readonly boldThickness: number;
-  readonly runStart: number;
-  readonly joinLeading: number;
-  readonly joinTrailing: number;
-  readonly runEnd: number;
-  readonly painted: string;
-  readonly printSafe: string;
+  readonly pairExtent: number;
 }
 
-test('a ダッシュ run renders as one drawn, centred rule', BROWSER_SKIP, async () => {
+test('ダッシュ stays a font glyph — the configured spelling is emitted as the em dash', async () => {
+  // Dashes must NOT be drawn in CSS: a sub-pixel box pixel-snaps in print (the same Skia
+  // lesson as the リーダー below); the em dash glyph joins a doubled pair on its own.
+  const { html } = await conn().request<RenderFileResult>('jpnov/renderFile', {
+    uri: 'file:///e2e/dash.jpnov',
+    text: DASH_TEXT,
+    settings: PREVIEW_SETTINGS,
+  });
+  assert.match(html, /約束は——もう/, 'the configured ― pair is typeset as an em dash pair');
+  assert.match(html, /<span class="b">——<\/span>/, '太字 wraps the translated run');
+  assert.doesNotMatch(html, /class="dash/, 'dashes ride the font, never a drawn substitute');
+  assert.doesNotMatch(html, /―/, 'no source dash leaks untranslated (fixture has no tcy/ruby)');
+});
+
+test('a ダッシュ pair advances exactly two cells as bare glyphs', BROWSER_SKIP, async () => {
   assert.ok(browser, 'JPNOV_E2E_REQUIRE_BROWSER=1 but no Chromium-family browser was found');
   const { html } = await conn().request<RenderFileResult>('jpnov/renderFile', {
     uri: 'file:///e2e/dash.jpnov',
-    text: '　約束は――もう果たせない。\n　彼女は［＃太字］――［＃太字終わり］と黙った。\n',
+    text: DASH_TEXT,
     settings: PREVIEW_SETTINGS,
   });
-
   const m = JSON.parse(await measurePage(browser, html, DASH_MEASURE_SCRIPT, 'dash')) as DashMetrics;
-
-  assert.equal(m.dashCount, 4, 'every dash cell carries its own drawn rule');
+  // The .b span wraps exactly the translated pair; a full-width em dash advances one cell, so
+  // any font substitution or kerning collapse shows up as a broken 2em extent.
   assert.ok(
-    Math.abs(m.cellExtent - m.rootFontSize) < 1,
-    `a hidden glyph must still advance one cell (${String(m.cellExtent)}px vs ${String(m.rootFontSize)}px)`,
-  );
-  assert.ok(m.thickness > 0 && m.painted !== 'none', 'the rule must actually paint');
-  assert.equal(m.printSafe, 'exact', 'the rule is a background — print would drop it otherwise');
-  assert.equal(m.joinLeading, 0, 'a dash facing another must run to the cell edge');
-  assert.equal(m.joinTrailing, 0, 'its neighbour must meet it there');
-  assert.ok(m.runStart > 0 && m.runEnd > 0, 'the outer ends of the run stay inset');
-  assert.ok(
-    m.boldThickness > m.thickness,
-    `太字 must thicken the rule (${String(m.boldThickness)}px vs ${String(m.thickness)}px)`,
+    Math.abs(m.pairExtent - 2 * m.rootFontSize) < 1,
+    `an em dash pair must fill two cells (${String(m.pairExtent)}px vs ${String(2 * m.rootFontSize)}px)`,
   );
 });
 

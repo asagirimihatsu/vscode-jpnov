@@ -485,6 +485,7 @@ test('renderDocument ships the settings snapshot on the renderFile request', asy
     fontFamily: '',
     kinsoku: 'normal',
     autoTcy: 'punctuationPairs',
+    dash: 'horizontalBar',
     lineNumbers: true,
     edgeLine: 'red',
   });

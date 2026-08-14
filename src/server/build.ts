@@ -280,6 +280,7 @@ async function buildRoot(
           linePitch: selection.settings.linePitch,
           kinsoku: selection.settings.kinsoku,
           autoTcy: selection.settings.autoTcy,
+          dash: selection.settings.dash,
           paperSize: selection.settings.paperSize,
           paperOrientation: selection.settings.paperOrientation,
           fontFamily: selection.settings.fontFamily,
@@ -297,6 +298,7 @@ async function buildRoot(
             outRel,
             kinsoku: selection.settings.kinsoku,
             autoTcy: selection.settings.autoTcy,
+            dash: selection.settings.dash,
             // dcterms:modified wants CCYY-MM-DDThh:mm:ssZ — second precision, no milliseconds.
             modified: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
           }),

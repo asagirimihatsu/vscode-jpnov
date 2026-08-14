@@ -47,7 +47,7 @@ import * as S from './styles/styles.generated.ts';
  * The CSS rule for one used class name, or '' for an unknown one (keeps the "no stray rules"
  * invariant). These are layout geometry / line furniture, not style-table entries: `indent-N`
  * (字下げ) and `rh-N` (stretched ruby) are generated here (unbounded N); `tcy` (縦中横), `midashi`
- * (見出し), `dash` (ダッシュ), `hang` (ぶら下げ), `emr` (傍点 line compensation) and the ruby
+ * (見出し), `hang` (ぶら下げ), `emr` (傍点 line compensation) and the ruby
  * classes come from the static `styles/class.*.css` fragments. The indent suffix check is
  * defence in depth (emitLine only ever emits positive N_eff). Every other class
  * (emph-* / dec-* / b / i) is forwarded to emphasis.ts's {@link styleRule}, the single home of
@@ -72,8 +72,6 @@ function classRule(name: string): string {
       return S.classTcy;
     case 'midashi':
       return S.classMidashi;
-    case 'dash':
-      return S.classDash;
     case 'hang':
       return S.classHang;
     case 'insep':

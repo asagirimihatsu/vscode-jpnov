@@ -111,7 +111,9 @@ but not Japanese typesetting:
 - **Dashes（ダッシュ）** — Japanese novels write a dash as a doubled pair
   (`――`), and it is typeset as one unbroken dash. Pick the
   character you write in `jpnov.lint.common.dash` (default `―`); any other
-  dash character, or an odd-numbered run, is flagged with an auto-fix.
+  dash character, or an odd-numbered run, is flagged with an auto-fix. In
+  HTML, PDF, and EPUB output, the chosen character is typeset as the em dash
+  (`—`).
 
 - **Genkō yōshi（原稿用紙）** — the manuscript grid Japanese prose is drafted
   on. The default page of **40 characters × 34 lines** mirrors common

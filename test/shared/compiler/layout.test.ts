@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { BuildChrome } from '../../../src/shared/compiler/chrome.ts';
-import type { KinsokuMode } from '../../../src/shared/config/types.ts';
+import type { DashMode, KinsokuMode } from '../../../src/shared/config/types.ts';
 import {
   buildRows,
   findPostfixTargetIssues,
@@ -382,43 +382,52 @@ test('flowToHtml: a break followed by a blank line opens the next segment on the
   );
 });
 
-test('ダッシュ: every dash glyph is wrapped, and a joined cell is marked in the HTML', () => {
-  const dash = (ch: string): string => `<span class="dash">${ch}</span>`;
-  const joined = (ch: string): string => `<span class="dash dash-j">${ch}</span>`;
+// ダッシュ tests drive the translation explicitly — the plain helpers above stay glyph-agnostic.
+const dashFlow = (src: string, dash: DashMode = 'horizontalBar'): string =>
+  flowToHtml(buildRows(tokenize(src), { dash }), 40, 'none');
+const dashHtml = (src: string): string =>
+  pagesToHtml(paginate(buildRows(tokenize(src), { dash: 'horizontalBar' }), 40, 34, 'none'), undefined, OFF);
+
+test('ダッシュ: the configured spelling is emitted as the em dash — bare glyph, no markup', () => {
   assert.equal(
-    html('あ――い'),
-    `<div class="book"><div class="page" data-page="0"><div class="line" data-line="0">あ${joined('―')}${dash('―')}い</div></div></div>`,
+    dashHtml('あ――い'),
+    '<div class="book"><div class="page" data-page="0"><div class="line" data-line="0">あ——い</div></div></div>',
   );
-  assert.match(flow('—―─'), new RegExp(`${joined('—')}${joined('―')}${dash('─')}`));
-  assert.match(flow('あ―い'), new RegExp(dash('―')));
-  // TWO runs with prose between: the inner ends must NOT join — a CSS sibling selector cannot
-  // see the text node, so the marker has to come from here
-  assert.match(flow('あ――い――う'), new RegExp(`${joined('―')}${dash('―')}い${joined('―')}${dash('―')}`));
+  assert.doesNotMatch(dashFlow('あ――い'), /class="dash/);
+  // Translation is per glyph and selected-only; `text` keeps the source for every spelling.
+  const row = buildRows(tokenize('—―─'), { dash: 'horizontalBar' })[0];
+  const units = row?.kind === 'line' ? row.units : [];
+  assert.deepEqual(units.map((u) => [u.html, u.text, u.cssClass]), [
+    ['—', '—', undefined], // already an em dash: nothing to translate
+    ['—', '―', undefined], // the configured glyph, translated; text keeps the source
+    ['─', '─', undefined], // a foreign glyph stays put — the dash lint flags it
+  ]);
 });
 
-test('ダッシュ: the join is decided after the postfix passes, not at emission', () => {
-  const dash = (ch: string): string => `<span class="dash">${ch}</span>`;
-  // A postfix re-channels units that were already emitted; emitLine then wraps the second dash in
-  // its own channel span, so the two are no longer siblings and the CSS join cannot reach.
-  assert.match(flow('あ――い［＃「―い」に傍点］'), new RegExp(`${dash('―')}<span class="emph-fs">${dash('―')}`));
-  // A postfix 縦中横 swallows the following dash entirely — the survivor must not keep a marker
-  // pointing at a cell that no longer exists.
-  assert.match(flow('あ――い［＃「―い」は縦中横］'), new RegExp(`${dash('―')}<span class="tcy">`));
+test('ダッシュ: each mode translates its own glyph only', () => {
+  assert.match(dashFlow('あ――い'), /あ——い/);
+  assert.match(dashFlow('あ──い', 'boxDrawing'), /あ——い/);
+  assert.match(dashFlow('あ――い', 'emDash'), /あ――い/); // ― is foreign under emDash
 });
 
-test('ダッシュ: a dash may still be a 左ルビ base (the ruby markup replaces the rule)', () => {
-  assert.match(flow('――［＃「――」の左に「and」のルビ］'), /<ruby class="lr">/);
+test('ダッシュ: postfix targets match the SOURCE spelling; the emitted run is translated', () => {
+  // ［＃「―い」…］ names U+2015. Matching runs on Unit.text — translating it would turn every
+  // such postfix into a syntax.postfixTargetMissing false positive.
+  assert.match(dashFlow('あ――い［＃「―い」に傍点］'), /あ—<span class="emph-fs">—い<\/span>/);
+  // A postfix 縦中横 rebuilds its combined cell from the source text — the cell keeps ―.
+  assert.match(dashFlow('あ――い［＃「―い」は縦中横］'), /あ—<span class="tcy">―い<\/span>/);
+  // A ルビ lane rebuilds its base the same way (a dash may still be a 左ルビ base).
+  assert.match(dashFlow('――［＃「――」の左に「and」のルビ］'), /<ruby class="lr">/);
 });
 
-test('ダッシュ: the class survives 分離禁止 binding, and never reaches a 縦中横 cell', () => {
-  // strict merges the run into ONE unit; the class must ride along or css.ts emits no rule
-  const bound = paginate(buildRows(tokenize('あ――')), 40, 34, 'strict').flat();
-  assert.deepEqual(
-    bound[0]?.units.map((u) => u.cssClass),
-    [undefined, 'dash'],
-  );
-  // inside 縦中横 the dash is part of the combined cell — one tcy span, no dash span
-  assert.match(flow('［＃縦中横］―［＃縦中横終わり］'), /<span class="tcy">―<\/span>/);
+test('ダッシュ: 分離禁止 still binds the run; the merged unit carries the translation', () => {
+  const bound = paginate(buildRows(tokenize('あ――'), { dash: 'horizontalBar' }), 40, 34, 'strict').flat();
+  assert.deepEqual(bound[0]?.units.map((u) => [u.html, u.text, u.cssClass]), [
+    ['あ', 'あ', undefined],
+    ['——', '――', undefined],
+  ]);
+  // inside 縦中横 the dash is part of the combined cell — one tcy span, source glyph
+  assert.match(dashFlow('［＃縦中横］―［＃縦中横終わり］'), /<span class="tcy">―<\/span>/);
 });
 
 test('flowToHtml: honors the kinsoku mode (禁則) — the SAME engine as the build', () => {

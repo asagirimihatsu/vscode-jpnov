@@ -198,7 +198,8 @@ function ensureStarted(): void {
         const params: HighlightChangedParams = { highlight: buildHighlightSnapshot() };
         void client.sendNotification(HighlightChangedNotification, params);
       }
-      if (e.affectsConfiguration('jpnov.layout')) {
+      if (e.affectsConfiguration('jpnov.layout') || e.affectsConfiguration('jpnov.lint.common.dash')) {
+        // The dash choice is the one lint key the render snapshot also carries.
         preview?.refresh();
       }
       if (e.affectsConfiguration('jpnov.layout.outDir')) {

@@ -32,7 +32,8 @@ export type Stream = 'narration' | 'dialogue' | 'ruby';
  *   - `threshold` -> `jpnov.lint.…` is `integer | null` (default `null` = off); a number is clamped
  *     to `[min, max]`. `suggested` is the recommended value shown to the user (NOT a default).
  *   - `enum`      -> `jpnov.lint.…` is a string drop-down. `select.ts` keys enablement off the
- *     literal `'off'` member, at any position in `values`.
+ *     literal `'off'` member, at any position in `values`; a list without `'off'` is enabled on
+ *     every member (the rule cannot be turned off).
  */
 export interface RuleMeta {
   /** Unique WITHIN a scope; the tail of both the setting key and the diagnostic code. */
@@ -43,7 +44,8 @@ export interface RuleMeta {
   readonly min?: number;
   readonly max?: number;
   readonly suggested?: number;
-  /** Enum rules only: the drop-down choices, in display order; one of them must be `'off'`. */
+  /** Enum rules only: the drop-down choices, in display order; an `'off'` member, when
+   *  present, is the disabled state. */
   readonly values?: readonly string[];
   /** The package.json default. Omit for `false` (boolean) / `values[0]` (enum). */
   readonly default?: boolean | string;
@@ -69,7 +71,10 @@ export const RULES = [
     id: 'dash',
     scope: 'common',
     kind: 'enum',
-    values: ['emDash', 'horizontalBar', 'boxDrawing', 'off'],
+    // Mirrors DASH_MODES/DASH_BY_MODE (catalog.test.ts locks the pair; this file stays
+    // import-free). No 'off': the glyph also drives typesetting, and a foreign dash renders
+    // untranslated — the check must always run.
+    values: ['emDash', 'horizontalBar', 'boxDrawing'],
     default: 'horizontalBar',
   },
   { id: 'noUnmatchedPair', scope: 'common', kind: 'boolean' },

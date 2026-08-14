@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { DASH_BY_MODE } from '../../../src/shared/compiler/layout.ts';
+import { DASH_MODES, LAYOUT_DEFAULT } from '../../../src/shared/config/types.ts';
 import { RULES, allSettingKeys, diagCode, settingKey } from '../../../src/shared/lint/catalog.ts';
 import type { RuleMeta } from '../../../src/shared/lint/catalog.ts';
 
@@ -25,13 +26,13 @@ test('settingKey and diagCode derive from scope + id', () => {
   }
 });
 
-test('every enum offers "off" and defaults to one of its own values', () => {
+test('every enum defaults to one of its own values', () => {
   const rules: readonly RuleMeta[] = RULES;
   for (const r of rules) {
     if (r.kind === 'enum') {
-      // 'off' is the spelling select.ts keys enablement off; its position in `values` is free.
+      // 'off' is the spelling select.ts keys enablement off; its position in `values` is free,
+      // and a list without it (dash) makes the rule always-on.
       const values = r.values ?? [];
-      assert.ok(values.includes('off'), `${r.id} must offer an "off" choice`);
       assert.ok(
         values.includes(String(r.default ?? values[0])),
         `${r.id} default must be one of its values`,
@@ -40,14 +41,14 @@ test('every enum offers "off" and defaults to one of its own values', () => {
   }
 });
 
-test('every dash choice but "off" maps to a glyph the renderer draws', () => {
-  // The drop-down values and the scanner's target glyphs are separate homes for one fact; a
-  // value with no glyph makes the rule a silent no-op.
+test('every dash choice maps to a glyph the scanner targets and the layout translates', () => {
+  // The drop-down values, DASH_MODES and DASH_BY_MODE are separate homes for one fact (the
+  // catalog stays import-free); a value with no glyph would make the rule a silent no-op. The
+  // catalog default and the render resolver's fallback are the same lockstep.
   const dash = (RULES as readonly RuleMeta[]).find((r) => r.id === 'dash');
-  assert.deepEqual(
-    (dash?.values ?? []).filter((v) => v !== 'off'),
-    Object.keys(DASH_BY_MODE),
-  );
+  assert.deepEqual(dash?.values, Object.keys(DASH_BY_MODE));
+  assert.deepEqual(dash.values, [...DASH_MODES]);
+  assert.equal(dash.default, LAYOUT_DEFAULT.dash);
 });
 
 test('allSettingKeys lists every rule exactly once', () => {

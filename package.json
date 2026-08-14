@@ -390,21 +390,18 @@
             "enum": [
               "emDash",
               "horizontalBar",
-              "boxDrawing",
-              "off"
+              "boxDrawing"
             ],
             "default": "horizontalBar",
             "enumItemLabels": [
               "%jpnov.lint.common.dash.emDash.label%",
               "%jpnov.lint.common.dash.horizontalBar.label%",
-              "%jpnov.lint.common.dash.boxDrawing.label%",
-              "%jpnov.lint.common.dash.off.label%"
+              "%jpnov.lint.common.dash.boxDrawing.label%"
             ],
             "enumDescriptions": [
               "%jpnov.lint.common.dash.emDash.description%",
               "%jpnov.lint.common.dash.horizontalBar.description%",
-              "%jpnov.lint.common.dash.boxDrawing.description%",
-              "%jpnov.lint.common.dash.off.description%"
+              "%jpnov.lint.common.dash.boxDrawing.description%"
             ],
             "order": 4,
             "markdownDescription": "%jpnov.lint.common.dash.description%"

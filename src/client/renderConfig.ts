@@ -10,7 +10,7 @@ import * as vscode from 'vscode';
 import type { EdgeLineStyle } from '#/shared/compiler/chrome.ts';
 import type { PaperOrientation, PaperSize } from '#/shared/compiler/geometry.ts';
 import { BUILD_CHROME_DEFAULT, BUILD_PAPER_DEFAULT, PREVIEW_CHROME_DEFAULT } from '#/shared/config/settings.ts';
-import type { AutoTcyMode, KinsokuMode, LayoutSettings, LinePitch } from '#/shared/config/types.ts';
+import type { AutoTcyMode, DashMode, KinsokuMode, LayoutSettings, LinePitch } from '#/shared/config/types.ts';
 import { LAYOUT_DEFAULT } from '#/shared/config/types.ts';
 import type { HtmlSettings, PreviewSettings } from '#/shared/protocol.ts';
 
@@ -23,6 +23,8 @@ function layoutSnapshot(c: vscode.WorkspaceConfiguration): LayoutSettings {
     fontFamily: c.get<string>('jpnov.layout.fontFamily', LAYOUT_DEFAULT.fontFamily),
     kinsoku: c.get<KinsokuMode>('jpnov.layout.kinsoku', LAYOUT_DEFAULT.kinsoku),
     autoTcy: c.get<AutoTcyMode>('jpnov.layout.autoTcy', LAYOUT_DEFAULT.autoTcy),
+    // The one `jpnov.lint.*` key in the render snapshot: the dash choice also drives typesetting.
+    dash: c.get<DashMode>('jpnov.lint.common.dash', LAYOUT_DEFAULT.dash),
   };
 }
 

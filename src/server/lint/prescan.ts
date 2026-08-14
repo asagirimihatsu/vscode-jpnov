@@ -9,6 +9,7 @@
  */
 import { DASH_BY_MODE, DASH_CHARS } from '../../shared/compiler/layout.ts';
 import { isHiragana, isKatakana } from '../../shared/compiler/tokenizer.ts';
+import { isDashMode } from '../../shared/config/types.ts';
 import { unencodableChars } from '../../shared/encoding.ts';
 import type { ActiveRule } from '../../shared/lint/select.ts';
 import type { LocalizableMessage } from '../../shared/protocol.ts';
@@ -52,7 +53,7 @@ export const minusPositionScan: PreScan = (text) => {
  *  run of the chosen glyph; the fix rewrites the run in that glyph, rounding an odd length up. */
 export const dashScan: PreScan = (text, options) => {
   const mode = typeof options === 'object' && 'mode' in options ? options.mode : undefined;
-  const want = mode === undefined ? undefined : DASH_BY_MODE[mode];
+  const want = mode !== undefined && isDashMode(mode) ? DASH_BY_MODE[mode] : undefined;
   if (want === undefined) {
     return [];
   }

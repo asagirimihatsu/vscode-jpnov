@@ -10,7 +10,7 @@ import { assertWellFormedXml } from './xml.ts';
 const MODIFIED = '2026-08-04T00:00:00Z';
 
 function members(book: BookInput, meta: JpbookMeta = {}, outRel = 'vol1'): ReturnType<typeof epubMembers> {
-  return epubMembers({ book, meta, outRel, kinsoku: 'normal', autoTcy: 'punctuationPairs', modified: MODIFIED });
+  return epubMembers({ book, meta, outRel, kinsoku: 'normal', autoTcy: 'punctuationPairs', dash: 'horizontalBar', modified: MODIFIED });
 }
 
 const TWO_CHAPTERS: BookInput = {

@@ -33,6 +33,7 @@ const BASE_SETTINGS: HtmlSettings = {
   fontFamily: '',
   kinsoku: 'normal',
   autoTcy: 'punctuationPairs',
+  dash: 'horizontalBar',
   lineNumbers: false,
   edgeLine: 'none',
   paperSize: 'a4',

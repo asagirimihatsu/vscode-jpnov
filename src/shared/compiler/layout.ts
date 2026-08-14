@@ -13,22 +13,26 @@
  * ぶら下げ of a trailing 句読点, then the leftward 追い出し nudge of the break point.
  * ［＃改ページ］ forces a new page.
  */
-import type { KinsokuMode } from '../config/types.ts';
+import type { DashMode, KinsokuMode } from '../config/types.ts';
 import type { BuildChrome, PageNumberPosition } from './chrome.ts';
 import { resolveStyle } from './emphasis.ts';
 import { escapeComment, escapeHtml } from './escape.ts';
 import { tokenize, type HeadingLevel, type Token } from './tokenizer.ts';
 
 /** The dash glyph each `jpnov.lint.common.dash` choice stands for. */
-export const DASH_BY_MODE: Readonly<Record<string, string>> = {
+export const DASH_BY_MODE: Readonly<Record<DashMode, string>> = {
   emDash: '—', // U+2014
   horizontalBar: '―', // U+2015
   boxDrawing: '─', // U+2500
 };
 
-/** Every dash glyph, whatever the setting selects: all of them bind as one 分離禁止 class and
- *  render as a drawn rule. Shared with the lint scanner (server/lint/prescan.ts). */
+/** Every dash glyph, whatever the setting selects: all of them bind as one 分離禁止 class.
+ *  Shared with the lint scanner (server/lint/prescan.ts). */
 export const DASH_CHARS = new Set<string>(Object.values(DASH_BY_MODE));
+
+/** The configured dash mode's glyph is EMITTED as this one (U+2014): its ink runs edge to edge
+ *  in the default font stack, so a doubled dash joins seamlessly. */
+export const DASH_GLYPH = DASH_BY_MODE.emDash;
 
 /**
  * One laid-out glyph group: a char (1 cell), a ruby unit (base char count, atomic), or a
@@ -61,13 +65,6 @@ export interface Unit {
   weight?: string | undefined;
   /** 斜体: `i`. */
   style?: string | undefined;
-}
-
-/** True for a unit that is still plain text: `dash` is a presentation class over an ordinary
- *  character, unlike the composed cells 縦中横/ルビ produce. Every guard that treats a classed
- *  unit as off-limits must ask this, or dashes silently drop out of it. */
-function isPlainText(u: Unit): boolean {
-  return u.cssClass === undefined || u.cssClass === 'dash';
 }
 
 /** A source row: a line of units (+ optional 字下げ / 見出し), or a forced page break. */
@@ -269,7 +266,7 @@ function applyLeftRuby(
         single.cssClass = rubyLane(single.ruby, cells);
         return;
       }
-      if (real.every((u) => u.ruby === undefined && isPlainText(u))) {
+      if (real.every((u) => u.ruby === undefined && u.cssClass === undefined)) {
         const first = units[m.first];
         const ruby = { base: target, left: reading };
         const cells = rubyCells(ruby);
@@ -358,12 +355,19 @@ function applyPostfix(
 }
 
 /**
- * Builds the rows (lines + page breaks) for ONE file's token stream. The optional `issues`
- * sink collects the token indices of unresolved corner-target postfixes — the render's own
- * failure list, mapped back to source spans by {@link findPostfixTargetIssues} so the Warnings
- * can never disagree with what was applied. Render callers pass nothing (zero cost).
+ * Builds the rows (lines + page breaks) for ONE file's token stream. `opts.dash` names the
+ * configured dash mode; that glyph is emitted as {@link DASH_GLYPH} while `Unit.text` keeps the
+ * source character — omitted = no translation (structural probes, the issue scan). The optional
+ * `opts.issues` sink collects the token indices of unresolved corner-target postfixes — the
+ * render's own failure list, mapped back to source spans by {@link findPostfixTargetIssues} so
+ * the Warnings can never disagree with what was applied.
  */
-export function buildRows(tokens: readonly Token[], issues?: number[]): Row[] {
+export function buildRows(
+  tokens: readonly Token[],
+  opts?: { readonly issues?: number[]; readonly dash?: DashMode },
+): Row[] {
+  const issues = opts?.issues;
+  const want = opts?.dash === undefined ? undefined : DASH_BY_MODE[opts.dash];
   const rows: Row[] = [];
   let cur: Unit[] = [];
   let srcLine = 0;
@@ -437,22 +441,8 @@ export function buildRows(tokens: readonly Token[], issues?: number[]): Row[] {
     }
   };
 
-  // Dash joins (row complete): decided after the postfix passes, which re-channel or swallow the
-  // units around a dash. A join also needs a shared unit key — emitLine wraps each channel run in
-  // its own span, and the css.ts join `.dash-j + .dash` is an adjacent-sibling selector.
-  const markDashJoins = (): void => {
-    for (let i = 0; i + 1 < cur.length; i += 1) {
-      const u = cur[i];
-      const next = cur[i + 1];
-      if (u?.cssClass === 'dash' && next?.cssClass === 'dash' && unitKey(next) === unitKey(u)) {
-        u.html = u.html.replace('class="dash"', 'class="dash dash-j"');
-      }
-    }
-  };
-
   const endLine = (isFlush: boolean): void => {
     settleRubyOverhang();
-    markDashJoins();
     const hasReal = cur.some((u) => u.cells > 0);
     // `heading` is CONDITIONAL: row snapshots deepEqual whole objects, so an absent heading
     // must be an absent KEY, never an explicit undefined.
@@ -499,13 +489,10 @@ export function buildRows(tokens: readonly Token[], issues?: number[]): Row[] {
             tcyBuf += part;
           } else {
             for (const ch of part) {
-              const u = mk(1, escapeHtml(ch), ch);
-              // 縦中横 and ルビ cells build their own html; a dash inside one stays a font glyph.
-              if (DASH_CHARS.has(ch)) {
-                u.cssClass = 'dash';
-                u.html = `<span class="dash">${u.html}</span>`;
-              }
-              cur.push(u);
+              // The configured dash is emitted as DASH_GLYPH; `text` keeps the source char so
+              // postfix targets, 分離禁止 and the lint scanner still match it. 縦中横 and ルビ
+              // cells build their own html — a dash inside one stays the source glyph.
+              cur.push(mk(1, ch === want ? DASH_GLYPH : escapeHtml(ch), ch));
             }
           }
         }
@@ -667,7 +654,7 @@ export interface PostfixTargetIssue {
 export function findPostfixTargetIssues(src: string): PostfixTargetIssue[] {
   const tokens = tokenize(src);
   const misses: number[] = [];
-  buildRows(tokens, misses);
+  buildRows(tokens, { issues: misses });
   if (misses.length === 0) {
     return [];
   }
@@ -806,7 +793,7 @@ const INSEP_BANG = new Set('!?'); // half-width; exactly-2 runs only
 
 /** The 分離禁止 class a unit binds under, or undefined (classed / ruby / multi-char / zero-width). */
 function insepClass(u: Unit | undefined): Set<string> | undefined {
-  if (u?.cells !== 1 || u.text.length !== 1 || !isPlainText(u) || u.ruby !== undefined) {
+  if (u?.cells !== 1 || u.text.length !== 1 || u.cssClass !== undefined || u.ruby !== undefined) {
     return undefined;
   }
   if (DASH_CHARS.has(u.text)) {
