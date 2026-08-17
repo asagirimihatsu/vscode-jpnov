@@ -113,7 +113,7 @@ but not Japanese typesetting:
   character you write in `jpnov.lint.common.dash` (default `―`); any other
   dash character, or an odd-numbered run, is flagged with an auto-fix. In
   HTML, PDF, and EPUB output, the chosen character is typeset as the em dash
-  (`—`).
+  (`—`) for Japanese font behavior.
 
 - **Genkō yōshi（原稿用紙）** — the manuscript grid Japanese prose is drafted
   on. The default page is **40 characters × 34 lines**, and the line pitch
