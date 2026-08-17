@@ -55,6 +55,8 @@ export interface StateMessage {
   /** True before the first enumeration lands — show a neutral placeholder, not the "no books" welcome. */
   readonly loading: boolean;
   readonly noFolder: boolean;
+  /** The footer's "open the output folder after building" toggle (host-held, like the selection). */
+  readonly revealOutput: boolean;
   readonly groups: readonly BookGroupVM[];
 }
 
@@ -92,6 +94,7 @@ export type BooksOutbound =
   | { readonly type: 'deselectAll' }
   // `uri` present = build exactly that one book (the open detail); absent = the checked set.
   | { readonly type: 'build'; readonly format: BuildAction; readonly uri?: string }
+  | { readonly type: 'revealOutput'; readonly on: boolean }
   | { readonly type: 'openDetail'; readonly uri: string }
   | { readonly type: 'closeDetail' }
   | { readonly type: 'openFile'; readonly uri: string }
@@ -116,6 +119,7 @@ export interface Labels {
   readonly buildTxt: string;
   readonly buildHtml: string;
   readonly buildEpub: string;
+  readonly revealOutput: string;
   readonly back: string;
   readonly openChapter: string;
   readonly chapters: string;

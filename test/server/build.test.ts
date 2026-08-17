@@ -194,6 +194,8 @@ test('deeply nested jpbook writes a mirrored nested output path', async () => {
   const txt = result.artifacts[0];
   assert.ok(txt);
   assert.equal(txt.path, `${ws.uri}/dist/a/b/c.txt`);
+  // The nested file's reveal target is still the resolved outDir, not its own parent.
+  assert.equal(txt.outDir, `${ws.uri}/dist`);
   assert.equal(txt.content, 'ふかい');
 });
 
@@ -235,6 +237,7 @@ test('projectDirs overrides outDir per root', async () => {
   assert.ok(result.artifacts);
   assert.equal(result.artifacts.length, 1);
   assert.equal(result.artifacts[0]?.path, `${ws.uri}/out/vol1.txt`);
+  assert.equal(result.artifacts[0].outDir, `${ws.uri}/out`);
 });
 
 test('an invalid outDir silently falls back to dist — and the FALLBACK dir is what discovery skips', async () => {

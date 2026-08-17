@@ -241,6 +241,43 @@ test('a uri build for a vanished book is dropped silently', async () => {
   assert.equal(state.errorMessages.length, 0);
 });
 
+test('a successful build opens the configured output dir, once — never a nested subfolder', async () => {
+  const root = 'file:///ws';
+  const { view } = await setup([entry(root, 'a'), entry(root, 'sub/b')], {
+    ok: true,
+    artifacts: [
+      { path: `${root}/out/a.html`, outDir: `${root}/out`, content: '<p>a</p>' },
+      // A nested book: the file sits below outDir, but the reveal target is still outDir.
+      { path: `${root}/out/sub/b.html`, outDir: `${root}/out`, content: '<p>b</p>' },
+    ],
+  });
+  view.webview.receive({ type: 'build', format: 'html' });
+  await tick();
+  assert.deepEqual(state.openedExternal, [`${root}/out`]);
+});
+
+test('the reveal-output toggle turns the reveal off; the toast still fires', async () => {
+  const root = 'file:///ws';
+  const { view } = await setup(
+    [entry(root, 'a')],
+    { ok: true, artifacts: [{ path: `${root}/out/a.html`, outDir: `${root}/out`, content: '<p>a</p>' }] },
+  );
+  view.webview.receive({ type: 'revealOutput', on: false });
+  view.webview.receive({ type: 'build', format: 'html' });
+  await tick();
+  assert.ok(state.infoMessages.some((m) => m.includes('built 1')), 'the success toast still fires');
+  assert.equal(state.openedExternal.length, 0);
+});
+
+test('state pushes mirror the reveal-output toggle (default on)', async () => {
+  const { view } = await setup([entry('file:///ws', 'a')]);
+  assert.equal(lastState(view).revealOutput, true);
+  view.webview.receive({ type: 'revealOutput', on: false });
+  view.webview.receive({ type: 'selectAll' }); // any state-pushing action
+  await tick();
+  assert.equal(lastState(view).revealOutput, false);
+});
+
 // --- detail -----------------------------------------------------------------
 
 test('openDetail posts chapters (missing flagged) and the five metadata rows', async () => {
@@ -433,6 +470,7 @@ test('an epub build zips member files client-side and writes one .epub per book'
   const epubs = [
     {
       path: `${root}/dist/a.epub`,
+      outDir: `${root}/dist`,
       members: [
         { name: 'META-INF/container.xml', content: '<container/>' },
         { name: 'OEBPS/package.opf', content: '<package/>' },
