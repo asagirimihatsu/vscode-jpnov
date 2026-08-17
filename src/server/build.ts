@@ -187,9 +187,10 @@ function toBuildMessage(cause: unknown): LocalizableMessage {
   return { code: 'build.failed', args: [cause instanceof Error ? cause.message : String(cause)] };
 }
 
-/** One `buildRoot` product: an artifact to return, or an error attributed to one book. */
+/** One `buildRoot` product: an artifact to return + the root's output dir it lands under
+ *  (rolled up into `BuildResult.outDirs`), or an error attributed to one book. */
 type BuildOutput =
-  | { readonly kind: 'artifact'; readonly artifact: BuildArtifact }
+  | { readonly kind: 'artifact'; readonly outDir: string; readonly artifact: BuildArtifact }
   | { readonly kind: 'error'; readonly error: BuildError };
 
 /**
@@ -208,7 +209,6 @@ function emitArtifact(
       return {
         kind: 'txt',
         path: childUri(target.outDirUri, `${outRel}.txt`),
-        outDir: target.outDirUri,
         content: concatBookText(input, selection.settings.autoTcy, selection.settings.charsPerLine),
       };
     case 'html':
@@ -218,7 +218,6 @@ function emitArtifact(
       return {
         kind: 'html',
         path: childUri(target.outDirUri, `${outRel}.html`),
-        outDir: target.outDirUri,
         content: renderBook({
           books: [input],
           charsPerLine: selection.settings.charsPerLine,
@@ -237,7 +236,6 @@ function emitArtifact(
       return {
         kind: 'epub',
         path: childUri(target.outDirUri, `${outRel}.epub`),
-        outDir: target.outDirUri,
         members: epubMembers({
           book: input,
           meta,
@@ -306,7 +304,7 @@ async function* buildRoot(
       // The divider is book identity like the page furniture, but BODY content — it rides the
       // BookInput into the assembly seams instead of composeBookChrome.
       const input = { ...(await readBookFiles(target.rootUri, parsed.lines)), divider: parsed.meta.divider };
-      yield { kind: 'artifact', artifact: emitArtifact(target, selection, outRel, input, parsed.meta) };
+      yield { kind: 'artifact', outDir: target.outDirUri, artifact: emitArtifact(target, selection, outRel, input, parsed.meta) };
     } catch (cause) {
       yield { kind: 'error', error: { book: fl.fileRel, ...toBuildMessage(cause) } };
     }
@@ -352,6 +350,7 @@ export async function handleBuild(
 ): Promise<BuildResult> {
   const roots = targetRoots(params.projectDirs, params.root);
   const artifacts: BuildArtifact[] = [];
+  const outDirs = new Set<string>();
   const errors: BuildError[] = [];
 
   // `books` ABSENT => build every discovered book; PRESENT (even empty `[]`, which is truthy)
@@ -375,6 +374,7 @@ export async function handleBuild(
       for await (const output of buildRoot(ctx, target, selection)) {
         if (output.kind === 'artifact') {
           artifacts.push(output.artifact);
+          outDirs.add(output.outDir);
         } else {
           errors.push(output.error);
         }
@@ -387,7 +387,8 @@ export async function handleBuild(
 
   progress?.done();
 
-  return { ok: errors.length === 0, artifacts, errors };
+  // Spread: a Set doesn't survive JSON-RPC serialization; the wire carries a plain array.
+  return { ok: errors.length === 0, outDirs: [...outDirs], artifacts, errors };
 }
 
 /**
