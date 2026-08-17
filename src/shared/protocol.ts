@@ -235,16 +235,24 @@ export interface BuildParams {
   readonly projectDirs: ProjectDirsMap;
 }
 
-export interface BuildArtifact {
+/** The output-location fields every {@link BuildArtifact} member carries. */
+interface BuildArtifactBase {
   /** Workspace-relative-or-absolute output path string; the CLIENT writes it. */
   readonly path: string;
   /** The root's resolved output dir `path` lives under (a nested book's file sits deeper);
    *  the client's post-build reveal target. */
   readonly outDir: string;
-  /**
-   * Rendered output TEXT — a `.txt` or `.html` payload per `path`. The client encodes it on the
-   * way to disk: `.html` is UTF-8, `.txt` follows `jpnov.layout.txt.encoding`.
-   */
+}
+
+export interface TxtArtifact extends BuildArtifactBase {
+  readonly kind: 'txt';
+  /** Rendered output text; the client encodes it per `jpnov.layout.txt.encoding` on the way to disk. */
+  readonly content: string;
+}
+
+export interface HtmlArtifact extends BuildArtifactBase {
+  readonly kind: 'html';
+  /** Rendered output text; the client writes it UTF-8. */
   readonly content: string;
 }
 
@@ -255,17 +263,20 @@ export interface EpubMember {
 }
 
 /**
- * One book's EPUB as its member FILES — the wire stays text-only (see {@link BuildArtifact}),
- * so the server ships the container's parts and the CLIENT zips them and writes `path`.
- * The constant `mimetype` member is added at zip time, never carried here.
+ * One book's EPUB as its member FILES — the server ships the container's parts and the
+ * CLIENT zips them and writes `path`. The constant `mimetype` member is added at zip
+ * time, never carried here.
  */
-export interface EpubArtifact {
-  /** Workspace-relative-or-absolute output path string; the CLIENT writes it. */
-  readonly path: string;
-  /** The root's resolved output dir `path` lives under; the client's post-build reveal target. */
-  readonly outDir: string;
+export interface EpubArtifact extends BuildArtifactBase {
+  readonly kind: 'epub';
   readonly members: readonly EpubMember[];
 }
+
+/**
+ * One build output, discriminated by `kind` (the request's {@link BuildFormat}). The wire
+ * stays text-only, which is why an EPUB travels as member files rather than the zipped bytes.
+ */
+export type BuildArtifact = TxtArtifact | HtmlArtifact | EpubArtifact;
 
 export interface BuildError extends LocalizableMessage {
   /** Book identity (e.g. the book dir relative to the workspace folder root). */
@@ -275,8 +286,6 @@ export interface BuildError extends LocalizableMessage {
 export interface BuildResult {
   readonly ok: boolean;
   readonly artifacts?: readonly BuildArtifact[];
-  /** Populated by `format: 'epub'` builds only. */
-  readonly epubs?: readonly EpubArtifact[];
   readonly errors?: readonly BuildError[];
 }
 

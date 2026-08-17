@@ -367,29 +367,21 @@ export function completeEntryLine(
   const seg = linePrefix.slice(segStart).toLowerCase();
   const replace = { startChar: segStart, endChar: linePrefix.length };
 
-  const out: JpbookCompletion[] = [];
-  for (const entry of entries) {
-    if (out.length >= cap) {
-      break;
-    }
-    const lower = entry.name.toLowerCase();
-    if (entry.name.startsWith('.') || lower.endsWith('.jpbook')) {
-      continue;
-    }
-    if (!entry.isDir && !lower.endsWith('.jpnov')) {
-      continue;
-    }
-    if (!lower.startsWith(seg)) {
-      continue;
-    }
-    out.push({
+  return entries
+    .filter((entry) => {
+      const lower = entry.name.toLowerCase();
+      return !entry.name.startsWith('.') &&
+        !lower.endsWith('.jpbook') &&
+        (entry.isDir || lower.endsWith('.jpnov')) &&
+        lower.startsWith(seg);
+    })
+    .slice(0, cap)
+    .map((entry) => ({
       label: entry.name,
       insertText: entry.isDir ? `${entry.name}/` : entry.name,
       kind: entry.isDir ? 'folder' : 'file',
       replace,
-    });
-  }
-  return out;
+    }));
 }
 
 /**

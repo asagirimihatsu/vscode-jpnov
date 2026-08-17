@@ -81,30 +81,32 @@ export function epubMembers(opts: {
 }): EpubMember[] {
   const title = opts.meta.title ?? chapterStem(opts.outRel);
   const used = new Set<string>();
-  const docs: SpineDoc[] = [];
-  const navChapters: NavChapter[] = [];
-
-  opts.book.files.forEach((file, index) => {
+  // One entry per non-empty chapter: its spine docs plus its one nav row (an empty chapter
+  // source contributes neither). reflowSegments feeds the shared `used` class sink, so
+  // chapters must be processed in file order.
+  const chapters = opts.book.files.flatMap((file, index) => {
     const rows = buildRows(tokenize(applyAutoTcy(file.src, opts.autoTcy)), { dash: opts.dash });
     const segments = reflowSegments(rows, used, opts.dash);
     if (segments.length === 0) {
-      return; // an empty chapter source contributes no spine file and no nav row
+      return [];
     }
     const stem = `ch${String(index + 1).padStart(3, '0')}`;
     const label = segments.find((s) => s.heading !== null)?.heading ?? chapterStem(file.name);
-    segments.forEach((seg, si) => {
+    const chapterDocs = segments.map((seg, si): SpineDoc => {
       const id = si === 0 ? stem : `${stem}-${String(si + 1)}`;
-      docs.push({ id, href: `text/${id}.xhtml`, title: seg.heading ?? label, body: seg.body });
-      if (si === 0) {
-        navChapters.push({ href: `text/${id}.xhtml`, label });
-      }
+      return { id, href: `text/${id}.xhtml`, title: seg.heading ?? label, body: seg.body };
     });
+    return [{ docs: chapterDocs, nav: { href: `text/${stem}.xhtml`, label } }];
   });
-  if (docs.length === 0) {
-    // A book whose chapters are all empty still needs a non-empty spine to be an EPUB at all.
-    docs.push({ id: 'ch001', href: 'text/ch001.xhtml', title, body: '<p><br/></p>' });
-    navChapters.push({ href: 'text/ch001.xhtml', label: title });
-  }
+  // A book whose chapters are all empty still needs a non-empty spine to be an EPUB at all.
+  const effective = chapters.length > 0
+    ? chapters
+    : [{
+        docs: [{ id: 'ch001', href: 'text/ch001.xhtml', title, body: '<p><br/></p>' }],
+        nav: { href: 'text/ch001.xhtml', label: title },
+      }];
+  const docs = effective.flatMap((c) => c.docs);
+  const navChapters = effective.map((c): NavChapter => c.nav);
 
   const creator = opts.meta.author === undefined
     ? ''

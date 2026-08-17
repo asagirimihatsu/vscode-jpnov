@@ -4,7 +4,8 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "target": "ES2025",
-    "lib": ["ES2025"],
+    // ESNext.Array: Array.fromAsync — implemented since Node 22 but not yet in the ES2025 lib.
+    "lib": ["ES2025", "ESNext.Array"],
 
     "noEmit": true,
     "allowImportingTsExtensions": true,

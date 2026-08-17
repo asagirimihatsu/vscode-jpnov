@@ -34,7 +34,7 @@ import { fileURLToPath } from 'node:url';
 import type { WorkDoneProgressReporter } from 'vscode-languageserver/node';
 
 import { composeBookChrome, jpbookOutRel, parseJpbook } from '#/shared/book/jpbook.ts';
-import type { ParsedLine } from '#/shared/book/jpbook.ts';
+import type { JpbookMeta, ParsedLine } from '#/shared/book/jpbook.ts';
 import { concatBookText, renderBook } from '#/shared/compiler/document.ts';
 import type { BookInput } from '#/shared/compiler/document.ts';
 import { epubMembers } from '#/shared/epub.ts';
@@ -49,7 +49,6 @@ import type {
   BuildFormat,
   BuildParams,
   BuildResult,
-  EpubArtifact,
   HtmlSettings,
   ListBooksParams,
   ListBooksResult,
@@ -113,38 +112,36 @@ async function discoverJpbooks(rootUri: string, outDirUri: string): Promise<Disc
   if (!isFileScheme(rootUri)) {
     return [];
   }
-  const outDirPath = fileURLToPath(outDirUri);
-  const found: DiscoveredJpbook[] = [];
-
-  async function walk(dirUri: string, dirPath: string, dirRel: string): Promise<void> {
-    let dirents;
-    try {
-      dirents = await readdir(dirPath, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const dirent of dirents) {
-      if (dirent.isFile() && dirent.name.toLowerCase().endsWith('.jpbook')) {
-        found.push({
-          fileRel: joinRel(dirRel, dirent.name),
-          uri: childUri(dirUri, dirent.name),
-        });
-      } else if (dirent.isDirectory()) {
-        if (dirent.name.startsWith('.') || dirent.name === 'node_modules') {
-          continue;
-        }
-        const childPath = join(dirPath, dirent.name);
-        if (childPath === outDirPath) {
-          continue;
-        }
-        await walk(childUri(dirUri, dirent.name), childPath, joinRel(dirRel, dirent.name));
-      }
-    }
-  }
-
-  await walk(rootUri, fileURLToPath(rootUri), '');
+  const found = await Array.fromAsync(walkJpbooks(rootUri, fileURLToPath(rootUri), '', fileURLToPath(outDirUri)));
   found.sort((a, b) => (a.fileRel < b.fileRel ? -1 : a.fileRel > b.fileRel ? 1 : 0));
   return found;
+}
+
+/** The recursive walk behind {@link discoverJpbooks}; yields matches depth-first in `readdir` order. */
+async function* walkJpbooks(dirUri: string, dirPath: string, dirRel: string, outDirPath: string): AsyncGenerator<DiscoveredJpbook> {
+  let dirents;
+  try {
+    dirents = await readdir(dirPath, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const dirent of dirents) {
+    if (dirent.isFile() && dirent.name.toLowerCase().endsWith('.jpbook')) {
+      yield {
+        fileRel: joinRel(dirRel, dirent.name),
+        uri: childUri(dirUri, dirent.name),
+      };
+    } else if (dirent.isDirectory()) {
+      if (dirent.name.startsWith('.') || dirent.name === 'node_modules') {
+        continue;
+      }
+      const childPath = join(dirPath, dirent.name);
+      if (childPath === outDirPath) {
+        continue;
+      }
+      yield* walkJpbooks(childUri(dirUri, dirent.name), childPath, joinRel(dirRel, dirent.name), outDirPath);
+    }
+  }
 }
 
 /**
@@ -190,91 +187,39 @@ function toBuildMessage(cause: unknown): LocalizableMessage {
   return { code: 'build.failed', args: [cause instanceof Error ? cause.message : String(cause)] };
 }
 
+/** One `buildRoot` product: an artifact to return, or an error attributed to one book. */
+type BuildOutput =
+  | { readonly kind: 'artifact'; readonly artifact: BuildArtifact }
+  | { readonly kind: 'error'; readonly error: BuildError };
+
 /**
- * Builds the book files under one targeted root, accumulating artifacts + per-book errors.
- * `selection.books` (when set) restricts WHICH books are built, but the output-path
- * collision map is still computed over ALL of them — a selected book that collides with an
- * UNSELECTED one still errors, so a later full build can never silently clobber it.
+ * The requested artifact for one successfully read book. renderBook (the paginator) is the
+ * expensive step, so a `txt` build never runs it.
  */
-async function buildRoot(
-  ctx: ServerContext,
+function emitArtifact(
   target: ProjectRoot,
   selection: BuildSelection,
-  artifacts: BuildArtifact[],
-  epubs: EpubArtifact[],
-  errors: BuildError[],
-): Promise<void> {
-  const jpbooks = await discoverJpbooks(target.rootUri, target.outDirUri);
-
-  // Derive each book's output path ONCE, then group by it to detect collisions across the
-  // whole root up front.
-  const derived = jpbooks.map((fl) => ({ fl, outRel: jpbookOutRel(fl.fileRel) }));
-  const byOutRel = new Map<string, DiscoveredJpbook[]>();
-  for (const { fl, outRel } of derived) {
-    const group = byOutRel.get(outRel);
-    if (group) {
-      group.push(fl);
-    } else {
-      byOutRel.set(outRel, [fl]);
-    }
-  }
-
-  for (const { fl, outRel } of derived) {
-    // Subset build: skip books outside the requested set entirely (no read, no diagnostics).
-    if (selection.books && !selection.books.has(fl.uri)) {
-      continue;
-    }
-    const bytes = await readFile(fileURLToPath(fl.uri)).catch(() => null as Buffer | null);
-    if (bytes === null) {
-      // Disappeared mid-build; skip silently rather than error on a non-existent file.
-      continue;
-    }
-    const parsed = parseJpbook(UTF8.decode(bytes));
-
-    // Per-line diagnostics (same path the live editor uses); published on the .jpbook URI.
-    const lineDiags = await diagnoseJpbook(target.rootUri, parsed);
-    const colliding = (byOutRel.get(outRel) ?? []).filter((other) => other !== fl);
-
-    if (colliding.length > 0) {
-      const list = [fl.fileRel, ...colliding.map((c) => c.fileRel)].sort().join(', ');
-      const error = { code: 'build.outPathCollision' as const, args: [outRel, list] };
-      // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
-      void ctx.connection.sendDiagnostics({
-        uri: fl.uri,
-        diagnostics: [...lineDiags, fileLevelError(error)],
-      });
-      errors.push({ book: fl.fileRel, ...error });
-      continue;
-    }
-
-    let input: BookInput;
-    try {
-      // The divider is book identity like the page furniture, but BODY content — it rides the
-      // BookInput into the assembly seams instead of composeBookChrome.
-      input = { ...(await readBookFiles(target.rootUri, parsed.lines)), divider: parsed.meta.divider };
-    } catch (cause) {
-      void ctx.connection.sendDiagnostics({ uri: fl.uri, diagnostics: lineDiags });
-      errors.push({ book: fl.fileRel, ...toBuildMessage(cause) });
-      continue;
-    }
-
-    void ctx.connection.sendDiagnostics({ uri: fl.uri, diagnostics: lineDiags });
-
-    // Emit exactly the requested kind. renderBook (the paginator) is the expensive step, so
-    // a `.txt` build never runs it.
-    switch (selection.format) {
-      case 'txt':
-        artifacts.push({
-          path: childUri(target.outDirUri, `${outRel}.txt`),
-          outDir: target.outDirUri,
-          content: concatBookText(input, selection.settings.autoTcy, selection.settings.charsPerLine),
-        });
-        break;
-      case 'html': {
-        // Grid geometry, 禁則, and 自動縦中横 come from the request's settings snapshot; the
-        // page furniture is composed per book from its own front matter (this is what lets
-        // one batch build carry a different header per volume).
-        const html = renderBook({
+  outRel: string,
+  input: BookInput,
+  meta: JpbookMeta,
+): BuildArtifact {
+  switch (selection.format) {
+    case 'txt':
+      return {
+        kind: 'txt',
+        path: childUri(target.outDirUri, `${outRel}.txt`),
+        outDir: target.outDirUri,
+        content: concatBookText(input, selection.settings.autoTcy, selection.settings.charsPerLine),
+      };
+    case 'html':
+      // Grid geometry, 禁則, and 自動縦中横 come from the request's settings snapshot; the
+      // page furniture is composed per book from its own front matter (this is what lets
+      // one batch build carry a different header per volume).
+      return {
+        kind: 'html',
+        path: childUri(target.outDirUri, `${outRel}.html`),
+        outDir: target.outDirUri,
+        content: renderBook({
           books: [input],
           charsPerLine: selection.settings.charsPerLine,
           linesPerPage: selection.settings.linesPerPage,
@@ -285,31 +230,85 @@ async function buildRoot(
           paperSize: selection.settings.paperSize,
           paperOrientation: selection.settings.paperOrientation,
           fontFamily: selection.settings.fontFamily,
-          chrome: composeBookChrome(selection.settings, parsed.meta),
+          chrome: composeBookChrome(selection.settings, meta),
+        }),
+      };
+    case 'epub':
+      return {
+        kind: 'epub',
+        path: childUri(target.outDirUri, `${outRel}.epub`),
+        outDir: target.outDirUri,
+        members: epubMembers({
+          book: input,
+          meta,
+          outRel,
+          kinsoku: selection.settings.kinsoku,
+          autoTcy: selection.settings.autoTcy,
+          dash: selection.settings.dash,
+          // dcterms:modified wants CCYY-MM-DDThh:mm:ssZ — second precision, no milliseconds.
+          modified: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+        }),
+      };
+    default: {
+      const exhaustive: never = selection.format;
+      throw new Error(`emitArtifact: unhandled format ${JSON.stringify(exhaustive)}`);
+    }
+  }
+}
+
+/**
+ * Builds the book files under one targeted root, yielding artifacts + per-book errors in
+ * book order. `selection.books` (when set) restricts WHICH books are built, but the
+ * output-path collision map is still computed over ALL of them — a selected book that
+ * collides with an UNSELECTED one still errors, so a later full build can never silently
+ * clobber it. A throw while compiling one book is that book's own failure: it becomes the
+ * book's error and the remaining books still build.
+ */
+async function* buildRoot(
+  ctx: ServerContext,
+  target: ProjectRoot,
+  selection: BuildSelection,
+): AsyncGenerator<BuildOutput> {
+  const jpbooks = await discoverJpbooks(target.rootUri, target.outDirUri);
+  // Group by derived output path to detect collisions across the whole root up front.
+  const byOutRel = Map.groupBy(jpbooks, (fl) => jpbookOutRel(fl.fileRel));
+
+  for (const fl of jpbooks) {
+    // Subset build: skip books outside the requested set entirely (no read, no diagnostics).
+    if (selection.books && !selection.books.has(fl.uri)) {
+      continue;
+    }
+    const bytes = await readFile(fileURLToPath(fl.uri)).catch(() => null as Buffer | null);
+    if (bytes === null) {
+      // Disappeared mid-build; skip silently rather than error on a non-existent file.
+      continue;
+    }
+    try {
+      const parsed = parseJpbook(UTF8.decode(bytes));
+      // Per-line diagnostics (same path the live editor uses); published on the .jpbook URI.
+      const lineDiags = await diagnoseJpbook(target.rootUri, parsed);
+      const outRel = jpbookOutRel(fl.fileRel);
+      const colliding = (byOutRel.get(outRel) ?? []).filter((other) => other !== fl);
+
+      if (colliding.length > 0) {
+        const list = [fl.fileRel, ...colliding.map((c) => c.fileRel)].sort().join(', ');
+        const collision = { code: 'build.outPathCollision' as const, args: [outRel, list] };
+        // LSP send: rejects only on a dead connection (nothing to recover) -> drop the promise.
+        void ctx.connection.sendDiagnostics({
+          uri: fl.uri,
+          diagnostics: [...lineDiags, fileLevelError(collision)],
         });
-        artifacts.push({ path: childUri(target.outDirUri, `${outRel}.html`), outDir: target.outDirUri, content: html });
-        break;
+        yield { kind: 'error', error: { book: fl.fileRel, ...collision } };
+        continue;
       }
-      case 'epub':
-        epubs.push({
-          path: childUri(target.outDirUri, `${outRel}.epub`),
-          outDir: target.outDirUri,
-          members: epubMembers({
-            book: input,
-            meta: parsed.meta,
-            outRel,
-            kinsoku: selection.settings.kinsoku,
-            autoTcy: selection.settings.autoTcy,
-            dash: selection.settings.dash,
-            // dcterms:modified wants CCYY-MM-DDThh:mm:ssZ — second precision, no milliseconds.
-            modified: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
-          }),
-        });
-        break;
-      default: {
-        const exhaustive: never = selection.format;
-        throw new Error(`buildRoot: unhandled format ${JSON.stringify(exhaustive)}`);
-      }
+
+      void ctx.connection.sendDiagnostics({ uri: fl.uri, diagnostics: lineDiags });
+      // The divider is book identity like the page furniture, but BODY content — it rides the
+      // BookInput into the assembly seams instead of composeBookChrome.
+      const input = { ...(await readBookFiles(target.rootUri, parsed.lines)), divider: parsed.meta.divider };
+      yield { kind: 'artifact', artifact: emitArtifact(target, selection, outRel, input, parsed.meta) };
+    } catch (cause) {
+      yield { kind: 'error', error: { book: fl.fileRel, ...toBuildMessage(cause) } };
     }
   }
 }
@@ -332,18 +331,12 @@ function resolveProjectDir(rootUri: string, value: string, fallback: string): st
  */
 function targetRoots(projectDirs: ProjectDirsMap, root?: string): ProjectRoot[] {
   const wanted = root === undefined ? undefined : normalizeRootUri(root);
-  const targets: ProjectRoot[] = [];
-  for (const [rawUri, dirs] of Object.entries(projectDirs)) {
+  return Object.entries(projectDirs).flatMap(([rawUri, dirs]) => {
     const rootUri = normalizeRootUri(rawUri);
-    if (wanted !== undefined && rootUri !== wanted) {
-      continue;
-    }
-    targets.push({
-      rootUri,
-      outDirUri: resolveProjectDir(rootUri, dirs.outDir, PROJECT_DEFAULT.outDir),
-    });
-  }
-  return targets;
+    return wanted === undefined || rootUri === wanted
+      ? [{ rootUri, outDirUri: resolveProjectDir(rootUri, dirs.outDir, PROJECT_DEFAULT.outDir) }]
+      : [];
+  });
 }
 
 /**
@@ -359,7 +352,6 @@ export async function handleBuild(
 ): Promise<BuildResult> {
   const roots = targetRoots(params.projectDirs, params.root);
   const artifacts: BuildArtifact[] = [];
-  const epubs: EpubArtifact[] = [];
   const errors: BuildError[] = [];
 
   // `books` ABSENT => build every discovered book; PRESENT (even empty `[]`, which is truthy)
@@ -376,24 +368,26 @@ export async function handleBuild(
   // its own localized progress notification, so begin with no English label.
   progress?.begin('', 0, undefined, false);
 
-  let done = 0;
-  for (const target of roots) {
+  for (const [index, target] of roots.entries()) {
     try {
-      await buildRoot(ctx, target, selection, artifacts, epubs, errors);
+      // for-await (not Array.fromAsync) so outputs yielded before a mid-root throw are kept;
+      // the throw itself (book discovery, iteration) becomes a root-level error.
+      for await (const output of buildRoot(ctx, target, selection)) {
+        if (output.kind === 'artifact') {
+          artifacts.push(output.artifact);
+        } else {
+          errors.push(output.error);
+        }
+      }
     } catch (cause) {
       errors.push({ book: target.rootUri, ...toBuildMessage(cause) });
     }
-    done += 1;
-    if (roots.length > 0) {
-      progress?.report(Math.round((done / roots.length) * 100));
-    }
+    progress?.report(Math.round(((index + 1) / roots.length) * 100));
   }
 
   progress?.done();
 
-  const base: BuildResult = { ok: errors.length === 0, artifacts, errors };
-  // `epubs` exists only on an epub build; text-format results carry no such key.
-  return params.format === 'epub' ? { ...base, epubs } : base;
+  return { ok: errors.length === 0, artifacts, errors };
 }
 
 /**
@@ -403,19 +397,19 @@ export async function handleBuild(
  * no diagnostics and no output-path collision check (those belong to an actual build).
  */
 export async function handleListBooks(params: ListBooksParams): Promise<ListBooksResult> {
-  const books: BookEntry[] = [];
-  for (const target of targetRoots(params.projectDirs, params.root)) {
-    for (const fl of await discoverJpbooks(target.rootUri, target.outDirUri)) {
+  const perRoot = await Promise.all(targetRoots(params.projectDirs, params.root).map(async (target) => {
+    const jpbooks = await discoverJpbooks(target.rootUri, target.outDirUri);
+    return Promise.all(jpbooks.map(async (fl): Promise<BookEntry> => {
       const bytes = await readFile(fileURLToPath(fl.uri)).catch(() => null as Buffer | null);
       const title = bytes === null ? undefined : parseJpbook(UTF8.decode(bytes)).meta.title;
-      books.push({
+      return {
         uri: fl.uri,
         rootUri: target.rootUri,
         fileRel: fl.fileRel,
         outRel: jpbookOutRel(fl.fileRel),
         ...(title !== undefined && title !== '' ? { title } : {}),
-      });
-    }
-  }
-  return { books };
+      };
+    }));
+  }));
+  return { books: perRoot.flat() };
 }

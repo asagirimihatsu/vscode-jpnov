@@ -159,7 +159,7 @@ test('jpnov/listBooks + jpnov/build round-trip a real workspace over the wire', 
   assert.equal(result.artifacts.length, 1);
 
   const htmlArtifact = result.artifacts[0];
-  assert.ok(htmlArtifact);
+  assert.ok(htmlArtifact?.kind === 'html');
   assert.equal(htmlArtifact.path, `${wsUri}/dist/hon.html`);
   assert.ok(htmlArtifact.content.includes('class="page"'), 'built HTML must paginate');
   assert.ok(htmlArtifact.content.includes('class="line"'), 'built HTML must emit line columns');
@@ -171,7 +171,7 @@ test('jpnov/listBooks + jpnov/build round-trip a real workspace over the wire', 
     projectDirs,
   });
   const txtArtifact = txtResult.artifacts?.[0];
-  assert.ok(txtArtifact);
+  assert.ok(txtArtifact?.kind === 'txt');
   assert.equal(txtArtifact.path, `${wsUri}/dist/hon.txt`);
   assert.ok(txtArtifact.content.includes('夜霧'), 'the .txt artifact carries the raw Aozora source');
 
@@ -380,7 +380,7 @@ test('the built page follows every 行送り tier (column width and fitted font 
     });
     assert.equal(result.ok, true, `@${String(linePitch)}: build must succeed`);
     const artifact = result.artifacts?.[0];
-    assert.ok(artifact, `@${String(linePitch)}: build must emit the HTML artifact`);
+    assert.ok(artifact?.kind === 'html', `@${String(linePitch)}: build must emit the HTML artifact`);
 
     const fit = fitPaper({
       charsPerLine: HTML_SETTINGS.charsPerLine,

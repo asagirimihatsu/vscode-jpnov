@@ -246,9 +246,9 @@ test('a successful build opens the configured output dir, once — never a neste
   const { view } = await setup([entry(root, 'a'), entry(root, 'sub/b')], {
     ok: true,
     artifacts: [
-      { path: `${root}/out/a.html`, outDir: `${root}/out`, content: '<p>a</p>' },
+      { kind: 'html', path: `${root}/out/a.html`, outDir: `${root}/out`, content: '<p>a</p>' },
       // A nested book: the file sits below outDir, but the reveal target is still outDir.
-      { path: `${root}/out/sub/b.html`, outDir: `${root}/out`, content: '<p>b</p>' },
+      { kind: 'html', path: `${root}/out/sub/b.html`, outDir: `${root}/out`, content: '<p>b</p>' },
     ],
   });
   view.webview.receive({ type: 'build', format: 'html' });
@@ -260,7 +260,7 @@ test('the reveal-output toggle turns the reveal off; the toast still fires', asy
   const root = 'file:///ws';
   const { view } = await setup(
     [entry(root, 'a')],
-    { ok: true, artifacts: [{ path: `${root}/out/a.html`, outDir: `${root}/out`, content: '<p>a</p>' }] },
+    { ok: true, artifacts: [{ kind: 'html', path: `${root}/out/a.html`, outDir: `${root}/out`, content: '<p>a</p>' }] },
   );
   view.webview.receive({ type: 'revealOutput', on: false });
   view.webview.receive({ type: 'build', format: 'html' });
@@ -467,8 +467,9 @@ test('dispose is idempotent and does not throw', async () => {
 
 test('an epub build zips member files client-side and writes one .epub per book', async () => {
   const root = 'file:///ws';
-  const epubs = [
+  const artifacts = [
     {
+      kind: 'epub',
       path: `${root}/dist/a.epub`,
       outDir: `${root}/dist`,
       members: [
@@ -477,7 +478,7 @@ test('an epub build zips member files client-side and writes one .epub per book'
       ],
     },
   ];
-  const { view, client } = await setup([entry(root, 'a')], { ok: true, epubs });
+  const { view, client } = await setup([entry(root, 'a')], { ok: true, artifacts });
   view.webview.receive({ type: 'build', format: 'epub' });
   await tick();
   await tick();
