@@ -310,8 +310,8 @@ export function composeDividerValue(mark: string, indent: number | null): string
 
 /**
  * Derives the output RELATIVE PATH (stem, no extension) for a `.jpbook`, mirroring the
- * tree under the workspace folder root (POSIX `/`; backslashes tolerated as separators). The build appends
- * `.txt` and `.html` to it. Strips `.jpbook`; a basename of `index` collapses to its parent
+ * tree under the workspace folder root (POSIX `/`; backslashes tolerated as separators). The build
+ * appends the format extension to it. Strips `.jpbook`; a basename of `index` collapses to its parent
  * directory when one exists (so `vol1/index.jpbook` and `vol1.jpbook` agree on `vol1`);
  * remaining segments join with `/`. A root-level `index.jpbook` has no parent, so it keeps
  * `index`.

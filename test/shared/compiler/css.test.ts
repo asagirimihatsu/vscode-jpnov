@@ -163,9 +163,9 @@ test('non-paginated (preview) stylesheet makes .pagebreak a labelled rule, no @p
   assert.match(css, /\.pb-label\{[^}]*writing-mode:vertical-rl/);
 });
 
-test('non-paginated (preview) stylesheet no longer caps width in CSS (JS hard-wraps)', () => {
-  // Line wrapping moved into the layout engine; the preview CSS must NOT emit an inline-size
-  // cap, which would only double-constrain the already-wrapped .line columns.
+test('non-paginated (preview) stylesheet emits no width cap (JS hard-wraps)', () => {
+  // Line wrapping lives in the layout engine, so the preview CSS must NOT emit an inline-size
+  // cap — it would double-constrain the already-wrapped .line columns.
   const css = preview({ charsPerLine: 24 });
   assert.doesNotMatch(css, /inline-size/);
 });
@@ -299,7 +299,7 @@ test('見出し .midashi rule is on-demand and identical in both media', () => {
 
 test('ruby rr/lr/br rule sets are on-demand, self-contained and media-identical', () => {
   for (const make of [preview, build]) {
-    // rr: the right-only lane every plain ruby now uses (native ruby layout is retired).
+    // rr: the right-only lane every plain ruby uses.
     const rr = make({ usedClasses: ['rr'] });
     assert.match(
       rr,
@@ -411,7 +411,7 @@ test('preview edge: frame + full-page background rules on the shared pitch', () 
   // The frame is full-band-high and starts at top:0 (containing block = the segment band).
   assert.match(red, /\.segment::before\{[^}]*top:0;[^}]*height:calc\(100vh - 32px\)/);
   assert.match(red, /\.segment\{position:relative;padding-inline:0\.35rem;\}/);
-  assert.doesNotMatch(red, /\.book/); // the one-frame-around-everything recipe is gone
+  assert.doesNotMatch(red, /\.book/); // the frame is per-segment, never one around .book
   // The pitch is the SAME --pitch value with rules on or off (uniform-layout contract):
   // the .line sizing and the 罫線 period read the one variable.
   assert.match(red, /html\{[^}]*line-height:var\(--pitch\)/);
@@ -486,7 +486,6 @@ test('build all-on chrome: bands, outset frame, counters, rules, furniture style
   assert.match(css, /\.page::before\{[^}]*-webkit-print-color-adjust:exact;print-color-adjust:exact/);
   assert.doesNotMatch(css, /::after/);
   assert.doesNotMatch(css, /\.line[^{]*\{[^}]*box-shadow/);
-  // Once-merged declarations now arrive as stacking rules (anchor + ln fragments).
   assert.match(css, /\.line\{counter-increment:ln;\}/);
   assert.match(css, /\.line\{position:relative;\}/);
   assert.match(css, /\.line::before\{content:counter\(ln\)/);

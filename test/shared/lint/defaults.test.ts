@@ -1,5 +1,5 @@
 /**
- * Locks the shipped lint experience: with no user overrides, exactly the four data-hygiene rules
+ * Locks the shipped lint experience: with no user overrides, exactly the data-hygiene rules
  * plus the ダッシュ rule run, and every other rule is off. Reads the real package.json `default`s and
  * drives the real `selectRules`, so a flipped manifest default (or a mis-scoped rule) fails here —
  * the schema-shape lock in config-codegen.test.ts never exercises this defaults-to-selection path.

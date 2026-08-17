@@ -7,7 +7,7 @@
  * pair: a rule added to `catalog.ts` without an entry here (or vice-versa) fails to build. Threshold
  * rules consume the normalized `{ max }` option (sentence-length, max-kanji, and the custom maxTen
  * all read `options.max`); a few boolean rules carry FIXED options here (e.g. the novel-style
- * rule's allowed line-head characters) since they are not user-tunable in Phase 1.
+ * rule's allowed line-head characters) since they are not user-tunable.
  */
 import sentenceLength from 'textlint-rule-sentence-length';
 import maxKanjiContinuousLen from 'textlint-rule-max-kanji-continuous-len';

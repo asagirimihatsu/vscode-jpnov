@@ -1072,19 +1072,16 @@ export function emitUnits(units: readonly Unit[], used?: Set<string>): string {
 }
 
 function emitLine(line: DisplayLine, used?: Set<string>, anchor = true, head = ''): string {
-  const sink = (classes: string | undefined): void => {
-    sinkInto(used, classes);
-  };
   let html = emitUnits(line.units, used);
   if (line.hang !== undefined) {
     // The hung 句読点 lands after the last cell; its channel span cannot join a neighbour's
     // (that span just closed above), so it carries its own.
-    sink(line.hang.cssClass);
+    sinkInto(used, line.hang.cssClass);
     const hk = unitKey(line.hang);
     if (hk === '') {
       html += line.hang.html;
     } else {
-      sink(hk);
+      sinkInto(used, hk);
       html += `<span class="${hk}">${line.hang.html}</span>`;
     }
   }

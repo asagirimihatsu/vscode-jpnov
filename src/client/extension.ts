@@ -39,6 +39,7 @@ import {
   type LintConfigChangedParams,
   type ServerErrorParams,
 } from '#/shared/protocol.ts';
+import { errorText } from '#/shared/errors.ts';
 
 import { createFile, registerBookCommands } from './book/manage.ts';
 import { BooksViewProvider } from './book/view.ts';
@@ -241,7 +242,7 @@ function ensureStarted(): void {
   client.start().then(
     () => void booksView?.refresh(),
     (err: unknown) => {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = errorText(err);
       // Terminal popup inside the rejection branch; showErrorMessage never rejects so void is safe.
       void vscode.window.showErrorMessage(
         vscode.l10n.t("Japanese Novel: couldn't start the language server. {0}", message),
@@ -283,11 +284,14 @@ export function activate(context: vscode.ExtensionContext): void {
   // Activity Bar container) and operate on its checkbox selection; there is no command-palette
   // build entry — a build needs at least one discovered, selected book, so the palette is the
   // wrong home for it.
+  const buildCommands = [
+    ['jpbook.buildHtml', 'html'],
+    ['jpbook.buildTxt', 'txt'],
+    ['jpbook.buildPdf', 'pdf'],
+    ['jpbook.buildEpub', 'epub'],
+  ] as const;
   context.subscriptions.push(
-    serverCommand('jpbook.buildHtml', () => booksView?.buildSelected('html')),
-    serverCommand('jpbook.buildTxt', () => booksView?.buildSelected('txt')),
-    serverCommand('jpbook.buildPdf', () => booksView?.buildSelected('pdf')),
-    serverCommand('jpbook.buildEpub', () => booksView?.buildSelected('epub')),
+    ...buildCommands.map(([id, format]) => serverCommand(id, () => booksView?.buildSelected(format))),
     serverCommand('jpbook.selectAll', () => booksView?.selectAll()),
     serverCommand('jpbook.deselectAll', () => booksView?.deselectAll()),
     serverCommand('jpbook.refresh', () => booksView?.refresh()),

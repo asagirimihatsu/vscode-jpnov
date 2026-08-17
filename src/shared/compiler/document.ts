@@ -17,7 +17,7 @@ export interface BookInput {
 }
 
 /** The first (or last) non-blank line of a chapter source, `\r`-stripped; null when none. */
-function edgeLine(src: string, edge: 'first' | 'last'): string | null {
+function boundaryLine(src: string, edge: 'first' | 'last'): string | null {
   const lines = src.split('\n');
   const ordered = edge === 'first' ? lines : lines.reverse();
   for (const raw of ordered) {
@@ -38,7 +38,7 @@ function edgeLine(src: string, edge: 'first' | 'last'): string | null {
  * inline opener dropped as the end-of-input artifact), the opener token decides.
  */
 function opensWithHeading(src: string): boolean {
-  const line = edgeLine(src, 'first');
+  const line = boundaryLine(src, 'first');
   if (line === null) {
     return false;
   }
@@ -52,7 +52,7 @@ function opensWithHeading(src: string): boolean {
 
 /** True iff `src`'s junction side reaches a ［＃改ページ］ before (first) / after (last) content. */
 function pageBreakAt(src: string, edge: 'first' | 'last'): boolean {
-  const line = edgeLine(src, edge);
+  const line = boundaryLine(src, edge);
   if (line === null) {
     return false;
   }

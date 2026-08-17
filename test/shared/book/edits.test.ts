@@ -164,7 +164,7 @@ test('chapterLines and metaRows project the panel model in fixed order', () => {
   const text = '---\nheader: 柱\n---\na.jpnov\nnote.md\nb.jpnov\n';
   const parsed = parseJpbook(text);
   assert.deepEqual(chapterLines(parsed.lines), [3, 5]);
-  assert.deepEqual(metaRows(text), [
+  assert.deepEqual(metaRows(parsed.meta), [
     { key: 'title', value: undefined },
     { key: 'author', value: undefined },
     { key: 'header', value: '柱' },

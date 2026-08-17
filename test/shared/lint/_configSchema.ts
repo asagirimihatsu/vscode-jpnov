@@ -1,8 +1,8 @@
 /**
  * Derives the expected `contributes.configuration` block + its nls keys from the rule catalog and
  * the render-settings constants. Used by config-codegen.test.ts to hold package.json honest (the
- * deepEqual doubles as the "package.json defaults == resolver constants" lock), and by the one-off
- * generator that produced that block. NOT a test file (no `.test` suffix), so the runner skips it.
+ * deepEqual doubles as the "package.json defaults == resolver constants" lock). NOT a test file
+ * (no `.test` suffix), so the runner skips it.
  *
  * Section order in the Settings UI (the `order` field, locked by the deepEqual):
  * Layout & Output(1) > Lint(2) > Editor(3). Every property carries an explicit in-section `order`.

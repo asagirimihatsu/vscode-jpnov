@@ -186,8 +186,7 @@ test('renderPreview: block 字下げ continuations keep indent-N; only the first
 
 test('renderPreview line numbers: .ln head spans count display lines, restarting at 改ページ', () => {
   // JS-numbered spans (not CSS counters: a sibling counter-reset does not reset following
-  // siblings in Chromium). 三 wraps at cpl 2? No — one char per line here; the wrap case
-  // below covers continuation columns.
+  // siblings in Chromium).
   const on = preview('一\n二\n［＃改ページ］\n三', {
     chrome: { lineNumbers: true, edgeLine: 'none' },
   });

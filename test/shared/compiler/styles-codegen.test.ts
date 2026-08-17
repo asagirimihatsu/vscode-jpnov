@@ -6,9 +6,6 @@
  * it is the `jpnov.layout.linePitch` setting, so every fragment site must read `var(--pitch)` —
  * pinned as exact strings below, with a no-literal tripwire.
  *
- * (There is no committed-vs-generated drift test: `styles.generated.ts` is gitignored and
- * regenerated on demand by `npm run gen`, so there is no stale artifact to guard.)
- *
  * The literal extraction keys on a KNOWN selector + property and never reads numbers embedded
  * in `calc()` expressions, so an intentional lowering to `calc(var())` breaks the assertion —
  * which is exactly when the constant relationship must be re-examined.

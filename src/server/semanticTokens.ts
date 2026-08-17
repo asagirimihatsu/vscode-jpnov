@@ -38,11 +38,9 @@ import type { Recognizer } from './highlight/recognizer.ts';
 
 /**
  * Single source of truth. Each row = one highlight kind and the LSP token type a theme colours it
- * as. Several kinds may share one lsp (e.g. direction reads as plain body text); the legend is the
+ * as. Several kinds may share one lsp (marker and direction both read as comment); the legend is the
  * DISTINCT lsp set and kind→index maps through it, so those kinds collapse onto one colour by design.
- * Add a row to introduce a new highlight — nothing else changes. Most lsp values are standard LSP
- * types a theme already colours. `'plain'` is intentionally not a real
- * type and is left uncontributed, so it renders as the default foreground.
+ * Add a row to introduce a new highlight — nothing else changes.
  *
  * The recognizer's span kinds ('character' / 'keyword') ARE rows here, so its output flows in with no
  * remapping; removing either row would make that assignment fail to type-check.

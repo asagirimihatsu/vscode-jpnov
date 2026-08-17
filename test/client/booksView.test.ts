@@ -287,7 +287,7 @@ test('state pushes mirror the reveal-output toggle (default on)', async () => {
 
 // --- detail -----------------------------------------------------------------
 
-test('openDetail posts chapters (missing flagged) and the five metadata rows', async () => {
+test('openDetail posts chapters (missing flagged) and the metadata rows', async () => {
   const root = 'file:///ws';
   const bookUri = `${root}/src/a.jpbook`;
   state.textDocuments.push(doc(bookUri, 'jpbook', '---\ntitle: A\n---\nch1.jpnov\nsub/ch2.jpnov\n'));

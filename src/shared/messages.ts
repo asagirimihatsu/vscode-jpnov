@@ -12,7 +12,7 @@
 import type { LabelId, LocalizableMessage, MsgCode } from './protocol.ts';
 
 /** English text per label id (`jpbookEntry`, the only label, is prose). */
-const LABEL_EN: Record<LabelId, string> = { jpbookEntry: 'book entry' };
+const LABEL_EN: Record<LabelId, string> = { jpbookEntry: 'a book entry' };
 
 function englishLabel(label: LabelId): string {
   return LABEL_EN[label];
@@ -73,13 +73,13 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
     case 'syntax.danglingBlockEnd':
       return 'block-end annotation without a matching start';
     case 'syntax.postfixTargetMissing':
-      return `annotation target "${a(0)}" not found or not aligned on this line`;
+      return `annotation target "${a(0)}" is not on this line, or is not aligned to a character boundary`;
     case 'syntax.unterminatedTcy':
-      return 'unterminated 縦中横 (missing ［＃縦中横終わり］ before the line end)';
+      return 'unterminated 縦中横 (missing ［＃縦中横終わり］ before the end of the line)';
     case 'syntax.danglingTcyEnd':
       return '［＃縦中横終わり］ without a matching ［＃縦中横］';
     case 'syntax.tcyTooLong':
-      return '縦中横 is too long (3 characters or fewer avoid distortion)';
+      return '縦中横 is too long (keep it to 3 characters or fewer to avoid distortion)';
     // --- prose lint (one code per (scope, rule); see lint/catalog.ts).
     // `common` rules run on both 地の文 + セリフ under one code; JA lives in bundle.l10n.ja.json.
     case 'lint.common.sentenceLength':
@@ -103,15 +103,15 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
     case 'lint.common.noControlChar':
       return 'invalid control character';
     case 'lint.common.shiftJisSafe':
-      return `"${a(0)}" (U+${a(1)}) may be an old-form or variant character; use another`;
+      return `"${a(0)}" (U+${a(1)}) is missing from Shift JIS (often an old-form or variant character); use another`;
     case 'lint.common.jaNoSpaceBetweenFullWidth':
       return 'space between full-width characters';
     case 'lint.common.jaUnnaturalAlphabet':
-      return 'unnatural alphabet usage';
+      return 'unnatural run of half-width letters';
     case 'lint.common.minusPosition':
       return 'a minus sign is allowed only before a number';
     case 'lint.narration.generalNovelStyle':
-      return 'does not follow Japanese novel style (paragraph indent / line head)';
+      return 'does not follow general Japanese novel style';
     case 'lint.narration.jaNoMixedPeriod':
       return 'this sentence does not end with a period (。)';
     case 'lint.ruby.kana':

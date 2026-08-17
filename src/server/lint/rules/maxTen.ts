@@ -1,6 +1,6 @@
 /**
  * Custom textlint rule: cap the number of 読点 (、) per sentence. Ships in-tree because the stock
- * `textlint-rule-max-ten` pulls kuromoji transitively, which Phase 1 forbids.
+ * `textlint-rule-max-ten` pulls kuromoji transitively, which this extension forbids.
  *
  * Kuromoji-free by design: "sentence" is delimited purely by terminators (。！？ and their ASCII
  * twins) within each Str node, so no morphological analysis is needed. Counting resets at every

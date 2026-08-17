@@ -25,6 +25,7 @@ import * as vscode from 'vscode';
 
 import type { LanguageClient } from 'vscode-languageclient/node';
 
+import { errorText } from '#/shared/errors.ts';
 import { escapeHtml } from '#/shared/compiler/escape.ts';
 import {
   RenderFileRequest,
@@ -34,7 +35,7 @@ import {
 
 import type { PreviewInit, RevealMessage } from '../protocol.ts';
 
-import { makeNonce } from '../nonce.ts';
+import { bootScript, cspMeta, makeNonce } from '../nonce.ts';
 import { lastPathSegment } from '../paths.ts';
 import { buildPreviewSettings } from '../renderConfig.ts';
 import { LOADING_CSS, SCROLL_JS } from './webviewBundle.generated.ts';
@@ -127,8 +128,7 @@ export class Preview {
    */
   adopt(panel: vscode.WebviewPanel, state: unknown): void {
     if (this.panel !== undefined) {
-      // A live panel already exists (revival raced the preview command, or the tab is a
-      // zombie persisted by a pre-serializer build): the incoming panel is redundant.
+      // A live panel already exists (revival raced the preview command): the incoming panel is redundant.
       panel.dispose();
       return;
     }
@@ -141,8 +141,7 @@ export class Preview {
     const editor = vscode.window.activeTextEditor;
     if (editor !== undefined && this.isPreviewable(editor.document)) {
       // Paint before the async render: the server is cold right after a reload, so the
-      // first response can take seconds — and if it never comes up at all, a silent
-      // blank would present exactly like the missing-serializer bug this path fixes.
+      // first response can take seconds, and a wedged start must never leave a blank tab.
       panel.webview.html = this.loadingShell(panel.webview);
       const fallbackLine = editor.document.uri.toString() === uri ? line : undefined;
       void this.renderDocument(editor.document, fallbackLine);
@@ -291,7 +290,7 @@ export class Preview {
       );
     } catch (err) {
       if (seq === this.renderSeq) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = errorText(err);
         panel.webview.html = this.shell(
           `<p>${vscode.l10n.t('Preview failed. {0}', escapeHtml(message))}</p>`,
           panel.webview,
@@ -334,7 +333,7 @@ export class Preview {
     docUri: string,
   ): string {
     const nonce = makeNonce();
-    const meta = this.cspMeta(nonce, webview);
+    const meta = cspMeta(nonce, webview, true);
 
     let out = html;
     // Nonce the compiler's own inline <style>/<script> (the stylesheet and the 傍点 probe):
@@ -352,13 +351,10 @@ export class Preview {
     }
     out = out.replace(/<head(\s[^>]*)?>/i, (m) => `${m}${meta}`);
 
-    // Inject the scroller at the end of <body> (DOM is ready) as two nonce'd <script>s — a bootstrap
-    // that seeds `window.__INIT`, then the bundled scroller. Escaping `<` in the JSON forecloses a
-    // `</script>` breakout via a hostile file name; the two stay separate so the bundle's own
-    // `"use strict"` prologue keeps effect (same rationale as book/webviewHtml.ts's booksHtml).
+    // Inject the scroller at the end of <body> (DOM is ready): the `__INIT` bootstrap, then the
+    // bundled scroller — see bootScript for the escaping / script-split constraints.
     const init: PreviewInit = { uri: docUri, line: activeLine };
-    const boot = `window.__INIT=${JSON.stringify(init).replace(/</g, '\\u003c')};`;
-    const script = `<script nonce="${nonce}">${boot}</script><script nonce="${nonce}">${SCROLL_JS}</script>`;
+    const script = `${bootScript(nonce, init)}<script nonce="${nonce}">${SCROLL_JS}</script>`;
     if (/<\/body>/i.test(out)) {
       return out.replace(/<\/body>/i, `${script}</body>`);
     }
@@ -371,7 +367,7 @@ export class Preview {
     return [
       '<!DOCTYPE html>',
       '<html><head><meta charset="utf-8">',
-      this.cspMeta(nonce, webview),
+      cspMeta(nonce, webview, true),
       `<style nonce="${nonce}">body{font-family:sans-serif;padding:1rem;}${extraCss}</style>`,
       `</head><body>${bodyHtml}</body></html>`,
     ].join('');
@@ -392,17 +388,6 @@ export class Preview {
       webview,
       LOADING_CSS,
     );
-  }
-
-  private cspMeta(nonce: string, webview: vscode.Webview): string {
-    const csp = [
-      "default-src 'none'",
-      `style-src 'nonce-${nonce}' ${webview.cspSource}`,
-      `script-src 'nonce-${nonce}'`,
-      `img-src ${webview.cspSource} https: data:`,
-      `font-src ${webview.cspSource} https: data:`,
-    ].join('; ');
-    return `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
   }
 
   private teardown(): void {
@@ -435,8 +420,8 @@ function minCursorLine(selections: readonly vscode.Selection[]): number {
 
 /**
  * Defensive read of the serializer's persisted webview state: whatever a previous
- * session's injected script last `setState`-ed — or `undefined` for panels persisted
- * by builds that predate the serializer — so nothing about its shape can be trusted.
+ * session's injected script last `setState`-ed, or `undefined`, so nothing about its
+ * shape can be trusted.
  */
 function parsePanelState(state: unknown): {
   uri: string | undefined;

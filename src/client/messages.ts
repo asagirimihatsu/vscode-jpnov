@@ -15,7 +15,7 @@ import type { LabelId, LocalizableMessage } from '#/shared/protocol.ts';
  * translated. Built per-call — `vscode.l10n` is ready by the time anything renders.
  */
 function labelText(label: LabelId): string {
-  const texts: Record<LabelId, string> = { jpbookEntry: vscode.l10n.t('book entry') };
+  const texts: Record<LabelId, string> = { jpbookEntry: vscode.l10n.t('a book entry') };
   return texts[label];
 }
 
@@ -84,13 +84,13 @@ export function renderMessage(msg: LocalizableMessage): string {
     case 'syntax.danglingBlockEnd':
       return vscode.l10n.t('block-end annotation without a matching start');
     case 'syntax.postfixTargetMissing':
-      return vscode.l10n.t('annotation target "{0}" not found or not aligned on this line', s(0));
+      return vscode.l10n.t('annotation target "{0}" is not on this line, or is not aligned to a character boundary', s(0));
     case 'syntax.unterminatedTcy':
-      return vscode.l10n.t('unterminated 縦中横 (missing ［＃縦中横終わり］ before the line end)');
+      return vscode.l10n.t('unterminated 縦中横 (missing ［＃縦中横終わり］ before the end of the line)');
     case 'syntax.danglingTcyEnd':
       return vscode.l10n.t('［＃縦中横終わり］ without a matching ［＃縦中横］');
     case 'syntax.tcyTooLong':
-      return vscode.l10n.t('縦中横 is too long (3 characters or fewer avoid distortion)');
+      return vscode.l10n.t('縦中横 is too long (keep it to 3 characters or fewer to avoid distortion)');
     // --- prose lint (kept byte-identical to renderEnglish). ---
     case 'lint.common.sentenceLength':
       return vscode.l10n.t('this sentence is too long');
@@ -113,15 +113,15 @@ export function renderMessage(msg: LocalizableMessage): string {
     case 'lint.common.noControlChar':
       return vscode.l10n.t('invalid control character');
     case 'lint.common.shiftJisSafe':
-      return vscode.l10n.t('"{0}" (U+{1}) may be an old-form or variant character; use another', s(0), s(1));
+      return vscode.l10n.t('"{0}" (U+{1}) is missing from Shift JIS (often an old-form or variant character); use another', s(0), s(1));
     case 'lint.common.jaNoSpaceBetweenFullWidth':
       return vscode.l10n.t('space between full-width characters');
     case 'lint.common.jaUnnaturalAlphabet':
-      return vscode.l10n.t('unnatural alphabet usage');
+      return vscode.l10n.t('unnatural run of half-width letters');
     case 'lint.common.minusPosition':
       return vscode.l10n.t('a minus sign is allowed only before a number');
     case 'lint.narration.generalNovelStyle':
-      return vscode.l10n.t('does not follow Japanese novel style (paragraph indent / line head)');
+      return vscode.l10n.t('does not follow general Japanese novel style');
     case 'lint.narration.jaNoMixedPeriod':
       return vscode.l10n.t('this sentence does not end with a period (。)');
     case 'lint.ruby.kana':

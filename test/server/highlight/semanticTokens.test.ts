@@ -25,9 +25,9 @@ const CHARACTER = tokenTypeIndex('character');
 const KEYWORD = tokenTypeIndex('keyword');
 
 test('legend is the distinct LSP types in first-seen order', () => {
-  // Distinct kinds get distinct indices; the custom cast/keyword types differ from the default 'plain'.
+  // Distinct kinds get distinct indices.
   assert.notEqual(tokenTypeIndex('character'), tokenTypeIndex('keyword'));
-  assert.notEqual(tokenTypeIndex('character'), tokenTypeIndex('direction')); // characterName != plain
+  assert.notEqual(tokenTypeIndex('character'), tokenTypeIndex('direction')); // variable != comment
   assert.notEqual(tokenTypeIndex('marker'), tokenTypeIndex('directive')); // comment != keyword
 });
 
@@ -38,7 +38,7 @@ test('a narration subject 巳一は -> character; the は particle is not colour
   assert.deepEqual(at(toks, 0, 0), { line: 0, char: 0, len: 3, type: CHARACTER }); // 巳一は
 });
 
-test('a coined keyword is bolded (coinedKeyword)', () => {
+test('a coined keyword is bolded', () => {
   const toks = decode(buildSemanticTokens(doc('黒剣を抜いた'), rec).data);
   assert.deepEqual(at(toks, 0, 0), { line: 0, char: 0, len: 2, type: KEYWORD }); // 黒剣
 });

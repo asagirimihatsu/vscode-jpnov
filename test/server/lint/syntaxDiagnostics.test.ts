@@ -157,7 +157,7 @@ test('an unresolved postfix target yields one Warning over the annotation, carry
   assert.equal(d.severity, DiagnosticSeverity.Warning);
   assert.equal(d.source, 'jpnov');
   assert.deepEqual(d.data, { code: 'syntax.postfixTargetMissing', args: ['無'] });
-  assert.equal(d.message, 'annotation target "無" not found or not aligned on this line');
+  assert.equal(d.message, 'annotation target "無" is not on this line, or is not aligned to a character boundary');
   assert.deepEqual(d.range, {
     start: { line: 0, character: 3 },
     end: { line: 0, character: 12 }, // ［＃「無」に傍点］

@@ -314,7 +314,7 @@ export interface BookEntry {
   readonly rootUri: string;
   /** Path relative to the workspace folder root (POSIX separators), e.g. `"part1/vol2.jpbook"`. */
   readonly fileRel: string;
-  /** Derived output relative path (`jpbookOutRel`, POSIX `/`); the build writes `${outRel}.{txt,html}`. */
+  /** Derived output relative path (`jpbookOutRel`, POSIX `/`); the build appends the format extension. */
   readonly outRel: string;
   /** The front-matter `title`, when present and non-empty — display metadata for the Books panel. */
   readonly title?: string;

@@ -235,14 +235,14 @@ export type Token =
   | IndentBlockEndToken;
 
 // Full-width annotation/ruby markers (see codepoints in the locked spec).
-const OPEN_BRACKET = '［'; // ［
-const HASH = '＃'; // ＃
-const CLOSE_BRACKET = '］'; // ］
-const RUBY_OPEN = '《'; // 《
-const RUBY_CLOSE = '》'; // 》
-const BASE_MARK = '｜'; // ｜
-const CORNER_OPEN = '「'; // 「
-const CORNER_CLOSE = '」'; // 」
+const OPEN_BRACKET = '［';
+const HASH = '＃';
+const CLOSE_BRACKET = '］';
+const RUBY_OPEN = '《';
+const RUBY_CLOSE = '》';
+const BASE_MARK = '｜';
+const CORNER_OPEN = '「';
+const CORNER_CLOSE = '」';
 const PAGE_BREAK = '改ページ';
 const SPAN_END_SUFFIX = '終わり';
 const CONNECTOR_NI = 'に';

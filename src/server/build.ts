@@ -38,6 +38,7 @@ import type { JpbookMeta, ParsedLine } from '#/shared/book/jpbook.ts';
 import { concatBookText, renderBook } from '#/shared/compiler/document.ts';
 import type { BookInput } from '#/shared/compiler/document.ts';
 import { epubMembers } from '#/shared/epub.ts';
+import { errorText } from '#/shared/errors.ts';
 import { LocalizedError } from '#/shared/messages.ts';
 import { resolveHtmlSettings } from '#/shared/config/settings.ts';
 import { resolveContained } from '#/shared/config/validate.ts';
@@ -171,7 +172,7 @@ async function readBookFiles(rootUri: string, lines: readonly ParsedLine[]): Pro
       if ((cause as NodeJS.ErrnoException).code === 'ENOENT') {
         throw new LocalizedError({ code: 'book.entryFileNotFound', args: [pl.value] });
       }
-      const why = cause instanceof Error ? cause.message : String(cause);
+      const why = errorText(cause);
       throw new LocalizedError({ code: 'book.entryReadFailed', args: [pl.value, why] });
     }
     files.push({ name: pl.value, src: UTF8.decode(bytes) });
@@ -184,7 +185,7 @@ function toBuildMessage(cause: unknown): LocalizableMessage {
   if (cause instanceof LocalizedError) {
     return cause.localized;
   }
-  return { code: 'build.failed', args: [cause instanceof Error ? cause.message : String(cause)] };
+  return { code: 'build.failed', args: [errorText(cause)] };
 }
 
 /** One `buildRoot` product: an artifact to return + the root's output dir it lands under
@@ -320,7 +321,7 @@ async function* buildRoot(
 function resolveProjectDir(rootUri: string, value: string, fallback: string): string {
   const resolved = resolveContained(rootUri, value, 'jpbookEntry');
   // The defaults are single-segment relative paths, so this join cannot escape the root.
-  return resolved.ok ? resolved.abs : childUri(rootUri, fallback.replace(/^\.\//, ''));
+  return resolved.ok ? resolved.abs : childUri(rootUri, fallback);
 }
 
 /**

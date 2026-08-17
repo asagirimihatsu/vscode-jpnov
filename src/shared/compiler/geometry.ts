@@ -37,7 +37,7 @@ export const SIDE_PAD = 1.5;
  * MINIMUM paper inset per side on the BLOCK axis (physical left/right), in em: {@link fitPaper}
  * caps the font size so the sheet keeps at least this surround inside the paper. The physical
  * top/bottom minimum is {@link MARGIN_MM} instead. The screen sheet's 2.5em inter-paper gap
- * (build.base.css) is a cosmetic look-alike, no longer coupled.
+ * (build.base.css) is a cosmetic look-alike, not coupled to this.
  */
 export const PRINT_MARGIN = 2.5;
 

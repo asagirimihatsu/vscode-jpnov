@@ -61,7 +61,7 @@ test('resolveContained carries the label in the rejection args', () => {
   assert.deepEqual(got.args, ['jpbookEntry']);
 });
 
-test('resolveContained maps each rejection family to its code (C18 merged into path.rootDot)', () => {
+test('resolveContained maps each rejection family to its code', () => {
   const code = (rel: string): string => {
     const got = resolveContained(ROOT, rel, 'jpbookEntry');
     assert.ok(!got.ok, `should reject ${JSON.stringify(rel)}`);

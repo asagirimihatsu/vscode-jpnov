@@ -40,7 +40,7 @@ function clamp(n: number, min: number, max: number): number {
  * per enabled row grouped by stream. A boolean rule is enabled iff its key is exactly `true`; a
  * threshold rule is enabled iff its key is a finite number (then clamped to the rule's bounds).
  * Absent / `null` / wrong-typed values leave a rule OFF; this reads only `raw`, so the shipped
- * on/off split lives entirely in the package.json defaults (the four data-hygiene booleans ship on).
+ * on/off split lives entirely in the package.json defaults (the data-hygiene booleans ship on).
  */
 export function selectRules(raw: RawLintConfigWire): RuleSelection {
   const narration: ActiveRule[] = [];
