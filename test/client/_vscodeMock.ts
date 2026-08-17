@@ -267,6 +267,8 @@ export interface MockState {
   openedDocs: string[];
   errorMessages: string[];
   infoMessages: string[];
+  /** `env.openExternal` targets (uri strings), e.g. the post-build output-folder opens. */
+  openedExternal: string[];
 }
 
 export function createMockState(): MockState {
@@ -304,6 +306,7 @@ export function createMockState(): MockState {
     openedDocs: [],
     errorMessages: [],
     infoMessages: [],
+    openedExternal: [],
   };
 }
 
@@ -345,6 +348,7 @@ export function resetMockState(s: MockState): void {
   s.openedDocs.length = 0;
   s.errorMessages.length = 0;
   s.infoMessages.length = 0;
+  s.openedExternal.length = 0;
 }
 
 /**
@@ -584,7 +588,13 @@ export function buildVscode(state: MockState): Record<string, unknown> {
     workspace,
     commands,
     l10n,
-    env: { language: 'en' },
+    env: {
+      language: 'en',
+      openExternal(target: { toString(): string }): Promise<boolean> {
+        state.openedExternal.push(String(target));
+        return Promise.resolve(true);
+      },
+    },
     Uri,
     FileType,
     FileSystemError,

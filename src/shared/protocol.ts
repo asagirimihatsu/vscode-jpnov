@@ -238,6 +238,9 @@ export interface BuildParams {
 export interface BuildArtifact {
   /** Workspace-relative-or-absolute output path string; the CLIENT writes it. */
   readonly path: string;
+  /** The root's resolved output dir `path` lives under (a nested book's file sits deeper);
+   *  the client's post-build reveal target. */
+  readonly outDir: string;
   /**
    * Rendered output TEXT — a `.txt` or `.html` payload per `path`. The client encodes it on the
    * way to disk: `.html` is UTF-8, `.txt` follows `jpnov.layout.txt.encoding`.
@@ -259,6 +262,8 @@ export interface EpubMember {
 export interface EpubArtifact {
   /** Workspace-relative-or-absolute output path string; the CLIENT writes it. */
   readonly path: string;
+  /** The root's resolved output dir `path` lives under; the client's post-build reveal target. */
+  readonly outDir: string;
   readonly members: readonly EpubMember[];
 }
 

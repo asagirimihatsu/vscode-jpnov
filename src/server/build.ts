@@ -266,6 +266,7 @@ async function buildRoot(
       case 'txt':
         artifacts.push({
           path: childUri(target.outDirUri, `${outRel}.txt`),
+          outDir: target.outDirUri,
           content: concatBookText(input, selection.settings.autoTcy, selection.settings.charsPerLine),
         });
         break;
@@ -286,12 +287,13 @@ async function buildRoot(
           fontFamily: selection.settings.fontFamily,
           chrome: composeBookChrome(selection.settings, parsed.meta),
         });
-        artifacts.push({ path: childUri(target.outDirUri, `${outRel}.html`), content: html });
+        artifacts.push({ path: childUri(target.outDirUri, `${outRel}.html`), outDir: target.outDirUri, content: html });
         break;
       }
       case 'epub':
         epubs.push({
           path: childUri(target.outDirUri, `${outRel}.epub`),
+          outDir: target.outDirUri,
           members: epubMembers({
             book: input,
             meta: parsed.meta,

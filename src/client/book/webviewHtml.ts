@@ -43,6 +43,7 @@ function labels(): Labels {
     buildTxt: vscode.l10n.t('txt'),
     buildHtml: vscode.l10n.t('Build to HTML'),
     buildEpub: vscode.l10n.t('Build to EPUB'),
+    revealOutput: vscode.l10n.t('Open the output folder after building'),
     back: vscode.l10n.t('Back'),
     openChapter: vscode.l10n.t('Open chapter'),
     chapters: vscode.l10n.t('Chapters'),

@@ -86,6 +86,7 @@ interface Props {
   readonly class?: string;
   readonly title?: string;
   readonly role?: string;
+  readonly type?: string;
   readonly 'aria-label'?: string;
   readonly 'aria-expanded'?: boolean;
   readonly 'aria-hidden'?: true;
@@ -97,7 +98,7 @@ type Child = Node | string | false;
 
 /** The Props keys h() writes with `setAttribute`; booleans serialize as 'true'/'false'. */
 const ATTRS: readonly Exclude<keyof Props, 'onClick'>[] =
-  ['class', 'title', 'role', 'aria-label', 'aria-expanded', 'aria-hidden', 'data-fk'];
+  ['class', 'title', 'role', 'type', 'aria-label', 'aria-expanded', 'aria-hidden', 'data-fk'];
 
 function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -394,7 +395,25 @@ function footer(buildUri?: string): HTMLElement {
       h('button', {
         class: 'btn icon', 'data-fk': 'bepub', title: L.buildEpub, 'aria-label': L.buildEpub,
         onClick: poster(build('epub')),
-      }, brandIcon('epub'))));
+      }, brandIcon('epub'))),
+    revealRow(),
+  );
+}
+
+/** The "open the output folder after building" preference: optimistic like the book checkboxes —
+ * paint + cache the new value here, the host records it without echoing. */
+function revealRow(): HTMLElement {
+  const input = h('input', { type: 'checkbox', 'data-fk': 'reveal' });
+  // `state` always precedes a footer render (the ready handshake answers with it); the
+  // fallback mirrors the host-side default.
+  input.checked = state?.revealOutput ?? true;
+  input.addEventListener('change', () => {
+    if (state) {
+      (state as { revealOutput: boolean }).revealOutput = input.checked;
+    }
+    post({ type: 'revealOutput', on: input.checked });
+  });
+  return h('label', { class: 'chkrow' }, input, L.revealOutput);
 }
 
 function renderDetail(): void {
