@@ -128,14 +128,12 @@ function hexCodePoint(cp: number): string {
  * inside its annotation and appears in no stream. No fix: the substitutes are semantic (𠮟 -> 叱),
  * and `source.fixAll` would scatter them through a manuscript on save.
  */
-export const shiftJisSafeScan: PreScan = (text) => {
-  const out: { start: number; end: number; message: LocalizableMessage }[] = [];
-  for (const { cluster, cp, offset, length } of unencodableChars(text)) {
-    const message: LocalizableMessage = { code: 'lint.common.shiftJisSafe', args: [cluster, hexCodePoint(cp)] };
-    out.push({ start: offset, end: offset + length, message });
-  }
-  return out;
-};
+export const shiftJisSafeScan: PreScan = (text) =>
+  unencodableChars(text).map(({ cluster, cp, offset, length }) => ({
+    start: offset,
+    end: offset + length,
+    message: { code: 'lint.common.shiftJisSafe', args: [cluster, hexCodePoint(cp)] },
+  }));
 
 const PROLONGED_SOUND = 0x30fc; // ー — neutral; allowed inside a hiragana OR katakana reading
 

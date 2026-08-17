@@ -465,22 +465,13 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     if (view === undefined) {
       return;
     }
-    const byRoot = new Map<string, BookEntry[]>();
-    for (const b of this.books) {
-      const bucket = byRoot.get(b.rootUri);
-      if (bucket === undefined) {
-        byRoot.set(b.rootUri, [b]);
-      } else {
-        bucket.push(b);
-      }
-    }
+    const byRoot = Map.groupBy(this.books, (b) => b.rootUri);
     const multiRoot = byRoot.size > 1;
     const groups = [...byRoot.entries()]
       .sort((a, b) => compareStr(lastPathSegment(a[0]), lastPathSegment(b[0])))
       .map(([rootUri, entries]) => ({
         rootLabel: multiRoot ? lastPathSegment(rootUri) : null,
         books: entries
-          .slice()
           .sort((a, b) => compareStr(a.outRel, b.outRel))
           .map((entry): BookVM => ({
             uri: entry.uri,
@@ -661,18 +652,26 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           };
           for (const artifact of result.artifacts ?? []) {
             let bytes: Uint8Array;
-            if (artifact.path.endsWith('.txt')) {
-              const encoded = encodeTxt(artifact.content, txtEncoding);
-              bytes = encoded.bytes;
-              substitutions += encoded.substitutions;
-            } else {
-              bytes = Buffer.from(artifact.content, 'utf8');
+            switch (artifact.kind) {
+              case 'txt': {
+                const encoded = encodeTxt(artifact.content, txtEncoding);
+                bytes = encoded.bytes;
+                substitutions += encoded.substitutions;
+                break;
+              }
+              case 'html':
+                bytes = Buffer.from(artifact.content, 'utf8');
+                break;
+              case 'epub':
+                // The server ships member files; the zip step (mimetype-first OCF) is local.
+                bytes = ocfZip(artifact.members);
+                break;
+              default: {
+                const exhaustive: never = artifact;
+                throw new Error(`buildSelected: unhandled artifact ${JSON.stringify(exhaustive)}`);
+              }
             }
             await write(artifact.path, artifact.outDir, bytes);
-          }
-          // EPUB: the server ships member files; the zip step (mimetype-first OCF) is local.
-          for (const epub of result.epubs ?? []) {
-            await write(epub.path, epub.outDir, ocfZip(epub.members));
           }
 
           // Per-book build errors (each isolated server-side; never aborts the rest). The server

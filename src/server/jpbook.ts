@@ -160,17 +160,10 @@ export function documentLinksForJpbook(rootUri: string | null, parsed: ParsedJpb
   if (rootUri === null) {
     return [];
   }
-  const links: DocumentLink[] = [];
-  for (const pl of parsed.lines) {
-    if (!isChapter(pl)) {
-      continue;
-    }
+  return parsed.lines.filter(isChapter).flatMap((pl) => {
     const resolved = resolveContained(rootUri, pl.value, 'jpbookEntry');
-    if (resolved.ok) {
-      links.push({ range: lineRange(pl), target: resolved.abs });
-    }
-  }
-  return links;
+    return resolved.ok ? [{ range: lineRange(pl), target: resolved.abs }] : [];
+  });
 }
 
 /** A pure {@link JpbookCompletion} as an LSP {@link CompletionItem} on `line`. */

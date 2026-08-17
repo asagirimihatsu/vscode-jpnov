@@ -65,7 +65,7 @@ test('build emits the requested artifact kind per jpbook containing both files',
   assert.equal(htmlResult.artifacts.length, 1);
 
   const html = htmlResult.artifacts[0];
-  assert.ok(html);
+  assert.ok(html?.kind === 'html');
   assert.equal(html.path, `${ws.uri}/dist/vol1.html`);
   assert.match(html.content, /<!DOCTYPE html>/i);
   assert.ok(html.content.includes('あいう'), 'first file content present');
@@ -77,7 +77,7 @@ test('build emits the requested artifact kind per jpbook containing both files',
     projectDirs: projectsFor(ws.uri),
   });
   const txt = txtResult.artifacts?.[0];
-  assert.ok(txt);
+  assert.ok(txt?.kind === 'txt');
   assert.equal(txt.path, `${ws.uri}/dist/vol1.txt`);
   // The .txt is the concatenated source: one blank glue line between chapters, no trailing newline.
   assert.equal(txt.content, 'あいう\n\nかきく');
@@ -105,7 +105,7 @@ test('a front-matter divider lands between heading-less chapters in BOTH artifac
   // a→b: no heading → blank + centred ＊ (cpl 40 → ［＃１９字下げ］) + one more blank.
   // b→c: c opens with a 見出し → the heading is the separator, blank line only.
   const txt = txtResult.artifacts?.[0];
-  assert.ok(txt);
+  assert.ok(txt?.kind === 'txt');
   assert.equal(
     txt.content,
     'あいう\n\n［＃１９字下げ］＊\n\nかきく\n\n終章［＃「終章」は大見出し］\nすえ',
@@ -117,7 +117,7 @@ test('a front-matter divider lands between heading-less chapters in BOTH artifac
     projectDirs: projectsFor(ws.uri),
   });
   const html = htmlResult.artifacts?.[0];
-  assert.ok(html);
+  assert.ok(html?.kind === 'html');
   assert.ok(html.content.includes('<div class="line indent-19">＊</div>'), 'centred divider row');
   assert.match(html.content, /\.indent-19\{padding-inline-start:19em\}/);
   assert.match(html.content, /<div class="line midashi" data-line="0">終章<\/div>/);
@@ -144,7 +144,7 @@ test('build stays lenient on an unclosed ［＃: ok, artifacts emitted, tail vis
   assert.equal(result.errors.length, 0);
   assert.equal(result.artifacts.length, 1);
   const html = result.artifacts[0];
-  assert.ok(html);
+  assert.ok(html?.kind === 'html');
   assert.ok(html.content.includes('本文［＃閉じない注記'), 'swallowed tail visible in HTML');
   assert.ok(html.content.includes('次の行'), 'the next line is untouched');
   const txtResult = await handleBuild(ctx, {
@@ -153,7 +153,7 @@ test('build stays lenient on an unclosed ［＃: ok, artifacts emitted, tail vis
     projectDirs: projectsFor(ws.uri),
   });
   const txt = txtResult.artifacts?.[0];
-  assert.ok(txt);
+  assert.ok(txt?.kind === 'txt');
   assert.equal(txt.content, '本文［＃閉じない注記\n次の行'); // .txt is byte-faithful anyway
 });
 
@@ -172,7 +172,7 @@ test('nested jpbook mirrors the folder tree in the output path', async () => {
   assert.equal(result.ok, true);
   assert.ok(result.artifacts);
   const txt = result.artifacts[0];
-  assert.ok(txt);
+  assert.ok(txt?.kind === 'txt');
   assert.equal(txt.path, `${ws.uri}/dist/part1/vol2.txt`);
   assert.equal(txt.content, 'テスト');
 });
@@ -192,7 +192,7 @@ test('deeply nested jpbook writes a mirrored nested output path', async () => {
   assert.equal(result.ok, true);
   assert.ok(result.artifacts);
   const txt = result.artifacts[0];
-  assert.ok(txt);
+  assert.ok(txt?.kind === 'txt');
   assert.equal(txt.path, `${ws.uri}/dist/a/b/c.txt`);
   // The nested file's reveal target is still the resolved outDir, not its own parent.
   assert.equal(txt.outDir, `${ws.uri}/dist`);
@@ -216,7 +216,7 @@ test('entries resolve against the workspace folder root, wherever the book sits'
   assert.equal(result.ok, true);
   assert.ok(result.artifacts);
   const txt = result.artifacts[0];
-  assert.ok(txt);
+  assert.ok(txt?.kind === 'txt');
   assert.equal(txt.path, `${ws.uri}/dist/books/volume01.txt`);
   assert.equal(txt.content, 'ほん');
 });
@@ -341,7 +341,7 @@ test('build honors the kinsoku mode from the settings snapshot (禁則)', async 
     settings: { ...SETTINGS, charsPerLine: 16, kinsoku: 'normal' },
     projectDirs: projectsFor(ws.uri),
   });
-  const html = result.artifacts?.find((a) => a.path.endsWith('.html'))?.content ?? '';
+  const html = result.artifacts?.find((a) => a.kind === 'html')?.content ?? '';
   assert.ok(
     html.includes(
       `<div class="line" data-line="0">${head}</div>` +
@@ -437,7 +437,7 @@ test('build format "txt" emits only the .txt artifact', async () => {
   assert.ok(result.artifacts);
   assert.equal(result.artifacts.length, 1);
   const only = result.artifacts[0];
-  assert.ok(only);
+  assert.ok(only?.kind === 'txt');
   assert.equal(only.path, `${ws.uri}/dist/vol1.txt`);
   assert.equal(only.content, 'あ');
 });
@@ -619,8 +619,8 @@ test('one batch build renders a DIFFERENT header per volume, each from its own f
   assert.ok(result.artifacts);
   const vol1 = result.artifacts.find((a) => a.path.endsWith('/vol1.html'));
   const vol2 = result.artifacts.find((a) => a.path.endsWith('/vol2.html'));
-  assert.ok(vol1);
-  assert.ok(vol2);
+  assert.ok(vol1?.kind === 'html');
+  assert.ok(vol2?.kind === 'html');
   assert.ok(vol1.content.includes('<div class="hd">作品名　一</div>'), 'vol1 carries its own header');
   assert.ok(vol2.content.includes('<div class="hd">作品名　二</div>'), 'vol2 carries its own header');
   assert.ok(!vol1.content.includes('作品名　二'), 'no cross-contamination');
@@ -643,7 +643,7 @@ test('front matter never leaks into the artifacts: body starts at the first chap
 
   assert.equal(result.ok, true);
   const txt = result.artifacts?.[0];
-  assert.ok(txt);
+  assert.ok(txt?.kind === 'txt');
   assert.equal(txt.content, 'ほんぶん', 'the .txt is the chapters only — no metadata lines');
 });
 
@@ -665,7 +665,7 @@ test('a book whose front matter has warnings (unknown key) still builds', async 
   assert.ok(conn.diagnostics.some((d) => d.uri === `${ws.uri}/vol1.jpbook` && d.count > 0));
 });
 
-test('build format "epub" returns member files per book, no text artifacts', async () => {
+test('build format "epub" returns one kind:"epub" artifact of member files per book', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
   await writeUnder(
@@ -683,11 +683,10 @@ test('build format "epub" returns member files per book, no text artifacts', asy
   });
 
   assert.equal(result.ok, true);
-  assert.deepEqual(result.artifacts, []);
-  assert.ok(result.epubs);
-  assert.equal(result.epubs.length, 1);
-  const epub = result.epubs[0];
-  assert.ok(epub);
+  assert.ok(result.artifacts);
+  assert.equal(result.artifacts.length, 1);
+  const epub = result.artifacts[0];
+  assert.ok(epub?.kind === 'epub');
   assert.equal(epub.path, `${ws.uri}/dist/vol1.epub`);
   const names = epub.members.map((m) => m.name);
   assert.ok(names.includes('META-INF/container.xml'));
@@ -703,7 +702,7 @@ test('build format "epub" returns member files per book, no text artifacts', asy
   );
 });
 
-test('text-format results carry no epubs field; epub rides the collision check too', async () => {
+test('results never carry a legacy epubs key; epub rides the collision check too', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
   await writeUnder(ws.dir, 'volume01/index.jpbook', 'volume01/a.jpnov');
@@ -715,7 +714,7 @@ test('text-format results carry no epubs field; epub rides the collision check t
     settings: SETTINGS,
     projectDirs: projectsFor(ws.uri),
   });
-  assert.ok(!('epubs' in txt), 'text builds keep their exact old result shape');
+  assert.ok(!('epubs' in txt), 'text builds keep the exact {ok, artifacts, errors} shape');
 
   const result = await handleBuild(ctx, {
     format: 'epub',
@@ -723,6 +722,7 @@ test('text-format results carry no epubs field; epub rides the collision check t
     projectDirs: projectsFor(ws.uri),
   });
   assert.equal(result.ok, false);
-  assert.deepEqual(result.epubs, []);
+  assert.ok(!('epubs' in result), 'epub builds share the same result shape');
+  assert.deepEqual(result.artifacts, []);
   assert.ok(result.errors?.every((e) => e.code === 'build.outPathCollision'));
 });

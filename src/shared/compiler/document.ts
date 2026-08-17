@@ -159,23 +159,18 @@ export function renderBook(opts: {
   fontFamily: string;
   chrome: BuildChrome;
 }): string {
-  const rows: Row[] = [];
-  opts.books.forEach((book, bookIndex) => {
-    if (bookIndex > 0) {
-      rows.push({ kind: 'pagebreak' });
-    }
+  const rows = opts.books.flatMap((book, bookIndex): Row[] => {
     const sources = book.files.map((file) => applyAutoTcy(file.src, opts.autoTcy));
-    sources.forEach((src, fileIndex) => {
-      if (fileIndex > 0) {
-        rows.push(
-          ...glueRows(
+    const bookRows = sources.flatMap((src, fileIndex): Row[] => {
+      const glue = fileIndex > 0
+        ? glueRows(
             chapterGlue(sources[fileIndex - 1] ?? '', src, book.divider ?? '', opts.charsPerLine),
             opts.dash,
-          ),
-        );
-      }
-      rows.push(...buildRows(tokenize(src), { dash: opts.dash }));
+          )
+        : [];
+      return [...glue, ...buildRows(tokenize(src), { dash: opts.dash })];
     });
+    return bookIndex > 0 ? [{ kind: 'pagebreak' }, ...bookRows] : bookRows;
   });
 
   const pages = paginate(rows, opts.charsPerLine, opts.linesPerPage, opts.kinsoku);

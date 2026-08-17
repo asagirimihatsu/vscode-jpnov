@@ -147,12 +147,9 @@ function rootVars(vars: Record<string, string | number>): string {
  */
 function edgeRules(selector: string, linesPerPage: number, unit: 'em' | 'rem'): string {
   const mix = 'color-mix(in srgb,var(--edge) 80%,transparent)';
-  const images: string[] = [];
-  const positions: string[] = [];
-  for (let k = 1; k < linesPerPage; k++) {
-    images.push(`linear-gradient(${mix},${mix})`);
-    positions.push(`right calc(${String(k)}*var(--pitch)*1${unit} - 1px) top`);
-  }
+  const boundaries = Array.from({ length: linesPerPage - 1 }, (_, i) => i + 1);
+  const images = boundaries.map(() => `linear-gradient(${mix},${mix})`);
+  const positions = boundaries.map((k) => `right calc(${String(k)}*var(--pitch)*1${unit} - 1px) top`);
   return `${selector}{background-image:${images.join(',')};` +
     `background-position:${positions.join(',')};` +
     'background-size:1px 100%;background-repeat:no-repeat;}';

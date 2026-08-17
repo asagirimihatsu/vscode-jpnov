@@ -100,7 +100,7 @@ async function buildHtml(settings: HtmlSettings): Promise<string> {
   });
   assert.equal(result.ok, true);
   const artifact = result.artifacts?.[0];
-  assert.ok(artifact, 'the build must produce one HTML artifact');
+  assert.ok(artifact?.kind === 'html', 'the build must produce one HTML artifact');
   return artifact.content;
 }
 
