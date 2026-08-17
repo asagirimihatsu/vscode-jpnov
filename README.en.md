@@ -116,8 +116,8 @@ but not Japanese typesetting:
   (`—`).
 
 - **Genkō yōshi（原稿用紙）** — the manuscript grid Japanese prose is drafted
-  on. The default page of **40 characters × 34 lines** mirrors common
-  submission requirements, and the line pitch comes in four steps
+  on. The default page is **40 characters × 34 lines**, and the line pitch
+  comes in four steps
   (`jpnov.layout.linePitch`); turn on line numbers and column
   rules for the classic manuscript-paper look, shown here at the 2× pitch:
 
@@ -358,8 +358,8 @@ coined proper noun is never "corrected".
 - **Publication-style checks are opt-in.** `narration.generalNovelStyle`
   (a bundle of general conventions: paragraph indent, punctuation spacing,
   numeral style, and more) and `narration.jaNoMixedPeriod` (narration
-  sentences end with `。`) catch manuscript-convention slips many editors
-  expect fixed before submission; both are auto-fixable. Length/run limits
+  sentences end with `。`) catch manuscript-convention slips before
+  submission; both are auto-fixable. Length/run limits
   (`sentenceLength`, `maxTen`, `maxKanjiRun`) and the ruby-kana rule are
   opt-in too.
 
