@@ -86,7 +86,7 @@ export const dashScan: PreScan = (text, options) => {
   return out;
 };
 
-const FULL_WIDTH_SPACE = '　'; //
+const FULL_WIDTH_SPACE = '　';
 
 /** True for any non-ASCII code unit (kana, kanji, full-width punctuation). */
 function isNonAscii(ch: string | undefined): boolean {

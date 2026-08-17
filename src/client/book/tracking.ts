@@ -113,7 +113,7 @@ async function handleRenames(e: vscode.FileRenameEvent): Promise<void> {
     // UI notification: showWarningMessage never rejects, so void is safe.
     void vscode.window.showWarningMessage(
       vscode.l10n.t(
-        "Japanese Novel: couldn't update {0} — the moved file's new location is outside the workspace folder.",
+        "Japanese Novel: couldn't update {0} — the new location is outside the workspace folder.",
         names,
       ),
     );

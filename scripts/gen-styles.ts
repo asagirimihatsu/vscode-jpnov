@@ -11,7 +11,7 @@
  * The generator is file-set-agnostic: it scans the directory, so adding/removing a fragment
  * needs no edit here. Consumers: css.ts (runtime) and esbuild.config.js (regenerates up front,
  * plus a watch plugin re-runs it on a fragment change). styles-codegen.test.ts guards the @page
- * geometry double-home against these fragments (not a committed-vs-generated drift).
+ * geometry double-home against these fragments.
  */
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';

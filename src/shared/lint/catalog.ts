@@ -1,5 +1,5 @@
 /**
- * The lint rule catalog — the SINGLE SOURCE OF TRUTH for every Phase-1 prose-lint rule.
+ * The lint rule catalog — the SINGLE SOURCE OF TRUTH for every prose-lint rule.
  *
  * One {@link RuleMeta} row = one `(scope, id)` pair = one diagnostic code (`lint.<scope>.<id>`)
  * = one vscode setting key (`jpnov.lint.<scope>.<id>`). Everything else conforms to this list:
@@ -52,10 +52,10 @@ export interface RuleMeta {
 }
 
 /**
- * Every Phase-1 rule. `common` rules are global typography/structure checks meaningful in both 地の文
+ * Every rule. `common` rules are global typography/structure checks meaningful in both 地の文
  * and セリフ; `narration` rules are prose-specific; the single `ruby` rule is a 3-way drop-down.
  *
- * Phase 1 is deliberately DICTIONARY-FREE: no kuromoji (morphological) rules and no prh/word-list
+ * The rule set is deliberately DICTIONARY-FREE: no kuromoji (morphological) rules and no prh/word-list
  * rules. 読点上限 (`maxTen`) ships as a custom kuromoji-free rule because the stock
  * `textlint-rule-max-ten` pulls kuromoji transitively.
  *

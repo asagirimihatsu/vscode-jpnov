@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import { applyAutoTcy, materializeAutoTcy } from '../../../src/shared/compiler/autoTcy.ts';
 import { concatBookText } from '../../../src/shared/compiler/document.ts';
 
-// The golden matrix fixed in the design round: source → materialized (punctuationPairs).
 // `none` is asserted globally below (applyAutoTcy returns the source UNCHANGED — same object).
 
 test('E1: every exactly-2 pair on a line is wrapped, each binding its own run', () => {
@@ -64,7 +63,7 @@ test('E11: a pair serving as a ruby base or reading is not body text — untouch
 
 test('E12: single marks never trigger; no gate on adjacent Latin (What?! combines)', () => {
   assert.equal(materializeAutoTcy('あ!か'), 'あ!か');
-  // The owner chose NO Latin-flank gate: an English-context pair combines like any other.
+  // No Latin-flank gate: an English-context pair combines like any other.
   assert.equal(materializeAutoTcy('What?!'), 'What?!［＃「?!」は縦中横］');
 });
 

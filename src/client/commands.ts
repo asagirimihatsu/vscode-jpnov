@@ -11,6 +11,8 @@
  */
 import * as vscode from 'vscode';
 
+import { errorText } from '#/shared/errors.ts';
+
 /**
  * Register `id` with a body shielded by one try/catch. On an unexpected throw, show a single
  * localized error notification; on success nothing extra happens. Command arguments (e.g.
@@ -21,7 +23,7 @@ export function command(id: string, run: (...args: unknown[]) => Promise<void> |
     try {
       await run(...args);
     } catch (err) {
-      const m = err instanceof Error ? err.message : String(err);
+      const m = errorText(err);
       // The last-resort popup itself never rejects; void it so this catch can't re-throw.
       void vscode.window.showErrorMessage(vscode.l10n.t('Japanese Novel: {0}', m));
     }

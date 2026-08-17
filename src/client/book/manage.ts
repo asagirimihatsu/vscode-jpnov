@@ -3,9 +3,9 @@
  * Every action plans precise range edits via the pure `#/shared/book/edits.ts`, applies
  * them as one `WorkspaceEdit`, and SAVES immediately (settings-UI semantics: a panel
  * action persists on the spot; the saved file then re-enters through the panel's own
- * watcher, so no manual refresh plumbing exists here). Metadata is upsert-only: the five
- * keys are always shown and never deleted or reordered — layout-conscious authors use
- * code mode.
+ * watcher, so no manual refresh plumbing exists here). Metadata is upsert-only: every
+ * META_KEYS key is always shown and never deleted or reordered — layout-conscious authors
+ * use code mode.
  */
 import * as vscode from 'vscode';
 
@@ -16,6 +16,7 @@ import { composeDividerValue, DIVIDER_PRESETS, parseDividerValue, parseJpbook, t
 import { PAGE_NUMBER_POSITIONS, type PageNumberPosition } from '#/shared/compiler/chrome.ts';
 import { BUILD_CHROME_DEFAULT } from '#/shared/config/settings.ts';
 import { unencodableChars } from '#/shared/encoding.ts';
+import { errorText } from '#/shared/errors.ts';
 import type { BookEntry } from '#/shared/protocol.ts';
 
 import { command } from '../commands.ts';
@@ -73,12 +74,7 @@ export function metaValueParts(key: MetaKey, value: string | undefined): { value
   if (key === 'title' || key === 'author' || key === 'divider') {
     return { value: '', note: vscode.l10n.t('(not set)') }; // no default: absent = simply not set
   }
-  const fallback =
-    key === 'header'
-      ? BUILD_CHROME_DEFAULT.header
-      : key === 'pageNumber'
-        ? BUILD_CHROME_DEFAULT.pageNumber
-        : BUILD_CHROME_DEFAULT.pageNumberFormat;
+  const fallback = BUILD_CHROME_DEFAULT[key];
   return fallback === ''
     ? { value: '', note: vscode.l10n.t('(not set)') }
     : { value: display(fallback), note: vscode.l10n.t('(default)') };
@@ -169,7 +165,7 @@ async function addChapters(arg: unknown): Promise<void> {
   const { uri, text } = await bookText(node.entry);
   const edit = appendChapters(text, picked);
   if (edit === null) {
-    void vscode.window.showInformationMessage(vscode.l10n.t('Japanese Novel: already in this book.'));
+    void vscode.window.showInformationMessage(vscode.l10n.t('Japanese Novel: those chapters are already in this book.'));
     return;
   }
   await applyBookEdits(uri, [edit]);
@@ -216,7 +212,7 @@ async function promptNewFile(rootUri: string, suffix: string, prompt: string): P
   // The validator is advisory: re-derive here (writeNewFile re-probes the target too).
   const parsed = normalizeFileInput(raw, suffix);
   if (!parsed.ok) {
-    void vscode.window.showErrorMessage(vscode.l10n.t('Japanese Novel: this file name cannot be used; creation was cancelled.'));
+    void vscode.window.showErrorMessage(vscode.l10n.t('Japanese Novel: this file name cannot be used. Nothing was created.'));
     return undefined;
   }
   return parsed.rel;
@@ -228,14 +224,14 @@ async function writeNewFile(rootUri: string, rel: string): Promise<vscode.Uri | 
   const segments = rel.split('/');
   const target = vscode.Uri.joinPath(root, ...segments);
   if (await fileExists(target)) {
-    void vscode.window.showErrorMessage(vscode.l10n.t('Japanese Novel: {0} already exists; creation was cancelled.', rel));
+    void vscode.window.showErrorMessage(vscode.l10n.t('Japanese Novel: {0} already exists. Nothing was created.', rel));
     return null;
   }
   try {
     await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(root, ...segments.slice(0, -1)));
     await vscode.workspace.fs.writeFile(target, new Uint8Array());
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorText(err);
     void vscode.window.showErrorMessage(vscode.l10n.t("Japanese Novel: couldn't write {0}. {1}", rel, message));
     return null;
   }
@@ -388,7 +384,7 @@ async function pickDivider(current: string | undefined): Promise<string | undefi
   const posItems: PosItem[] = [
     {
       label: vscode.l10n.t('Centred'),
-      description: vscode.l10n.t('A ［＃○字下げ］ computed from the line length at build time'),
+      description: vscode.l10n.t('Centred with a ［＃○字下げ］ computed from the line length at build time'),
       indented: false,
     },
     { label: vscode.l10n.t('Indented'), description: '［＃○字下げ］', indented: true },

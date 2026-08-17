@@ -36,6 +36,7 @@ import {
 import { chapterLines, metaRows, moveChapterTo } from '#/shared/book/edits.ts';
 import { META_KEYS, parseJpbook, type MetaKey } from '#/shared/book/jpbook.ts';
 import { encodeTxt, TXT_ENCODING_DEFAULT, type TxtEncoding } from '#/shared/encoding.ts';
+import { errorText } from '#/shared/errors.ts';
 import { ocfZip } from '#/shared/epub.ts';
 
 import type { BookVM, BuildAction, ChapterVM, DetailMessage, MetaVM, StateMessage } from '../protocol.ts';
@@ -392,7 +393,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     let value: string | undefined;
     try {
       const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(entry.uri));
-      value = metaRows(doc.getText()).find((r) => r.key === metaKey)?.value;
+      value = parseJpbook(doc.getText()).meta[metaKey as MetaKey];
     } catch {
       return;
     }
@@ -527,7 +528,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         };
       }),
     );
-    const meta: MetaVM[] = metaRows(text).map((row) => {
+    const meta: MetaVM[] = metaRows(parsed.meta).map((row) => {
       const parts = metaValueParts(row.key, row.value);
       return { key: row.key, label: metaLabel(row.key), value: parts.value, note: parts.note };
     });
@@ -617,7 +618,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
             };
             result = await c.sendRequest<BuildResult>(BuildRequest, params);
           } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
+            const message = errorText(err);
             // This granular popup means buildSelected returns normally (no rethrow) -> no
             // boundary double-popup from the command wrapper.
             void vscode.window.showErrorMessage(vscode.l10n.t('Japanese Novel: build failed. {0}', message));
@@ -637,7 +638,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
               await vscode.workspace.fs.writeFile(vscode.Uri.parse(uri), bytes);
               written.push(uri);
             } catch (err) {
-              const message = err instanceof Error ? err.message : String(err);
+              const message = errorText(err);
               void vscode.window.showErrorMessage(
                 vscode.l10n.t("Japanese Novel: couldn't write {0}. {1}", uri, message),
               );
@@ -728,7 +729,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       void vscode.window
         .showWarningMessage(
           vscode.l10n.t(
-            'Japanese Novel: no Chrome, Edge, or Chromium browser found. Built the HTML instead — open it in a browser and print to PDF, or set jpnov.layout.browserPath.',
+            'Japanese Novel: no Chrome, Edge, Chromium, or Brave browser found. Built the HTML instead — open it in a browser and print to PDF, or set jpnov.layout.browserPath.',
           ),
           openFolder,
           configure,
@@ -758,7 +759,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         }
         done += 1;
         progress.report({
-          message: vscode.l10n.t('converting to PDF… ({0}/{1})', String(done), String(files.length)),
+          message: vscode.l10n.t('Converting to PDF… ({0}/{1})', String(done), String(files.length)),
         });
         const htmlPath = vscode.Uri.parse(file).fsPath;
         const pdfPath = htmlPath.replace(/\.html$/i, '.pdf');
@@ -770,7 +771,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           if (abort.signal.aborted) {
             break;
           }
-          const message = err instanceof Error ? err.message : String(err);
+          const message = errorText(err);
           void vscode.window.showErrorMessage(
             vscode.l10n.t("Japanese Novel: couldn't convert {0} to PDF. {1}", lastPathSegment(file), message),
           );

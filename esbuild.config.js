@@ -39,7 +39,7 @@ const base = {
 };
 
 /**
- * Phase-1 forbids dictionary-backed lint rules. If a textlint rule ever pulls a morphological
+ * Dictionary-backed lint rules are forbidden. If a textlint rule ever pulls a morphological
  * analyzer (kuromoji/kuromojin) or its IPADIC/MeCab dictionary into the SERVER bundle, fail the build
  * loudly here rather than silently shipping a ~15 MB dictionary. Scoped to the server build (the only
  * one that bundles textlint).
@@ -51,7 +51,7 @@ const kuromojiTripwire = {
     build.onResolve({ filter: /kuromoji|ipadic|mecab/ }, (args) => ({
       errors: [
         {
-          text: `[kuromoji-tripwire] Phase-1 forbids dictionary deps, but "${args.path}" was imported by "${args.importer}". Drop the offending rule or move it to a later opt-in pack.`,
+          text: `[kuromoji-tripwire] Dictionary deps are forbidden, but "${args.path}" was imported by "${args.importer}". Drop the offending rule.`,
         },
       ],
     }));

@@ -144,7 +144,7 @@ test('an existing target cancels creation', async () => {
   await createFile(undefined);
 
   assert.deepEqual(state.writtenFiles, []);
-  assert.deepEqual(state.errorMessages, ['Japanese Novel: X.jpbook already exists; creation was cancelled.']);
+  assert.deepEqual(state.errorMessages, ['Japanese Novel: X.jpbook already exists. Nothing was created.']);
 });
 
 test('a created book is revealed in the panel', async () => {

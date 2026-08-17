@@ -2,31 +2,16 @@
  * The Books panel's WebviewView document: a strict-CSP, nonce'd static shell. The provider
  * ({@link ./view.ts}) sets this html ONCE on resolve, then pushes JSON `state` / `detail` messages
  * that the bundled client renderer ({@link ../webview/book/main.ts} → {@link BOOKS_JS}) turns into DOM.
- * This module owns only the shell: the CSP `<meta>` + per-render nonce, the `__INIT` bootstrap of
- * localized strings, and the codicon stylesheet linked from the extension's `media/` via
- * `asWebviewUri`. Hardening mirrors {@link ../preview/preview.ts}.
+ * This module owns only the shell: the hardening pieces (nonce, CSP `<meta>`, `__INIT`
+ * bootstrap) come from {@link ../nonce.ts}, shared with the preview; the codicon stylesheet is
+ * linked from the extension's `media/` via `asWebviewUri`.
  */
 import * as vscode from 'vscode';
 
 import type { BooksInit, Labels } from '../protocol.ts';
 
-import { makeNonce } from '../nonce.ts';
+import { bootScript, cspMeta, makeNonce } from '../nonce.ts';
 import { BOOKS_CSS, BOOKS_JS } from './webviewBundle.generated.ts';
-
-/**
- * Strict CSP: only the nonce'd inline style/script run; the codicon stylesheet + font load from
- * the webview source (the same `cspSource` that already backs `style-src`/`font-src`).
- */
-function cspMeta(nonce: string, webview: vscode.Webview): string {
-  const csp = [
-    "default-src 'none'",
-    `style-src 'nonce-${nonce}' ${webview.cspSource}`,
-    `script-src 'nonce-${nonce}'`,
-    `img-src ${webview.cspSource} https: data:`,
-    `font-src ${webview.cspSource}`,
-  ].join('; ');
-  return `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
-}
 
 /**
  * Localized UI strings baked into the `__INIT` bootstrap. Keys mirror the {@link Labels} contract
@@ -40,7 +25,7 @@ function labels(): Labels {
     deselectAll: vscode.l10n.t('Deselect all'),
     selectBook: vscode.l10n.t('Include in build'),
     buildPdf: vscode.l10n.t('Build to PDF'),
-    buildTxt: vscode.l10n.t('txt'),
+    buildTxt: vscode.l10n.t('TXT'),
     buildHtml: vscode.l10n.t('Build to HTML'),
     buildEpub: vscode.l10n.t('Build to EPUB'),
     revealOutput: vscode.l10n.t('Open the output folder after building'),
@@ -60,22 +45,20 @@ function labels(): Labels {
     createBook: vscode.l10n.t('Create a Book…'),
     openGuide: vscode.l10n.t('Open the Guide'),
     noFolderTitle: vscode.l10n.t('No folder open.'),
-    noFolderBody: vscode.l10n.t('Book files (.jpbook) live inside a workspace folder. Open your novel’s folder first, then create the book there.'),
+    noFolderBody: vscode.l10n.t("Book files (.jpbook) live inside a workspace folder. Open your novel's folder first, then create the book there."),
     openFolder: vscode.l10n.t('Open Folder'),
   };
 }
 
 /**
- * The full static webview document. Content is rendered client-side from pushed messages. A nonce'd
- * bootstrap `<script>` seeds `window.__INIT` (localized strings; `<` escaped so a translation cannot
- * break out of the script); a second nonce'd `<script>` then runs the bundled renderer — kept
- * separate so the bundle's own `"use strict"` prologue stays first (a `__INIT` prefix would demote it).
+ * The full static webview document. Content is rendered client-side from pushed messages: the
+ * `__INIT` bootstrap seeds the localized strings, then the bundled renderer runs — see
+ * {@link bootScript} for the escaping / script-split constraints.
  */
 export function booksHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
   const nonce = makeNonce();
   const codiconHref = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'codicon', 'codicon.css'));
   const init: BooksInit = { labels: labels() };
-  const boot = `window.__INIT=${JSON.stringify(init).replace(/</g, '\\u003c')};`;
   return [
     '<!DOCTYPE html>',
     `<html lang="${vscode.env.language || 'en'}"><head><meta charset="utf-8">`,
@@ -85,7 +68,7 @@ export function booksHtml(webview: vscode.Webview, extensionUri: vscode.Uri): st
     `<style nonce="${nonce}">${BOOKS_CSS}</style>`,
     '</head><body>',
     '<div id="app"></div>',
-    `<script nonce="${nonce}">${boot}</script>`,
+    bootScript(nonce, init),
     `<script nonce="${nonce}">${BOOKS_JS}</script>`,
     '</body></html>',
   ].join('');

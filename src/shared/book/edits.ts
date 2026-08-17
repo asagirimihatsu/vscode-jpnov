@@ -12,6 +12,7 @@ import {
   metaKeyOf,
   metaRegionOf,
   parseJpbook,
+  type JpbookMeta,
   type MetaKey,
   type ParsedLine,
 } from './jpbook.ts';
@@ -182,7 +183,6 @@ export function chapterLines(lines: readonly ParsedLine[]): number[] {
 }
 
 /** Fixed display order + current values for the panel's metadata rows (absent = undefined). */
-export function metaRows(text: string): { key: MetaKey; value: string | undefined }[] {
-  const meta = parseJpbook(text).meta;
+export function metaRows(meta: JpbookMeta): { key: MetaKey; value: string | undefined }[] {
   return META_KEYS.map((key) => ({ key, value: meta[key] }));
 }

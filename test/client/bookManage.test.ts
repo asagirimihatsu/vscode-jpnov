@@ -168,7 +168,7 @@ test('createFile never overwrites an existing chapter file', async () => {
   state.inputBoxQueue.push('taken');
   await runCreateChapter();
 
-  assert.deepEqual(state.errorMessages, ['Japanese Novel: taken.jpnov already exists; creation was cancelled.']);
+  assert.deepEqual(state.errorMessages, ['Japanese Novel: taken.jpnov already exists. Nothing was created.']);
   assert.deepEqual(state.writtenFiles, []);
   assert.deepEqual(state.appliedEdits, []);
 });

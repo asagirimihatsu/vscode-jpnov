@@ -453,8 +453,6 @@ test('flowToHtml: lineNumbers emits JS-numbered .ln heads that restart at a brea
   );
 });
 
-// --- emit coverage migrated from the deleted render.test.ts ---------------------------
-
 test('emit: postfix target missing on the source line degrades to a comment', () => {
   assert.equal(
     html('別の文［＃「無」に傍点］'),
@@ -588,8 +586,7 @@ test('phantom spaces: a U+0020 run measures at its PAINTED width — no base str
 test('右-only ruby uses the rr lane; JIS ルビ掛け keeps odd readings on-grid', () => {
   assert.match(html('漢字《かんじ》'), /<ruby class="rr">/);
   // 1:3 — the 1.5em reading hangs ≤0.25em over the plain あ/い neighbours (ルビ掛け): the
-  // unit stays ONE on-grid cell, no stretch. (Native painted a fractional 1.5em here — the
-  // half-cell drift — and plain round-up took 2 loose cells.)
+  // unit stays ONE on-grid cell, no stretch.
   const hang = 'あ字《かんじ》い';
   assert.match(html(hang), /<ruby class="rr">/);
   assert.doesNotMatch(html(hang), /rh-/);

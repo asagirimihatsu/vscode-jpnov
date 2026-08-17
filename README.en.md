@@ -7,7 +7,7 @@ layout, [Aozora Bunko](https://www.aozora.gr.jp/annotation/index.html) markup,
 one-command HTML / PDF / EPUB / text builds. No AI anywhere in the writing path
 (see [No-AI policy](#no-ai-policy)).
 
-![A vertically typeset novel page with ruby glosses, a running head, and a folio](docs/images/hero-page.png)
+![A vertically typeset novel page with ruby glosses, a running head, and a page number](docs/images/hero-page.png)
 
 *Unretouched "Build to PDF" output: the opening of Natsume Sōseki's* I Am a Cat *(Aozora Bunko).*
 
@@ -15,7 +15,7 @@ one-command HTML / PDF / EPUB / text builds. No AI anywhere in the writing path
 
 - **Vertical preview** — live, cursor-following 縦書き rendering beside the editor,
   using the same layout engine as the builds.
-- **Aozora Bunko annotations** — ruby (incl. both-side), emphasis dots, side
+- **Aozora Bunko annotations** — ruby (including both-side), emphasis dots, side
   lines, bold/italic, tate-chū-yoko, indents, page breaks.
 - **Auto indent** — every Enter starts the new line with a full-width space;
   open it with `「` or `『` and the space is removed.
@@ -34,14 +34,13 @@ one-command HTML / PDF / EPUB / text builds. No AI anywhere in the writing path
 
 - **No AI.** Nothing in the writing path involves AI; Copilot is disabled by
   default for `.jpnov` / `.jpbook` (see [No-AI policy](#no-ai-policy)).
-- **Dictionary-free.** No morphological analysis, no bundled word lists — so no
-  false positives on ordinary words and no coined term left behind. What
-  deserves highlighting is declared by the author; the lint rules reason about
-  structure, not vocabulary.
+- **Dictionary-free.** No morphological analysis, no bundled word lists —
+  ordinary words are never flagged, and every coined term you declare is
+  recognised. What deserves highlighting is the author's call; the lint rules
+  reason about structure.
 - **Zero runtime dependencies.** Everything ships bundled: no package manager,
   no post-install downloads, no network traffic — fully offline, with an
-  instant preview. Even PDF export just drives a browser already on the
-  machine, offline like everything else.
+  instant preview. PDF export drives a browser already on the machine.
 - **Non-invasive.** Sources are plain text in Aozora notation under dedicated
   extensions (`.jpnov` / `.jpbook`), so no `.txt` / `.md` project is ever
   touched, and the manuscript outlives the tool.
@@ -50,8 +49,8 @@ one-command HTML / PDF / EPUB / text builds. No AI anywhere in the writing path
 
 1. **Make a book.** Open the **Books** view in the Activity Bar (the
    **Japanese Novel** book icon) and click **Create a Book…** (`+`): the
-   input box comes with `.jpbook` already in place, so type just the name in
-   front of it. The new book opens right there with its **Book Info** and
+   input box already holds `.jpbook`, so type only the name before it. The
+   new book opens right there with its **Book Info** and
    **Chapters** sections. One `.jpbook` is one book: a plain text file with
    one chapter path per line, each relative to the workspace folder, so
    moving the `.jpbook` never breaks them. An optional `---`-fenced block at
@@ -64,10 +63,10 @@ one-command HTML / PDF / EPUB / text builds. No AI anywhere in the writing path
    book, and opened in the editor. Aozora Bunko annotations are highlighted as you type;
    click the preview icon in the editor title bar (**Japanese Novel: Open
    Preview to the Side**) to write beside the vertical layout.
-3. **Build it.** Save everything (builds read from disk) and hit **Build to
+3. **Build it.** Save everything (builds read from disk) and click **Build to
    PDF** at the bottom of the view; the text, HTML, and EPUB buttons sit
    beside it. With a book open, the buttons build just that book; back in
-   the list, they build every ticked book.
+   the list, they build every checked book.
 
 Chapters and book files can live anywhere in the workspace folder; subfolders are
 mirrored into the output (`src/volume1.jpbook` builds to
@@ -83,39 +82,39 @@ or folder level — preview and book editing need no configuration at all. A
 The terms this document (and the settings UI) uses, for readers who know code
 but not Japanese typesetting:
 
-- **Vertical writing（縦書き）** — text runs top-to-bottom, lines advance
+- **Vertical writing (縦書き)** — text runs top-to-bottom, lines advance
   right-to-left, books open "backwards". The preview, HTML, and PDF are all
   vertical; the source you edit stays ordinary horizontal text.
-- **Ruby（ルビ）** — small reading glosses beside the base characters (furigana).
+- **Ruby (ルビ)** — small reading glosses beside the base characters (furigana).
   In vertical text they sit to the right; a second gloss can sit on the left
   (両側ルビ, "both-side ruby") — often a translation or nuance note.
-- **Emphasis dots（傍点）** — the Japanese counterpart of italics: a small mark
+- **Emphasis dots (傍点)** — the Japanese counterpart of italics: a small mark
   beside every emphasised character. Nine dot shapes plus five side-line styles
   (傍線) are part of the Aozora vocabulary, and all are supported.
-- **Tate-chū-yoko（縦中横）** — a short horizontal run ("42", "!?") stood upright
+- **Tate-chū-yoko (縦中横)** — a short horizontal run ("42", "!?") stood upright
   in a single character cell within vertical text. Half-width pairs `!!` `!?`
   `?!` `??` are combined automatically by default
   (`jpnov.layout.autoTcy`); anything else takes an explicit annotation.
-- **Kinsoku（禁則処理）** — Japanese line-breaking prohibitions, applied at every
+- **Kinsoku (禁則処理)** — Japanese line-breaking prohibitions, applied at every
   wrap in preview and builds alike (`jpnov.layout.kinsoku`, default `normal`):
   opening brackets never end a line; closing punctuation, small kana, `ー` and
   `々` never start one; `――` and `……` pairs never split; and a trailing `、`/`。`
   hangs into the margin (ぶら下げ) instead of pushing text down. `strict` adds
   the middle-dot and repetition-mark classes and keeps symbol runs unbroken;
-  `none` restores the bare wrap.
+  `none` is a bare wrap at the column width.
 
   | kinsoku `none` | kinsoku `normal` (default) |
   | :---: | :---: |
   | <img src="docs/images/kinsoku-off.png" width="180" alt="Without kinsoku: a full stop opens a line and an opening bracket ends one"> | <img src="docs/images/kinsoku-on.png" width="180" alt="With kinsoku: the full stop hangs at the end of the previous line and the bracket moves inline"> |
 
-- **Dashes（ダッシュ）** — Japanese novels write a dash as a doubled pair
+- **Dashes (ダッシュ)** — Japanese novels write a dash as a doubled pair
   (`――`), and it is typeset as one unbroken dash. Pick the
   character you write in `jpnov.lint.common.dash` (default `―`); any other
-  dash character, or an odd-numbered run, is flagged with an auto-fix. In
-  HTML, PDF, and EPUB output, the chosen character is typeset as the em dash
-  (`—`) for Japanese font behavior.
+  dash character, or a run of an odd number of dashes, is flagged with an
+  auto-fix. In HTML, PDF, and EPUB output, the chosen character is typeset as
+  the em dash (`—`), which Japanese fonts join into one unbroken line.
 
-- **Genkō yōshi（原稿用紙）** — the manuscript grid Japanese prose is drafted
+- **Genkō-yōshi (原稿用紙)** — the manuscript grid Japanese prose is drafted
   on. The default page is **40 characters × 34 lines**, and the line pitch
   comes in four steps
   (`jpnov.layout.linePitch`); turn on line numbers and column
@@ -133,13 +132,13 @@ Novel sources use [Aozora Bunko annotations](https://www.aozora.gr.jp/annotation
 Recognised forms are highlighted and rendered; anything else passes through as
 an HTML comment (never an error), so unusual markup degrades quietly.
 
-Most annotations take a **forward-ref** form that points back at the target text. Where the range is easier to bracket, a **start / end** pair wraps it inline; for multi-line ranges a **block** form puts the start and end annotations on their own lines. All spellings render the same.
+Most annotations take a **forward-ref** form: the annotation follows the text it applies to and names it. Where the range is easier to bracket, a **start / end** pair wraps it inline; for multi-line ranges a **block** form puts the start and end annotations on their own lines. All spellings render the same.
 
 | Effect | Forward-ref form | Start / end form | Block form |
 | --- | --- | --- | --- |
 | Ruby | `漢字《かんじ》` | `｜親文字《ルビ》` | — |
 | Left ruby 左ルビ | `［＃「対象」の左に「よみ」のルビ］` | — | — |
-| Tate-chu-yoko 縦中横 | `対象［＃「対象」は縦中横］` | `［＃縦中横］…［＃縦中横終わり］` | — |
+| Tate-chū-yoko 縦中横 | `対象［＃「対象」は縦中横］` | `［＃縦中横］…［＃縦中横終わり］` | — |
 | Emphasis dots 傍点 | `［＃「対象」に傍点］` | `［＃傍点］…［＃傍点終わり］` | — |
 | Side line 傍線 (5 styles) | `［＃「対象」に傍線］` (傍線/二重傍線/鎖線/破線/波線) | `［＃傍線］…［＃傍線終わり］` | — |
 | Bold 太字 | `［＃「対象」は太字］` | `［＃太字］…［＃太字終わり］` | `［＃ここから太字］…［＃ここで太字終わり］` |
@@ -148,7 +147,7 @@ Most annotations take a **forward-ref** form that points back at the target text
 | Indent 字下げ | `［＃○字下げ］` (line head) | — | `［＃ここから○字下げ］…［＃ここで字下げ終わり］` |
 | Page break | `［＃改ページ］` (on its own line) | — | — |
 
-<img src="docs/images/notation.png" width="800" alt="A rendered specimen showing ruby, both-side ruby, emphasis dots, a wavy side line, bold, and tate-chu-yoko">
+<img src="docs/images/notation.png" width="800" alt="A rendered specimen showing ruby, both-side ruby, emphasis dots, a wavy side line, bold, and tate-chū-yoko">
 
 The specimen is typeset at 2× line pitch for the left ruby. Its source —
 paste it into a `.jpnov` to try:
@@ -163,24 +162,24 @@ paste it into a `.jpnov` to try:
 「何だと!?」
 ```
 
-Notes: 傍点/傍線 take a left-side variant, fixed by form — the **forward-ref**
-form uses `の左に` (`［＃「対象」の左に傍点］`), the **start / end** form uses bare
-`左に` (`［＃左に傍点］…［＃左に傍点終わり］`); bold/italic use the connector **は**,
-not に. Indent counts (`○`) are **full-width digits** (２, １０); the block indent
+Notes: 傍点/傍線 take a left-side variant spelled differently in each form — the
+**forward-ref** form uses `の左に` (`［＃「対象」の左に傍点］`), the **start / end**
+form uses bare `左に` (`［＃左に傍点］…［＃左に傍点終わり］`); bold/italic use the
+connector **は**. Indent counts (`○`) are **full-width digits** (２, １０); the block indent
 also indents wrapped continuation lines. An unclosed block (`ここから` with no
 `ここで…終わり`) still renders to the end of the file but raises an editor
 **Warning**; an unclosed `［＃` is an **Error**. Italic relies on the browser
 synthesising an oblique for Japanese fonts.
 
-**Left ruby** puts a reading on the LEFT of the preceding text; pair it with an
+**Left ruby** puts a reading on the left of the preceding text; pair it with an
 ordinary right ruby for 両側ルビ (`青空文庫《あおぞらぶんこ》［＃「青空文庫」の左に
 「aozora bunko」のルビ］` — the annotation names the base only, never the `《》`
 part). Left readings are exempt from the ruby-kana lint, since they are often
 Latin. Left ruby needs room to the left of the line — set
 `jpnov.layout.linePitch` to `2` or wider. At tighter pitches the reading
-overlaps the neighboring line. **縦中横** stands a short run upright in one
-square — keep it to 3 characters or fewer (longer squishes and raises a
-Warning). **自動縦中横**
+overlaps the neighbouring line. **縦中横** stands a short run upright in one
+square — keep it to 3 characters or fewer (a longer run is squeezed to fit
+and raises a Warning). **自動縦中横**
 (`jpnov.layout.autoTcy`, default `punctuationPairs`) auto-combines the
 half-width pairs `!!` `!?` `?!` `??` with no markup — runs of three or more are
 never touched — and the text build writes the explicit markers out, so the
@@ -196,8 +195,7 @@ convention as you type:
 - Open the line with `「` or `『` and the space is removed.
 - Press Enter again without typing anything and the leftover space is
   cleared, leaving a true blank line.
-- Only spaces inserted automatically are ever removed — spaces you enter
-  yourself are left alone.
+- Only spaces inserted automatically are ever removed.
 
 Turn it off under **Japanese Novel — Editor** (`jpnov.editor.autoIndent`).
 
@@ -234,23 +232,23 @@ and EPUB are icon buttons):
 
 Outputs land in `<outDir>/<book path>.{html,pdf,epub,txt}` with `outDir`
 defaulting to `dist`. Two book files that resolve to the same output path fail
-the build with a diagnostic instead of overwriting each other.
+the build with a diagnostic.
 
 The built PDF embeds a subset of each font it uses. With the default stack,
 the result is fine to submit to a print shop and to sell: Hiragino Mincho
-(macOS) and Yu Mincho (Windows) are OS-bundled fonts whose licenses permit
+(macOS) and Yu Mincho (Windows) are OS-bundled fonts whose licences permit
 commercial use of rendered output and PDF embedding, and Noto Serif JP is
 openly licensed (SIL OFL). When `jpnov.layout.fontFamily` names a commercial
-font, check that its license allows PDF embedding.
+font, check that its licence allows PDF embedding.
 
 A `.jpbook` is a reading-order table of contents — file names and folder
 layout never decide what a book contains or in what order. That scales to long
-works: keep one `.jpbook` per volume and hand your editor only the newest
-volume's PDF; keep alternate drafts of a chapter side by side and swap a
-single line to retarget a submission; name and move chapter files freely
-without reshuffling the book.
+works. Keep one `.jpbook` per volume and send your editor only the newest
+volume's PDF. Keep alternate drafts of a chapter side by side and swap a
+single line to retarget a submission. Name and move chapter files freely; the
+book keeps its order.
 
-On `.jpbook` files the editor offers completion (chapter paths, metadata keys
+On `.jpbook` files the editor offers completion (chapter paths, metadata keys,
 and enum values), diagnostics (missing files, duplicates, escaping the
 workspace, unknown metadata keys…), and document links — Cmd/Ctrl-click an
 entry to open the chapter.
@@ -269,14 +267,15 @@ hand-editing always agree.
 Renaming or moving a chapter (or a folder of chapters) inside VS Code offers
 to update every `.jpbook` that references it —
 `jpnov.editor.updateRefsOnFileMove` picks `prompt` (default), `always`, or
-`never`, the `updateImportsOnFileMove` triad. Renames made outside VS Code
+`never` — the same three choices VS Code offers for updating imports on file
+move. Renames made outside VS Code
 can't be tracked; the missing path is flagged in the editor instead.
 
 ### Per-book metadata (front matter)
 
-Page furniture is a property of the book, not of the workspace — two volumes
-in one workspace can carry different running heads; the chapter divider is
-book identity for the same reason. A `.jpbook` therefore starts with an
+Page furniture belongs to the book: two volumes in one workspace can carry
+different running heads, and the chapter divider is part of a book's identity
+too. A `.jpbook` therefore starts with an
 optional `---`-fenced block of `key: value` lines:
 
 ```text
@@ -295,9 +294,9 @@ divider: ＊　＊　＊
 | --- | --- | --- |
 | `title` | — | Display name in the Books view and the EPUB title (the output path still derives from the file name) |
 | `author` | — | Author name; becomes the EPUB creator metadata |
-| `header` | `""` | Running head centered at the top of every page; omit for none |
-| `pageNumber` | `right` | Folio placement: pinned (`right`, `left`) or alternating per page (`rightLeft`, `leftRight`), or `none` |
-| `pageNumberFormat` | `{page} / {totalPage}` | Folio text; blank suppresses it |
+| `header` | `""` | Running head centred at the top of every page; omit for none |
+| `pageNumber` | `right` | Page-number placement: pinned (`right`, `left`) or alternating per page (`rightLeft`, `leftRight`), or `none` |
+| `pageNumberFormat` | `{page} / {totalPage}` | Page-number text; blank suppresses it |
 | `divider` | — | Chapter divider inserted between chapters that do not open with a heading (e.g. `＊　＊　＊`); a bare mark is centred along the line at build time, a `［＃３字下げ］` prefix indents it instead; omit for a single blank line |
 
 Every key is optional; unknown keys warn and are ignored, so future keys stay
@@ -347,11 +346,10 @@ Everything is a plain `jpnov.lint.*` setting under **Japanese Novel — Lint**.
 
 Checks run per stream: narration, dialogue (`「…」`), and ruby readings are
 linted separately, so narration-only style rules never fire inside a line of
-dialogue. Being dictionary-free, the rules never guess at vocabulary — a
-coined proper noun is never "corrected".
+dialogue.
 
 - **Hygiene checks are on by default** — half-width kana, decomposed (NFD)
-  characters, zero-width / invisible characters, and invalid control
+  characters, zero-width spaces, and invalid control
   characters — so a stray malformed or invisible character never slips into a
   manuscript. The dash check (`common.dash`) is on too, keeping one dash
   character throughout.
@@ -386,7 +384,7 @@ highlighting lists are per workspace folder; the browser path is per machine.
 | `jpnov.layout.autoTcy` | `punctuationPairs` | Auto-combine `!!` `!?` `?!` `??`; `none` to disable |
 | `jpnov.layout.preview.lineNumbers` | `true` | Line numbers in the preview, restarting per page break |
 | `jpnov.layout.preview.edgeLine` | `none` | Column rules in the preview: `none` / `text` / `red` |
-| `jpnov.layout.paper.size` | `a4` | Paper of built HTML/PDF pages: `a4` / `a6`; the grid scales to fill it, centered |
+| `jpnov.layout.paper.size` | `a4` | Paper of built HTML/PDF pages: `a4` / `a6`; the grid scales to fill it, centred |
 | `jpnov.layout.paper.orientation` | `auto` | Paper orientation: `auto` (follows the page grid) / `landscape` / `portrait` |
 | `jpnov.layout.paper.lineNumbers` | `false` | Line numbers in built pages, restarting per page |
 | `jpnov.layout.paper.edgeLine` | `none` | Column rules + page frame in built pages: `none` / `text` / `red` |
@@ -400,23 +398,24 @@ The running head and page number are **per-book** properties and live in each
 
 ### Japanese Novel — Lint
 
-Threshold rules take an integer or `null` (off). All rules run on narration;
-`common.*` rules also run inside dialogue.
+Threshold rules take an integer or `null` (off). `common.*` rules run on
+narration and dialogue, `narration.*` rules on narration, and `ruby.kana` on
+ruby readings.
 
 | Setting | Default | Checks |
 | --- | --- | --- |
 | `jpnov.lint.common.noHankakuKana` | `true` | Half-width kana |
 | `jpnov.lint.common.noNfd` | `true` | Decomposed (NFD) characters |
-| `jpnov.lint.common.noZeroWidth` | `true` | Zero-width / invisible characters |
+| `jpnov.lint.common.noZeroWidth` | `true` | Zero-width spaces (U+200B) |
 | `jpnov.lint.common.noControlChar` | `true` | Invalid control characters |
-| `jpnov.lint.common.shiftJisSafe` | `true` | Characters Shift JIS lacks, written as 〓 in a `.txt` build |
-| `jpnov.lint.common.dash` | `horizontalBar` | One dash character throughout, in even-numbered runs (auto-fix) |
+| `jpnov.lint.common.shiftJisSafe` | `true` | Characters Shift JIS lacks, written as 〓 in a Shift JIS `.txt` build |
+| `jpnov.lint.common.dash` | `horizontalBar` | One dash character throughout, always in pairs (auto-fix) |
 | `jpnov.lint.common.sentenceLength` | `null` | Sentence length limit (suggested 100) |
 | `jpnov.lint.common.maxTen` | `null` | Commas (、) per sentence (suggested 3) |
 | `jpnov.lint.common.maxKanjiRun` | `null` | Consecutive kanji (suggested 6) |
 | `jpnov.lint.common.noUnmatchedPair` | `false` | Unmatched brackets / quotes |
 | `jpnov.lint.common.jaNoSpaceBetweenFullWidth` | `false` | Space between full-width characters (auto-fix) |
-| `jpnov.lint.common.jaUnnaturalAlphabet` | `false` | Unnatural alphabet usage |
+| `jpnov.lint.common.jaUnnaturalAlphabet` | `false` | Unnatural runs of half-width letters |
 | `jpnov.lint.common.minusPosition` | `false` | Minus sign not before a number |
 | `jpnov.lint.narration.generalNovelStyle` | `false` | General novel conventions bundle (auto-fix) |
 | `jpnov.lint.narration.jaNoMixedPeriod` | `false` | Narration sentences end with `。` (auto-fix) |
@@ -426,7 +425,7 @@ Threshold rules take an integer or `null` (off). All rules run on narration;
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `jpnov.editor.autoIndent` | on | Full-width space on Enter, removed again for `「`/`『` lines (see auto indent) |
+| `jpnov.editor.autoIndent` | `true` | Full-width space on Enter, removed again for `「`/`『` lines (see auto indent) |
 | `jpnov.editor.highlight.characters` | `[]` | Cast names, per workspace folder (see highlighting) |
 | `jpnov.editor.highlight.keywords` | `[]` | Coined terms, per workspace folder (see highlighting) |
 | `jpnov.editor.updateRefsOnFileMove` | `prompt` | Update `.jpbook` paths on rename/move (`always`, `never`) |
@@ -439,17 +438,21 @@ All under the **Japanese Novel** category.
 | --- | --- |
 | Open Preview to the Side | Editor title bar on `.jpnov`, Command Palette |
 | Open Preview | Command Palette |
+| Create a Book… | Books view title bar (`+`), Command Palette |
 | Build to HTML / Build to PDF / Build to Text / Build to EPUB | Buttons at the bottom of the Books view |
-| Select All Books / Deselect All Books / Refresh Books | Books view title bar |
+| Select All Books / Deselect All Books | Links at the bottom of the Books view |
+| Refresh Books | Books view title bar |
+| Open the Getting Started Guide | Command Palette |
 
 There are no default keybindings.
 
 ## No-AI policy
 
-Publishing a novel is a serious matter, and many editors explicitly forbid the
-use of **any AI**. This extension introduces **no AI tools for writing**, and
-disables the Copilot extension by default for `*.jpnov` / `*.jpbook`. All
-completion (chapter paths, metadata keys, etc.) relies entirely on non-AI programs.
+Publishing a novel is a serious matter, and many publishers explicitly forbid
+the use of **any AI**. This extension introduces **no AI tools for writing**,
+and disables the Copilot extension by default for `*.jpnov` / `*.jpbook`. All
+completion (chapter paths, metadata keys, and the like) comes from ordinary
+rule-based code.
 
 **Writing must be done entirely by the human author, from beginning to end.**
 
@@ -480,5 +483,4 @@ retake the VS Code captures.
 
 ## License
 
-Under the MIT License. See the [`LICENSE`](./LICENSE) file for the
-full text.
+Released under the MIT License. See [`LICENSE`](./LICENSE) for the full text.
