@@ -62,13 +62,6 @@ function bookTitle(entry: BookEntry): string {
   return entry.title ?? splitRelPath(entry.outRel).name;
 }
 
-/** One client-written artifact: its URI string + the resolved output dir it landed under
- *  (the server's `outDir` field; the post-build reveal target). */
-interface WrittenFile {
-  readonly uri: string;
-  readonly outDir: string;
-}
-
 export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   /** The view id (matches `contributes.views.jpnov[].id` in package.json). */
   static readonly viewId = 'jpnov.books';
@@ -554,10 +547,10 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
   /**
    * The localized "built {N} file(s)" success toast (Japanese is number-invariant). With the
-   * footer's reveal toggle on, also opens each distinct `outDir` once, however many books
-   * landed in it.
+   * footer's reveal toggle on, also opens each output dir — `BuildResult.outDirs`, already
+   * deduplicated server-side.
    */
-  private reportBuilt(count: number, label: string, outDirs: Iterable<string>): void {
+  private reportBuilt(count: number, label: string, outDirs: readonly string[]): void {
     // showInformationMessage never rejects, so void is safe.
     void vscode.window.showInformationMessage(
       vscode.l10n.t('Japanese Novel: built {0} {1} file(s).', String(count), label),
@@ -565,7 +558,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     if (!this.revealOutput) {
       return;
     }
-    for (const dir of new Set(outDirs)) {
+    for (const dir of outDirs) {
       // openExternal opens the folder's contents; revealFileInOS would only select it in its parent.
       void vscode.env.openExternal(vscode.Uri.parse(dir));
     }
@@ -635,22 +628,22 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           const txtEncoding = vscode.workspace
             .getConfiguration()
             .get<TxtEncoding>('jpnov.layout.txt.encoding', TXT_ENCODING_DEFAULT);
-          const written: WrittenFile[] = [];
+          const written: string[] = [];
           let substitutions = 0;
           // One write shape for every artifact kind: success lands in `written`, failure
-          // toasts and moves on (a bad path never aborts the batch).
-          const write = async (path: string, outDir: string, bytes: Uint8Array): Promise<void> => {
+          // toasts and moves on (a bad uri never aborts the batch).
+          const write = async (uri: string, bytes: Uint8Array): Promise<void> => {
             try {
-              await vscode.workspace.fs.writeFile(vscode.Uri.parse(path), bytes);
-              written.push({ uri: path, outDir });
+              await vscode.workspace.fs.writeFile(vscode.Uri.parse(uri), bytes);
+              written.push(uri);
             } catch (err) {
               const message = err instanceof Error ? err.message : String(err);
               void vscode.window.showErrorMessage(
-                vscode.l10n.t("Japanese Novel: couldn't write {0}. {1}", path, message),
+                vscode.l10n.t("Japanese Novel: couldn't write {0}. {1}", uri, message),
               );
             }
           };
-          for (const artifact of result.artifacts ?? []) {
+          for (const artifact of result.artifacts) {
             let bytes: Uint8Array;
             switch (artifact.kind) {
               case 'txt': {
@@ -663,7 +656,6 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
                 bytes = Buffer.from(artifact.content, 'utf8');
                 break;
               case 'epub':
-                // The server ships member files; the zip step (mimetype-first OCF) is local.
                 bytes = ocfZip(artifact.members);
                 break;
               default: {
@@ -671,12 +663,11 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
                 throw new Error(`buildSelected: unhandled artifact ${JSON.stringify(exhaustive)}`);
               }
             }
-            await write(artifact.path, artifact.outDir, bytes);
+            await write(artifact.path, bytes);
           }
 
-          // Per-book build errors (each isolated server-side; never aborts the rest). The server
-          // sends a {code,args}; the client renders it to localized text.
-          const errors = result.errors ?? [];
+          // The server sends a {code,args}; the client renders it to localized text.
+          const errors = result.errors;
           for (const e of errors) {
             void vscode.window.showErrorMessage(
               vscode.l10n.t('Japanese Novel: build error for {0}. {1}', e.book, renderMessage(e)),
@@ -685,13 +676,13 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
           // PDF: convert the just-written .html files, then report the PDF count in place of HTML.
           if (action === 'pdf' && written.length > 0) {
-            await this.convertToPdf(written, label, progress, token);
+            await this.convertToPdf(written, label, result.outDirs, progress, token);
             return;
           }
 
           if (written.length > 0) {
             // One artifact per book now (a single format), so the file count IS the book count.
-            this.reportBuilt(written.length, label, written.map((w) => w.outDir));
+            this.reportBuilt(written.length, label, result.outDirs);
             if (substitutions > 0) {
               void vscode.window.showWarningMessage(
                 vscode.l10n.t('Japanese Novel: {0} character(s) became 〓 in the text output.', String(substitutions)),
@@ -718,8 +709,9 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
    * exists. Conversions run serially (one browser at a time) and stop on cancellation.
    */
   private async convertToPdf(
-    files: readonly WrittenFile[],
+    files: readonly string[],
     label: string,
+    outDirs: readonly string[],
     progress: vscode.Progress<{ message?: string }>,
     token: vscode.CancellationToken,
   ): Promise<void> {
@@ -742,9 +734,9 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           configure,
         )
         .then((pick) => {
-          const first = files[0];
-          if (pick === openFolder && first !== undefined) {
-            void vscode.env.openExternal(vscode.Uri.parse(first.outDir));
+          const dir = outDirs[0];
+          if (pick === openFolder && dir !== undefined) {
+            void vscode.env.openExternal(vscode.Uri.parse(dir));
           } else if (pick === configure) {
             void vscode.commands.executeCommand('workbench.action.openSettings', 'jpnov.layout.browserPath');
           }
@@ -757,8 +749,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const cancelSub = token.onCancellationRequested(() => {
       abort.abort();
     });
-    // One entry per converted PDF (its output dir); doubles as the count and the reveal targets.
-    const pdfDirs: string[] = [];
+    let converted = 0;
     try {
       let done = 0;
       for (const file of files) {
@@ -769,11 +760,11 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         progress.report({
           message: vscode.l10n.t('converting to PDF… ({0}/{1})', String(done), String(files.length)),
         });
-        const htmlPath = vscode.Uri.parse(file.uri).fsPath;
+        const htmlPath = vscode.Uri.parse(file).fsPath;
         const pdfPath = htmlPath.replace(/\.html$/i, '.pdf');
         try {
           await convertHtmlToPdf(browserExe, htmlPath, pdfPath, 60_000, abort.signal);
-          pdfDirs.push(file.outDir);
+          converted += 1;
         } catch (err) {
           // A cancel aborts the child, surfacing as a rejection here — don't report that as a failure.
           if (abort.signal.aborted) {
@@ -781,7 +772,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           }
           const message = err instanceof Error ? err.message : String(err);
           void vscode.window.showErrorMessage(
-            vscode.l10n.t("Japanese Novel: couldn't convert {0} to PDF. {1}", lastPathSegment(file.uri), message),
+            vscode.l10n.t("Japanese Novel: couldn't convert {0} to PDF. {1}", lastPathSegment(file), message),
           );
         }
       }
@@ -789,8 +780,8 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       cancelSub.dispose();
     }
 
-    if (pdfDirs.length > 0) {
-      this.reportBuilt(pdfDirs.length, label, pdfDirs);
+    if (converted > 0) {
+      this.reportBuilt(converted, label, outDirs);
     }
   }
 }

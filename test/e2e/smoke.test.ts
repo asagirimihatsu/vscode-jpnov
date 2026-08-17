@@ -155,7 +155,6 @@ test('jpnov/listBooks + jpnov/build round-trip a real workspace over the wire', 
     projectDirs,
   });
   assert.equal(result.ok, true);
-  assert.ok(result.artifacts);
   assert.equal(result.artifacts.length, 1);
 
   const htmlArtifact = result.artifacts[0];
@@ -170,9 +169,11 @@ test('jpnov/listBooks + jpnov/build round-trip a real workspace over the wire', 
     settings: HTML_SETTINGS,
     projectDirs,
   });
-  const txtArtifact = txtResult.artifacts?.[0];
+  const txtArtifact = txtResult.artifacts[0];
   assert.ok(txtArtifact?.kind === 'txt');
   assert.equal(txtArtifact.path, `${wsUri}/dist/hon.txt`);
+  // deepEqual over the REAL wire: locks outDirs arriving as a plain array (a Set would not survive).
+  assert.deepEqual(txtResult.outDirs, [`${wsUri}/dist`]);
   assert.ok(txtArtifact.content.includes('夜霧'), 'the .txt artifact carries the raw Aozora source');
 
   builtHtml = htmlArtifact.content;
@@ -379,7 +380,7 @@ test('the built page follows every 行送り tier (column width and fitted font 
       projectDirs,
     });
     assert.equal(result.ok, true, `@${String(linePitch)}: build must succeed`);
-    const artifact = result.artifacts?.[0];
+    const artifact = result.artifacts[0];
     assert.ok(artifact?.kind === 'html', `@${String(linePitch)}: build must emit the HTML artifact`);
 
     const fit = fitPaper({

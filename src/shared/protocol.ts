@@ -235,13 +235,10 @@ export interface BuildParams {
   readonly projectDirs: ProjectDirsMap;
 }
 
-/** The output-location fields every {@link BuildArtifact} member carries. */
+/** The output-location field every {@link BuildArtifact} member carries. */
 interface BuildArtifactBase {
   /** Workspace-relative-or-absolute output path string; the CLIENT writes it. */
   readonly path: string;
-  /** The root's resolved output dir `path` lives under (a nested book's file sits deeper);
-   *  the client's post-build reveal target. */
-  readonly outDir: string;
 }
 
 export interface TxtArtifact extends BuildArtifactBase {
@@ -285,8 +282,11 @@ export interface BuildError extends LocalizableMessage {
 
 export interface BuildResult {
   readonly ok: boolean;
-  readonly artifacts?: readonly BuildArtifact[];
-  readonly errors?: readonly BuildError[];
+  /** Each resolved output dir the artifacts landed under, once (deduplicated server-side);
+   *  the client's post-build reveal targets. An errored book contributes no entry. */
+  readonly outDirs: readonly string[];
+  readonly artifacts: readonly BuildArtifact[];
+  readonly errors: readonly BuildError[];
 }
 
 // ---------------------------------------------------------------------------

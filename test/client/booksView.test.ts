@@ -53,7 +53,7 @@ function fakeClient(books: unknown[], buildResult?: unknown) {
       }
       if (type === BuildRequest) {
         calls.build = params as { books?: string[]; format?: string };
-        return Promise.resolve(buildResult ?? { ok: true, artifacts: [] });
+        return Promise.resolve(buildResult ?? { ok: true, outDirs: [], artifacts: [], errors: [] });
       }
       return Promise.resolve({});
     },
@@ -245,11 +245,13 @@ test('a successful build opens the configured output dir, once — never a neste
   const root = 'file:///ws';
   const { view } = await setup([entry(root, 'a'), entry(root, 'sub/b')], {
     ok: true,
+    // One dir for both books — the nested book's file sits below it; the server sends it once.
+    outDirs: [`${root}/out`],
     artifacts: [
-      { kind: 'html', path: `${root}/out/a.html`, outDir: `${root}/out`, content: '<p>a</p>' },
-      // A nested book: the file sits below outDir, but the reveal target is still outDir.
-      { kind: 'html', path: `${root}/out/sub/b.html`, outDir: `${root}/out`, content: '<p>b</p>' },
+      { kind: 'html', path: `${root}/out/a.html`, content: '<p>a</p>' },
+      { kind: 'html', path: `${root}/out/sub/b.html`, content: '<p>b</p>' },
     ],
+    errors: [],
   });
   view.webview.receive({ type: 'build', format: 'html' });
   await tick();
@@ -260,7 +262,12 @@ test('the reveal-output toggle turns the reveal off; the toast still fires', asy
   const root = 'file:///ws';
   const { view } = await setup(
     [entry(root, 'a')],
-    { ok: true, artifacts: [{ kind: 'html', path: `${root}/out/a.html`, outDir: `${root}/out`, content: '<p>a</p>' }] },
+    {
+      ok: true,
+      outDirs: [`${root}/out`],
+      artifacts: [{ kind: 'html', path: `${root}/out/a.html`, content: '<p>a</p>' }],
+      errors: [],
+    },
   );
   view.webview.receive({ type: 'revealOutput', on: false });
   view.webview.receive({ type: 'build', format: 'html' });
@@ -471,14 +478,16 @@ test('an epub build zips member files client-side and writes one .epub per book'
     {
       kind: 'epub',
       path: `${root}/dist/a.epub`,
-      outDir: `${root}/dist`,
       members: [
         { name: 'META-INF/container.xml', content: '<container/>' },
         { name: 'OEBPS/package.opf', content: '<package/>' },
       ],
     },
   ];
-  const { view, client } = await setup([entry(root, 'a')], { ok: true, artifacts });
+  const { view, client } = await setup(
+    [entry(root, 'a')],
+    { ok: true, outDirs: [`${root}/dist`], artifacts, errors: [] },
+  );
   view.webview.receive({ type: 'build', format: 'epub' });
   await tick();
   await tick();

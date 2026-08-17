@@ -59,8 +59,6 @@ test('build emits the requested artifact kind per jpbook containing both files',
   });
 
   assert.equal(htmlResult.ok, true);
-  assert.ok(htmlResult.artifacts);
-  assert.ok(htmlResult.errors);
   assert.equal(htmlResult.errors.length, 0);
   assert.equal(htmlResult.artifacts.length, 1);
 
@@ -76,7 +74,7 @@ test('build emits the requested artifact kind per jpbook containing both files',
     settings: SETTINGS,
     projectDirs: projectsFor(ws.uri),
   });
-  const txt = txtResult.artifacts?.[0];
+  const txt = txtResult.artifacts[0];
   assert.ok(txt?.kind === 'txt');
   assert.equal(txt.path, `${ws.uri}/dist/vol1.txt`);
   // The .txt is the concatenated source: one blank glue line between chapters, no trailing newline.
@@ -104,7 +102,7 @@ test('a front-matter divider lands between heading-less chapters in BOTH artifac
 
   // a→b: no heading → blank + centred ＊ (cpl 40 → ［＃１９字下げ］) + one more blank.
   // b→c: c opens with a 見出し → the heading is the separator, blank line only.
-  const txt = txtResult.artifacts?.[0];
+  const txt = txtResult.artifacts[0];
   assert.ok(txt?.kind === 'txt');
   assert.equal(
     txt.content,
@@ -116,7 +114,7 @@ test('a front-matter divider lands between heading-less chapters in BOTH artifac
     settings: SETTINGS,
     projectDirs: projectsFor(ws.uri),
   });
-  const html = htmlResult.artifacts?.[0];
+  const html = htmlResult.artifacts[0];
   assert.ok(html?.kind === 'html');
   assert.ok(html.content.includes('<div class="line indent-19">＊</div>'), 'centred divider row');
   assert.match(html.content, /\.indent-19\{padding-inline-start:19em\}/);
@@ -152,7 +150,7 @@ test('build stays lenient on an unclosed ［＃: ok, artifacts emitted, tail vis
     settings: SETTINGS,
     projectDirs: projectsFor(ws.uri),
   });
-  const txt = txtResult.artifacts?.[0];
+  const txt = txtResult.artifacts[0];
   assert.ok(txt?.kind === 'txt');
   assert.equal(txt.content, '本文［＃閉じない注記\n次の行'); // .txt is byte-faithful anyway
 });
@@ -190,12 +188,11 @@ test('deeply nested jpbook writes a mirrored nested output path', async () => {
   });
 
   assert.equal(result.ok, true);
-  assert.ok(result.artifacts);
+  // The nested file's reveal target is still the resolved outDir, not its own parent.
+  assert.deepEqual(result.outDirs, [`${ws.uri}/dist`]);
   const txt = result.artifacts[0];
   assert.ok(txt?.kind === 'txt');
   assert.equal(txt.path, `${ws.uri}/dist/a/b/c.txt`);
-  // The nested file's reveal target is still the resolved outDir, not its own parent.
-  assert.equal(txt.outDir, `${ws.uri}/dist`);
   assert.equal(txt.content, 'ふかい');
 });
 
@@ -234,10 +231,28 @@ test('projectDirs overrides outDir per root', async () => {
   });
 
   assert.equal(result.ok, true);
-  assert.ok(result.artifacts);
+  assert.deepEqual(result.outDirs, [`${ws.uri}/out`]);
   assert.equal(result.artifacts.length, 1);
   assert.equal(result.artifacts[0]?.path, `${ws.uri}/out/vol1.txt`);
-  assert.equal(result.artifacts[0].outDir, `${ws.uri}/out`);
+});
+
+test('outDirs carries each resolved output dir ONCE across the books that landed in it', async () => {
+  await using ws = await makeTmpWorkspace();
+  const { ctx } = boot();
+  await writeUnder(ws.dir, 'a/index.jpbook', 'a/x.jpnov');
+  await writeUnder(ws.dir, 'a/x.jpnov', 'A');
+  await writeUnder(ws.dir, 'b/index.jpbook', 'b/y.jpnov');
+  await writeUnder(ws.dir, 'b/y.jpnov', 'B');
+
+  const result = await handleBuild(ctx, {
+    format: 'txt',
+    settings: SETTINGS,
+    projectDirs: projectsFor(ws.uri),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.artifacts.length, 2);
+  assert.deepEqual(result.outDirs, [`${ws.uri}/dist`]);
 });
 
 test('an invalid outDir silently falls back to dist — and the FALLBACK dir is what discovery skips', async () => {
@@ -278,8 +293,6 @@ test('a missing referenced .jpnov is a per-book error + diagnostic; other books 
   });
 
   assert.equal(result.ok, false);
-  assert.ok(result.errors);
-  assert.ok(result.artifacts);
   assert.equal(result.errors.length, 1);
   const err = result.errors[0];
   assert.ok(err);
@@ -341,7 +354,7 @@ test('build honors the kinsoku mode from the settings snapshot (禁則)', async 
     settings: { ...SETTINGS, charsPerLine: 16, kinsoku: 'normal' },
     projectDirs: projectsFor(ws.uri),
   });
-  const html = result.artifacts?.find((a) => a.kind === 'html')?.content ?? '';
+  const html = result.artifacts.find((a) => a.kind === 'html')?.content ?? '';
   assert.ok(
     html.includes(
       `<div class="line" data-line="0">${head}</div>` +
@@ -354,7 +367,7 @@ test('build honors the kinsoku mode from the settings snapshot (禁則)', async 
 test('build with an empty projectDirs map returns ok with no artifacts', async () => {
   const { ctx } = boot();
   const result = await handleBuild(ctx, { format: 'txt', settings: SETTINGS, projectDirs: {} });
-  assert.deepEqual(result, { ok: true, artifacts: [], errors: [] });
+  assert.deepEqual(result, { ok: true, outDirs: [], artifacts: [], errors: [] });
 });
 
 test('build targeting a specific root only builds that root', async () => {
@@ -373,7 +386,6 @@ test('build targeting a specific root only builds that root', async () => {
     projectDirs: { ...projectsFor(wsA.uri), ...projectsFor(wsB.uri) },
   });
 
-  assert.ok(result.artifacts);
   assert.equal(result.artifacts.length, 1);
   assert.equal(result.artifacts[0]?.path, `${wsA.uri}/dist/va.txt`);
 });
@@ -458,7 +470,6 @@ test('build restricts to the selected books (by jpbook uri)', async () => {
     projectDirs: projectsFor(ws.uri),
   });
 
-  assert.ok(result.artifacts);
   assert.equal(result.artifacts.length, 1); // a.txt, and nothing from book b
   assert.equal(result.artifacts[0]?.path, `${ws.uri}/dist/a.txt`);
 });
@@ -477,6 +488,7 @@ test('build with an empty books selection builds nothing (distinct from omitting
   });
 
   assert.equal(result.ok, true);
+  assert.deepEqual(result.outDirs, []);
   assert.deepEqual(result.artifacts, []);
   assert.deepEqual(result.errors, []);
 });
@@ -642,7 +654,7 @@ test('front matter never leaks into the artifacts: body starts at the first chap
   });
 
   assert.equal(result.ok, true);
-  const txt = result.artifacts?.[0];
+  const txt = result.artifacts[0];
   assert.ok(txt?.kind === 'txt');
   assert.equal(txt.content, 'ほんぶん', 'the .txt is the chapters only — no metadata lines');
 });
@@ -660,7 +672,7 @@ test('a book whose front matter has warnings (unknown key) still builds', async 
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.artifacts?.length, 1);
+  assert.equal(result.artifacts.length, 1);
   // The warning is still published as a diagnostic on the .jpbook.
   assert.ok(conn.diagnostics.some((d) => d.uri === `${ws.uri}/vol1.jpbook` && d.count > 0));
 });
@@ -723,6 +735,8 @@ test('results never carry a legacy epubs key; epub rides the collision check too
   });
   assert.equal(result.ok, false);
   assert.ok(!('epubs' in result), 'epub builds share the same result shape');
+  // Nothing was emitted, so no dir qualifies as a reveal target either.
+  assert.deepEqual(result.outDirs, []);
   assert.deepEqual(result.artifacts, []);
-  assert.ok(result.errors?.every((e) => e.code === 'build.outPathCollision'));
+  assert.ok(result.errors.every((e) => e.code === 'build.outPathCollision'));
 });
