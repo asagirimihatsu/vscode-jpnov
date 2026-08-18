@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { DASH_BY_MODE } from '../../../src/shared/compiler/layout.ts';
+import { DASH_BY_MODE } from '../../../src/shared/chars.ts';
 import { DASH_MODES, LAYOUT_DEFAULT } from '../../../src/shared/config/types.ts';
 import { RULES, allSettingKeys, diagCode, settingKey } from '../../../src/shared/lint/catalog.ts';
 import type { RuleMeta } from '../../../src/shared/lint/catalog.ts';

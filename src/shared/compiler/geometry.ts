@@ -1,11 +1,12 @@
 /**
- * The page-geometry constants the TypeScript side still CONSUMES at runtime — the paper-fit
- * generator (css.ts's `paperRules` via {@link fitPaper}) and the `--htop` band variable are
- * computed from these, so they cannot live only in the static stylesheets.
+ * The page-geometry constants. All but the guard-only {@link EDGE_INSET} are CONSUMED at
+ * runtime — the paper-fit generator (css.ts's `paperRules` via {@link fitPaper}) and the
+ * `--htop` band variable are computed from them, so they cannot live only in the static
+ * stylesheets.
  *
- * Two of them (FOLIO_BAND, SIDE_PAD) are ALSO written as plain literals in `styles/*.css`
- * (`2em` folio band, `1.5em` side pads): that double home is deliberate — `@page` cannot
- * read `var()` portably (ruling: build output stays portable) — and is guarded by
+ * Some of them (FOLIO_BAND, SIDE_PAD, EDGE_INSET) are ALSO written as plain literals in
+ * `styles/*.css`: that double home is deliberate — `@page` cannot read `var()` portably
+ * (ruling: build output stays portable) — and is guarded by
  * `test/shared/compiler/styles-codegen.test.ts`, which asserts the `.css` literals equal
  * these constants. Change a value here WITHOUT updating the fragments (or vice versa) and
  * that test fails loudly. The line pitch is NOT a constant: the `jpnov.layout.linePitch`
@@ -29,10 +30,17 @@ export const FOLIO_BAND = 2;
 /**
  * Sheet padding on the physical left/right (the vertical-rl block axis): the text grid and
  * the outset frame never touch the paper's side cut. Doubly homed as fragment literals
- * (padding-block, frame sides, folio corners at SIDE_PAD + 0.35 EDGE_INSET) —
+ * (padding-block, frame sides, folio corners at SIDE_PAD + EDGE_INSET) —
  * styles-codegen.test.ts guards the set.
  */
 export const SIDE_PAD = 1.5;
+/**
+ * Frame ↔ text breathing gap in em, reserved UNCONDITIONALLY by both media (toggling
+ * edgeLine never moves a glyph). Guard-only: the fit math never consumes it — the value
+ * lives as fragment literals (preview reserve/lifts, frame top/bottom, folio corners),
+ * every site derived-asserted from this constant by styles-codegen.test.ts.
+ */
+export const EDGE_INSET = 0.35;
 /**
  * MINIMUM paper inset per side on the BLOCK axis (physical left/right), in em: {@link fitPaper}
  * caps the font size so the sheet keeps at least this surround inside the paper. The physical

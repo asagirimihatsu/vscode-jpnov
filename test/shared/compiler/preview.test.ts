@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { PreviewChrome } from '../../../src/shared/compiler/chrome.ts';
+import { EDGE_INSET } from '../../../src/shared/compiler/geometry.ts';
 import { renderPreview } from '../../../src/shared/compiler/preview.ts';
 
 /**
@@ -159,10 +160,10 @@ test('renderPreview pins line font-size to the root and emits no CSS width cap',
 
 test('renderPreview scales the root font so a full line fills the pane height', () => {
   // The SAME charsPerLine drives both the JS hard wrap and the stylesheet's
-  // fit-to-viewport formula — a full 20-char column plus the two reserved 0.35em frame
-  // gaps measures exactly 100vh − padding.
+  // fit-to-viewport formula — a full 20-char column plus the two reserved EDGE_INSET
+  // frame gaps measures exactly 100vh − padding.
   const html = preview('本文', { charsPerLine: 20 });
-  assert.match(html, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ \(var\(--cpl\) \+ 0\.7\)\)/);
+  assert.ok(html.includes(`font-size:calc((100vh - 32px) / (var(--cpl) + ${String(2 * EDGE_INSET)}))`));
   assert.match(html, /:root\{--cpl:20;--pitch:2;--font-family:/);
 });
 

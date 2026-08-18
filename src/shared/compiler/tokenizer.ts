@@ -3,8 +3,8 @@
  *
  * The only annotation delimiter is the full-width ［＃ ... ］; corner brackets 「」 are
  * dialogue and are never comments. Ruby uses its own delimiters 《 》 with an optional
- * explicit base marker ｜. This is the single entry point that both the per-file
- * renderer and the book renderer build on, so it handles cross-line spans (style span
+ * explicit base marker ｜. This is the single entry point that the per-file renderer,
+ * the book renderer and the prose lint build on, so it handles cross-line spans (style span
  * start/end and 字下げ block start/end emit independent tokens in stream order; the
  * renderer pairs them).
  *

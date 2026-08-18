@@ -12,12 +12,10 @@
  *
  * Pure + vscode-free.
  */
+import { DASH_BY_MODE, DASH_CHARS, DASH_GLYPH } from '../chars.ts';
 import type { DashMode } from '../config/types.ts';
 import { escapeHtml } from './escape.ts';
 import {
-  DASH_BY_MODE,
-  DASH_CHARS,
-  DASH_GLYPH,
   emitUnits,
   INSEP_LEADER,
   reflowRubyHtml,

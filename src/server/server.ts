@@ -17,6 +17,7 @@ import {
   TextDocumentSyncKind,
 } from 'vscode-languageserver/node';
 import type {
+  CancellationToken,
   CodeAction,
   CodeActionParams,
   InitializeParams,
@@ -53,7 +54,7 @@ import { computeLintFindings } from './lint/engine.ts';
 import type { LintFinding } from './lint/engine.ts';
 import { reportError } from './report.ts';
 import { createWorkspaceRoots } from './roots.ts';
-import type { ServerContext } from './roots.ts';
+import type { ServerContext } from './context.ts';
 import { createHighlightStore, handleHighlightChanged } from './highlight/vocabulary.ts';
 import { buildSemanticTokens, SEMANTIC_LEGEND } from './semanticTokens.ts';
 import { annotationDiagnostics } from './syntax.ts';
@@ -165,9 +166,9 @@ connection.onRequest(
   BuildRequest,
   (
     params: BuildParams,
-    _token: unknown,
+    token: CancellationToken,
     workDone?: WorkDoneProgressReporter,
-  ): Promise<BuildResult> => handleBuild(context, params, workDone),
+  ): Promise<BuildResult> => handleBuild(context, params, workDone, token),
 );
 
 // List books: enumerate every `.jpbook` of every root in the request's projectDirs map.

@@ -13,8 +13,8 @@ import type { Connection } from 'vscode-languageserver/node';
 
 import { selectRules } from '../../src/shared/lint/select.ts';
 import { createHighlightStore } from '../../src/server/highlight/vocabulary.ts';
+import type { ServerContext } from '../../src/server/context.ts';
 import { createWorkspaceRoots } from '../../src/server/roots.ts';
-import type { ServerContext } from '../../src/server/roots.ts';
 
 export interface RecordedNotification {
   readonly method: string;

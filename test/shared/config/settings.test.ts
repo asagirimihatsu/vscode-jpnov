@@ -123,7 +123,7 @@ test('dash rides both snapshots: kept when known, defaulted otherwise — retire
   // the lint side keeps reading that spelling as disabled (select.ts).
   assert.equal(resolveHtmlSettings(badHtml({ dash: 'off' })).dash, LAYOUT_DEFAULT.dash);
   assert.equal(resolveHtmlSettings(badHtml({ dash: true })).dash, LAYOUT_DEFAULT.dash);
-  assert.equal(LAYOUT_DEFAULT.dash, 'horizontalBar'); // 常用ダッシュ ― is the shipped default
+  assert.equal(LAYOUT_DEFAULT.dash, 'horizontalBar'); // 全角ダッシュ ― is the shipped default
 });
 
 test('bogus enum and boolean values coerce to their defaults', () => {

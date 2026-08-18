@@ -38,7 +38,7 @@
   "jpnov.lint.common.dash.description": "本文で使うダッシュ文字を指定します。ほかのダッシュ文字や奇数個の連続を警告します。自動修正可。どれを選んでも、組版では em ダッシュ（—）になります。",
   "jpnov.lint.common.dash.emDash.label": "em ダッシュ（—）",
   "jpnov.lint.common.dash.emDash.description": "ダッシュを —（U+2014）に統一します。",
-  "jpnov.lint.common.dash.horizontalBar.label": "常用ダッシュ（―）",
+  "jpnov.lint.common.dash.horizontalBar.label": "全角ダッシュ（―）",
   "jpnov.lint.common.dash.horizontalBar.description": "ダッシュを ―（U+2015）に統一します。",
   "jpnov.lint.common.dash.boxDrawing.label": "罫線（─）",
   "jpnov.lint.common.dash.boxDrawing.description": "ダッシュを ─（U+2500）に統一します。",

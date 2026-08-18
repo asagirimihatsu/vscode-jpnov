@@ -5,6 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { CancellationToken } from 'vscode-languageserver/node';
 
 import { handleBuild, handleListBooks } from '../../src/server/build.ts';
 import {
@@ -14,7 +15,7 @@ import {
   writeUnder,
   type FakeConnection,
 } from './helpers.ts';
-import type { ServerContext } from '../../src/server/roots.ts';
+import type { ServerContext } from '../../src/server/context.ts';
 import { BUILD_CHROME_DEFAULT, BUILD_PAPER_DEFAULT } from '../../src/shared/config/settings.ts';
 import { LAYOUT_DEFAULT } from '../../src/shared/config/types.ts';
 import type {
@@ -79,6 +80,23 @@ test('build emits the requested artifact kind per jpbook containing both files',
   assert.equal(txt.path, `${ws.uri}/dist/vol1.txt`);
   // The .txt is the concatenated source: one blank glue line between chapters, no trailing newline.
   assert.equal(txt.content, 'あいう\n\nかきく');
+});
+
+test('a pre-cancelled token skips the work and returns an empty result', async () => {
+  await using ws = await makeTmpWorkspace();
+  const { ctx } = boot();
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'vol1/a.jpnov');
+  await writeUnder(ws.dir, 'vol1/a.jpnov', 'あいう');
+
+  const result: BuildResult = await handleBuild(ctx, {
+    format: 'txt',
+    settings: SETTINGS,
+    projectDirs: projectsFor(ws.uri),
+  }, undefined, CancellationToken.Cancelled);
+
+  assert.deepEqual(result.artifacts, []);
+  assert.deepEqual(result.outDirs, []);
+  assert.equal(result.errors.length, 0);
 });
 
 test('a front-matter divider lands between heading-less chapters in BOTH artifacts', async () => {

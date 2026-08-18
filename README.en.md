@@ -248,6 +248,10 @@ volume's PDF. Keep alternate drafts of a chapter side by side and swap a
 single line to retarget a submission. Name and move chapter files freely; the
 book keeps its order.
 
+The built output has no table-of-contents page yet. Headings come from
+annotations (see [Annotations](#annotations)), and chapters appear in the
+order the `.jpbook` lists them.
+
 On `.jpbook` files the editor offers completion (chapter paths, metadata keys,
 and enum values), diagnostics (missing files, duplicates, escaping the
 workspace, unknown metadata keys…), and document links — Cmd/Ctrl-click an

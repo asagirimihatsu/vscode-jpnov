@@ -8,6 +8,7 @@
  */
 import { test, mock, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { CancellationTokenSource } from 'vscode-languageserver/node';
 
 import {
   buildVscode,
@@ -23,6 +24,7 @@ const state = createMockState();
 mock.module('vscode', { namedExports: buildVscode(state) });
 
 const { BooksViewProvider } = await import('../../src/client/book/view.ts');
+const { raceRequest } = await import('../../src/client/requests.ts');
 const { ListBooksRequest, BuildRequest } = await import('../../src/shared/protocol.ts');
 
 /** A stand-in extension root (the provider asWebviewUri-serves the codicon assets under it). */
@@ -42,17 +44,21 @@ function entry(rootUri: string, outRel: string, title?: string) {
   return { uri: `${rootUri}/src/${outRel}.jpbook`, rootUri, fileRel: `${outRel}.jpbook`, outRel, title };
 }
 
-/** A fake LanguageClient: answers listBooks with `books`, records the build params. */
+/** A fake LanguageClient: answers listBooks with `books`, records the build params + token. */
 function fakeClient(books: unknown[], buildResult?: unknown) {
-  const calls: { build: { books?: string[]; format?: string } | null } = { build: null };
+  const calls: {
+    build: { books?: string[]; format?: string } | null;
+    buildToken: unknown;
+  } = { build: null, buildToken: undefined };
   return {
     calls,
-    sendRequest(type: string, params: unknown): Promise<unknown> {
+    sendRequest(type: string, params: unknown, token?: unknown): Promise<unknown> {
       if (type === ListBooksRequest) {
         return Promise.resolve({ books });
       }
       if (type === BuildRequest) {
         calls.build = params as { books?: string[]; format?: string };
+        calls.buildToken = token;
         return Promise.resolve(buildResult ?? { ok: true, outDirs: [], artifacts: [], errors: [] });
       }
       return Promise.resolve({});
@@ -239,6 +245,32 @@ test('a uri build for a vanished book is dropped silently', async () => {
   assert.equal(client.calls.build, null);
   assert.equal(state.infoMessages.length, 0);
   assert.equal(state.errorMessages.length, 0);
+});
+
+test('build runs under a cancellable progress and hands its token to the wire', async () => {
+  const root = 'file:///ws';
+  const { view, client } = await setup([entry(root, 'a')]);
+  view.webview.receive({ type: 'build', format: 'html' });
+  await tick();
+  const opts = state.progressOptions[0] as { cancellable?: boolean } | undefined;
+  assert.equal(opts?.cancellable, true);
+  assert.ok(client.calls.buildToken !== undefined, 'sendRequest must receive the progress token');
+});
+
+test('a cancelled build stays silent: no failure toast, nothing written, nothing opened', async () => {
+  const root = 'file:///ws';
+  const artifact = { kind: 'html', path: `${root}/dist/a.html`, content: '<p>x</p>' };
+  const { view, client } = await setup(
+    [entry(root, 'a')],
+    { ok: true, outDirs: [`${root}/dist`], artifacts: [artifact], errors: [] },
+  );
+  state.progressCancelled = true;
+  view.webview.receive({ type: 'build', format: 'html' });
+  await tick();
+  assert.ok(client.calls.build, 'the request went out before the cancel took effect');
+  assert.equal(state.errorMessages.length, 0);
+  assert.equal(state.writtenFiles.length, 0);
+  assert.equal(state.openedExternal.length, 0);
 });
 
 test('a successful build opens the configured output dir, once — never a nested subfolder', async () => {
@@ -496,4 +528,27 @@ test('an epub build zips member files client-side and writes one .epub per book'
   assert.ok(written, 'the client wrote the .epub');
   assert.ok(written.content.startsWith('PK'), 'what it wrote is a ZIP container');
   assert.ok(state.infoMessages.some((m) => m.includes('EPUB')), 'the toast names the format');
+});
+
+// --- raceRequest ------------------------------------------------------------
+
+test('raceRequest rejects on the timeout cap while the request hangs', async () => {
+  const hang = new Promise<never>(() => undefined);
+  const src = new CancellationTokenSource();
+  await assert.rejects(raceRequest(hang, src.token, 10), /no reply from the language server/);
+});
+
+test('raceRequest rejects when the token cancels mid-flight', async () => {
+  const src = new CancellationTokenSource();
+  const raced = raceRequest(new Promise<never>(() => undefined), src.token, 5_000);
+  src.cancel();
+  await assert.rejects(raced, /cancelled/);
+});
+
+test('raceRequest passes a settling request straight through', async () => {
+  assert.equal(await raceRequest(Promise.resolve(42), new CancellationTokenSource().token, 5_000), 42);
+  await assert.rejects(
+    raceRequest(Promise.reject(new Error('server boom')), new CancellationTokenSource().token, 5_000),
+    /server boom/,
+  );
 });

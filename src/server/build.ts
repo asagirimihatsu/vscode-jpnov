@@ -31,13 +31,13 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { WorkDoneProgressReporter } from 'vscode-languageserver/node';
+import type { CancellationToken, WorkDoneProgressReporter } from 'vscode-languageserver/node';
 
 import { composeBookChrome, jpbookOutRel, parseJpbook } from '#/shared/book/jpbook.ts';
 import type { JpbookMeta, ParsedLine } from '#/shared/book/jpbook.ts';
 import { concatBookText, renderBook } from '#/shared/compiler/document.ts';
 import type { BookInput } from '#/shared/compiler/document.ts';
-import { epubMembers } from '#/shared/epub.ts';
+import { epubMembers } from '#/shared/compiler/epub.ts';
 import { errorText } from '#/shared/errors.ts';
 import { LocalizedError } from '#/shared/messages.ts';
 import { resolveHtmlSettings } from '#/shared/config/settings.ts';
@@ -60,7 +60,7 @@ import type {
 import { fileLevelError } from './diagnostics.ts';
 import { diagnoseJpbook } from './jpbook.ts';
 import { childUri, isFileScheme, normalizeRootUri } from './fsUri.ts';
-import type { ServerContext } from './roots.ts';
+import type { ServerContext } from './context.ts';
 
 const UTF8 = new TextDecoder('utf-8');
 
@@ -342,12 +342,15 @@ function targetRoots(projectDirs: ProjectDirsMap, root?: string): ProjectRoot[] 
  * Handles `jpnov/build`. Omitting `root` builds every root in `projectDirs`. Reports coarse
  * `$/progress` via the supplied work-done reporter (one tick per root). The result is
  * `ok` when no build-level errors were collected; per-book errors are surfaced in
- * `errors[]` and as diagnostics on each offending `.jpbook`.
+ * `errors[]` and as diagnostics on each offending `.jpbook`. A cancelled `token` makes it
+ * stop between books and return what's done — the client has stopped listening, so no
+ * RequestCancelled is raised.
  */
 export async function handleBuild(
   ctx: ServerContext,
   params: BuildParams,
   progress?: WorkDoneProgressReporter,
+  token?: CancellationToken,
 ): Promise<BuildResult> {
   const roots = targetRoots(params.projectDirs, params.root);
   const artifacts: BuildArtifact[] = [];
@@ -369,10 +372,16 @@ export async function handleBuild(
   progress?.begin('', 0, undefined, false);
 
   for (const [index, target] of roots.entries()) {
+    if (token?.isCancellationRequested) {
+      break;
+    }
     try {
       // for-await (not Array.fromAsync) so outputs yielded before a mid-root throw are kept;
       // the throw itself (book discovery, iteration) becomes a root-level error.
       for await (const output of buildRoot(ctx, target, selection)) {
+        if (token?.isCancellationRequested) {
+          break;
+        }
         if (output.kind === 'artifact') {
           artifacts.push(output.artifact);
           outDirs.add(output.outDir);

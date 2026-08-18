@@ -5,7 +5,7 @@
  *
  * Relative imports only (native test loader); vscode-free.
  */
-import { DASH_CHARS } from '../../../shared/compiler/layout.ts';
+import { DASH_CHARS } from '../../../shared/chars.ts';
 
 import { CLOSERS } from '../sentences.ts';
 import type { LineRule, LintLine, ProseView, RuleContext } from '../types.ts';
