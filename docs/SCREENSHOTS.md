@@ -102,7 +102,7 @@ novel-sample/
   "chat.disableAIFeatures": true,
   "jpnov.editor.highlight.characters": ["神木 林", "Arill Stains"],
   "jpnov.editor.highlight.keywords": ["境無"],
-  "jpnov.lint.narration.generalNovelStyle": true
+  "jpnov.lint.narration.indent": false
 }
 ```
 
@@ -149,7 +149,8 @@ divider: ＊　＊　＊
 Open `第一章.jpnov` and click the editor-title 「プレビューを横に開く」 icon.
 In the activity-bar 「小説」 view, open My 作品集 (click its title row) so the
 sidebar shows 「本の情報」 and 「目次」. Cursor somewhere mid-text. Leave
-`jpnov.lint.narration.generalNovelStyle` **off** for the first capture.
+`jpnov.lint.narration.indent` **off** (the settings line above) for the first
+capture.
 
 ### Capture 1 — the writing screen (clean editor)
 
@@ -167,8 +168,9 @@ same PNG becomes `vscode-highlight.png`.
 
 ### Capture 2 — book management + quick fix
 
-Expand 「本の情報」, enable `jpnov.lint.narration.generalNovelStyle` (the
-line-2 sample text is its bait), and open the lightbulb menu on the squiggle.
+Expand 「本の情報」, re-enable `jpnov.lint.narration.indent` (delete the
+settings line or set it true — the line-2 sample text is its bait), and open
+the lightbulb menu on the squiggle.
 Whole window, then two crops:
 
 - `vscode-books-panel.png` (sidebar incl. activity bar): from the view header

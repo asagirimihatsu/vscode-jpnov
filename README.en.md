@@ -344,26 +344,32 @@ Japanese Novel runs prose checks as you write, surfaced as editor diagnostics
 with quick fixes (and a **Fix all auto-fixable problems** source action).
 Everything is a plain `jpnov.lint.*` setting under **Japanese Novel — Lint**.
 
-Checks run per stream: narration, dialogue (`「…」`), and ruby readings are
-linted separately, so narration-only style rules never fire inside a line of
-dialogue.
+Every check knows what it is looking at: narration, dialogue (`「…」`), a
+heading line, a ruby reading, an annotation. A narration rule never fires
+inside a line of dialogue, a heading hangs free of the sentence-ending rule,
+and a kanji run split by an annotation (`聴覚視覚［＃太字］区分装置`) still
+counts as one run — the checks see the text the way a reader will.
 
 - **Hygiene checks are on by default** — half-width kana, decomposed (NFD)
   characters, zero-width spaces, and invalid control
   characters — so a stray malformed or invisible character never slips into a
   manuscript. The dash check (`common.dash`) is on too, keeping one dash
   character throughout.
-- **Publication-style checks are opt-in.** `narration.generalNovelStyle`
-  (a bundle of general conventions: paragraph indent, punctuation spacing,
-  numeral style, and more) and `narration.jaNoMixedPeriod` (narration
-  sentences end with `。`) catch manuscript-convention slips before
-  submission; both are auto-fixable. Length/run limits
-  (`sentenceLength`, `maxTen`, `maxKanjiRun`) and the ruby-kana rule are
-  opt-in too.
+- **Manuscript-convention checks are on by default too**, each with its own
+  switch and message: paragraph indent (`narration.indent`), narration lines
+  ending with `。` (`narration.endPeriod` — a trailing `……` or dash still
+  wants its `。`), no punctuation right before a closing bracket
+  (`dialogue.closingPunct`), no leading space on a dialogue line
+  (`dialogue.noIndent`), a space after `！`/`？` (`common.exclamationSpace`),
+  even-count ellipses (`common.ellipsis`), and bracket pairing
+  (`noUnmatchedPair`). All but the bracket matcher auto-fixable; a
+  symbol-only scene-break line (`＊`) is exempt from the paragraph rules.
+- **Stricter checks are opt-in.** Length/run limits (`sentenceLength`,
+  `maxTen`, `maxKanjiRun`, `arabicDigits`, `blankRun`), the `！？`-pair
+  style, and the ruby-kana rule.
 
-Turn the publication-style checks on when you prepare a submission; leave them
-off while drafting. Syntax problems (an unclosed `［＃` annotation, a dangling
-block end) are always reported, independent of lint settings.
+Syntax problems (an unclosed `［＃` annotation, a dangling block end) are
+always reported, independent of lint settings.
 
 ![A lint squiggle with its quick-fix menu open](docs/images/vscode-lint-quickfix.png)
 
@@ -398,27 +404,34 @@ The running head and page number are **per-book** properties and live in each
 
 ### Japanese Novel — Lint
 
-Threshold rules take an integer or `null` (off). `common.*` rules run on
-narration and dialogue, `narration.*` rules on narration, and `ruby.kana` on
-ruby readings.
+Threshold rules take an integer or `null` (off). `common.*` rules apply to
+narration and dialogue alike, `narration.*` / `dialogue.*` rules to their own
+form, and `ruby.kana` to ruby readings.
 
 | Setting | Default | Checks |
 | --- | --- | --- |
-| `jpnov.lint.common.noHankakuKana` | `true` | Half-width kana |
-| `jpnov.lint.common.noNfd` | `true` | Decomposed (NFD) characters |
-| `jpnov.lint.common.noZeroWidth` | `true` | Zero-width spaces (U+200B) |
-| `jpnov.lint.common.noControlChar` | `true` | Invalid control characters |
+| `jpnov.lint.common.noHankakuKana` | `true` | Half-width kana (auto-fix) |
+| `jpnov.lint.common.noNfd` | `true` | Decomposed (NFD) characters (auto-fix) |
+| `jpnov.lint.common.noZeroWidth` | `true` | Zero-width spaces (U+200B) (auto-fix) |
+| `jpnov.lint.common.noControlChar` | `true` | Invalid control characters (auto-fix) |
 | `jpnov.lint.common.shiftJisSafe` | `true` | Characters Shift JIS lacks, written as 〓 in a Shift JIS `.txt` build |
 | `jpnov.lint.common.dash` | `horizontalBar` | One dash character throughout, always in pairs (auto-fix) |
+| `jpnov.lint.common.ellipsis` | `true` | Even-count `…` runs; `。。`/`、、`/`・・` stand-ins (auto-fix) |
+| `jpnov.lint.common.exclamationSpace` | `true` | A full-width space after `！`/`？` when text continues (auto-fix) |
+| `jpnov.lint.narration.indent` | `true` | Narration lines start with `　` or an opening bracket (auto-fix) |
+| `jpnov.lint.narration.endPeriod` | `true` | Narration lines end with `。` (auto-fix) |
+| `jpnov.lint.dialogue.closingPunct` | `true` | No `。`/`、` right before a closing `」` (auto-fix) |
+| `jpnov.lint.dialogue.noIndent` | `true` | No leading space on a dialogue line (auto-fix) |
+| `jpnov.lint.common.exclamationRun` | `false` | Double `！？` as the half-width pair; runs of 3+ (auto-fix) |
 | `jpnov.lint.common.sentenceLength` | `null` | Sentence length limit (suggested 100) |
 | `jpnov.lint.common.maxTen` | `null` | Commas (、) per sentence (suggested 3) |
-| `jpnov.lint.common.maxKanjiRun` | `null` | Consecutive kanji (suggested 6) |
-| `jpnov.lint.common.noUnmatchedPair` | `false` | Unmatched brackets / quotes |
+| `jpnov.lint.common.maxKanjiRun` | `null` | Consecutive kanji, counted across annotations (suggested 6) |
+| `jpnov.lint.common.arabicDigits` | `null` | Digits per Arabic-numeral run (suggested 2) |
+| `jpnov.lint.common.blankRun` | `null` | Consecutive blank lines (suggested 2) |
+| `jpnov.lint.common.noUnmatchedPair` | `true` | Unmatched brackets / quotes |
 | `jpnov.lint.common.jaNoSpaceBetweenFullWidth` | `false` | Space between full-width characters (auto-fix) |
 | `jpnov.lint.common.jaUnnaturalAlphabet` | `false` | Unnatural runs of half-width letters |
 | `jpnov.lint.common.minusPosition` | `false` | Minus sign not before a number |
-| `jpnov.lint.narration.generalNovelStyle` | `false` | General novel conventions bundle (auto-fix) |
-| `jpnov.lint.narration.jaNoMixedPeriod` | `false` | Narration sentences end with `。` (auto-fix) |
 | `jpnov.lint.ruby.kana` | `off` | Ruby readings all-hiragana / all-katakana |
 
 ### Japanese Novel — Editor

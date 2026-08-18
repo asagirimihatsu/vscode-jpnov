@@ -9,7 +9,7 @@
 import { CodeActionKind } from 'vscode-languageserver/node';
 import type { CodeAction, Position, Range, TextEdit } from 'vscode-languageserver/node';
 
-import type { LintFinding, LintFix } from './kernel.ts';
+import type { LintFinding, LintFix } from './engine.ts';
 
 type FixableFinding = LintFinding & { readonly fix: LintFix };
 

@@ -11,20 +11,18 @@
  *   - the package.json `contributes.configuration` block and its nls keys are asserted to match
  *     these rows by `test/shared/lint/config-codegen.test.ts`.
  *
- * SCOPE vs STREAM: a rule's {@link Scope} is where the USER toggles it. `common` means "applies to
- * BOTH 地の文 and セリフ" — `select.ts` fans a `common` rule out onto the narration AND dialogue
- * {@link Stream}s (the buckets the driver actually runs). `narration`/`dialogue` are prose-specific;
- * `ruby` is the 読み.
+ * A rule's {@link Scope} is where the USER toggles it and what the settings UI groups by; the
+ * engine does not fan anything out — each rule implementation reads the view/flags it needs
+ * (`common` implementations read the whole prose view, `narration`/`dialogue` ones the matching
+ * form, `ruby` the 読み).
  *
- * Pure data, import-free (it must load on Node's native test loader): no `#/` specifiers, no
- * `vscode`, no textlint. Rule MODULES live server-side only — this file never references them.
+ * Pure data, import-free (it must load on Node's native test loader): no `#/` specifiers and no
+ * `vscode`. Rule MODULES live server-side only — this file never references them.
  */
 
-/** Where the user toggles a rule. `common` runs on both narration + dialogue (see `select.ts`). */
+/** Where the user toggles a rule: `common` applies to both 地の文 and セリフ; the engine's rule
+ *  implementations self-select what they read (a prose view, line flags, the ruby readings). */
 export type Scope = 'common' | 'narration' | 'dialogue' | 'ruby';
-
-/** The prose streams the driver runs against (a `common` rule is fanned onto narration + dialogue). */
-export type Stream = 'narration' | 'dialogue' | 'ruby';
 
 /**
  * One rule's static metadata. `kind` fixes the setting shape:
@@ -53,11 +51,12 @@ export interface RuleMeta {
 
 /**
  * Every rule. `common` rules are global typography/structure checks meaningful in both 地の文
- * and セリフ; `narration` rules are prose-specific; the single `ruby` rule is a 3-way drop-down.
+ * and セリフ; `narration`/`dialogue` rules are form-specific; the single `ruby` rule is a 3-way
+ * drop-down.
  *
- * The rule set is deliberately DICTIONARY-FREE: no kuromoji (morphological) rules and no prh/word-list
- * rules. 読点上限 (`maxTen`) ships as a custom kuromoji-free rule because the stock
- * `textlint-rule-max-ten` pulls kuromoji transitively.
+ * The rule set is deliberately DICTIONARY-FREE: no kuromoji (morphological) rules and no
+ * prh/word-list rules — every implementation is a character-class scanner or a small state
+ * machine over the walker's lines (`src/server/lint/`).
  *
  * `as const satisfies …` keeps the literal `id`/`scope` types (so {@link LintCode} can derive the
  * exact code union) while still type-checking each row against {@link RuleMeta}.
@@ -77,7 +76,12 @@ export const RULES = [
     values: ['emDash', 'horizontalBar', 'boxDrawing'],
     default: 'horizontalBar',
   },
-  { id: 'noUnmatchedPair', scope: 'common', kind: 'boolean' },
+  { id: 'ellipsis', scope: 'common', kind: 'boolean', default: true },
+  { id: 'exclamationSpace', scope: 'common', kind: 'boolean', default: true },
+  { id: 'exclamationRun', scope: 'common', kind: 'boolean' },
+  { id: 'arabicDigits', scope: 'common', kind: 'threshold', min: 1, max: 10, suggested: 2 },
+  { id: 'blankRun', scope: 'common', kind: 'threshold', min: 1, max: 20, suggested: 2 },
+  { id: 'noUnmatchedPair', scope: 'common', kind: 'boolean', default: true },
   { id: 'noHankakuKana', scope: 'common', kind: 'boolean', default: true },
   { id: 'noNfd', scope: 'common', kind: 'boolean', default: true },
   { id: 'noZeroWidth', scope: 'common', kind: 'boolean', default: true },
@@ -86,9 +90,12 @@ export const RULES = [
   { id: 'jaNoSpaceBetweenFullWidth', scope: 'common', kind: 'boolean' },
   { id: 'jaUnnaturalAlphabet', scope: 'common', kind: 'boolean' },
   { id: 'minusPosition', scope: 'common', kind: 'boolean' },
-  // --- narration (地の文) only: prose-specific -----------------------------
-  { id: 'generalNovelStyle', scope: 'narration', kind: 'boolean' },
-  { id: 'jaNoMixedPeriod', scope: 'narration', kind: 'boolean' },
+  // --- narration (地の文) only: paragraph form ------------------------------
+  { id: 'indent', scope: 'narration', kind: 'boolean', default: true },
+  { id: 'endPeriod', scope: 'narration', kind: 'boolean', default: true },
+  // --- dialogue (セリフ) only: utterance form -------------------------------
+  { id: 'closingPunct', scope: 'dialogue', kind: 'boolean', default: true },
+  { id: 'noIndent', scope: 'dialogue', kind: 'boolean', default: true },
   // --- ruby (ルビ / 読み): one drop-down ------------------------------------
   { id: 'kana', scope: 'ruby', kind: 'enum', values: ['off', 'hiragana', 'katakana'] },
 ] as const satisfies readonly RuleMeta[];

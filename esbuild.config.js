@@ -39,10 +39,10 @@ const base = {
 };
 
 /**
- * Dictionary-backed lint rules are forbidden. If a textlint rule ever pulls a morphological
+ * Dictionary-backed lint rules are forbidden. If a dependency ever pulls a morphological
  * analyzer (kuromoji/kuromojin) or its IPADIC/MeCab dictionary into the SERVER bundle, fail the build
- * loudly here rather than silently shipping a ~15 MB dictionary. Scoped to the server build (the only
- * one that bundles textlint).
+ * loudly here rather than silently shipping a ~15 MB dictionary. Scoped to the server build (the
+ * one that hosts the lint engine).
  */
 const kuromojiTripwire = {
   name: 'kuromoji-tripwire',

@@ -17,7 +17,6 @@ import {
   TextDocumentSyncKind,
 } from 'vscode-languageserver/node';
 import type {
-  CancellationToken,
   CodeAction,
   CodeActionParams,
   InitializeParams,
@@ -50,8 +49,8 @@ import type {
 
 import { handleBuild, handleListBooks } from './build.ts';
 import { buildCodeActions } from './lint/codeActions.ts';
-import { computeLintFindings, LintCancelled } from './lint/kernel.ts';
-import type { LintFinding } from './lint/kernel.ts';
+import { computeLintFindings } from './lint/engine.ts';
+import type { LintFinding } from './lint/engine.ts';
 import { reportError } from './report.ts';
 import { createWorkspaceRoots } from './roots.ts';
 import type { ServerContext } from './roots.ts';
@@ -272,11 +271,10 @@ function scheduleJpbookDiagnostics(doc: TextDocument): void {
   );
 }
 
-// Live prose-lint Warnings for an open .jpnov. The enabled rules run through the textlint kernel
-// (see lint/kernel.ts), which is async once any rule is on — so, like the jpbook path, a version
-// recheck AFTER the await guards against publishing results for stale text. With no rule enabled the
-// driver returns synchronously (a plain []), so the common case still publishes at once. The short
-// debounce keeps typing snappy on long chapters.
+// Live prose-lint Warnings for an open .jpnov. The engine (lint/engine.ts) is fully synchronous
+// and O(n) in the document — one walker pass plus per-line scans — so a run always reflects the
+// text it was scheduled for; only the debounce's own version guard is needed. The short debounce
+// keeps typing snappy on long chapters.
 const proseDebounce = new Map<string, ReturnType<typeof setTimeout>>();
 const PROSE_DEBOUNCE_MS = 300;
 
@@ -310,39 +308,23 @@ function scheduleProseDiagnostics(doc: TextDocument): void {
       if (current?.languageId !== 'jpnov' || current.version !== scheduledVersion) {
         return;
       }
-      // Superseded runs abort between chunks instead of running to completion: the version
-      // check is the same one the post-resolve guard below applies, just polled mid-run.
-      const result = computeLintFindings(current.getText(), context.lintSelection, current, {
-        shouldCancel: () => documents.get(uri)?.version !== scheduledVersion,
-      });
-      if (Array.isArray(result)) {
-        // No rule enabled (or only sync pre-scans): nothing async to race.
-        publishFindings(uri, scheduledVersion, result);
-        return;
+      try {
+        publishFindings(
+          uri,
+          scheduledVersion,
+          computeLintFindings(current.getText(), context.lintSelection, current),
+        );
+      } catch (err) {
+        reportError(context, err);
       }
-      void result
-        .then((findings) => {
-          // A newer edit (or a config change) since scheduling supersedes this run.
-          if (documents.get(uri)?.version === scheduledVersion) {
-            publishFindings(uri, scheduledVersion, findings);
-          }
-        })
-        .catch((err: unknown) => {
-          if (err instanceof LintCancelled) {
-            return; // superseded — the newer edit's own schedule publishes instead
-          }
-          reportError(context, err);
-        });
     }, PROSE_DEBOUNCE_MS),
   );
 }
 
 // Quick-fix + fix-all code actions for an open .jpnov. Reuse the cached findings when they match the
-// document version; otherwise recompute (e.g. an action requested before the debounced lint landed).
-connection.onCodeAction((
-  params: CodeActionParams,
-  token: CancellationToken,
-): CodeAction[] | Promise<CodeAction[]> => {
+// document version; otherwise recompute synchronously (e.g. an action requested before the
+// debounced lint landed) — the engine is fast enough that no cancellation plumbing is needed.
+connection.onCodeAction((params: CodeActionParams): CodeAction[] => {
   const doc = documents.get(params.textDocument.uri);
   if (doc?.languageId !== 'jpnov') {
     return [];
@@ -353,28 +335,9 @@ connection.onCodeAction((
   if (cached?.version === version) {
     return buildCodeActions(uri, cached.findings, params.range, params.context.only);
   }
-  // A cache-miss recompute honors the LSP cancellation (the client cancels a code-action
-  // request as the cursor moves on) and aborts when an edit lands mid-run.
-  const result = computeLintFindings(doc.getText(), context.lintSelection, doc, {
-    shouldCancel: () => token.isCancellationRequested || documents.get(uri)?.version !== version,
-  });
-  if (Array.isArray(result)) {
-    findingsCache.set(uri, { version, findings: result });
-    return buildCodeActions(uri, result, params.range, params.context.only);
-  }
-  return result
-    .then((findings) => {
-      if (documents.get(uri)?.version === version) {
-        findingsCache.set(uri, { version, findings });
-      }
-      return buildCodeActions(uri, findings, params.range, params.context.only);
-    })
-    .catch((err: unknown): CodeAction[] => {
-      if (err instanceof LintCancelled) {
-        return []; // cancelled request / superseded text — no actions to offer
-      }
-      throw err;
-    });
+  const findings = computeLintFindings(doc.getText(), context.lintSelection, doc);
+  findingsCache.set(uri, { version, findings });
+  return buildCodeActions(uri, findings, params.range, params.context.only);
 });
 
 /** Re-lint every open .jpnov — used when the lint selection changes (no text edit drives it). */

@@ -8,8 +8,8 @@
  *     auto-close / dangling no-op), the pairing is just incomplete.
  * A lone 《 / ］ / 》 is NOT an error (the tokenizer keeps them literal).
  *
- * Unconditional by design: unlike the prose lint (selection-gated Warnings through the textlint
- * kernel), these publish under every lint configuration, including all-off. The findings stay
+ * Unconditional by design: unlike the prose lint (selection-gated Warnings through the lint
+ * engine), these publish under every lint configuration, including all-off. The findings stay
  * OUT of the lint findings cache — there is no quick fix to offer.
  *
  * Relative imports only (native test loader; see test/server/lint/syntaxDiagnostics.test.ts).

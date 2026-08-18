@@ -1,8 +1,9 @@
 /**
- * Locks the shipped lint experience: with no user overrides, exactly the data-hygiene rules
- * plus the ダッシュ rule run, and every other rule is off. Reads the real package.json `default`s and
- * drives the real `selectRules`, so a flipped manifest default (or a mis-scoped rule) fails here —
- * the schema-shape lock in config-codegen.test.ts never exercises this defaults-to-selection path.
+ * Locks the shipped lint experience: with no user overrides, exactly the data-hygiene rules, the
+ * ダッシュ rule, and the five format rules run; every other rule is off. Reads the real
+ * package.json `default`s and drives the real `selectRules`, so a flipped manifest default (or a
+ * mis-scoped rule) fails here — the schema-shape lock in config-codegen.test.ts never exercises
+ * this defaults-to-selection path.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -34,20 +35,25 @@ function shippedLintDefaults(): RawLintConfigWire {
   return raw;
 }
 
-test('shipped defaults enable exactly the data-hygiene rules and ダッシュ on both prose streams', () => {
+test('shipped defaults enable exactly the hygiene rules, ダッシュ, and the format rules', () => {
   const selection = selectRules(shippedLintDefaults());
-  const codes = (rules: readonly { readonly code: string }[]): string[] =>
-    rules.map((r) => r.code).sort();
-  // Alphabetically sorted to match `codes`; these `common` rules fan onto narration AND dialogue.
+  // Alphabetically sorted; the format rules (ellipsis, exclamationSpace, indent, endPeriod,
+  // closingPunct, noIndent) and the bracket matcher ship ON — the discrete successors of the
+  // retired general-novel-style bundle plus the 和文 conventions ruled default-worthy.
   const shipped = [
     'lint.common.dash',
+    'lint.common.ellipsis',
+    'lint.common.exclamationSpace',
     'lint.common.noControlChar',
     'lint.common.noHankakuKana',
     'lint.common.noNfd',
+    'lint.common.noUnmatchedPair',
     'lint.common.noZeroWidth',
     'lint.common.shiftJisSafe',
+    'lint.dialogue.closingPunct',
+    'lint.dialogue.noIndent',
+    'lint.narration.endPeriod',
+    'lint.narration.indent',
   ];
-  assert.deepEqual(codes(selection.narration), shipped);
-  assert.deepEqual(codes(selection.dialogue), shipped);
-  assert.deepEqual(selection.ruby, []); // nothing ships on the 読み stream
+  assert.deepEqual(selection.map((r) => r.code).sort(), shipped);
 });

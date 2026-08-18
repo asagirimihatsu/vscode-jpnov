@@ -1,28 +1,25 @@
-/** Enablement / clamping / common-fan-out / enum behaviour of selectRules. */
+/** Enablement / clamping / enum behaviour of selectRules (flat, catalog-ordered selection). */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { isSelectionEmpty, selectRules } from '../../../src/shared/lint/select.ts';
 
-test('an empty snapshot (nothing enabled) leaves every stream empty', () => {
+test('an empty snapshot (nothing enabled) selects nothing', () => {
   const sel = selectRules({});
   assert.ok(isSelectionEmpty(sel));
-  assert.deepEqual(sel, { narration: [], dialogue: [], ruby: [] });
+  assert.deepEqual(sel, []);
 });
 
-test('a common rule is fanned onto BOTH narration and dialogue under one code', () => {
-  const sel = selectRules({ 'jpnov.lint.common.noUnmatchedPair': true });
-  const expected = { id: 'noUnmatchedPair', options: true, code: 'lint.common.noUnmatchedPair' };
-  assert.deepEqual(sel.narration, [expected]);
-  assert.deepEqual(sel.dialogue, [expected]);
-  assert.deepEqual(sel.ruby, []);
+test('a boolean rule resolves to options: true under its own code', () => {
+  assert.deepEqual(selectRules({ 'jpnov.lint.common.noUnmatchedPair': true }), [
+    { id: 'noUnmatchedPair', options: true, code: 'lint.common.noUnmatchedPair' },
+  ]);
 });
 
-test('a common threshold rule clamps to bounds and lands in both streams', () => {
-  const sel = selectRules({ 'jpnov.lint.common.maxTen': 999 });
-  const expected = { id: 'maxTen', options: { max: 20 }, code: 'lint.common.maxTen' };
-  assert.deepEqual(sel.narration, [expected]);
-  assert.deepEqual(sel.dialogue, [expected]);
+test('a threshold rule clamps to its catalog bounds', () => {
+  assert.deepEqual(selectRules({ 'jpnov.lint.common.maxTen': 999 }), [
+    { id: 'maxTen', options: { max: 20 }, code: 'lint.common.maxTen' },
+  ]);
 });
 
 test('a boolean rule enables only on exactly true', () => {
@@ -30,16 +27,25 @@ test('a boolean rule enables only on exactly true', () => {
   assert.ok(isSelectionEmpty(selectRules({ 'jpnov.lint.common.noUnmatchedPair': 1 })));
 });
 
-test('a narration-only rule stays out of dialogue', () => {
-  const sel = selectRules({ 'jpnov.lint.narration.generalNovelStyle': true });
-  assert.deepEqual(sel.narration, [
-    { id: 'generalNovelStyle', options: true, code: 'lint.narration.generalNovelStyle' },
+test('scoped rules resolve like any other (the scope lives in the code)', () => {
+  assert.deepEqual(selectRules({ 'jpnov.lint.narration.indent': true }), [
+    { id: 'indent', options: true, code: 'lint.narration.indent' },
   ]);
-  assert.deepEqual(sel.dialogue, []);
+  assert.deepEqual(selectRules({ 'jpnov.lint.dialogue.closingPunct': true }), [
+    { id: 'closingPunct', options: true, code: 'lint.dialogue.closingPunct' },
+  ]);
+});
+
+test('the selection keeps catalog order regardless of snapshot key order', () => {
+  const sel = selectRules({
+    'jpnov.lint.ruby.kana': 'hiragana',
+    'jpnov.lint.common.maxTen': 3,
+  });
+  assert.deepEqual(sel.map((r) => r.id), ['maxTen', 'kana']);
 });
 
 test('the ruby enum resolves a mode; off / unknown values stay off', () => {
-  assert.deepEqual(selectRules({ 'jpnov.lint.ruby.kana': 'hiragana' }).ruby, [
+  assert.deepEqual(selectRules({ 'jpnov.lint.ruby.kana': 'hiragana' }), [
     { id: 'kana', options: { mode: 'hiragana' }, code: 'lint.ruby.kana' },
   ]);
   assert.ok(isSelectionEmpty(selectRules({ 'jpnov.lint.ruby.kana': 'off' })));
@@ -47,10 +53,9 @@ test('the ruby enum resolves a mode; off / unknown values stay off', () => {
 });
 
 test('the dash enum has no off member, yet the retired "off" spelling still disables', () => {
-  const expected = { id: 'dash', options: { mode: 'emDash' }, code: 'lint.common.dash' };
-  const sel = selectRules({ 'jpnov.lint.common.dash': 'emDash' });
-  assert.deepEqual(sel.narration, [expected]);
-  assert.deepEqual(sel.dialogue, [expected]);
+  assert.deepEqual(selectRules({ 'jpnov.lint.common.dash': 'emDash' }), [
+    { id: 'dash', options: { mode: 'emDash' }, code: 'lint.common.dash' },
+  ]);
   // A settings.json written before the member was retired: the literal 'off' guard runs ahead
   // of the membership check, so the rule stays off instead of erroring or defaulting on.
   assert.ok(isSelectionEmpty(selectRules({ 'jpnov.lint.common.dash': 'off' })));

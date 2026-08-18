@@ -1,0 +1,611 @@
+/**
+ * End-to-end driver tests: the native engine runs over real documents, and every hit is checked
+ * for (a) the right diagnostic code and (b) a source range that slices back to the offending text.
+ * Exercises line rules, the raw rule, per-rule views, and fix mapping together.
+ */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+import { TextDocument } from 'vscode-languageserver-textdocument';
+
+import { computeLintFindings } from '../../../src/server/lint/engine.ts';
+import { RULES, settingKey } from '../../../src/shared/lint/catalog.ts';
+import { selectRules } from '../../../src/shared/lint/select.ts';
+import type { RawLintConfigWire } from '../../../src/shared/protocol.ts';
+
+interface Hit {
+  readonly code: string;
+  readonly text: string;
+  readonly fix?: { readonly text: string; readonly newText: string };
+}
+
+/** Run the engine and project each finding to { code, flagged source text, optional fix }. */
+function lintAll(src: string, raw: RawLintConfigWire): Hit[] {
+  const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, src);
+  const findings = computeLintFindings(src, selectRules(raw), doc);
+  const slice = (r: { start: { line: number; character: number }; end: { line: number; character: number } }): string =>
+    src.slice(doc.offsetAt(r.start), doc.offsetAt(r.end));
+  return findings.map((f) => ({
+    code: (f.diagnostic.data as { code: string }).code,
+    text: slice(f.diagnostic.range),
+    ...(f.fix ? { fix: { text: slice(f.fix.range), newText: f.fix.newText } } : {}),
+  }));
+}
+
+/** Just the { code, text } of each finding (fix-agnostic tests). */
+function lint(src: string, raw: RawLintConfigWire): { code: string; text: string }[] {
+  return lintAll(src, raw).map(({ code, text }) => ({ code, text }));
+}
+
+/** Apply every fix (right-to-left so offsets stay valid) and return the resulting source — the real
+ *  "does the fix corrupt the text?" check (no deleted chars, no eaten newlines). */
+function applied(src: string, raw: RawLintConfigWire): string {
+  const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, src);
+  const findings = computeLintFindings(src, selectRules(raw), doc);
+  const edits = findings
+    .flatMap((f) =>
+      f.fix ? [{ s: doc.offsetAt(f.fix.range.start), e: doc.offsetAt(f.fix.range.end), t: f.fix.newText }] : [],
+    )
+    .sort((a, b) => b.s - a.s);
+  let out = src;
+  for (const ed of edits) {
+    out = out.slice(0, ed.s) + ed.t + out.slice(ed.e);
+  }
+  return out;
+}
+
+/** The ダッシュ rule on its shipped default (HORIZONTAL BAR ―). */
+const DASH_BAR: RawLintConfigWire = { 'jpnov.lint.common.dash': 'horizontalBar' };
+
+test('no rules enabled -> empty result', () => {
+  const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, '　半 角 が あ る。');
+  assert.deepEqual(computeLintFindings(doc.getText(), selectRules({}), doc), []);
+});
+
+// --- common rules see 地の文 AND 台詞 through the prose view ---
+
+test('a common rule sees content INSIDE 「」', () => {
+  assert.deepEqual(lint('「彼は—と」', DASH_BAR), [{ code: 'lint.common.dash', text: '—' }]);
+});
+
+test('a rule message reaches Diagnostic.data whole, args included', () => {
+  // renderEnglish substitutes a missing arg with '', so a dropped arg would surface only here
+  const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, '彼は——と');
+  const findings = computeLintFindings(doc.getText(), selectRules(DASH_BAR), doc);
+  assert.deepEqual(
+    findings.map((f) => f.diagnostic.data as unknown),
+    [{ code: 'lint.common.dash', args: ['―'] }],
+  );
+  assert.equal(findings[0]?.diagnostic.message, 'use the configured dash character (―)');
+  assert.equal(findings[0].diagnostic.code, 'lint.common.dash'); // mirrored onto Diagnostic.code
+});
+
+test('a common rule fires in narration AND dialogue under one code', () => {
+  const hits = lint('—と「—」', DASH_BAR);
+  assert.equal(hits.length, 2);
+  assert.ok(hits.every((h) => h.code === 'lint.common.dash' && h.text === '—'));
+});
+
+test('common maxTen flags the (max+1)-th 読点 of a sentence', () => {
+  assert.deepEqual(lint('あ、い、う、え、お。', { 'jpnov.lint.common.maxTen': 3 }), [
+    { code: 'lint.common.maxTen', text: '、' },
+  ]);
+});
+
+test('common maxTen also counts within a dialogue utterance', () => {
+  assert.deepEqual(lint('「あ、い、う、え、お」', { 'jpnov.lint.common.maxTen': 3 }), [
+    { code: 'lint.common.maxTen', text: '、' },
+  ]);
+});
+
+test('common sentenceLength fires on an over-long sentence', () => {
+  assert.deepEqual(lint('あいうえおかきくけこ。', { 'jpnov.lint.common.sentenceLength': 5 }), [
+    { code: 'lint.common.sentenceLength', text: 'あいうえおかきくけこ。' },
+  ]);
+});
+
+test('maxKanjiRun counts ACROSS elided markup — the run reads as one in print', () => {
+  const hits = lint('聴覚視覚［＃太字］区分装置［＃太字終わり］', { 'jpnov.lint.common.maxKanjiRun': 6 });
+  assert.deepEqual(hits, [
+    { code: 'lint.common.maxKanjiRun', text: '聴覚視覚［＃太字］区分装置' },
+  ]);
+  assert.deepEqual(lint('聴覚視覚区分', { 'jpnov.lint.common.maxKanjiRun': 6 }), []);
+});
+
+test('common noHankakuKana carries a fix mapping the source kana to full-width', () => {
+  assert.deepEqual(lintAll('はｱだ', { 'jpnov.lint.common.noHankakuKana': true }), [
+    { code: 'lint.common.noHankakuKana', text: 'ｱ', fix: { text: 'ｱ', newText: 'ア' } },
+  ]);
+  assert.equal(applied('はｶﾞだ', { 'jpnov.lint.common.noHankakuKana': true }), 'はガだ');
+});
+
+test('common jaNoSpaceBetweenFullWidth fixes the space to a full-width space (not deletion)', () => {
+  assert.deepEqual(lintAll('あ いう', { 'jpnov.lint.common.jaNoSpaceBetweenFullWidth': true }), [
+    { code: 'lint.common.jaNoSpaceBetweenFullWidth', text: ' ', fix: { text: ' ', newText: '　' } },
+  ]);
+  assert.equal(applied('あ いう', { 'jpnov.lint.common.jaNoSpaceBetweenFullWidth': true }), 'あ　いう');
+});
+
+// --- fix correctness: inserts must not delete chars; line-end fixes must keep the newline ---
+
+test('indent fix INSERTS the 字下げ (does not overwrite the first character)', () => {
+  assert.equal(applied('、句点。', { 'jpnov.lint.narration.indent': true }), '　、句点。');
+  assert.equal(applied('普通の段落。', { 'jpnov.lint.narration.indent': true }), '　普通の段落。');
+});
+
+test('dash fix pairs an odd run and rewrites a foreign glyph in place', () => {
+  assert.equal(applied('彼は—と', DASH_BAR), '彼は――と');
+  assert.equal(applied('彼は——と', DASH_BAR), '彼は――と'); // same length, chosen glyph
+  assert.equal(applied('彼は―――と', DASH_BAR), '彼は――――と'); // odd rounds up
+  assert.equal(applied('彼は――と', { 'jpnov.lint.common.dash': 'boxDrawing' }), '彼は──と');
+  assert.equal(applied('彼は―と', { 'jpnov.lint.common.dash': 'off' }), '彼は―と'); // retired spelling still reads as disabled
+});
+
+test('dash parity stays the dash rule; ellipsis parity is the ellipsis rule', () => {
+  const both = { ...DASH_BAR, 'jpnov.lint.common.ellipsis': true };
+  assert.deepEqual(lint('　彼は―――と言った。', both), [
+    { code: 'lint.common.dash.parity', text: '―――' },
+  ]);
+  assert.deepEqual(lint('　彼は…と言った。', both), [
+    { code: 'lint.common.ellipsis.parity', text: '…' },
+  ]);
+});
+
+test('only the dash rule is scanned per piece — the rest keep their neighbours', () => {
+  // A scanner that reads the character next to its hit misjudges the one at a piece edge, so
+  // only a rule whose notion of a run must match the renderer's opts in.
+  const MINUS = { 'jpnov.lint.common.minusPosition': true };
+  const SPACE = { 'jpnov.lint.common.jaNoSpaceBetweenFullWidth': true };
+  assert.deepEqual(lint('気温は−［＃縦中横］１０［＃縦中横終わり］度。', MINUS), []);
+  assert.deepEqual(lint('あ ｜漢《かん》い', SPACE), [
+    { code: 'lint.common.jaNoSpaceBetweenFullWidth', text: ' ' },
+  ]);
+  // …and the markup between two hits still costs only the FIX, never the warning
+  assert.equal(applied('あ ［＃「z」に傍点］ い', SPACE), 'あ ［＃「z」に傍点］ い');
+  assert.equal(lint('あ ［＃「z」に傍点］ い', SPACE).length, 1);
+});
+
+test('a dash run split by markup is two runs — matching how it renders', () => {
+  // A fix may not reach across the markup, so the run ends at the gap and each piece pairs alone.
+  assert.equal(applied('あ―［＃改丁］―い', DASH_BAR), 'あ――［＃改丁］――い');
+  assert.deepEqual(lint('あ―［＃改丁］―い', DASH_BAR), [
+    { code: 'lint.common.dash.parity', text: '―' },
+    { code: 'lint.common.dash.parity', text: '―' },
+  ]);
+});
+
+test('common minusPosition flags a stray minus but not a signed number', () => {
+  assert.deepEqual(lint('－あ', { 'jpnov.lint.common.minusPosition': true }), [
+    { code: 'lint.common.minusPosition', text: '－' },
+  ]);
+  assert.deepEqual(lint('－5', { 'jpnov.lint.common.minusPosition': true }), []);
+});
+
+test('minusPosition leaves a Western hyphen between ASCII alphanumerics alone', () => {
+  const MINUS = { 'jpnov.lint.common.minusPosition': true };
+  assert.deepEqual(lint('Wi-Fiが切れた。', MINUS), []);
+  assert.deepEqual(lint('J-POPを流す。', MINUS), []);
+  assert.deepEqual(lint('ラ-メン', MINUS), [{ code: 'lint.common.minusPosition', text: '-' }]);
+});
+
+// --- the format rules (the exploded general-novel-style bundle) ---
+
+const INDENT: RawLintConfigWire = { 'jpnov.lint.narration.indent': true };
+
+test('indent flags a paragraph not starting with 字下げ / an opening bracket', () => {
+  assert.deepEqual(lint('、いきなり始まる。', INDENT), [{ code: 'lint.narration.indent', text: '、' }]);
+  assert.deepEqual(lint('　字下げ済み。', INDENT), []);
+  assert.deepEqual(lint('「台詞行だ」', INDENT), []); // opening bracket counts
+});
+
+test('a line opened by ［＃N字下げ］ (N ≥ 1) is not flagged as un-indented', () => {
+  assert.deepEqual(lint('［＃２字下げ］引用の行だ。\n', INDENT), []);
+});
+
+test('［＃０字下げ］ renders un-indented, so the flag (and its insert fix) stays', () => {
+  assert.equal(applied('［＃０字下げ］内容だ。\n', INDENT), '［＃０字下げ］　内容だ。\n');
+});
+
+test('every line inside a ここから…ここで block is covered; lines after the end are not', () => {
+  const src = '［＃ここから２字下げ］\n引用一だ。\n引用二だ。\n［＃ここで字下げ終わり］\n戻りの行だ。\n';
+  assert.deepEqual(lint(src, INDENT), [{ code: 'lint.narration.indent', text: '戻' }]);
+});
+
+test('a 見出し line hangs free of indent and endPeriod', () => {
+  const raw = { ...INDENT, 'jpnov.lint.narration.endPeriod': true };
+  assert.deepEqual(lint('序章　空へ［＃「序章　空へ」は大見出し］', raw), []);
+  assert.deepEqual(lint('［＃ここから大見出し］\n題名の行\n［＃ここで大見出し終わり］', raw), []);
+});
+
+test('a continuation line of a multi-line utterance is not a paragraph head', () => {
+  assert.deepEqual(lint('「あの\nね」と言った。', INDENT), []);
+});
+
+const PERIOD: RawLintConfigWire = { 'jpnov.lint.narration.endPeriod': true };
+
+test('endPeriod fix appends 。 at the end WITHOUT eating the trailing newline', () => {
+  assert.equal(applied('好き', PERIOD), '好き。');
+  assert.equal(applied('好き\nおわり。', PERIOD), '好き。\nおわり。');
+});
+
+test('endPeriod allows 「」-final lines, ！？ endings, and blank lines', () => {
+  for (const src of ['「そうだ」', '（そうか）', '好き！', 'なぜ?', '文。\n\n文。']) {
+    assert.deepEqual(lint(src, PERIOD), [], src);
+  }
+});
+
+test('endPeriod flags … and dashes — 和文 keeps its 。 after a trailing run', () => {
+  for (const src of ['好き…', '好き……', '好き—', '好き―', '好き─']) {
+    const hits = lint(src, PERIOD);
+    assert.deepEqual(hits.map((h) => h.code), ['lint.narration.endPeriod'], src);
+  }
+  assert.equal(applied('彼は黙った……', PERIOD), '彼は黙った……。');
+  assert.equal(applied('彼は――', PERIOD), '彼は――。');
+});
+
+test('an ornament line (a hand-written scene break) skips indent and endPeriod', () => {
+  const both = { ...PERIOD, ...INDENT };
+  for (const src of ['＊', '　＊　＊　＊', '◇', '※※※']) {
+    assert.deepEqual(lint(src, both), [], src);
+  }
+  // …but a prose line among ornaments is still checked
+  assert.deepEqual(lint('＊\n終わり', both).map((h) => h.code).sort(), [
+    'lint.narration.endPeriod',
+    'lint.narration.indent',
+  ]);
+});
+
+test('a pause line (…… / ―― alone) is prose: it earns its 字下げ and its 。', () => {
+  const both = { ...PERIOD, ...INDENT };
+  for (const src of ['……', '――']) {
+    assert.deepEqual(lint(src, both).map((h) => h.code).sort(), [
+      'lint.narration.endPeriod',
+      'lint.narration.indent',
+    ], src);
+  }
+  assert.equal(applied('……', both), '　……。'); // the strict form of a silence paragraph
+  assert.equal(applied('　……', PERIOD), '　……。');
+});
+
+test('a status/inset line ending on 】 or 〉 is closed — no 。 demanded after the bracket', () => {
+  for (const src of ['　称号【竜殺し】', '【スキル：剣術】', '〈風の剣〉']) {
+    assert.deepEqual(lint(src, PERIOD), [], src);
+  }
+});
+
+test('a ・ bullet line is inset material: neither 字下げ nor 。 is demanded', () => {
+  const both = { ...PERIOD, ...INDENT };
+  assert.deepEqual(lint('・ポーション×３', both), []);
+  assert.deepEqual(lint('　・回復薬', both), []);
+});
+
+test('endPeriod skips a line that ends inside a multi-line utterance', () => {
+  assert.deepEqual(lint('「あの\nね」', PERIOD), []);
+});
+
+test('endPeriod flags a trailing-annotation line at its last prose character', () => {
+  assert.deepEqual(lintAll('好き［＃「好き」に傍点］', PERIOD), [
+    { code: 'lint.narration.endPeriod', text: 'き', fix: { text: '', newText: '。' } },
+  ]);
+});
+
+const CLOSING: RawLintConfigWire = { 'jpnov.lint.dialogue.closingPunct': true };
+
+test('closingPunct flags 。/、 right before the closing bracket and deletes it', () => {
+  assert.deepEqual(lintAll('「そうだ。」', CLOSING), [
+    { code: 'lint.dialogue.closingPunct', text: '。', fix: { text: '。', newText: '' } },
+  ]);
+  assert.equal(applied('「そうだ。」と言った。', CLOSING), '「そうだ」と言った。');
+  assert.equal(applied('「まさか、」', CLOSING), '「まさか」');
+});
+
+test('closingPunct leaves ！？ and mid-utterance punctuation alone', () => {
+  assert.deepEqual(lint('「なに！？」', CLOSING), []);
+  assert.deepEqual(lint('「そうだ。まだある」', CLOSING), []);
+  assert.deepEqual(lint('地の文。「台詞」', CLOSING), []); // narration 。 is not inside an utterance
+});
+
+test('closingPunct flags a nested 『』 close too', () => {
+  assert.deepEqual(lint('「『題名。』を読んだ」', CLOSING), [
+    { code: 'lint.dialogue.closingPunct', text: '。' },
+  ]);
+});
+
+const EXCL_SPACE: RawLintConfigWire = { 'jpnov.lint.common.exclamationSpace': true };
+
+test('exclamationSpace requires a full-width space when prose continues', () => {
+  assert.deepEqual(lintAll('　驚いた！そのまま。', EXCL_SPACE), [
+    { code: 'lint.common.exclamationSpace', text: '！', fix: { text: '', newText: '　' } },
+  ]);
+  assert.equal(applied('　驚いた！そのまま。', EXCL_SPACE), '　驚いた！　そのまま。');
+});
+
+test('exclamationSpace allows line end, a closer, 　, and reports once per run', () => {
+  for (const src of ['　驚いた！', '「なんだ！？」', '　え！　と続く。', '「まさか？」と']) {
+    assert.deepEqual(lint(src, EXCL_SPACE), [], src);
+  }
+  assert.deepEqual(lint('　え！！続く。', EXCL_SPACE), [
+    { code: 'lint.common.exclamationSpace', text: '！' }, // the run's last mark only
+  ]);
+});
+
+test('exclamationSpace treats the half-width !? pair as the sentence-ender form', () => {
+  assert.deepEqual(lint('　え!?続く。', EXCL_SPACE), [
+    { code: 'lint.common.exclamationSpace', text: '?' },
+  ]);
+  assert.deepEqual(lint('　km/h だ。', EXCL_SPACE), []); // a lone half-width mark is not
+});
+
+test('exclamationSpace lets a trailing …/dash run follow ！ solid, as set in practice', () => {
+  for (const src of ['　助けて！……誰か。', '　行け！――と、そのとき。']) {
+    assert.deepEqual(lint(src, EXCL_SPACE), [], src);
+  }
+});
+
+const EXCL_RUN: RawLintConfigWire = { 'jpnov.lint.common.exclamationRun': true };
+
+test('exclamationRun: a full-width double becomes the half-width pair (縦中横 via autoTcy)', () => {
+  assert.deepEqual(lintAll('「なに！？」', EXCL_RUN), [
+    { code: 'lint.common.exclamationRun', text: '！？', fix: { text: '！？', newText: '!?' } },
+  ]);
+  assert.equal(applied('「なに！！」', EXCL_RUN), '「なに!!」');
+  assert.deepEqual(lint('「なに!?」', EXCL_RUN), []); // already the pair form
+  assert.deepEqual(lint('「なに！」', EXCL_RUN), []); // a single mark is fine
+});
+
+test('exclamationRun: three or more marks are their own finding, with no fix', () => {
+  assert.deepEqual(lintAll('「うそ！！！」', EXCL_RUN), [
+    { code: 'lint.common.exclamationRun.long', text: '！！！' },
+  ]);
+});
+
+test('exclamationRun: a lone half-width mark lies on its side — the fix widens it', () => {
+  assert.deepEqual(lintAll('　もうだめだ!', EXCL_RUN), [
+    { code: 'lint.common.exclamationRun.single', text: '!', fix: { text: '!', newText: '！' } },
+  ]);
+  assert.equal(applied('　なぜ?と思う。', EXCL_RUN), '　なぜ？と思う。');
+  assert.deepEqual(lint('　もうだめだ！', EXCL_RUN), []); // full-width single is the right form
+});
+
+const ELLIPSIS: RawLintConfigWire = { 'jpnov.lint.common.ellipsis': true };
+
+test('ellipsis: an odd … run gains one; surrogates become ……', () => {
+  assert.equal(applied('　沈黙…だ。', ELLIPSIS), '　沈黙……だ。');
+  assert.deepEqual(lint('　沈黙……だ。', ELLIPSIS), []);
+  assert.deepEqual(lintAll('　沈黙。。。だ。', ELLIPSIS), [
+    { code: 'lint.common.ellipsis', text: '。。。', fix: { text: '。。。', newText: '……' } },
+  ]);
+  assert.equal(applied('　えっ、、', ELLIPSIS), '　えっ……');
+  assert.equal(applied('　中黒・・・だ。', ELLIPSIS), '　中黒……だ。');
+  assert.deepEqual(lint('　中黒・並び。', ELLIPSIS), []); // a single 中黒 is prose
+  assert.equal(applied('　二点‥だ。', ELLIPSIS), '　二点‥‥だ。'); // ‥ pairs like …
+  assert.deepEqual(lint('　二点‥‥だ。', ELLIPSIS), []);
+});
+
+const DIGITS: RawLintConfigWire = { 'jpnov.lint.common.arabicDigits': 2 };
+
+test('arabicDigits flags a digit run over the limit (either width), without a fix', () => {
+  assert.deepEqual(lintAll('　１２３年だ。', DIGITS), [
+    { code: 'lint.common.arabicDigits', text: '１２３' },
+  ]);
+  assert.deepEqual(lint('　12年だ。', DIGITS), []);
+  assert.deepEqual(lint('［＃１２字下げ］３４五。', { ...DIGITS, 'jpnov.lint.common.arabicDigits': 1 }), [
+    { code: 'lint.common.arabicDigits', text: '３４' }, // the annotation's digits are NOT prose
+  ]);
+});
+
+const BLANKS: RawLintConfigWire = { 'jpnov.lint.common.blankRun': 2 };
+
+test('blankRun reports a run of blank lines over the limit as one finding', () => {
+  // The span runs from the first blank line's start to the last one's end — for empty lines
+  // that is the two terminators BETWEEN the three blank lines (rendered as lines 1-3 selected).
+  assert.deepEqual(lint('あ。\n\n\n\nい。', BLANKS), [
+    { code: 'lint.common.blankRun', text: '\n\n' },
+  ]);
+  assert.deepEqual(lint('あ。\n\n\nい。', BLANKS), []);
+  // EOF flush: the line after the final \n is a real (blank) line too, so this run is FOUR lines.
+  assert.deepEqual(lint('あ。\n\n\n\n', BLANKS), [{ code: 'lint.common.blankRun', text: '\n\n\n' }]);
+  assert.deepEqual(lint('あ。\n\n［＃改ページ］\n\nい。', BLANKS), []); // a directive line breaks the run
+});
+
+const NO_INDENT: RawLintConfigWire = { 'jpnov.lint.dialogue.noIndent': true };
+
+test('noIndent flags leading whitespace before a 「 and deletes it', () => {
+  assert.deepEqual(lintAll('　「台詞だ」', NO_INDENT), [
+    { code: 'lint.dialogue.noIndent', text: '　', fix: { text: '　', newText: '' } },
+  ]);
+  assert.deepEqual(lint('　地の文だ。', NO_INDENT), []);
+  assert.deepEqual(lint('「台詞だ」', NO_INDENT), []);
+});
+
+// --- noUnmatchedPair: the deterministic document-level stack ---
+
+const PAIRS: RawLintConfigWire = { 'jpnov.lint.common.noUnmatchedPair': true };
+
+test('noUnmatchedPair reports an unclosed opener at the opener, at EOF', () => {
+  assert.deepEqual(lint('「あ', PAIRS), [{ code: 'lint.common.noUnmatchedPair', text: '「' }]);
+  assert.deepEqual(lint('（メモ', PAIRS), [{ code: 'lint.common.noUnmatchedPair', text: '（' }]);
+});
+
+test('noUnmatchedPair reports a dangling closer at the closer', () => {
+  assert.deepEqual(lint('あ」', PAIRS), [{ code: 'lint.common.noUnmatchedPair', text: '」' }]);
+});
+
+test('noUnmatchedPair: a closer skipping an inner opener reports the skipped opener', () => {
+  assert.deepEqual(lint('「『あ」', PAIRS), [{ code: 'lint.common.noUnmatchedPair', text: '『' }]);
+});
+
+test('noUnmatchedPair spans lines (a multi-line utterance is balanced)', () => {
+  assert.deepEqual(lint('「あの\nね」', PAIRS), []);
+});
+
+test('noUnmatchedPair flags a lone prose 《 — a broken ruby, in practice', () => {
+  assert.deepEqual(lint('あ《き', PAIRS), [{ code: 'lint.common.noUnmatchedPair', text: '《' }]);
+  assert.deepEqual(lint('漢字《かんじ》', PAIRS), []); // a real ruby never reaches prose
+});
+
+// --- ranges over lines with 字下げ annotations map without drift ---
+
+test('ranges and fixes on an annotated line map back without positional drift', () => {
+  assert.deepEqual(
+    lint('［＃３字下げ］あいうえおかきくけこ。\n', { 'jpnov.lint.common.sentenceLength': 5 }),
+    [{ code: 'lint.common.sentenceLength', text: 'あいうえおかきくけこ。' }],
+  );
+  assert.deepEqual(lint('［＃３字下げ］あ、い、う、え、お。\n', { 'jpnov.lint.common.maxTen': 2 }), [
+    { code: 'lint.common.maxTen', text: '、' },
+  ]);
+  assert.deepEqual(lintAll('［＃３字下げ］はｱだ。\n', { 'jpnov.lint.common.noHankakuKana': true }), [
+    { code: 'lint.common.noHankakuKana', text: 'ｱ', fix: { text: 'ｱ', newText: 'ア' } },
+  ]);
+});
+
+// --- ruby drop-down ---
+
+test('ruby kana=hiragana flags a reading that is not all hiragana', () => {
+  assert.deepEqual(lint('巳一《みハつ》と一郎《いちろう》', { 'jpnov.lint.ruby.kana': 'hiragana' }), [
+    { code: 'lint.ruby.kana', text: 'みハつ' },
+  ]);
+});
+
+test('ruby kana=katakana flags a hiragana reading', () => {
+  assert.deepEqual(lint('名《メイ》前《まえ》', { 'jpnov.lint.ruby.kana': 'katakana' }), [
+    { code: 'lint.ruby.kana', text: 'まえ' },
+  ]);
+});
+
+test('ruby kana=off leaves all readings alone', () => {
+  assert.deepEqual(lint('名《メイ》前《まえ》', { 'jpnov.lint.ruby.kana': 'off' }), []);
+});
+
+// --- shiftJisSafe: the one `raw` rule (reads the source, not the views) ---
+
+/** The rule on its shipped default. */
+const SJIS: RawLintConfigWire = { 'jpnov.lint.common.shiftJisSafe': true };
+
+test('shiftJisSafe flags a character Shift JIS lacks, once, over its whole code point', () => {
+  assert.deepEqual(lint('吉野家と𠮷野家', SJIS), [
+    { code: 'lint.common.shiftJisSafe', text: '𠮷' },
+  ]);
+});
+
+test('shiftJisSafe leaves encodable prose alone, aliases included', () => {
+  // — 〜 − 髙 ① all reach Shift JIS through the table's alias overlay or the CP932 blocks.
+  assert.deepEqual(lint('――〜−髙①ｱ。', SJIS), []);
+});
+
+test('shiftJisSafe sees inside annotations, which the views drop', () => {
+  // A 左ルビ reading lives ONLY in its annotation: no view carries it, yet the .txt does.
+  assert.deepEqual(lint('峠《とうげ》［＃「峠」の左に「😀」のルビ］', SJIS), [
+    { code: 'lint.common.shiftJisSafe', text: '😀' },
+  ]);
+});
+
+test('shiftJisSafe runs once per document — one finding per occurrence', () => {
+  assert.deepEqual(lint('地の文😀\n「セリフ😀」', SJIS), [
+    { code: 'lint.common.shiftJisSafe', text: '😀' },
+    { code: 'lint.common.shiftJisSafe', text: '😀' },
+  ]);
+});
+
+test('shiftJisSafe offers no fix — the substitutes would be semantic', () => {
+  const hits = lintAll('𠮷', SJIS);
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0]?.fix, undefined);
+});
+
+test('shiftJisSafe off reports nothing', () => {
+  assert.deepEqual(lint('𠮷😀', { 'jpnov.lint.common.shiftJisSafe': false }), []);
+});
+
+test('shiftJisSafe stays quiet where an always-on hygiene rule already reports', () => {
+  // All three ship ON, and everything they flag is unencodable by construction, so without the
+  // engine's range de-dup every default-configuration user would see two warnings on one character.
+  const shipped: RawLintConfigWire = {
+    ...SJIS,
+    'jpnov.lint.common.noZeroWidth': true,
+    'jpnov.lint.common.noNfd': true,
+    'jpnov.lint.common.noControlChar': true,
+  };
+  assert.deepEqual(lint('あ\u200bい', shipped), [
+    { code: 'lint.common.noZeroWidth', text: '\u200b' },
+  ]);
+  assert.deepEqual(lint('か\u3099', shipped), [
+    { code: 'lint.common.noNfd', text: '\u3099' },
+  ]);
+  assert.deepEqual(lint('あ\u0085い', shipped), [
+    { code: 'lint.common.noControlChar', text: '\u0085' },
+  ]);
+});
+
+test('noNfd fixes by composing the base+mark pair', () => {
+  assert.equal(applied('か\u3099き', { 'jpnov.lint.common.noNfd': true }), 'がき');
+});
+
+test('shiftJisSafe still reports a variation selector — no sibling rule owns 異体字 loss', () => {
+  // U+E0100 is a mark, but it composes with nothing, so noNfd never sees it.
+  assert.deepEqual(lint('辻\u{E0100}', SJIS), [
+    { code: 'lint.common.shiftJisSafe', text: '\u{E0100}' },
+  ]);
+
+  // One diagnostic per WRITTEN character: ❤️ is two code points but one thing the author typed.
+  assert.deepEqual(lint('「好き❤️」', SJIS), [
+    { code: 'lint.common.shiftJisSafe', text: '❤' },
+  ]);
+});
+
+test('the de-dup holds when markup separates in SOURCE what is adjacent in prose', () => {
+  // The view drops the annotation, so noNfd sees "か\u3099" and reports the mark; the raw
+  // scan saw them far apart. Deciding this in the engine (not in a scanner) is what makes it work.
+  const shipped: RawLintConfigWire = { ...SJIS, 'jpnov.lint.common.noNfd': true };
+  assert.deepEqual(lint('か［＃「か」に傍点］\u3099', shipped), [
+    { code: 'lint.common.noNfd', text: '\u3099' },
+  ]);
+  // A character no sibling claims keeps its own finding alongside the sibling's.
+  assert.deepEqual(lint('\u{20BB7}\u3099', shipped), [
+    { code: 'lint.common.shiftJisSafe', text: '\u{20BB7}' },
+    { code: 'lint.common.noNfd', text: '\u3099' },
+  ]);
+});
+
+test('shiftJisSafe reports invisible characters no sibling rule covers', () => {
+  // The hygiene rules match narrow literal sets, so these reach the .txt as 〓 unless this rule
+  // speaks up. Reported by code point, since the character itself shows nothing.
+  for (const ch of ['\u00ad', '\u200c', '\u200d', '\u200e', '\u2060', '\ufeff', '\u2066']) {
+    assert.deepEqual(lint(`あ${ch}い`, SJIS), [
+      { code: 'lint.common.shiftJisSafe', text: ch },
+    ], `U+${ch.codePointAt(0)?.toString(16) ?? ''}`);
+  }
+});
+
+// --- fixture smoke: real corpora under EVERY rule at once ---
+
+test('fixtures produce well-formed findings under the full rule set', () => {
+  const everything: Record<string, boolean | number | string> = {};
+  for (const rule of RULES) {
+    everything[settingKey(rule)] =
+      rule.kind === 'boolean'
+        ? true
+        : rule.kind === 'threshold'
+          ? rule.suggested
+          : (rule.values.find((v) => v !== 'off') ?? 'off');
+  }
+  for (const name of ['seams.jpnov', 'showcase.jpnov']) {
+    const url = new URL(`../../../test-fixtures/novel/${name}`, import.meta.url);
+    const src = readFileSync(fileURLToPath(url), 'utf8');
+    const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, src);
+    const findings = computeLintFindings(src, selectRules(everything), doc);
+    assert.ok(findings.length > 0, `${name}: the corpus should trip something`);
+    for (const f of findings) {
+      const a = doc.offsetAt(f.diagnostic.range.start);
+      const b = doc.offsetAt(f.diagnostic.range.end);
+      assert.ok(a >= 0 && a <= b && b <= src.length, `${name}: range out of bounds`);
+      if (f.fix !== undefined) {
+        const fa = doc.offsetAt(f.fix.range.start);
+        const fb = doc.offsetAt(f.fix.range.end);
+        assert.ok(fa >= 0 && fa <= fb && fb <= src.length, `${name}: fix out of bounds`);
+      }
+    }
+  }
+});
