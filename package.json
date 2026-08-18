@@ -406,71 +406,123 @@
             "order": 4,
             "markdownDescription": "%jpnov.lint.common.dash.description%"
           },
-          "jpnov.lint.common.noUnmatchedPair": {
+          "jpnov.lint.common.ellipsis": {
+            "type": "boolean",
+            "default": true,
+            "order": 5,
+            "markdownDescription": "%jpnov.lint.common.ellipsis.description%"
+          },
+          "jpnov.lint.common.exclamationSpace": {
+            "type": "boolean",
+            "default": true,
+            "order": 6,
+            "markdownDescription": "%jpnov.lint.common.exclamationSpace.description%"
+          },
+          "jpnov.lint.common.exclamationRun": {
             "type": "boolean",
             "default": false,
-            "order": 5,
+            "order": 7,
+            "markdownDescription": "%jpnov.lint.common.exclamationRun.description%"
+          },
+          "jpnov.lint.common.arabicDigits": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null,
+            "minimum": 1,
+            "maximum": 10,
+            "order": 8,
+            "markdownDescription": "%jpnov.lint.common.arabicDigits.description%"
+          },
+          "jpnov.lint.common.blankRun": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null,
+            "minimum": 1,
+            "maximum": 20,
+            "order": 9,
+            "markdownDescription": "%jpnov.lint.common.blankRun.description%"
+          },
+          "jpnov.lint.common.noUnmatchedPair": {
+            "type": "boolean",
+            "default": true,
+            "order": 10,
             "markdownDescription": "%jpnov.lint.common.noUnmatchedPair.description%"
           },
           "jpnov.lint.common.noHankakuKana": {
             "type": "boolean",
             "default": true,
-            "order": 6,
+            "order": 11,
             "markdownDescription": "%jpnov.lint.common.noHankakuKana.description%"
           },
           "jpnov.lint.common.noNfd": {
             "type": "boolean",
             "default": true,
-            "order": 7,
+            "order": 12,
             "markdownDescription": "%jpnov.lint.common.noNfd.description%"
           },
           "jpnov.lint.common.noZeroWidth": {
             "type": "boolean",
             "default": true,
-            "order": 8,
+            "order": 13,
             "markdownDescription": "%jpnov.lint.common.noZeroWidth.description%"
           },
           "jpnov.lint.common.noControlChar": {
             "type": "boolean",
             "default": true,
-            "order": 9,
+            "order": 14,
             "markdownDescription": "%jpnov.lint.common.noControlChar.description%"
           },
           "jpnov.lint.common.shiftJisSafe": {
             "type": "boolean",
             "default": true,
-            "order": 10,
+            "order": 15,
             "markdownDescription": "%jpnov.lint.common.shiftJisSafe.description%"
           },
           "jpnov.lint.common.jaNoSpaceBetweenFullWidth": {
             "type": "boolean",
             "default": false,
-            "order": 11,
+            "order": 16,
             "markdownDescription": "%jpnov.lint.common.jaNoSpaceBetweenFullWidth.description%"
           },
           "jpnov.lint.common.jaUnnaturalAlphabet": {
             "type": "boolean",
             "default": false,
-            "order": 12,
+            "order": 17,
             "markdownDescription": "%jpnov.lint.common.jaUnnaturalAlphabet.description%"
           },
           "jpnov.lint.common.minusPosition": {
             "type": "boolean",
             "default": false,
-            "order": 13,
+            "order": 18,
             "markdownDescription": "%jpnov.lint.common.minusPosition.description%"
           },
-          "jpnov.lint.narration.generalNovelStyle": {
+          "jpnov.lint.narration.indent": {
             "type": "boolean",
-            "default": false,
-            "order": 14,
-            "markdownDescription": "%jpnov.lint.narration.generalNovelStyle.description%"
+            "default": true,
+            "order": 19,
+            "markdownDescription": "%jpnov.lint.narration.indent.description%"
           },
-          "jpnov.lint.narration.jaNoMixedPeriod": {
+          "jpnov.lint.narration.endPeriod": {
             "type": "boolean",
-            "default": false,
-            "order": 15,
-            "markdownDescription": "%jpnov.lint.narration.jaNoMixedPeriod.description%"
+            "default": true,
+            "order": 20,
+            "markdownDescription": "%jpnov.lint.narration.endPeriod.description%"
+          },
+          "jpnov.lint.dialogue.closingPunct": {
+            "type": "boolean",
+            "default": true,
+            "order": 21,
+            "markdownDescription": "%jpnov.lint.dialogue.closingPunct.description%"
+          },
+          "jpnov.lint.dialogue.noIndent": {
+            "type": "boolean",
+            "default": true,
+            "order": 22,
+            "markdownDescription": "%jpnov.lint.dialogue.noIndent.description%"
           },
           "jpnov.lint.ruby.kana": {
             "type": "string",
@@ -490,7 +542,7 @@
               "%jpnov.lint.ruby.kana.hiragana.description%",
               "%jpnov.lint.ruby.kana.katakana.description%"
             ],
-            "order": 16,
+            "order": 23,
             "markdownDescription": "%jpnov.lint.ruby.kana.description%"
           }
         }
@@ -802,7 +854,7 @@
             "completionEvents": [
               "onSettingChanged:jpnov.editor.highlight.characters",
               "onSettingChanged:jpnov.editor.highlight.keywords",
-              "onSettingChanged:jpnov.lint.narration.generalNovelStyle"
+              "onSettingChanged:jpnov.lint.narration.indent"
             ]
           }
         ]
@@ -842,19 +894,7 @@
     "package": "vsce package"
   },
   "dependencies": {
-    "@textlint-rule/textlint-rule-no-invalid-control-character": "^3.0.0",
-    "@textlint-rule/textlint-rule-no-unmatched-pair": "^2.0.4",
-    "@textlint/kernel": "^15.8.0",
-    "@textlint/textlint-plugin-text": "^15.8.0",
     "fflate": "^0.8.3",
-    "textlint-rule-general-novel-style-ja": "^1.3.0",
-    "textlint-rule-ja-no-mixed-period": "^3.0.2",
-    "textlint-rule-ja-unnatural-alphabet": "^2.0.1",
-    "textlint-rule-max-kanji-continuous-len": "^1.1.1",
-    "textlint-rule-no-hankaku-kana": "^2.0.1",
-    "textlint-rule-no-nfd": "^2.0.2",
-    "textlint-rule-no-zero-width-spaces": "^1.0.1",
-    "textlint-rule-sentence-length": "^5.2.1",
     "vscode-languageclient": "^10.1.0",
     "vscode-languageserver": "^10.1.0",
     "vscode-languageserver-textdocument": "^1.0.13"

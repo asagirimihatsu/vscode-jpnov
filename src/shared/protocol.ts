@@ -20,7 +20,7 @@ import type { LintCode } from './lint/catalog.ts';
 
 /**
  * A flat snapshot of the user's `jpnov.lint.*` settings, keyed by full setting key
- * (`jpnov.lint.<stream>.<id>`) -> primitive. Plain primitives only, so it survives IPC; the server
+ * (`jpnov.lint.<scope>.<id>`) -> primitive. Plain primitives only, so it survives IPC; the server
  * resolves it to enabled rules via `selectRules()` (`src/shared/lint/select.ts`). Absent keys (and
  * `null`) mean "off", so the client may ship a sparse object.
  */
@@ -79,8 +79,11 @@ export type MsgCode =
   | 'syntax.unterminatedTcy' // args: [] — ［＃縦中横］ with no 終わり before its line end (the render auto-closes); range = the opening annotation
   | 'syntax.danglingTcyEnd' // args: [] — ［＃縦中横終わり］ with no open span (render no-op); range = the annotation
   | 'syntax.tcyTooLong' // args: [] — combined 縦中横 content over 3 code points (renders but squishes); range = the content (span form) / the annotation (postfix form)
-  | LintCode // one prose-lint code per (stream, rule); see lint/catalog.ts
+  | LintCode // one prose-lint code per (scope, rule); see lint/catalog.ts
   | 'lint.common.dash.parity' // args: [] — the `dash` rule's second fault: right glyph, odd count
+  | 'lint.common.ellipsis.parity' // args: [] — the `ellipsis` rule's second fault: real …, odd count
+  | 'lint.common.exclamationRun.long' // args: [] — the `exclamationRun` rule's second fault: 3+ marks
+  | 'lint.common.exclamationRun.single' // args: [] — its third fault: a lone half-width ! or ?
   | 'server.unexpected'; // args: [detail]  (detail = raw unexpected server error, untranslatable)
 
 /**

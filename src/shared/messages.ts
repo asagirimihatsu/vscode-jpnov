@@ -92,6 +92,22 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return `use the configured dash character (${a(0)})`;
     case 'lint.common.dash.parity':
       return 'use an even number of dashes';
+    case 'lint.common.ellipsis':
+      return 'use the ellipsis (……) here';
+    case 'lint.common.ellipsis.parity':
+      return 'use an even number of ellipsis characters (…)';
+    case 'lint.common.exclamationSpace':
+      return 'put a full-width space after ！ or ？';
+    case 'lint.common.exclamationRun':
+      return 'use the half-width pair !? so it can sit in one square';
+    case 'lint.common.exclamationRun.long':
+      return 'too many ！ or ？ in a row';
+    case 'lint.common.exclamationRun.single':
+      return 'use the full-width mark for a single ！ or ？';
+    case 'lint.common.arabicDigits':
+      return 'too many digits in an Arabic numeral';
+    case 'lint.common.blankRun':
+      return 'too many consecutive blank lines';
     case 'lint.common.noUnmatchedPair':
       return 'unmatched bracket or quote';
     case 'lint.common.noHankakuKana':
@@ -110,10 +126,14 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return 'unnatural run of half-width letters';
     case 'lint.common.minusPosition':
       return 'a minus sign is allowed only before a number';
-    case 'lint.narration.generalNovelStyle':
-      return 'does not follow general Japanese novel style';
-    case 'lint.narration.jaNoMixedPeriod':
+    case 'lint.narration.indent':
+      return 'the line does not start with a full-width space (　)';
+    case 'lint.narration.endPeriod':
       return 'this sentence does not end with a period (。)';
+    case 'lint.dialogue.closingPunct':
+      return 'a period or comma right before the closing bracket';
+    case 'lint.dialogue.noIndent':
+      return 'a dialogue line starts with a full-width space';
     case 'lint.ruby.kana':
       return 'ruby reading should be all hiragana or all katakana';
     case 'server.unexpected':

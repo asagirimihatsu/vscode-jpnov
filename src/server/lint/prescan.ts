@@ -1,9 +1,10 @@
 /**
- * Pure, kuromoji-free pre-scanners — the non-kernel half of the rule set. Each takes some text
- * (plus the rule's resolved options) and returns half-open `[start, end)` UTF-16 spans into THAT
- * text; no scanner computes a source position itself. Which text it gets is the driver's call
- * (`modules.ts` `kind`): a `prescan` rule sees one stream's clean text and its spans are mapped back
- * via `mapRange`, a `raw` rule sees the document source and its spans already ARE source offsets.
+ * Pure, kuromoji-free character scanners. Each takes some text (plus the rule's resolved options)
+ * and returns half-open `[start, end)` UTF-16 spans into THAT text; no scanner computes a source
+ * position itself. Which text it gets is the binding's call (`modules.ts` / `rules/adapt.ts`): a
+ * view-scanned rule sees one line view's prose and its spans are mapped through the view's units,
+ * a per-piece rule sees one contiguous piece, and a `raw` rule sees the document source, so its
+ * spans already ARE source offsets.
  *
  * Relative imports only (native test loader).
  */
@@ -38,13 +39,25 @@ function isDigit(ch: string | undefined): boolean {
   return (cp >= 0x30 && cp <= 0x39) || (cp >= 0xff10 && cp <= 0xff19);
 }
 
-/** Flags a minus sign that is not immediately followed by a digit (so it reads as a stray dash). */
+/** True for an ASCII letter or digit — the neighbours of a legitimate Western hyphen. */
+function isAsciiAlnum(ch: string | undefined): boolean {
+  return ch !== undefined && /[A-Za-z0-9]/.test(ch);
+}
+
+/** Flags a minus sign that is not immediately followed by a digit (so it reads as a stray dash).
+ *  An ASCII `-` between ASCII alphanumerics is a Western hyphen (Wi-Fi, J-POP) and is left alone;
+ *  ラ-メン (a kana neighbour) is still the mistake this rule exists for. */
 export const minusPositionScan: PreScan = (text) => {
   const out: { start: number; end: number }[] = [];
   for (let i = 0; i < text.length; i++) {
-    if (MINUS.has(text.charAt(i)) && !isDigit(text[i + 1])) {
-      out.push({ start: i, end: i + 1 });
+    const ch = text.charAt(i);
+    if (!MINUS.has(ch) || isDigit(text[i + 1])) {
+      continue;
     }
+    if (ch === '-' && isAsciiAlnum(text[i - 1]) && isAsciiAlnum(text[i + 1])) {
+      continue;
+    }
+    out.push({ start: i, end: i + 1 });
   }
   return out;
 };
@@ -96,7 +109,7 @@ function isNonAscii(ch: string | undefined): boolean {
 /**
  * Flags a run of half-width spaces sandwiched between two full-width (non-ASCII) characters; the fix
  * REPLACES the run with a single full-width space (　) — never deletes it. A run touching ASCII or a
- * line edge is left alone (Western text; paragraph indentation is generalNovelStyle's job).
+ * line edge is left alone (Western text; paragraph indentation is the indent rule's job).
  */
 export const fullWidthSpaceScan: PreScan = (text) => {
   const out: { start: number; end: number; fix: string }[] = [];
@@ -150,25 +163,14 @@ function isAllKana(reading: string, mode: string): boolean {
 }
 
 /**
- * Flags each `\n`-delimited ruby reading that is not entirely the kana type chosen in the setting
- * (`{ mode: 'hiragana' | 'katakana' }`). Requiring all-hiragana or all-katakana also rejects
- * half-width kana and decomposed (NFD) characters, so one drop-down covers all three checks.
+ * Flags ONE ruby reading (the whole input text) unless it is entirely the kana type chosen in the
+ * setting (`{ mode: 'hiragana' | 'katakana' }`). Requiring all-hiragana or all-katakana also
+ * rejects half-width kana and decomposed (NFD) characters, so one drop-down covers all three.
  */
 export const rubyKanaScan: PreScan = (text, options) => {
   const mode = typeof options === 'object' && 'mode' in options ? options.mode : undefined;
-  if (mode === undefined) {
+  if (mode === undefined || text === '' || isAllKana(text, mode)) {
     return [];
   }
-  const out: { start: number; end: number }[] = [];
-  let segStart = 0;
-  for (let i = 0; i <= text.length; i++) {
-    if (i !== text.length && text.charAt(i) !== '\n') {
-      continue;
-    }
-    if (i > segStart && !isAllKana(text.slice(segStart, i), mode)) {
-      out.push({ start: segStart, end: i });
-    }
-    segStart = i + 1;
-  }
-  return out;
+  return [{ start: 0, end: text.length }];
 };

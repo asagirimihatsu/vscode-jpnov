@@ -6,7 +6,7 @@ import { CodeActionKind } from 'vscode-languageserver/node';
 import type { CodeAction, Diagnostic, Range, TextEdit } from 'vscode-languageserver/node';
 
 import { buildCodeActions } from '../../../src/server/lint/codeActions.ts';
-import type { LintFinding } from '../../../src/server/lint/kernel.ts';
+import type { LintFinding } from '../../../src/server/lint/engine.ts';
 
 const URI = 'file:///x.jpnov';
 

@@ -36,6 +36,8 @@ export function diagnostic(
     range,
     severity,
     source: DIAGNOSTIC_SOURCE,
+    // `code` shows in the Problems panel and lets users filter by it; same id as `.data.code`.
+    code: message.code,
     message: renderEnglish(message.code, message.args),
     data: message,
   };

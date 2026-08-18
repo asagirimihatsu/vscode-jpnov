@@ -19,18 +19,16 @@ const flagged = (scan: PreScan, text: string, options: ActiveRule['options'] = t
   scan(text, options).map((s) => text.slice(s.start, s.end));
 
 test('rubyKana hiragana mode: katakana / mixed / non-kana readings fail (ー stays neutral)', () => {
-  // ruby stream joins readings with '\n'
-  assert.deepEqual(flagged(rubyKanaScan, 'らーめん\nみはつ', { mode: 'hiragana' }), []);
-  assert.deepEqual(flagged(rubyKanaScan, 'カード\nかード\nabc', { mode: 'hiragana' }), [
-    'カード',
-    'かード',
-    'abc',
-  ]);
+  assert.deepEqual(flagged(rubyKanaScan, 'らーめん', { mode: 'hiragana' }), []);
+  assert.deepEqual(flagged(rubyKanaScan, 'カード', { mode: 'hiragana' }), ['カード']);
+  assert.deepEqual(flagged(rubyKanaScan, 'かード', { mode: 'hiragana' }), ['かード']);
+  assert.deepEqual(flagged(rubyKanaScan, 'abc', { mode: 'hiragana' }), ['abc']);
 });
 
 test('rubyKana katakana mode: hiragana readings fail (ー stays neutral)', () => {
-  assert.deepEqual(flagged(rubyKanaScan, 'カード\nミハツ', { mode: 'katakana' }), []);
-  assert.deepEqual(flagged(rubyKanaScan, 'らーめん\nみはつ', { mode: 'katakana' }), ['らーめん', 'みはつ']);
+  assert.deepEqual(flagged(rubyKanaScan, 'カード', { mode: 'katakana' }), []);
+  assert.deepEqual(flagged(rubyKanaScan, 'らーめん', { mode: 'katakana' }), ['らーめん']);
+  assert.deepEqual(flagged(rubyKanaScan, 'みはつ', { mode: 'katakana' }), ['みはつ']);
 });
 
 const BAR = { mode: 'horizontalBar' } as const; // the shipped default: ― U+2015

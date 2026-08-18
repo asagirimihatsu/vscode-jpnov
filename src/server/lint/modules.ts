@@ -1,111 +1,92 @@
 /**
- * Binds each catalog rule id to HOW it runs: a textlint kernel rule (optionally with fixed options)
- * or a pure pre-scan. This is the ONLY module that value-imports textlint rule packages, so the
- * bundle's rule surface is auditable in one place.
+ * Binds each catalog rule id to HOW it runs: a `line` rule (a per-document {@link LineRule}
+ * instance fed every {@link LintLine} by the engine) or a `raw` scan over the document source.
  *
  * `satisfies Record<CatalogId, RuleImpl>` makes the catalog and the implementations a compile-time
- * pair: a rule added to `catalog.ts` without an entry here (or vice-versa) fails to build. Threshold
- * rules consume the normalized `{ max }` option (sentence-length, max-kanji, and the custom maxTen
- * all read `options.max`); a few boolean rules carry FIXED options here (e.g. the novel-style
- * rule's allowed line-head characters) since they are not user-tunable.
+ * pair: a rule added to `catalog.ts` without an entry here (or vice-versa) fails to build.
+ * Character-class scanners are lifted through the adapters in rules/adapt.ts; everything else is a
+ * hand-written factory in rules/.
+ *
+ * Relative imports only (native test loader); vscode-free.
  */
-import sentenceLength from 'textlint-rule-sentence-length';
-import maxKanjiContinuousLen from 'textlint-rule-max-kanji-continuous-len';
-import noHankakuKana from 'textlint-rule-no-hankaku-kana';
-import noNfd from 'textlint-rule-no-nfd';
-import noZeroWidthSpaces from 'textlint-rule-no-zero-width-spaces';
-import noInvalidControlCharacter from '@textlint-rule/textlint-rule-no-invalid-control-character';
-import jaUnnaturalAlphabet from 'textlint-rule-ja-unnatural-alphabet';
-import generalNovelStyle from 'textlint-rule-general-novel-style-ja';
-import noUnmatchedPair from '@textlint-rule/textlint-rule-no-unmatched-pair';
-import jaNoMixedPeriod from 'textlint-rule-ja-no-mixed-period';
-import type { TextlintRuleModule } from '@textlint/types';
-
-import { DASH_CHARS } from '../../shared/compiler/layout.ts';
 import type { CatalogId } from '../../shared/lint/catalog.ts';
 
-import { unwrapDefault } from './interop.ts';
-import maxTen from './rules/maxTen.ts';
-import { dashScan, fullWidthSpaceScan, minusPositionScan, rubyKanaScan, shiftJisSafeScan } from './prescan.ts';
+import { dashScan, fullWidthSpaceScan, minusPositionScan, shiftJisSafeScan } from './prescan.ts';
 import type { PreScan } from './prescan.ts';
-
-// Each CJS rule, normalized past its `.default` wrapper exactly once (see interop.ts). `maxTen` is a
-// real ESM default and passes through untouched.
-const sentenceLengthRule = unwrapDefault(sentenceLength);
-const maxKanjiRule = unwrapDefault(maxKanjiContinuousLen);
-const noHankakuKanaRule = unwrapDefault(noHankakuKana);
-const noNfdRule = unwrapDefault(noNfd);
-const noZeroWidthRule = unwrapDefault(noZeroWidthSpaces);
-const noControlCharRule = unwrapDefault(noInvalidControlCharacter);
-const jaUnnaturalAlphabetRule = unwrapDefault(jaUnnaturalAlphabet);
-const generalNovelStyleRule = unwrapDefault(generalNovelStyle);
-const noUnmatchedPairRule = unwrapDefault(noUnmatchedPair);
-const jaNoMixedPeriodRule = unwrapDefault(jaNoMixedPeriod);
-
-/** Full-width space + opening brackets allowed at a paragraph head (general-novel-style-ja). */
-const LEADING_PARAGRAPH_CHARS = '　「『（【〈';
-/** Sentence-ending marks accepted besides 。 (ja-no-mixed-period). Every dash spelling and … are
- *  real enders; 」』 mean the "sentence" was a quotation (セリフ) — not a missing-句点 case — so a
- *  「…」 line is never flagged. */
-const ALLOWED_PERIOD_MARKS = [...DASH_CHARS, '…', '」', '』'];
+import { perPieceScan, viewScan } from './rules/adapt.ts';
+import {
+  controlCharRule,
+  hankakuKanaRule,
+  nfdRule,
+  rubyKanaRule,
+  unnaturalAlphabetRule,
+  zeroWidthRule,
+} from './rules/chars.ts';
+import {
+  blankRunRule,
+  closingPunctRule,
+  ellipsisRule,
+  endPeriodRule,
+  exclamationRunRule,
+  exclamationSpaceRule,
+  indentRule,
+  noIndentRule,
+} from './rules/format.ts';
+import {
+  arabicDigitsRule,
+  maxKanjiRunRule,
+  maxTenRule,
+  sentenceLengthRule,
+} from './rules/metrics.ts';
+import { noUnmatchedPairRule } from './rules/pairs.ts';
+import type { LineRule, RuleContext } from './types.ts';
 
 /**
  * How a rule executes:
- *  - `kernel`  — a textlint rule run via `TextlintKernel.lintText`. Boolean rules pass `true` unless
- *                they carry fixed `options`; threshold rules pass the normalized `{ max }`. `insertAfter`
- *                overrides the rule's own fix with an INSERT of that text after the message (e.g. 。).
- *  - `prescan` — a pure scanner over the stream's clean text (may carry its own `fix`).
- *  - `raw`     — a pure scanner over the DOCUMENT SOURCE, run once per document instead of per
- *                stream. For rules that must see what the streams drop (annotations, comments).
+ *  - `line` — `create(ctx)` yields a per-document instance fed every line, then `end()`. Cross-line
+ *             state lives in the factory's closure; the engine re-instantiates per run.
+ *  - `raw`  — a pure scanner over the DOCUMENT SOURCE, run once per document. For rules that must
+ *             see what the prose views drop (annotation interiors — a 左ルビ reading appears in no
+ *             view but reaches a built `.txt` verbatim).
  */
 export type RuleImpl =
-  | {
-    readonly kind: 'kernel';
-    readonly rule: TextlintRuleModule;
-    readonly options?: Record<string, unknown>;
-    readonly insertAfter?: string;
-  }
-  | {
-    readonly kind: 'prescan';
-    readonly scan: PreScan;
-    /** Scan each contiguous source piece alone: a run interrupted by markup is two runs, not one. */
-    readonly perPiece?: boolean;
-  }
-  | {
-    readonly kind: 'raw';
-    readonly scan: PreScan;
-  };
+  | { readonly kind: 'line'; readonly create: (ctx: RuleContext) => LineRule }
+  | { readonly kind: 'raw'; readonly scan: PreScan };
+
+/** Shorthand for the common case. */
+function line(create: (ctx: RuleContext) => LineRule): RuleImpl {
+  return { kind: 'line', create };
+}
 
 /** Catalog id -> implementation. The `Record<CatalogId, …>` type requires exactly the catalog ids
- *  (a missing/extra impl fails to compile) and keeps `options` reachable on the kernel variant. */
+ *  (a missing/extra impl fails to compile). */
 export const RULE_IMPL: Record<CatalogId, RuleImpl> = {
   // common
-  sentenceLength: { kind: 'kernel', rule: sentenceLengthRule },
-  maxTen: { kind: 'kernel', rule: maxTen },
-  maxKanjiRun: { kind: 'kernel', rule: maxKanjiRule },
-  dash: { kind: 'prescan', scan: dashScan, perPiece: true },
-  noUnmatchedPair: { kind: 'kernel', rule: noUnmatchedPairRule },
-  noHankakuKana: { kind: 'kernel', rule: noHankakuKanaRule },
-  noNfd: { kind: 'kernel', rule: noNfdRule },
-  noZeroWidth: { kind: 'kernel', rule: noZeroWidthRule },
-  noControlChar: { kind: 'kernel', rule: noControlCharRule },
+  sentenceLength: line(sentenceLengthRule),
+  maxTen: line(maxTenRule),
+  maxKanjiRun: line(maxKanjiRunRule),
+  // Per PIECE: a dash run interrupted by markup is two runs, not one — parity per rendered run.
+  dash: line(perPieceScan(dashScan)),
+  ellipsis: line(ellipsisRule),
+  exclamationSpace: line(exclamationSpaceRule),
+  exclamationRun: line(exclamationRunRule),
+  arabicDigits: line(arabicDigitsRule),
+  blankRun: line(blankRunRule),
+  noUnmatchedPair: line(noUnmatchedPairRule),
+  noHankakuKana: line(hankakuKanaRule),
+  noNfd: line(nfdRule),
+  noZeroWidth: line(zeroWidthRule),
+  noControlChar: line(controlCharRule),
   shiftJisSafe: { kind: 'raw', scan: shiftJisSafeScan },
-  jaNoSpaceBetweenFullWidth: { kind: 'prescan', scan: fullWidthSpaceScan },
-  jaUnnaturalAlphabet: { kind: 'kernel', rule: jaUnnaturalAlphabetRule },
-  minusPosition: { kind: 'prescan', scan: minusPositionScan },
+  jaNoSpaceBetweenFullWidth: line(viewScan(fullWidthSpaceScan, 'prose')),
+  jaUnnaturalAlphabet: line(unnaturalAlphabetRule),
+  minusPosition: line(viewScan(minusPositionScan, 'prose')),
   // narration
-  generalNovelStyle: {
-    kind: 'kernel',
-    rule: generalNovelStyleRule,
-    // `even_number_dashes` off: the `dash` rule owns dash parity and would double-report.
-    options: { chars_leading_paragraph: LEADING_PARAGRAPH_CHARS, even_number_dashes: false },
-  },
-  jaNoMixedPeriod: {
-    kind: 'kernel',
-    rule: jaNoMixedPeriodRule,
-    options: { allowPeriodMarks: ALLOWED_PERIOD_MARKS },
-    insertAfter: '。',
-  },
+  indent: line(indentRule),
+  endPeriod: line(endPeriodRule),
+  // dialogue
+  closingPunct: line(closingPunctRule),
+  noIndent: line(noIndentRule),
   // ruby
-  kana: { kind: 'prescan', scan: rubyKanaScan },
+  kana: line(rubyKanaRule),
 };

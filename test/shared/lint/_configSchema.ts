@@ -28,9 +28,9 @@ import { RULES, settingKey } from '../../../src/shared/lint/catalog.ts';
 import type { RuleMeta, Scope } from '../../../src/shared/lint/catalog.ts';
 
 /**
- * Rule ordering inside the merged Lint section (scopes with no rules, e.g. `dialogue`,
- * contribute nothing). Every rule gets an explicit per-property `order` so the merged
- * section keeps the common → narration → ruby clustering in the Settings UI.
+ * Rule ordering inside the merged Lint section. Every rule gets an explicit per-property
+ * `order` so the merged section keeps the common → narration → dialogue → ruby clustering
+ * in the Settings UI.
  */
 export const SCOPES: readonly Scope[] = ['common', 'narration', 'dialogue', 'ruby'];
 

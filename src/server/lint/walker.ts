@@ -1,0 +1,290 @@
+/**
+ * The lint walker — ONE pass over `tokenize(src)` (the same token stream the highlighter and the
+ * layout use) that yields one contextualized {@link LintLine} per SOURCE line. This is the "big
+ * state machine": it owns the dialogue stack, the 字下げ and 見出し line state, and the
+ * piece/sentinel bookkeeping; rules are small per-document state machines fed its lines.
+ *
+ * Inherited semantics (each guarded by walker.test.ts):
+ *   - The dialogue stack is driven from PROSE characters only, exactly as in semanticTokens.ts —
+ *     Aozora's ［＃「対象」に傍点］ carries its 「対象」 inside an annotation token, so it can never
+ *     be mistaken for a quote (the Aozora trap).
+ *   - 字下げ state mirrors layout.ts `buildRows` (`curIndent`/`activeIndent`): a line-head
+ *     ［＃N字下げ］ overrides the line (N = 0 cancels an open block for that line); a ここから block
+ *     covers FOLLOWING lines; the line carrying a block directive keeps its head snapshot.
+ *   - 見出し state mirrors `curHeading`/`activeHeading`: an inline span marks its own line, the
+ *     block form marks following lines only, the three levels share one slot, the end token's line
+ *     stays a heading. A heading POSTFIX marks its line without re-checking the target text —
+ *     a missed target already surfaces as `syntax.postfixTargetMissing` (accepted simplification).
+ *   - A broken ［＃ (unclosed) contributes no prose: malformed markup is deliberately not linted.
+ *   - Offsets are per UTF-16 unit (astral chars = two consecutive units), matching
+ *     `TextDocument.positionAt`. Terminators: '\n', '\r\n' and a lone '\r' all end a line.
+ *
+ * Lines are NEVER merged: a multi-line utterance yields one line per source line with
+ * `openDepthAtEnd` > 0, and the 〇 sentinel lands on the line holding the utterance's first
+ * interior character. A rendered 字下げ reaches rules only as `LintLine.indent`.
+ *
+ * Relative imports only (native test loader); vscode-free; no LSP types (offsets only).
+ */
+import { tokenize } from '../../shared/compiler/tokenizer.ts';
+import type { HeadingLevel } from '../../shared/compiler/tokenizer.ts';
+
+import type { LintLine, Piece, ProseUnit, ProseView, RubyReading } from './types.ts';
+
+/** The narration placeholder for a collapsed utterance interior. U+3007 〇 is classified as
+ *  neither kanji nor kana by the tokenizer, so it cannot trip a run/width rule. */
+const SENTINEL = '〇';
+
+/** One entry of a view plan: a whole piece, the 〇 sentinel, or the dialogue '\n' separator. */
+type PlanItem =
+  | { readonly kind: 'piece'; readonly piece: Piece }
+  | { readonly kind: 'sentinel'; readonly src: number }
+  | { readonly kind: 'sep' };
+
+/** Materializes a plan into an index-aligned {@link ProseView}. A separator's offset is just past
+ *  the previous unit (it separates two utterances, so a previous unit always exists). */
+function materialize(plan: readonly PlanItem[]): ProseView {
+  let text = '';
+  const units: ProseUnit[] = [];
+  for (const item of plan) {
+    if (item.kind === 'piece') {
+      const piece = item.piece;
+      for (let k = 0; k < piece.text.length; k += 1) {
+        text += piece.text.charAt(k);
+        units.push({ src: piece.srcStart + k, piece, indexInPiece: k, depth: piece.depth });
+      }
+    } else if (item.kind === 'sentinel') {
+      text += SENTINEL;
+      units.push({ src: item.src, piece: null, indexInPiece: 0, depth: 0 });
+    } else {
+      const prev = units[units.length - 1];
+      text += '\n';
+      units.push({ src: (prev?.src ?? -1) + 1, piece: null, indexInPiece: 0, depth: 0 });
+    }
+  }
+  return { text, units };
+}
+
+/** Accumulates one line, then freezes into a {@link LintLine} with lazily memoized views. */
+class LineBuilder {
+  readonly pieces: Piece[] = [];
+  readonly prosePlan: PlanItem[] = [];
+  readonly narrPlan: PlanItem[] = [];
+  readonly diaPlan: PlanItem[] = [];
+  readonly rubies: RubyReading[] = [];
+  sawAnnotation = false;
+  /** Utterance serial of the last dialogue piece on THIS line (separator bookkeeping). */
+  lastDiaSerial: number | undefined = undefined;
+
+  // The piece under construction.
+  private curText = '';
+  private curStart = 0;
+  private curDepth = 0;
+
+  /** Appends one prose unit, closing the open piece at a source gap or a depth change. */
+  push(ch: string, at: number, depth: number, serial: number): void {
+    if (this.curText !== '' && (at !== this.curStart + this.curText.length || depth !== this.curDepth)) {
+      this.closePiece(serial);
+    }
+    if (this.curText === '') {
+      this.curStart = at;
+      this.curDepth = depth;
+    }
+    this.curText += ch;
+  }
+
+  /** Closes the open piece into `pieces` and registers it on its view plans. */
+  closePiece(serial: number): void {
+    if (this.curText === '') {
+      return;
+    }
+    const piece: Piece = { text: this.curText, srcStart: this.curStart, depth: this.curDepth };
+    this.pieces.push(piece);
+    const item: PlanItem = { kind: 'piece', piece };
+    this.prosePlan.push(item);
+    if (piece.depth === 0) {
+      this.narrPlan.push(item);
+    } else {
+      if (this.lastDiaSerial !== undefined && this.lastDiaSerial !== serial) {
+        this.diaPlan.push({ kind: 'sep' });
+      }
+      this.diaPlan.push(item);
+      this.lastDiaSerial = serial;
+    }
+    this.curText = '';
+  }
+
+  freeze(
+    meta: Pick<
+      LintLine,
+      'srcLine' | 'srcStart' | 'srcEnd' | 'indent' | 'heading' | 'openDepthAtEnd'
+    >,
+  ): LintLine {
+    const { pieces, prosePlan, narrPlan, diaPlan } = this;
+    let proseView: ProseView | undefined;
+    let narrView: ProseView | undefined;
+    let diaView: ProseView | undefined;
+    return {
+      ...meta,
+      directiveOnly: pieces.length === 0 && this.sawAnnotation,
+      blank: pieces.length === 0 && !this.sawAnnotation,
+      pieces,
+      rubies: this.rubies,
+      prose: () => (proseView ??= materialize(prosePlan)),
+      narration: () => (narrView ??= materialize(narrPlan)),
+      dialogue: () => (diaView ??= materialize(diaPlan)),
+    };
+  }
+}
+
+/**
+ * Walks `src` and yields one {@link LintLine} per source line, INCLUDING the final line (even when
+ * empty — a trailing blank run is real). Line numbers match LSP positions for '\n' / '\r\n'
+ * sources; a lone '\r' also ends a line here (layout.ts counts only '\n' — pathological input).
+ */
+export function* walkLines(src: string): Generator<LintLine, void, undefined> {
+  // Cross-line state (the "big state machine").
+  const stack: ('」' | '』')[] = []; // dialogue nesting, by expected closer
+  let placeheld = false; // has the current top-level utterance emitted its 〇 yet?
+  let serial = 0; // increments per top-level utterance (dialogue separator bookkeeping)
+  let blockIndent = 0; // ここから字下げ in effect, carried across lines
+  let lineIndent = 0; // 字下げ of the line under construction (line start = blockIndent)
+  let activeHeading: HeadingLevel | undefined; // 見出し span/block in effect, carried across lines
+  let lineHeading: HeadingLevel | undefined; // 見出し of the line under construction
+  let srcLine = 0;
+  let lineStart = 0;
+  let builder = new LineBuilder();
+
+  /** Routes one prose character through the dialogue stack (same discipline as semanticTokens.ts:
+   *  only a stack-matched closer leaves the utterance; a mismatched one is ordinary prose). */
+  const prose = (ch: string, at: number): void => {
+    if (ch === '「' || ch === '『') {
+      const closer = ch === '「' ? '」' : '』';
+      if (stack.length === 0) {
+        builder.push(ch, at, 0, serial); // top-level opening corner stays 地の文
+        serial += 1;
+        placeheld = false; // a fresh interior begins; its 〇 is emitted lazily
+      } else {
+        interior(ch, at);
+      }
+      stack.push(closer);
+      return;
+    }
+    if (ch === stack[stack.length - 1]) {
+      stack.pop();
+      if (stack.length === 0) {
+        builder.push(ch, at, 0, serial); // top-level closing corner stays 地の文
+      } else {
+        interior(ch, at);
+      }
+      return;
+    }
+    if (stack.length === 0) {
+      builder.push(ch, at, 0, serial);
+    } else {
+      interior(ch, at);
+    }
+  };
+
+  /** Pushes one utterance-interior unit, emitting the utterance's single 〇 on the first one. */
+  const interior = (ch: string, at: number): void => {
+    if (!placeheld) {
+      builder.closePiece(serial); // the 〇 sits between the depth-0 piece and the interior
+      builder.narrPlan.push({ kind: 'sentinel', src: at });
+      placeheld = true;
+    }
+    builder.push(ch, at, stack.length, serial);
+  };
+
+  /** Appends a ruby base (contiguous prose starting at `srcStart`) through the dialogue router. */
+  const appendBase = (base: string, srcStart: number): void => {
+    for (let i = 0; i < base.length; i += 1) {
+      prose(base.charAt(i), srcStart + i);
+    }
+  };
+
+  /** Freezes the line ending at `terminatorAt` (or EOF) and resets the per-line state. */
+  const flush = (terminatorAt: number): LintLine => {
+    builder.closePiece(serial);
+    const line = builder.freeze({
+      srcLine,
+      srcStart: lineStart,
+      srcEnd: terminatorAt,
+      indent: lineIndent,
+      heading: lineHeading,
+      openDepthAtEnd: stack.length,
+    });
+    builder = new LineBuilder();
+    srcLine += 1;
+    lineIndent = blockIndent; // the next line starts at the block's indent
+    lineHeading = activeHeading; // …and inherits an open 見出し span/block
+    return line;
+  };
+
+  let offset = 0; // source UTF-16 offset of the current token's `raw`
+  for (const token of tokenize(src)) {
+    switch (token.kind) {
+      case 'text': {
+        const text = token.text;
+        for (let i = 0; i < text.length; i += 1) {
+          const ch = text.charAt(i);
+          const at = offset + i;
+          if (ch === '\n' || ch === '\r') {
+            yield flush(at);
+            if (ch === '\r' && text.charAt(i + 1) === '\n') {
+              i += 1; // one CRLF terminator, not two lines
+            }
+            lineStart = offset + i + 1;
+          } else {
+            prose(ch, at);
+          }
+        }
+        break;
+      }
+      case 'rubyExplicit': // raw = ｜ base 《 reading 》
+        appendBase(token.base, offset + 1);
+        builder.rubies.push({ text: token.reading, srcStart: offset + 1 + token.base.length + 1 });
+        break;
+      case 'rubyImplicit': // raw = base 《 reading 》
+        appendBase(token.base, offset);
+        builder.rubies.push({ text: token.reading, srcStart: offset + token.base.length + 1 });
+        break;
+      case 'indent': // line-head only (tokenizer-gated); overrides this line, 0 included
+        lineIndent = token.amount;
+        builder.sawAnnotation = true;
+        break;
+      case 'indentBlockStart': // affects FOLLOWING lines; this line keeps its head snapshot
+        blockIndent = token.amount;
+        builder.sawAnnotation = true;
+        break;
+      case 'indentBlockEnd':
+        blockIndent = 0;
+        builder.sawAnnotation = true;
+        break;
+      case 'headingPostfix': // marks its own line (target re-check left to syntax diagnostics)
+        lineHeading = token.level;
+        builder.sawAnnotation = true;
+        break;
+      case 'headingSpanStart':
+        // One slot for the three levels (a re-open is a level change). The inline form marks
+        // THIS line too; the block form affects following lines only.
+        activeHeading = token.level;
+        if (token.block !== true) {
+          lineHeading = token.level;
+        }
+        builder.sawAnnotation = true;
+        break;
+      case 'headingSpanEnd':
+        activeHeading = undefined; // the line carrying the end stays a heading
+        builder.sawAnnotation = true;
+        break;
+      default:
+        // rubyLeftPostfix / emphasis* / tcy* / comment / brokenAnnotation / pageBreak contribute
+        // no prose (a 左ルビ reading lives only inside its annotation and is not linted); they
+        // only advance `offset`, which alone breaks piece contiguity.
+        builder.sawAnnotation = true;
+        break;
+    }
+    offset += token.raw.length;
+  }
+  yield flush(offset); // the final line, blank or not
+}
