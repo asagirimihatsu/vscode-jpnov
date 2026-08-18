@@ -37,7 +37,7 @@ import { chapterLines, metaRows, moveChapterTo } from '#/shared/book/edits.ts';
 import { META_KEYS, parseJpbook, type MetaKey } from '#/shared/book/jpbook.ts';
 import { encodeTxt, TXT_ENCODING_DEFAULT, type TxtEncoding } from '#/shared/encoding.ts';
 import { errorText } from '#/shared/errors.ts';
-import { ocfZip } from '#/shared/epub.ts';
+import { ocfZip } from '#/shared/compiler/epub.ts';
 
 import type { BookVM, BuildAction, ChapterVM, DetailMessage, MetaVM, StateMessage } from '../protocol.ts';
 
@@ -50,6 +50,7 @@ import { chapterUri, lastPathSegment, splitRelPath } from '../paths.ts';
 import { convertHtmlToPdf } from '../pdf.ts';
 import { buildProjectDirs } from '../projectConfig.ts';
 import { buildHtmlSettings } from '../renderConfig.ts';
+import { raceRequest } from '../requests.ts';
 
 function compareStr(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -57,6 +58,10 @@ function compareStr(a: string, b: string): number {
 
 /** Trailing-edge delay for chapter-file event bursts (matches the preview's render debounce). */
 const REPOST_DEBOUNCE_MS = 120;
+
+/** Hard cap on the build round-trip: a whole-root scan is bounded work, so a reply this late
+ *  means a stuck server. */
+const BUILD_REQUEST_TIMEOUT_MS = 120_000;
 
 /** The book's display label: its front-matter title, else the last segment of the output name. */
 function bookTitle(entry: BookEntry): string {
@@ -605,7 +610,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         {
           location: vscode.ProgressLocation.Notification,
           title: vscode.l10n.t('Japanese Novel: building {0} book(s) to {1}…', String(books.length), label),
-          cancellable: action === 'pdf',
+          cancellable: true,
         },
         async (progress, token) => {
           let result: BuildResult;
@@ -616,13 +621,24 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
               settings: buildHtmlSettings(),
               projectDirs: buildProjectDirs(),
             };
-            result = await c.sendRequest<BuildResult>(BuildRequest, params);
+            // The token rides the wire too: $/cancelRequest lets the server stop early.
+            result = await raceRequest(
+              c.sendRequest<BuildResult>(BuildRequest, params, token),
+              token,
+              BUILD_REQUEST_TIMEOUT_MS,
+            );
           } catch (err) {
+            if (token.isCancellationRequested) {
+              return; // user cancelled: silence, not a failure toast
+            }
             const message = errorText(err);
             // This granular popup means buildSelected returns normally (no rethrow) -> no
             // boundary double-popup from the command wrapper.
             void vscode.window.showErrorMessage(vscode.l10n.t('Japanese Novel: build failed. {0}', message));
             return;
+          }
+          if (token.isCancellationRequested) {
+            return; // cancelled while the reply was landing: write nothing
           }
 
           // The CLIENT owns all filesystem writes and encodings.

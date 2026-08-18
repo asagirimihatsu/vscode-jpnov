@@ -1,7 +1,7 @@
 /**
- * Guards the deliberate DOUBLE HOME of the sheet geometry: FOLIO_BAND / SIDE_PAD live in
- * geometry.ts (the TS paper-fit generator consumes them — `@page` cannot read `var()`
- * portably) AND as plain literals in the authored `styles/*.css` fragments. If either side moves
+ * Guards the deliberate DOUBLE HOME of the sheet geometry: FOLIO_BAND / SIDE_PAD /
+ * EDGE_INSET live in geometry.ts (`@page` cannot read `var()` portably; each constant's
+ * role is documented there) AND as plain literals in the authored `styles/*.css` fragments. If either side moves
  * alone, this fails loudly (see geometry.ts's module header). The line pitch is NOT double-homed:
  * it is the `jpnov.layout.linePitch` setting, so every fragment site must read `var(--pitch)` —
  * pinned as exact strings below, with a no-literal tripwire.
@@ -16,6 +16,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import {
+  EDGE_INSET,
   FOLIO_BAND,
   SIDE_PAD,
 } from '../../../src/shared/compiler/geometry.ts';
@@ -63,9 +64,9 @@ test('the .css geometry literals equal the geometry.ts constants (paper-fit doub
   // FOLIO_BAND: the always-reserved bottom band.
   assert.equal(cssValue(buildBase, '.page', 'padding-inline-end'), FOLIO_BAND);
   // …and its one DERIVED literal: the outset frame's bottom inset in build.edge.css is
-  // FOLIO_BAND − EDGE_INSET (0.35, a .css-only constant); a FOLIO_BAND change could
-  // silently leave it behind — guard it here.
-  assert.equal(cssValue(read('build.edge.css'), '.page::before', 'bottom'), FOLIO_BAND - 0.35);
+  // FOLIO_BAND − EDGE_INSET; a change to either constant could silently leave it behind —
+  // guard it here.
+  assert.equal(cssValue(read('build.edge.css'), '.page::before', 'bottom'), FOLIO_BAND - EDGE_INSET);
 
   // Print margin: pinned to ZERO on all four sides — the paper inset rides the TS-emitted
   // border (geometry.ts fitPaper), so any non-zero print margin would push the border box
@@ -74,13 +75,29 @@ test('the .css geometry literals equal the geometry.ts constants (paper-fit doub
 
   // SIDE_PAD: the sheet's physical left/right padding (fitPaper's block-axis sheet size), the
   // outset frame's side insets (flush with the grid's side columns), and its one derived
-  // literal — the folio corners at SIDE_PAD + 0.35 EDGE_INSET (0.35em inside the frame line).
+  // literal — the folio corners at SIDE_PAD + EDGE_INSET (just inside the frame line).
   assert.equal(cssValue(buildBase, '.page', 'padding-block-start'), SIDE_PAD);
   assert.equal(cssValue(buildBase, '.page', 'padding-block-end'), SIDE_PAD);
   assert.equal(cssValue(read('build.edge.css'), '.page::before', 'left'), SIDE_PAD);
   assert.equal(cssValue(read('build.edge.css'), '.page::before', 'right'), SIDE_PAD);
-  assert.equal(cssValue(read('build.folio.css'), '.pn.r', 'right'), SIDE_PAD + 0.35);
-  assert.equal(cssValue(read('build.folio.css'), '.pn.l', 'left'), SIDE_PAD + 0.35);
+  assert.equal(cssValue(read('build.folio.css'), '.pn.r', 'right'), SIDE_PAD + EDGE_INSET);
+  assert.equal(cssValue(read('build.folio.css'), '.pn.l', 'left'), SIDE_PAD + EDGE_INSET);
+});
+
+test('the EDGE_INSET fragment sites all derive from the constant (reserve double-home guard)', () => {
+  // Fragments write the String(n) canonical form ('0.7', not '.70'). Same-value literals
+  // that are NOT this constant stay out: .pn{font-size:0.7em} and layout.ts's ruby-hang
+  // tolerance.
+  assert.equal(cssValue(read('preview.base.css'), '.segment', 'padding-inline'), EDGE_INSET);
+  const calcSites: readonly (readonly [file: string, needle: string])[] = [
+    ['preview.base.css', `(var(--cpl) + ${String(2 * EDGE_INSET)})`],
+    ['preview.ln.css', `translateY(calc(-100% - ${String(EDGE_INSET)}rem - 2px))`],
+    ['build.ln.css', `translateY(calc(-100% - ${String(EDGE_INSET)}rem))`],
+    ['build.edge.css', `top:calc(var(--htop)*1em - ${String(EDGE_INSET)}em)`],
+  ];
+  for (const [file, needle] of calcSites) {
+    assert.ok(read(file).includes(needle), `${file}: expected ${needle}`);
+  }
 });
 
 test('the pitch-bearing fragment sites all read var(--pitch), and no literal pitch remains', () => {

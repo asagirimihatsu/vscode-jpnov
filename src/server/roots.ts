@@ -1,19 +1,8 @@
 /**
- * The process-wide server context, plus the standard-LSP workspace-folder list
- * (initialize + `workspace/didChangeWorkspaceFolders`) the live `.jpbook` features use to
- * resolve root-relative entries. Per-root CONFIG state deliberately does NOT live here:
- * `projectDirs` rides each build/listBooks request, and the vocabulary store carries its
- * own root keys.
- *
- * vscode-free: only `import type` of the language-server types is used; the runtime
- * `Connection` is injected by server.ts.
+ * The standard-LSP workspace-folder list (initialize + `workspace/didChangeWorkspaceFolders`)
+ * the live `.jpbook` features use to resolve root-relative entries.
  */
-import type { Connection } from 'vscode-languageserver/node';
-
-import type { RuleSelection } from '#/shared/lint/select.ts';
-
 import { normalizeRootUri } from './fsUri.ts';
-import type { HighlightStore } from './highlight/vocabulary.ts';
 
 /** The workspace-folder set, answering "which root owns this URI" by longest prefix. */
 export interface WorkspaceRoots {
@@ -45,20 +34,4 @@ export function createWorkspaceRoots(): WorkspaceRoots {
       return best;
     },
   };
-}
-
-/**
- * Mutable, process-wide server state threaded through every server module. It is a
- * single object shared by reference, so writes (e.g. a lint-selection swap) are
- * visible everywhere.
- */
-export interface ServerContext {
-  readonly connection: Connection;
-  /** Enabled prose-lint rules, resolved from the client's `jpnov.lint.*` settings snapshot. Workspace-
-   *  (not root-) scoped, so it lives on the context rather than per root. */
-  lintSelection: RuleSelection;
-  /** Per-root narration vocabulary (characters/keywords), fed by the client's `jpnov.editor.highlight.*` pushes. */
-  readonly highlight: HighlightStore;
-  /** Workspace folders (standard LSP), for root-relative `.jpbook` entry resolution. */
-  readonly roots: WorkspaceRoots;
 }

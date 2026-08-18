@@ -15,7 +15,7 @@ import { LocalizedError } from '#/shared/messages.ts';
 import { ServerErrorNotification } from '#/shared/protocol.ts';
 import type { LocalizableMessage, ServerErrorParams } from '#/shared/protocol.ts';
 
-import type { ServerContext } from './roots.ts';
+import type { ServerContext } from './context.ts';
 
 /**
  * Reports an unexpected server error to the client as a `jpnov/serverError` notification. A

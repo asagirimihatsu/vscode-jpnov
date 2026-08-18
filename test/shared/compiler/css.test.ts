@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import type { BuildChrome, PreviewChrome } from '../../../src/shared/compiler/chrome.ts';
 import { DEFAULT_FONT_STACK, reflowStylesheet, stylesheet } from '../../../src/shared/compiler/css.ts';
 import type { PaperOrientation, PaperSize } from '../../../src/shared/compiler/geometry.ts';
-import { FOLIO_BAND, HEADER_BAND, LINENUM_BAND, SIDE_PAD, fitPaper } from '../../../src/shared/compiler/geometry.ts';
+import { EDGE_INSET, FOLIO_BAND, HEADER_BAND, LINENUM_BAND, SIDE_PAD, fitPaper } from '../../../src/shared/compiler/geometry.ts';
 import type { LinePitch } from '../../../src/shared/config/types.ts';
 import { LINE_PITCHES } from '../../../src/shared/config/types.ts';
 
@@ -123,9 +123,13 @@ const numRe = (n: number): string => String(n).replace('.', String.raw`\.`);
 const htopRe = (bands: number): RegExp => new RegExp(String.raw`:root\{[^}]*--htop:` + numRe(bands) + '[;}]');
 /** `.page{…padding-inline-end:Nem…}` — the folio band's double-home, value from the TS side. */
 const folioPadRe = new RegExp(String.raw`\.page\{[^}]*padding-inline-end:` + numRe(FOLIO_BAND) + 'em');
-/** The outset frame's inset run: 0.35em off the band tops, SIDE_PAD on the sides. */
-const FRAME_INSETS = `top:calc(var(--htop)*1em - 0.35em);right:${String(SIDE_PAD)}em;` +
-  `bottom:${String(FOLIO_BAND - 0.35)}em;left:${String(SIDE_PAD)}em`;
+/** The outset frame's inset run: EDGE_INSET off the band tops, SIDE_PAD on the sides. */
+const FRAME_INSETS = `top:calc(var(--htop)*1em - ${String(EDGE_INSET)}em);right:${String(SIDE_PAD)}em;` +
+  `bottom:${String(FOLIO_BAND - EDGE_INSET)}em;left:${String(SIDE_PAD)}em`;
+/** The fit-to-viewport font-size formula — its constant term is 2 × EDGE_INSET. */
+const fitFormulaRe = new RegExp(
+  String.raw`html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ \(var\(--cpl\) \+ ` + numRe(2 * EDGE_INSET) + String.raw`\)\)`,
+);
 
 test('stylesheet renders vertical-rl writing mode', () => {
   assert.match(preview(), /writing-mode:vertical-rl/);
@@ -177,14 +181,14 @@ test('non-paginated (preview) stylesheet fits the root font-size to the viewport
   // that root (1rem) so a webview-injected body{font-size} can't desync the glyph
   // advance from the em-based pitch.
   const css = preview({ charsPerLine: 25 });
-  assert.match(css, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ \(var\(--cpl\) \+ 0\.7\)\)/);
+  assert.match(css, fitFormulaRe);
   assert.ok(css.includes(`:root{--cpl:25;--pitch:2;--font-family:${DEFAULT_FONT_STACK}}`));
   assert.match(css, /\.line\{[^}]*font-size:1rem/);
 });
 
 test('preview fit formula at the standard 40 chars per line pads the columns', () => {
   const css = preview();
-  assert.match(css, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ \(var\(--cpl\) \+ 0\.7\)\)/);
+  assert.match(css, fitFormulaRe);
   assert.ok(css.includes(`:root{--cpl:40;--pitch:2;--font-family:${DEFAULT_FONT_STACK}}`));
   // The padding the formula subtracts (top/bottom = inline axis in vertical-rl).
   assert.match(css, /body\{[^}]*padding-inline:16px/);
@@ -489,9 +493,9 @@ test('build all-on chrome: bands, outset frame, counters, rules, furniture style
   assert.match(css, /\.line\{counter-increment:ln;\}/);
   assert.match(css, /\.line\{position:relative;\}/);
   assert.match(css, /\.line::before\{content:counter\(ln\)/);
-  // The number lifts an extra 0.35rem (rem: its own em is halved by font-size:0.5em) so
-  // it clears the outset frame; line-height:1 keeps it inside the line-number band.
-  assert.match(css, /\.line::before\{[^}]*translateY\(calc\(-100% - 0\.35rem\)\)/);
+  // The number lifts an extra EDGE_INSET in rem (its own em is halved by font-size:0.5em)
+  // so it clears the outset frame; line-height:1 keeps it inside the line-number band.
+  assert.match(css, new RegExp(String.raw`\.line::before\{[^}]*translateY\(calc\(-100% - ` + numRe(EDGE_INSET) + String.raw`rem\)\)`));
   assert.match(css, /\.line::before\{[^}]*line-height:1;/);
   // The furniture sits flush against the paper margin (the MARGIN_MM white stays
   // furniture-free) in smaller-than-body type — .hd top:0 mirrors .pn bottom:0.
@@ -501,8 +505,8 @@ test('build all-on chrome: bands, outset frame, counters, rules, furniture style
   assert.match(css, /\.pn\{position:absolute;bottom:0/);
   assert.match(css, /\.pn\{[^}]*font-size:0\.\d+em;/);
   assert.match(css, /\.pn\{[^}]*line-height:1;/);
-  assert.ok(css.includes(`.pn.r{right:${String(SIDE_PAD + 0.35)}em;}`));
-  assert.ok(css.includes(`.pn.l{left:${String(SIDE_PAD + 0.35)}em;}`));
+  assert.ok(css.includes(`.pn.r{right:${String(SIDE_PAD + EDGE_INSET)}em;}`));
+  assert.ok(css.includes(`.pn.l{left:${String(SIDE_PAD + EDGE_INSET)}em;}`));
   // The line-number band widens the sheet, which the fit absorbs in the paper insets —
   // expected strings computed with the band on.
   const paper = paperStrings({ lineNumbers: true });
@@ -547,7 +551,7 @@ test('build red edge lines colour both the frame and the inter-column rules', ()
   const css = build({ chrome: { ...BUILD_OFF, edgeLine: 'red' } });
   assert.match(css, edgeMixRe(String.raw`\.page::before\{[^}]*border:1px solid `));
   assert.match(css, /:root\{[^}]*--edge:#cc0000\}/);
-  // No line-number band here, so the frame floats 0.35em off the header band.
+  // No line-number band here, so the frame floats EDGE_INSET off the header band.
   assert.ok(css.includes(FRAME_INSETS), 'frame insets must track the band constants');
   assert.match(css, htopRe(HEADER_BAND));
   assert.ok(css.includes(EDGE_RULES('.page::before', 'em')));

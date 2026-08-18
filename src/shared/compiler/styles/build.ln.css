@@ -6,7 +6,7 @@
 .line{counter-increment:ln;}
 
 /* The number sits ABOVE its column: lifted by its own height into the line-number band (inside
-   the padding box, so overflow:hidden keeps it), plus 0.35 EDGE_INSET so it stays OUTSIDE the
+   the padding box, so overflow:hidden keeps it), plus EDGE_INSET so it stays OUTSIDE the
    outset frame. That extra lift is REM, not em: font-size:0.5em halves the local em, while
    rem = the page em (the build never sets a root font-size) — the same base the frame's inset
    is measured in. This is the ONE rem in the build stylesheet; everything else is em.

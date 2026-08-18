@@ -5,7 +5,8 @@
 /* Fit-to-viewport type scale: in vertical-rl a full-width char advances exactly 1em along the
    column, so (100vh − 2·16px pad) / (charsPerLine + 2·EDGE_INSET) makes a full line PLUS the
    always-reserved frame gaps fill the pane top to bottom; vh re-evaluates on panel resize, so
-   no script is involved. --cpl is the only dynamic input; 0.7 = 2 × EDGE_INSET (0.35). */
+   no script is involved. --cpl is the only dynamic input; the denominator's constant term
+   is 2 × EDGE_INSET (geometry.ts; styles-codegen.test.ts derives the guard). */
 html{writing-mode:vertical-rl;font-family:var(--font-family);line-height:var(--pitch);font-size:calc((100vh - 32px) / (var(--cpl) + 0.7));}
 
 /* The inline axis is vertical here: padding-inline is the top/bottom breathing room the
@@ -14,7 +15,7 @@ html{writing-mode:vertical-rl;font-family:var(--font-family);line-height:var(--p
    as the band the .ln numbers are lifted into (see preview.ln.css). */
 body{margin:0;padding-inline:16px;}
 
-/* EDGE_INSET reserve (0.35): every segment insets its text from both band ends — the reserve
+/* EDGE_INSET reserve: every segment insets its text from both band ends — the reserve
    the fit formula's denominator pays for. Unconditional (frame or not): toggling edgeLine must
    not move the text. REM, not em: the webview host injects body{font-size}, and an em here
    would follow it while the text follows the 1rem-pinned .line. position:relative doubles as

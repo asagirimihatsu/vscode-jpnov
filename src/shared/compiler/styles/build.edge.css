@@ -1,12 +1,12 @@
 /* Edge rules (罫線 + 枠) — included when edgeLine ≠ none. Same --edge + 80% color-mix recipe as
-   the preview (one recipe, both media). Pure paint: the 0.35em EDGE_INSET gap is reserved by
+   the preview (one recipe, both media). Pure paint: the EDGE_INSET gap is reserved by
    the grid whether the frame is drawn or not, so toggling edgeLine never moves a glyph, a line
    number, or a page boundary. */
 
 /* The frame floats EDGE_INSET off the text grid, borrowed from the bands, so the glyphs never
    touch the stroke while line numbers, header and folio still sit OUTSIDE it — like the printed
-   枠 of 原稿用紙. Insets: top = --htop band − 0.35em; bottom:1.65em = FOLIO_BAND 2 −
-   EDGE_INSET 0.35 (a folio-band derivation); left/right:1.5em = SIDE_PAD, hugging the grid's
+   枠 of 原稿用紙. Insets: top = --htop band − EDGE_INSET; bottom = FOLIO_BAND − EDGE_INSET
+   (a folio-band derivation); left/right = SIDE_PAD, hugging the grid's
    side columns flush (no EDGE_INSET sideways — at every pitch the glyph's ≥0.25em column-side
    slack clears the stroke). All guarded against drift by styles-codegen.test.ts.
    The 罫線 are this frame's own BACKGROUND, independent of the .line count — emitted by

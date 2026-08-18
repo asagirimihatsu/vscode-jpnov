@@ -10,6 +10,7 @@
  * (structured-clone over the forked-process channel) without vscode value types.
  */
 import type { EdgeLineStyle, PreviewChrome } from './compiler/chrome.ts';
+import type { EpubMember } from './compiler/epub.ts';
 import type { PaperOrientation, PaperSize } from './compiler/geometry.ts';
 import type { LayoutSettings } from './config/types.ts';
 import type { LintCode } from './lint/catalog.ts';
@@ -253,12 +254,6 @@ export interface TxtArtifact extends BuildArtifactBase {
 export interface HtmlArtifact extends BuildArtifactBase {
   readonly kind: 'html';
   /** Rendered output text; the client writes it UTF-8. */
-  readonly content: string;
-}
-
-/** One text member of an EPUB container: its path inside the archive + full content. */
-export interface EpubMember {
-  readonly name: string;
   readonly content: string;
 }
 

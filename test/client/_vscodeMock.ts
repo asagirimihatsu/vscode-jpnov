@@ -269,6 +269,11 @@ export interface MockState {
   infoMessages: string[];
   /** `env.openExternal` targets (uri strings), e.g. the post-build output-folder opens. */
   openedExternal: string[];
+  /** `withProgress` options seen, one per call (so tests can assert `cancellable`). */
+  progressOptions: unknown[];
+  /** Pre-set to true to hand the progress task an already-cancelled token. The mock token
+   *  reports this flag only — its `onCancellationRequested` never fires mid-task. */
+  progressCancelled: boolean;
 }
 
 export function createMockState(): MockState {
@@ -307,6 +312,8 @@ export function createMockState(): MockState {
     errorMessages: [],
     infoMessages: [],
     openedExternal: [],
+    progressOptions: [],
+    progressCancelled: false,
   };
 }
 
@@ -349,6 +356,8 @@ export function resetMockState(s: MockState): void {
   s.errorMessages.length = 0;
   s.infoMessages.length = 0;
   s.openedExternal.length = 0;
+  s.progressOptions.length = 0;
+  s.progressCancelled = false;
 }
 
 /**
@@ -408,8 +417,27 @@ export function buildVscode(state: MockState): Record<string, unknown> {
     showTextDocument(document: unknown): Promise<unknown> {
       return Promise.resolve(document);
     },
-    withProgress<R>(_opts: unknown, task: () => Thenable<R>): Thenable<R> {
-      return task();
+    withProgress<R>(
+      opts: unknown,
+      task: (
+        progress: { report(value: unknown): void },
+        token: { isCancellationRequested: boolean; onCancellationRequested(l: () => void): Disposable },
+      ) => Thenable<R>,
+    ): Thenable<R> {
+      state.progressOptions.push(opts);
+      return task(
+        {
+          report(): void { /* progress text is not asserted */ },
+        },
+        {
+          get isCancellationRequested(): boolean {
+            return state.progressCancelled;
+          },
+          onCancellationRequested(): Disposable {
+            return new Disposable(() => undefined);
+          },
+        },
+      );
     },
   };
 

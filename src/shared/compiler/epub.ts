@@ -14,16 +14,21 @@
 import { createHash } from 'node:crypto';
 import { strToU8, zipSync, type Zippable } from 'fflate';
 
-import type { JpbookMeta } from './book/jpbook.ts';
-import { applyAutoTcy } from './compiler/autoTcy.ts';
-import { reflowStylesheet } from './compiler/css.ts';
-import type { BookInput } from './compiler/document.ts';
-import { escapeHtml } from './compiler/escape.ts';
-import { buildRows } from './compiler/layout.ts';
-import { reflowDocument, reflowSegments } from './compiler/reflow.ts';
-import { tokenize } from './compiler/tokenizer.ts';
-import type { AutoTcyMode, DashMode, KinsokuMode } from './config/types.ts';
-import type { EpubMember } from './protocol.ts';
+import type { JpbookMeta } from '../book/jpbook.ts';
+import type { AutoTcyMode, DashMode, KinsokuMode } from '../config/types.ts';
+import { applyAutoTcy } from './autoTcy.ts';
+import { reflowStylesheet } from './css.ts';
+import type { BookInput } from './document.ts';
+import { escapeHtml } from './escape.ts';
+import { buildRows } from './layout.ts';
+import { reflowDocument, reflowSegments } from './reflow.ts';
+import { tokenize } from './tokenizer.ts';
+
+/** One text member of an EPUB container: its path inside the archive + full content. */
+export interface EpubMember {
+  readonly name: string;
+  readonly content: string;
+}
 
 /**
  * `urn:uuid:` identity derived from the book's output stem: sha-256 of a fixed seed, first

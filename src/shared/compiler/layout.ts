@@ -13,26 +13,12 @@
  * ぶら下げ of a trailing 句読点, then the leftward 追い出し nudge of the break point.
  * ［＃改ページ］ forces a new page.
  */
+import { DASH_BY_MODE, DASH_CHARS, DASH_GLYPH } from '../chars.ts';
 import type { DashMode, KinsokuMode } from '../config/types.ts';
 import type { BuildChrome, PageNumberPosition } from './chrome.ts';
 import { resolveStyle } from './emphasis.ts';
 import { escapeComment, escapeHtml } from './escape.ts';
 import { tokenize, type HeadingLevel, type Token } from './tokenizer.ts';
-
-/** The dash glyph each `jpnov.lint.common.dash` choice stands for. */
-export const DASH_BY_MODE: Readonly<Record<DashMode, string>> = {
-  emDash: '—', // U+2014
-  horizontalBar: '―', // U+2015
-  boxDrawing: '─', // U+2500
-};
-
-/** Every dash glyph, whatever the setting selects: all of them bind as one 分離禁止 class.
- *  Shared with the lint scanner (server/lint/prescan.ts). */
-export const DASH_CHARS = new Set<string>(Object.values(DASH_BY_MODE));
-
-/** The configured dash mode's glyph is EMITTED as this one (U+2014): its ink runs edge to edge
- *  in the default font stack, so a doubled dash joins seamlessly. */
-export const DASH_GLYPH = DASH_BY_MODE.emDash;
 
 /**
  * One laid-out glyph group: a char (1 cell), a ruby unit (base char count, atomic), or a
@@ -725,7 +711,7 @@ function everyCharIn(u: Unit | undefined, set: Set<string>): boolean {
 
 /**
  * ぶら下げ対象は句読点のみ (JIS X 4051 の慣例; 閉じ括弧・約物は対象外). The hung glyph's ink
- * reaches ≤0.35em past the last cell — inside the EDGE_INSET reserve, clear of the 枠.
+ * stays inside the EDGE_INSET reserve past the last cell, clear of the 枠.
  */
 const HANGABLE = new Set('、。，．');
 

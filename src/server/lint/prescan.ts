@@ -8,7 +8,7 @@
  *
  * Relative imports only (native test loader).
  */
-import { DASH_BY_MODE, DASH_CHARS } from '../../shared/compiler/layout.ts';
+import { DASH_BY_MODE, DASH_CHARS } from '../../shared/chars.ts';
 import { isHiragana, isKatakana } from '../../shared/compiler/tokenizer.ts';
 import { isDashMode } from '../../shared/config/types.ts';
 import { unencodableChars } from '../../shared/encoding.ts';

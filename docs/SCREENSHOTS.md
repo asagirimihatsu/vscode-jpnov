@@ -15,7 +15,7 @@ Inventory:
 | `notation.png` | generated (A) | annotation specimen |
 | `kinsoku-off.png` / `kinsoku-on.png` | generated (A) | kinsoku comparison |
 | `vscode-workspace.png` | capture 1, whole window (B) | the writing screen: Books view + editor + preview |
-| `vscode-highlight.png` | crop of capture 1 (B) | cast/keyword colouring in narration |
+| `vscode-highlight.png` | capture 4, whole window (B) | highlight settings beside coloured narration |
 | `vscode-books-panel.png` | crop of capture 2 (B) | open book: Book Info + 目次 |
 | `vscode-lint-quickfix.png` | crop of capture 2 (B) | lint squiggle + quick-fix menu |
 | `vscode-settings.png` | crop of capture 3 (B) | settings search `jpnov` |
@@ -46,8 +46,8 @@ Requirements: macOS with Google Chrome at the standard path, `ffmpeg`
 
 ## B. Manual VS Code captures
 
-Five images come from **one window arrangement and three whole-window
-captures**; four of the five are crops of those captures. Retake by
+Five images come from **one window arrangement and four whole-window
+captures**; three of the five are crops of those captures. Retake by
 overwriting the PNGs in `docs/images/` under the same filenames.
 
 Common setup:
@@ -154,17 +154,12 @@ capture.
 
 ### Capture 1 — the writing screen (clean editor)
 
-Whole window, saved as `vscode-workspace.png`; one editor crop from the
-same PNG becomes `vscode-highlight.png`.
+Whole window, saved as `vscode-workspace.png`.
 
-- `vscode-workspace.png` must show: 目次 with the two chapter rows in the
-  sidebar, annotated source with syntax highlighting in the middle, the
-  vertical preview on the right.
-- `vscode-highlight.png` (crop around lines 1–21) must show: `林は` /
-  `神木林は` coloured as subjects, `境無` bold, dialogue lines left in body
-  colour. **Check the colours at 1:1 before cropping** — they are the whole
-  point of this image. If nothing is coloured, the workspace highlight
-  settings didn't load; fix that before capturing.
+- Must show: 目次 with the two chapter rows in the sidebar (build buttons and
+  the 「出力後に出力フォルダーを開く」 checkbox in the view footer), annotated
+  source with syntax highlighting in the middle, the vertical preview on the
+  right.
 
 ### Capture 2 — book management + quick fix
 
@@ -190,6 +185,19 @@ nothing). Whole window, cropped to the settings editor. Must show: the three
 小説 groups in the tree on the left, and the 「小説 — 組版と出力」 items with
 the 40 × 34 defaults visible.
 
+### Capture 4 — highlight settings beside the text
+
+Back on the Books view **list** screen (the `<` arrow), open Settings
+(<kbd>⌘,</kbd>) in the preview's editor group, search `jpnov`, and scroll
+until **Highlight: Characters** (神木 林 / Arill Stains) and
+**Highlight: Keywords** (境無) sit beside the chapter text. Whole window,
+saved as `vscode-highlight.png` — no crop.
+
+- Must show: both populated highlight lists in the settings pane, and
+  `神木林は` coloured / `境無` bold in the narration at 1:1 — config and
+  effect side by side are the point of this image. If nothing is coloured,
+  the workspace highlight settings didn't load; fix that before capturing.
+
 ### Crop commands
 
 The rects used this round (ffmpeg, physical px on a 3204×2004 capture with
@@ -198,8 +206,7 @@ size — re-aim by eye, or crop in Preview.app; nothing depends on exact
 pixels.
 
 ```sh
-ffmpeg -i cap1.png -vf "crop=1088:766:706:182"  docs/images/vscode-highlight.png
-ffmpeg -i cap2.png -vf "crop=682:762:0:76"      docs/images/vscode-books-panel.png
-ffmpeg -i cap2.png -vf "crop=1104:368:706:134"  docs/images/vscode-lint-quickfix.png
+ffmpeg -i cap2.png -vf "crop=690:920:0:80"      docs/images/vscode-books-panel.png
+ffmpeg -i cap2.png -vf "crop=1056:420:706:96"   docs/images/vscode-lint-quickfix.png
 ffmpeg -i cap3.png -vf "crop=2544:1452:644:80"  docs/images/vscode-settings.png
 ```

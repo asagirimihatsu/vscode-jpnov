@@ -10,10 +10,10 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = new URL('../../../', import.meta.url); // repo root, from test/shared/packaging/
+import { readRepoFile, REPO_ROOT } from '../repo.ts';
 
 /** Files the runtime loads by path (not discoverable from the manifest). */
 const CODE_REFERENCED = [
@@ -24,10 +24,6 @@ const CODE_REFERENCED = [
 
 /** vsce metadata that must survive the allowlist. */
 const PACKAGING_METADATA = ['package.json', 'package.nls.json', 'package.nls.ja.json', 'README.md', 'LICENSE'];
-
-function read(rel: string): string {
-  return readFileSync(fileURLToPath(new URL(rel, ROOT)), 'utf8');
-}
 
 type Json = Record<string, unknown>;
 
@@ -64,7 +60,7 @@ function pushMedia(out: string[], media: unknown): void {
 
 /** Every relative file path the manifest references. */
 function manifestAssets(): string[] {
-  const pkg = JSON.parse(read('package.json')) as Json;
+  const pkg = JSON.parse(readRepoFile('package.json')) as Json;
   const out: string[] = [];
   push(out, pkg.main);
   push(out, pkg.icon);
@@ -119,7 +115,7 @@ function manifestAssets(): string[] {
 
 /** The `!…` negations of the allowlist; asserts the ignore-everything base rule is intact. */
 function allowlist(): string[] {
-  const lines = read('.vscodeignore')
+  const lines = readRepoFile('.vscodeignore')
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line !== '' && !line.startsWith('#'));
@@ -139,7 +135,7 @@ test('every manifest-referenced asset exists on disk', () => {
     if (asset.startsWith('dist/')) {
       continue; // build output; absent in a fresh clone, produced by npm run build
     }
-    assert.ok(existsSync(fileURLToPath(new URL(asset, ROOT))), `missing on disk: ${asset}`);
+    assert.ok(existsSync(fileURLToPath(new URL(asset, REPO_ROOT))), `missing on disk: ${asset}`);
   }
 });
 

@@ -2,10 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { strFromU8, unzipSync } from 'fflate';
 
-import type { JpbookMeta } from '../../src/shared/book/jpbook.ts';
-import type { BookInput } from '../../src/shared/compiler/document.ts';
-import { epubMembers, ocfZip } from '../../src/shared/epub.ts';
-import { assertWellFormedXml } from './xml.ts';
+import type { JpbookMeta } from '../../../src/shared/book/jpbook.ts';
+import type { BookInput } from '../../../src/shared/compiler/document.ts';
+import { epubMembers, ocfZip } from '../../../src/shared/compiler/epub.ts';
+import { assertWellFormedXml } from '../xml.ts';
 
 const MODIFIED = '2026-08-04T00:00:00Z';
 
