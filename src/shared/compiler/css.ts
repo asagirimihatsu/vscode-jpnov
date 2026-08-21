@@ -116,7 +116,7 @@ function edgeBase(edge: EdgeLineStyle): string | null {
  * localized names) → Linux Noto, generic serif last.
  */
 export const DEFAULT_FONT_STACK =
-  '"Hiragino Mincho ProN","Hiragino Mincho Pro","Yu Mincho","YuMincho","游明朝","Noto Serif CJK JP","Noto Serif JP",serif';
+  '"Hiragino Mincho ProN","Yu Mincho","YuMincho","游明朝","Noto Serif CJK JP","Noto Serif JP",serif';
 
 /**
  * `jpnov.layout.fontFamily` → the `--font-family` value. The raw setting lands inside the
