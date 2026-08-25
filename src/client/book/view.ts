@@ -25,6 +25,7 @@ import {
   BuildRequest,
   ListBooksRequest,
   type BookEntry,
+  type BuildError,
   type BuildFormat,
   type BuildParams,
   type BuildResult,
@@ -287,6 +288,17 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     // reveal: the webview sits on the list screen and would drop a plain re-push.
     await this.postDetail(this.openDetailUri, true);
+  }
+
+  /**
+   * Failed-build hand-off: focus the view, then open one listed book's detail with `reveal`;
+   * no refresh runs here, so the chrome is applied explicitly.
+   */
+  private async revealDetail(uri: string): Promise<void> {
+    await vscode.commands.executeCommand(`${BooksViewProvider.viewId}.focus`).then(undefined, () => undefined);
+    this.openDetailUri = uri;
+    this.applyDetailChrome();
+    await this.postDetail(uri, true);
   }
 
   dispose(): void {
@@ -585,7 +597,8 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
    * format (`print` = `.html` on the wire, then opened in the OS default browser — the HTML
    * artifact's only build path; `epub` comes back as member files the client zips), write
    * the results (the client owns all filesystem writes), and report. An empty selection is
-   * a no-op with a nudge rather than a silent "built 0".
+   * a no-op with a nudge rather than a silent "built 0". A failed book opens its detail
+   * afterwards (the first one, when several fail).
    */
   async buildSelected(action: BuildAction, only?: readonly string[]): Promise<void> {
     const books = only ?? [...this.checked];
@@ -605,7 +618,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const c = this.client;
     // Print asks the server for HTML on the wire and opens the result; txt/epub pass through.
     const wireFormat: BuildFormat = action === 'print' ? 'html' : action;
-    await vscode.window.withProgress(
+    const failures = await vscode.window.withProgress<readonly BuildError[]>(
       {
         location: vscode.ProgressLocation.Notification,
         title: vscode.l10n.t('Japanese Novel: building {0} book(s) to {1}…', String(books.length), label),
@@ -628,16 +641,16 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           );
         } catch (err) {
           if (token.isCancellationRequested) {
-            return; // user cancelled: silence, not a failure toast
+            return []; // user cancelled: silence, not a failure toast
           }
           const message = errorText(err);
           // This granular popup means buildSelected returns normally (no rethrow) -> no
           // boundary double-popup from the command wrapper.
           void vscode.window.showErrorMessage(vscode.l10n.t('Japanese Novel: build failed. {0}', message));
-          return;
+          return [];
         }
         if (token.isCancellationRequested) {
-          return; // cancelled while the reply was landing: write nothing
+          return []; // cancelled while the reply was landing: write nothing
         }
 
         // The CLIENT owns all filesystem writes and encodings.
@@ -712,7 +725,15 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
             vscode.l10n.t('Japanese Novel: nothing to build.'),
           );
         }
+        return errors;
       },
     );
+
+    // After the progress closes, the first failing book (server order = toast order) opens;
+    // an error without a listed book (root-level fault, vanished book) stays toast-only.
+    const failing = failures.find((e) => this.entryOf(e.uri) !== undefined)?.uri;
+    if (failing !== undefined) {
+      await this.revealDetail(failing);
+    }
   }
 }

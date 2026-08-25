@@ -35,6 +35,7 @@ export interface EntryVM {
   readonly name: string;
   readonly folder: string;
   readonly fileUri: string;
+  /** Absent or not a file; the webview renders the row as an error. */
   readonly missing: boolean;
 }
 
@@ -75,8 +76,9 @@ export interface DetailMessage {
   readonly chapters: readonly EntryVM[];
   readonly covers: readonly EntryVM[];
   readonly meta: readonly MetaVM[];
-  /** Host-initiated open (create-book reveal, ready re-hydration): the webview adopts the
-   *  intent instead of dropping the push as a stale race. Refresh re-pushes omit it. */
+  /** Host-initiated open (create-book reveal, failed-build hand-off, ready re-hydration): the
+   *  webview adopts the intent instead of dropping the push as a stale race, and re-applies its
+   *  entry-time fold rule. Refresh re-pushes omit it. */
   readonly reveal?: boolean;
 }
 
