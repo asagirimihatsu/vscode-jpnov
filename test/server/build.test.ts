@@ -314,14 +314,15 @@ test('a missing referenced .jpnov is a per-book error + diagnostic; other books 
   assert.equal(result.errors.length, 1);
   const err = result.errors[0];
   assert.ok(err);
+  const badUri = `${ws.uri}/bad/index.jpbook`;
   assert.equal(err.book, 'bad/index.jpbook');
+  assert.equal(err.uri, badUri); // the Books panel opens the failing book by this key
   assert.equal(err.code, 'book.entryFileNotFound');
   assert.ok(String(err.args?.[0]).includes('gone.jpnov'));
   // The good book still produced its artifact.
   assert.equal(result.artifacts.length, 1);
   assert.equal(result.artifacts[0]?.path, `${ws.uri}/dist/good.txt`);
   // A diagnostic was published on the offending .jpbook (line-level).
-  const badUri = `${ws.uri}/bad/index.jpbook`;
   assert.ok(conn.diagnostics.some((d) => d.uri === badUri && d.count > 0));
 });
 
@@ -348,6 +349,10 @@ test('two book files colliding on the output path error BOTH and emit neither', 
     'collision code present on both',
   );
   assert.equal(result.artifacts.length, 0, 'neither colliding book is emitted');
+  assert.deepEqual(
+    result.errors.map((e) => e.uri).sort(),
+    ['volume01/index.jpbook', 'volume01.jpbook'].map((rel) => `${ws.uri}/${rel}`).sort(),
+  );
   for (const rel of ['volume01/index.jpbook', 'volume01.jpbook']) {
     assert.ok(
       conn.diagnostics.some((d) => d.uri === `${ws.uri}/${rel}` && d.count > 0),
@@ -877,6 +882,7 @@ test('build: a missing cover file fails ONLY the html build; txt still succeeds'
   assert.equal(html.artifacts.length, 0);
   assert.equal(html.errors[0]?.code, 'book.entryFileNotFound');
   assert.deepEqual(html.errors[0].args, ['src/gone.jpnov']);
+  assert.equal(html.errors[0].uri, `${ws.uri}/vol1.jpbook`);
 
   const txt: BuildResult = await handleBuild(boot().ctx, {
     format: 'txt',

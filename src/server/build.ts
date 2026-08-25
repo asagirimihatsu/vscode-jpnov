@@ -321,7 +321,7 @@ async function* buildRoot(
           uri: fl.uri,
           diagnostics: [...lineDiags, fileLevelError(collision)],
         });
-        yield { kind: 'error', error: { book: fl.fileRel, ...collision } };
+        yield { kind: 'error', error: { book: fl.fileRel, uri: fl.uri, ...collision } };
         continue;
       }
 
@@ -348,7 +348,7 @@ async function* buildRoot(
       };
       yield { kind: 'artifact', outDir: target.outDirUri, artifact: emitArtifact(target, selection, outRel, input, parsed.meta) };
     } catch (cause) {
-      yield { kind: 'error', error: { book: fl.fileRel, ...toBuildMessage(cause) } };
+      yield { kind: 'error', error: { book: fl.fileRel, uri: fl.uri, ...toBuildMessage(cause) } };
     }
   }
 }

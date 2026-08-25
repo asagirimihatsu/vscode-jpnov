@@ -31,7 +31,7 @@ import type {
 
 /** Every glyph the panel draws; `cbOff`/`cbOn` are the selection checkbox's two states. */
 type IconName =
-  | 'chevR' | 'chevL' | 'up' | 'down' | 'warn' | 'pick' | 'newFile' | 'close' | 'edit' | 'grip' | 'cbOff' | 'cbOn';
+  | 'chevR' | 'chevL' | 'up' | 'down' | 'err' | 'pick' | 'newFile' | 'close' | 'edit' | 'grip' | 'cbOff' | 'cbOn';
 
 /** Codicon suffix per icon; the element gets `class="codicon codicon-<suffix>"`. */
 const CODICON: Record<IconName, string> = {
@@ -39,7 +39,7 @@ const CODICON: Record<IconName, string> = {
   chevL: 'chevron-left',
   up: 'chevron-up',
   down: 'chevron-down',
-  warn: 'warning',
+  err: 'error',
   pick: 'checklist',
   newFile: 'new-file',
   close: 'close',
@@ -84,7 +84,7 @@ let detail: DetailMessage | null = null;
 let screen: 'list' | 'detail' = 'list';
 let lastDetailUri: string | null = null;
 let infoOpen = false;
-let coverOpen = false; // the cover list is rarely touched, so it folds like Book Info
+let coverOpen = false; // folds like Book Info, except on entry to a book whose cover list shows an error
 let drag: { readonly list: EntryList; readonly line: number } | null = null;
 let detailWanted = false; // true while the detail screen is intended (user click, or an adopted host reveal)
 
@@ -423,6 +423,11 @@ function revealRow(): HTMLElement {
   return h('label', { class: 'chkrow' }, input, L.revealOutput);
 }
 
+/** Entry-time fold rule: the cover list opens when it shows an error (a missing file). */
+function troubledCovers(d: DetailMessage): boolean {
+  return d.covers.some((e) => e.missing);
+}
+
 function renderDetail(): void {
   if (detail === null) {
     return;
@@ -519,7 +524,7 @@ function entryRow(d: DetailMessage, list: EntryList, e: EntryVM, idx: number, co
       'data-fk': fk(list, 'open', e.fileUri),
       onClick: poster({ type: 'openFile', uri: e.fileUri }),
     },
-    e.missing && icon('warn', 'warn'),
+    e.missing && icon('err', 'err'),
     h('div', { class: 'maincol' },
       h('div', { class: 'title' },
         e.folder !== '' && h('span', { class: 'dir' }, e.folder + '/'),
@@ -628,16 +633,20 @@ window.addEventListener('message', (e: MessageEvent) => {
       // A re-push of the SAME open book (after an edit saved -> watcher -> refresh) preserves
       // focus/scroll; opening a book fresh moves focus to the Back button.
       const reentry = screen === 'detail' && detail !== null && detail.uri === msg.uri;
+      const troubled = troubledCovers(msg);
       detail = msg;
       screen = 'detail';
       lastDetailUri = msg.uri;
       if (reentry) {
+        if (msg.reveal === true) {
+          coverOpen = coverOpen || troubled; // a failed build of the open book re-applies the entry rule
+        }
         const c2 = capture();
         render();
         restore(c2);
       } else {
-        infoOpen = false; // a freshly opened book starts with both collapsible sections folded
-        coverOpen = false;
+        infoOpen = false; // a freshly opened book folds Book Info; the cover list opens only to show an error
+        coverOpen = troubled;
         render();
         focusFk('back');
       }

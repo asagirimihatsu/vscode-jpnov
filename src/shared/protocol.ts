@@ -278,6 +278,8 @@ export type BuildArtifact = TxtArtifact | HtmlArtifact | EpubArtifact;
 export interface BuildError extends LocalizableMessage {
   /** Book identity (e.g. the book dir relative to the workspace folder root). */
   readonly book: string;
+  /** The `.jpbook` URI when the error is one book's (the Books panel's key); absent for a root-level fault. */
+  readonly uri?: string;
 }
 
 export interface BuildResult {

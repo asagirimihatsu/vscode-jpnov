@@ -349,6 +349,118 @@ test('state pushes mirror the reveal-output toggle (default on)', async () => {
   assert.equal(lastState(view).revealOutput, false);
 });
 
+// --- build failure hand-off -------------------------------------------------
+
+/** The reveal-flagged detail posts — the only pushes the webview's list screen adopts. */
+function revealedDetails(view: { webview: { posted: unknown[] } }): MsgList {
+  return posts(view).filter((m) => m.type === 'detail' && m.reveal === true);
+}
+
+/** A per-book build error as the server reports it: `uri` is the panel's key, `book` the toast label. */
+function bookError(root: string, outRel: string, missing: string) {
+  return {
+    book: `${outRel}.jpbook`,
+    uri: `${root}/src/${outRel}.jpbook`,
+    code: 'book.entryFileNotFound',
+    args: [missing],
+  };
+}
+
+test('a failed build toasts every error, then opens the FIRST failing book with reveal', async () => {
+  const root = 'file:///ws';
+  const aUri = `${root}/src/a.jpbook`;
+  state.textDocuments.push(doc(aUri, 'jpbook', 'gone.jpnov\n'));
+  const { view } = await setup([entry(root, 'a', 'A'), entry(root, 'b', 'B')], {
+    ok: false,
+    outDirs: [],
+    artifacts: [],
+    errors: [bookError(root, 'a', 'gone.jpnov'), bookError(root, 'b', 'lost.jpnov')],
+  });
+  view.webview.receive({ type: 'build', format: 'txt' });
+  await tick();
+  assert.equal(state.errorMessages.filter((m) => m.includes('build error for')).length, 2);
+  assert.ok(state.executedCommands.some((c) => c.command === 'jpnov.books.focus'));
+  assert.deepEqual(revealedDetails(view).map((m) => m.uri), [aUri]);
+  assert.equal((view as { title?: string }).title, 'A');
+  const ctx = state.executedCommands.filter((c) => c.command === 'setContext' && c.args[0] === 'jpnov.booksDetail');
+  assert.equal(ctx.at(-1)?.args[1], true);
+  assert.equal(state.infoMessages.length, 0); // no success toast
+  assert.equal(state.openedExternal.length, 0);
+});
+
+test('a partial batch keeps the success flow intact and still opens the failing book', async () => {
+  const root = 'file:///ws';
+  const bUri = `${root}/src/sub/b.jpbook`;
+  state.textDocuments.push(doc(bUri, 'jpbook', 'sub/lost.jpnov\n'));
+  const { view } = await setup([entry(root, 'a', 'A'), entry(root, 'sub/b', 'B')], {
+    ok: false,
+    outDirs: [`${root}/out`],
+    artifacts: [{ kind: 'txt', path: `${root}/out/a.txt`, content: 'a' }],
+    errors: [bookError(root, 'sub/b', 'sub/lost.jpnov')],
+  });
+  view.webview.receive({ type: 'build', format: 'txt' });
+  await tick();
+  assert.deepEqual(state.writtenFiles.map((w) => w.uri), [`${root}/out/a.txt`]);
+  assert.ok(state.infoMessages.some((m) => m.includes('built 1')));
+  assert.deepEqual(state.openedExternal, [`${root}/out`]);
+  assert.equal(state.errorMessages.length, 1);
+  assert.deepEqual(revealedDetails(view).map((m) => m.uri), [bUri]);
+});
+
+test('an error without a book uri (a root-level fault) stays toast-only', async () => {
+  const root = 'file:///ws';
+  const { view } = await setup([entry(root, 'a', 'A')], {
+    ok: false,
+    outDirs: [],
+    artifacts: [],
+    errors: [{ book: root, code: 'build.failed', args: ['boom'] }],
+  });
+  view.webview.receive({ type: 'build', format: 'txt' });
+  await tick();
+  assert.equal(state.errorMessages.length, 1);
+  assert.ok(!state.executedCommands.some((c) => c.command === 'jpnov.books.focus'));
+  assert.ok(!posts(view).some((m) => m.type === 'detail'));
+});
+
+test('a failure of the book already open re-posts its detail with reveal', async () => {
+  const root = 'file:///ws';
+  const aUri = `${root}/src/a.jpbook`;
+  state.textDocuments.push(doc(aUri, 'jpbook', 'gone.jpnov\n'));
+  const { view } = await setup([entry(root, 'a', 'A')], {
+    ok: false,
+    outDirs: [],
+    artifacts: [],
+    errors: [bookError(root, 'a', 'gone.jpnov')],
+  });
+  view.webview.receive({ type: 'openDetail', uri: aUri });
+  await tick();
+  view.webview.receive({ type: 'build', format: 'print', uri: aUri });
+  await tick();
+  const details = posts(view).filter((m) => m.type === 'detail');
+  assert.equal(details.length, 2);
+  const [own, handoff] = details;
+  assert.ok(own);
+  assert.ok(handoff);
+  assert.equal(own.reveal, undefined); // the user's own open
+  assert.equal(handoff.reveal, true); // the failed build's hand-off
+  assert.equal(handoff.uri, aUri);
+});
+
+test('an error whose book is not listed is skipped in favour of the next one', async () => {
+  const root = 'file:///ws';
+  const bUri = `${root}/src/b.jpbook`;
+  state.textDocuments.push(doc(bUri, 'jpbook', 'lost.jpnov\n'));
+  const { view } = await setup([entry(root, 'a', 'A'), entry(root, 'b', 'B')], {
+    ok: false,
+    outDirs: [],
+    artifacts: [],
+    errors: [bookError(root, 'ghost', 'x.jpnov'), bookError(root, 'b', 'lost.jpnov')],
+  });
+  view.webview.receive({ type: 'build', format: 'txt' });
+  await tick();
+  assert.deepEqual(revealedDetails(view).map((m) => m.uri), [bUri]);
+});
+
 // --- detail -----------------------------------------------------------------
 
 test('openDetail posts covers and chapters (missing flagged) and the metadata rows', async () => {
