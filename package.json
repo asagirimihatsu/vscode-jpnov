@@ -656,26 +656,26 @@
         "title": "%command.openGuide.title%"
       },
       {
-        "command": "jpbook.addChapters",
+        "command": "jpbook.addFiles",
         "category": "%command.category%",
-        "title": "%command.book.addChapters.title%",
+        "title": "%command.book.addFiles.title%",
         "icon": "$(checklist)"
       },
       {
-        "command": "jpbook.removeChapter",
+        "command": "jpbook.removeEntry",
         "category": "%command.category%",
-        "title": "%command.book.removeChapter.title%",
+        "title": "%command.book.removeEntry.title%",
         "icon": "$(remove)"
       },
       {
-        "command": "jpbook.moveChapterUp",
+        "command": "jpbook.moveEntryUp",
         "category": "%command.category%",
-        "title": "%command.book.moveChapterUp.title%"
+        "title": "%command.book.moveEntryUp.title%"
       },
       {
-        "command": "jpbook.moveChapterDown",
+        "command": "jpbook.moveEntryDown",
         "category": "%command.category%",
-        "title": "%command.book.moveChapterDown.title%"
+        "title": "%command.book.moveEntryDown.title%"
       },
       {
         "command": "jpbook.editMeta",
@@ -764,7 +764,7 @@
           "when": "false"
         },
         {
-          "command": "jpbook.addChapters",
+          "command": "jpbook.addFiles",
           "when": "false"
         },
         {
@@ -772,15 +772,15 @@
           "when": "workspaceFolderCount != 0"
         },
         {
-          "command": "jpbook.removeChapter",
+          "command": "jpbook.removeEntry",
           "when": "false"
         },
         {
-          "command": "jpbook.moveChapterUp",
+          "command": "jpbook.moveEntryUp",
           "when": "false"
         },
         {
-          "command": "jpbook.moveChapterDown",
+          "command": "jpbook.moveEntryDown",
           "when": "false"
         },
         {

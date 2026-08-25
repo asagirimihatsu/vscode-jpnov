@@ -13,3 +13,8 @@
    line-height:1 keeps the lifted box its glyph height, inside the band. PHYSICAL top/left/right:
    horizontal-tb inside a vertical-rl container. Ink #888 literal (print, not themed). */
 .line::before{content:counter(ln);position:absolute;top:0;left:0;right:0;transform:translateY(calc(-100% - 0.35rem));writing-mode:horizontal-tb;text-align:center;font-size:0.5em;line-height:1;color:#888;}
+
+/* A cover sheet numbers nothing: line numbers count MANUSCRIPT lines, and a front page has
+   none. The header and folio are DOM elements the emitter withholds; this counter is pure CSS
+   matching `.page`, so the same exemption has to be spelled out here. */
+.page.cover .line::before{content:none;}

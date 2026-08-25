@@ -202,3 +202,109 @@ test('diagnoseJpbook leaves an encodable divider and the HTML-only metadata alon
   const text = '---\ndivider: ◇\ntitle: 😀\nheader: 𠮷\n---\na.jpnov';
   assert.deepEqual(await diagnoseJpbook(null, parseJpbook(text)), []);
 });
+
+// --- cover lines -------------------------------------------------------------
+
+test('diagnoseJpbook checks cover paths on the PATH span', async () => {
+  await using ws = await makeTmpWorkspace();
+  await writeUnder(ws.dir, 'src/c1.jpnov', 'x');
+  await writeUnder(ws.dir, 'adir.jpnov/keep', 'x');
+  const inlineOnly = [
+    '---',
+    'cover:',
+    '  - src/c1.jpnov', // fine
+    '  - src/missing.jpnov', // Error: not found
+    '  - adir.jpnov', // Error: directory
+    '  - ../outside.jpnov', // Error: escapes the root
+    '  - src/c1.jpnov', // Warning: duplicate
+    '---',
+    'src/c1.jpnov',
+  ].join('\n');
+
+  const diags = await diagnoseJpbook(ws.uri, parseJpbook(inlineOnly));
+  const codes = diags.map((d) => (d.data as { code: string }).code);
+  assert.deepEqual(codes, [
+    'jpbook.fileNotFound',
+    'jpbook.entryIsDirectory',
+    'path.escapesRoot',
+    'jpbook.duplicateEntry',
+  ]);
+  // Each squiggle covers the PATH exactly: past the "  - " marker, out to the line end.
+  assert.deepEqual(diags.map((d) => [d.range.start.character, d.range.end.character]), [
+    [4, 21], // src/missing.jpnov
+    [4, 14], // adir.jpnov
+    [4, 20], // ../outside.jpnov
+    [4, 16], // src/c1.jpnov
+  ]);
+  assert.deepEqual((diags[0]?.data as { args: unknown[] }).args, ['src/missing.jpnov']);
+
+  // A value on the key line never becomes a path: it is one error steering to the list form.
+  const valued = await diagnoseJpbook(ws.uri, parseJpbook('---\ncover: src/c1.jpnov\n---\nsrc/c1.jpnov'));
+  assert.equal(valued.length, 1);
+  assert.equal((valued[0]?.data as { code: string }).code, 'jpbook.coverNeedsList');
+  assert.equal(valued[0]?.severity, DiagnosticSeverity.Error);
+});
+
+test('diagnoseJpbook: the bare cover: key is clean, an orphan item is an Error', async () => {
+  await using ws = await makeTmpWorkspace();
+  await writeUnder(ws.dir, 'c.jpnov', 'x');
+  const ok = await diagnoseJpbook(ws.uri, parseJpbook('---\ncover:\n- c.jpnov\n---\nc.jpnov'));
+  assert.deepEqual(ok, []);
+
+  const orphan = await diagnoseJpbook(ws.uri, parseJpbook('---\ntitle: t\n- c.jpnov\n---\nc.jpnov'));
+  assert.equal(orphan.length, 1);
+  assert.equal((orphan[0]?.data as { code: string }).code, 'jpbook.coverItemWithoutKey');
+  assert.equal(orphan[0]?.severity, DiagnosticSeverity.Error);
+  // An orphan is a whole-line problem — it has no cover path to point at.
+  assert.equal(orphan[0].range.start.character, 0);
+});
+
+test('documentLinksForJpbook links cover paths, spanning the path alone', () => {
+  const parsed = parseJpbook('---\ncover:\n  - src/c1.jpnov\ncover2: x\n---\nch.jpnov');
+  const links = documentLinksForJpbook('file:///proj', parsed);
+  assert.equal(links.length, 2);
+  assert.ok(links[0]?.target?.endsWith('/proj/src/c1.jpnov'));
+  assert.deepEqual(links[0]?.range, {
+    start: { line: 2, character: 4 },
+    end: { line: 2, character: 16 },
+  });
+  assert.ok(links[1]?.target?.endsWith('/proj/ch.jpnov'));
+});
+
+test('documentLinksForJpbook leaves a valued cover key alone (it names no path)', () => {
+  assert.deepEqual(documentLinksForJpbook('file:///proj', parseJpbook('---\ncover: src/c1.jpnov\n---\n')), []);
+});
+
+test('completeJpbook offers cover as a key and file paths after the item marker', async () => {
+  await using ws = await makeTmpWorkspace();
+  await writeUnder(ws.dir, 'src/c1.jpnov', 'x');
+  const doc = (line: string): ReturnType<typeof parseJpbook> =>
+    parseJpbook(['---', line, '---', 'ch.jpnov'].join('\n'));
+  const at = async (line: string, character: number): Promise<ReturnType<typeof completeJpbook>> =>
+    completeJpbook(ws.uri, doc(line), line, { line: 1, character });
+
+  const keys = await at('cov', 3);
+  assert.deepEqual(keys.map((c) => c.label), ['cover']);
+
+  // …and after the marker the path completion takes over, replacing only the path span.
+  const item = await at('- src/', 6);
+  assert.deepEqual(item.map((c) => c.label), ['c1.jpnov']);
+  assert.deepEqual(item[0]?.textEdit, {
+    range: { start: { line: 1, character: 6 }, end: { line: 1, character: 6 } },
+    newText: 'c1.jpnov',
+  });
+  // A valued key line offers nothing — it is an error, not a path.
+  assert.deepEqual(await at('cover: src/', 11), []);
+  // A folder still drills, from either marker.
+  const dir = await at('－ s', 3);
+  assert.deepEqual(dir.map((c) => c.label), ['src']);
+  assert.equal(dir[0]?.kind, CompletionItemKind.Folder);
+});
+
+test('completeJpbook suppresses cover suggestions once the path names a file', async () => {
+  await using ws = await makeTmpWorkspace();
+  await writeUnder(ws.dir, 'src/c1.jpnov', 'x');
+  const line = '- src/c1.jpnov';
+  const parsed = parseJpbook(['---', 'cover:', line, '---'].join('\n'));
+  assert.deepEqual(await completeJpbook(ws.uri, parsed, line, { line: 2, character: line.length }), []);
+});

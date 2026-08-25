@@ -14,7 +14,7 @@
  */
 import { posix } from 'node:path';
 
-import { isChapter, parseJpbook } from '../../shared/book/jpbook.ts';
+import { entryPathOf, parseJpbook } from '../../shared/book/jpbook.ts';
 
 /** One rename from the event, as normalized absolute paths. */
 export interface FileRename {
@@ -56,10 +56,10 @@ function movedTo(abs: string, renames: readonly FileRename[]): string | null {
 
 /**
  * Computes the edits one `.jpbook` needs for `renames`, entries resolved against
- * `rootPath` (its owning workspace folder). Both `ok` and `duplicate` chapter lines are
- * rewritten (a duplicate must keep duplicating whatever it duplicated); blank,
- * front-matter, and error lines are never touched. Each edit replaces exactly the trimmed
- * path span, so surrounding whitespace survives.
+ * `rootPath` (its owning workspace folder). Chapter and cover lines are rewritten,
+ * duplicates included (a duplicate must keep duplicating whatever it duplicated); blank,
+ * front-matter, and error/warning lines are never touched. Each edit replaces exactly the
+ * path span — a cover line's `- `/`cover: ` marker and any surrounding whitespace survive.
  */
 export function planBookEdits(
   rootPath: string,
@@ -70,21 +70,22 @@ export function planBookEdits(
   const unrepresentable: string[] = [];
 
   for (const pl of parseJpbook(text).lines) {
-    if (!isChapter(pl)) {
+    const entry = entryPathOf(pl);
+    if (entry === null) {
       continue;
     }
-    const abs = posix.normalize(posix.join(rootPath, pl.value));
+    const abs = posix.normalize(posix.join(rootPath, entry.value));
     const target = movedTo(abs, renames);
     if (target === null) {
       continue;
     }
     const rel = posix.relative(rootPath, target);
     if (rel === '' || rel === '..' || rel.startsWith('../') || posix.isAbsolute(rel)) {
-      unrepresentable.push(pl.value);
+      unrepresentable.push(entry.value);
       continue;
     }
-    if (rel !== pl.value) {
-      edits.push({ line: pl.line, startChar: pl.range.startChar, endChar: pl.range.endChar, newText: rel });
+    if (rel !== entry.value) {
+      edits.push({ line: pl.line, startChar: entry.range.startChar, endChar: entry.range.endChar, newText: rel });
     }
   }
   return { edits, unrepresentable };

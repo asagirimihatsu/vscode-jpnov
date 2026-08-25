@@ -758,3 +758,177 @@ test('results never carry a legacy epubs key; epub rides the collision check too
   assert.deepEqual(result.artifacts, []);
   assert.ok(result.errors.every((e) => e.code === 'build.outPathCollision'));
 });
+
+// --- cover pages -------------------------------------------------------------
+
+/** A book with a two-entry cover list, a template cover, and a two-page body. */
+async function writeCoverFixture(dir: string): Promise<void> {
+  await writeUnder(dir, 'vol1.jpbook', [
+    '---',
+    'title: 作品名',
+    'author: 著者名',
+    'header: 柱',
+    'cover:',
+    '  - src/cover.jpnov',
+    '  - src/arasuji.jpnov',
+    '---',
+    'src/a.jpnov',
+  ].join('\n'));
+  await writeUnder(dir, 'src/cover.jpnov', [
+    '［＃ここに「題名」の値を表示］',
+    '［＃ここに「著者」の値を表示］',
+    '全［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］ページ',
+  ].join('\n'));
+  await writeUnder(dir, 'src/arasuji.jpnov', 'あらすじ本文。');
+  await writeUnder(dir, 'src/a.jpnov', '本文。\n［＃改ページ］\n続き。');
+}
+
+test('build: covers render as unnumbered front pages carrying the book values (html only)', async () => {
+  await using ws = await makeTmpWorkspace();
+  const { ctx } = boot();
+  await writeCoverFixture(ws.dir);
+
+  const result: BuildResult = await handleBuild(ctx, {
+    format: 'html',
+    settings: { ...SETTINGS, pageNumber: 'right', pageNumberFormat: '{page} / {totalPage}' } as HtmlSettings,
+    projectDirs: projectsFor(ws.uri),
+  });
+  assert.equal(result.ok, true);
+  const html = result.artifacts[0];
+  assert.ok(html?.kind === 'html');
+
+  const sheets = html.content.split(/(?=<div class="page)/).slice(1);
+  assert.equal(sheets.length, 4); // 2 covers + 2 body pages
+  assert.ok(sheets[0]?.startsWith('<div class="page cover" data-page="0">'));
+  assert.ok(sheets[1]?.startsWith('<div class="page cover" data-page="1">'));
+  // The book's own values land on the cover; the count is the BODY count.
+  assert.ok(sheets[0]?.includes('作品名'));
+  assert.ok(sheets[0]?.includes('著者名'));
+  assert.ok(sheets[0]?.includes('<span class="tcy">2</span>'));
+  // Neither cover carries the book's header or a folio; the body starts at page 1.
+  for (const cover of [sheets[0], sheets[1]]) {
+    assert.ok(cover !== undefined && !cover.includes('class="hd') && !cover.includes('class="pn'));
+  }
+  assert.match(sheets[2] ?? '', /<div class="hd">柱<\/div><div class="pn r">1 \/ 2<\/div>/);
+});
+
+test('build: a title-less book falls back to the outRel STEM, exactly like the EPUB title', async () => {
+  await using ws = await makeTmpWorkspace();
+  const { ctx } = boot();
+  // Nested on purpose: outRel is `part1/vol2` but its stem is `vol2`, so the two differ.
+  await writeUnder(ws.dir, 'part1/vol2.jpbook', '---\ncover:\n- c.jpnov\n---\na.jpnov');
+  await writeUnder(ws.dir, 'c.jpnov', '［＃ここに「題名」の値を表示］／［＃ここに「著者」の値を表示］');
+  await writeUnder(ws.dir, 'a.jpnov', '本文。');
+
+  const html = (await handleBuild(ctx, {
+    format: 'html',
+    settings: SETTINGS,
+    projectDirs: projectsFor(ws.uri),
+  })).artifacts[0];
+  assert.ok(html?.kind === 'html');
+  // The stem alone, and an absent author contributes nothing after the separator.
+  assert.match(html.content, /<div class="line" data-line="0">vol2／<\/div>/);
+  assert.doesNotMatch(html.content, /part1\/vol2/);
+
+  // …and the EPUB's dc:title agrees, which is why the two share one expression.
+  const epub = (await handleBuild(ctx, {
+    format: 'epub',
+    settings: SETTINGS,
+    projectDirs: projectsFor(ws.uri),
+  })).artifacts[0];
+  assert.ok(epub?.kind === 'epub');
+  const opf = epub.members.find((m) => m.name === 'OEBPS/package.opf')?.content ?? '';
+  assert.match(opf, /<dc:title>vol2<\/dc:title>/);
+});
+
+test('build: txt and epub ignore the cover key entirely (byte-identical either way)', async () => {
+  await using ws = await makeTmpWorkspace();
+  await writeUnder(ws.dir, 'src/cover.jpnov', '［＃ここに「題名」の値を表示］');
+  await writeUnder(ws.dir, 'src/a.jpnov', '本文。');
+  // One workspace, so paths match too; the EPUB's wall-clock dcterms:modified is normalized.
+  const build = async (jpbook: string, format: 'txt' | 'epub'): Promise<string> => {
+    await writeUnder(ws.dir, 'vol1.jpbook', jpbook);
+    const result: BuildResult = await handleBuild(boot().ctx, {
+      format,
+      settings: SETTINGS,
+      projectDirs: projectsFor(ws.uri),
+    });
+    assert.equal(result.ok, true);
+    return JSON.stringify(result.artifacts).replaceAll(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/g, 'T');
+  };
+  const plain = '---\ntitle: t\n---\nsrc/a.jpnov';
+  const covered = '---\ntitle: t\ncover:\n  - src/cover.jpnov\n---\nsrc/a.jpnov';
+
+  assert.equal(await build(covered, 'txt'), await build(plain, 'txt'));
+  assert.equal(await build(covered, 'epub'), await build(plain, 'epub'));
+});
+
+test('build: a missing cover file fails ONLY the html build; txt still succeeds', async () => {
+  await using ws = await makeTmpWorkspace();
+  await writeUnder(ws.dir, 'vol1.jpbook', '---\ncover:\n  - src/gone.jpnov\n---\nsrc/a.jpnov');
+  await writeUnder(ws.dir, 'src/a.jpnov', '本文。');
+
+  const html: BuildResult = await handleBuild(boot().ctx, {
+    format: 'html',
+    settings: SETTINGS,
+    projectDirs: projectsFor(ws.uri),
+  });
+  assert.equal(html.ok, false);
+  assert.equal(html.artifacts.length, 0);
+  assert.equal(html.errors[0]?.code, 'book.entryFileNotFound');
+  assert.deepEqual(html.errors[0].args, ['src/gone.jpnov']);
+
+  const txt: BuildResult = await handleBuild(boot().ctx, {
+    format: 'txt',
+    settings: SETTINGS,
+    projectDirs: projectsFor(ws.uri),
+  });
+  assert.equal(txt.ok, true);
+  assert.equal(txt.artifacts.length, 1);
+});
+
+test('build: duplicate and muted cover lines never reach the output', async () => {
+  await using ws = await makeTmpWorkspace();
+  const { ctx, conn } = boot();
+  await writeUnder(ws.dir, 'vol1.jpbook', [
+    '---',
+    'cover:',
+    '  - src/c.jpnov',
+    '  - src/c.jpnov', // duplicate — warned, built once
+    'cover:',
+    '  - src/second.jpnov', // muted by the duplicate key — never built
+    '---',
+    'src/a.jpnov',
+  ].join('\n'));
+  await writeUnder(ws.dir, 'src/c.jpnov', '表紙');
+  await writeUnder(ws.dir, 'src/second.jpnov', '二枚目');
+  await writeUnder(ws.dir, 'src/a.jpnov', '本文。');
+
+  const result: BuildResult = await handleBuild(ctx, {
+    format: 'html',
+    settings: SETTINGS,
+    projectDirs: projectsFor(ws.uri),
+  });
+  assert.equal(result.ok, true);
+  const html = result.artifacts[0];
+  assert.ok(html?.kind === 'html');
+  assert.equal((html.content.match(/class="page cover"/g) ?? []).length, 1);
+  assert.ok(!html.content.includes('二枚目'));
+  // A clean build still publishes the manifest's problems (codes pinned by diagnoseJpbook).
+  assert.ok(conn.diagnostics.some((d) => d.uri === `${ws.uri}/vol1.jpbook` && d.count === 3));
+});
+
+test('build: a missing chapter outranks a missing cover, so every format reports the same error', async () => {
+  await using ws = await makeTmpWorkspace();
+  await writeUnder(ws.dir, 'vol1.jpbook', '---\ncover:\n  - src/gone-cover.jpnov\n---\nsrc/gone-chapter.jpnov');
+
+  for (const format of ['html', 'txt'] as const) {
+    const result: BuildResult = await handleBuild(boot().ctx, {
+      format,
+      settings: SETTINGS,
+      projectDirs: projectsFor(ws.uri),
+    });
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.errors[0]?.args, ['src/gone-chapter.jpnov'], `${format} names the chapter`);
+  }
+});

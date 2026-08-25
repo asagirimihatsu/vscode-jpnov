@@ -12,6 +12,7 @@
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { FRONT_MATTER_KEYS } from '../../src/shared/book/jpbook.ts';
 import { renderEnglish } from '../../src/shared/messages.ts';
 import type { MsgCode } from '../../src/shared/protocol.ts';
 import { buildVscode, createMockState } from './_vscodeMock.ts';
@@ -34,10 +35,12 @@ const ARGS: Record<MsgCode, readonly (string | number)[]> = {
   'jpbook.entryIsDirectory': ['adir.jpnov'],
   'jpbook.fileNotFound': ['missing.jpnov'],
   'jpbook.metaNotKeyValue': ['just text'],
-  'jpbook.metaUnknownKey': ['publisher', 'title, author, header, pageNumber, pageNumberFormat'],
+  'jpbook.metaUnknownKey': ['publisher', FRONT_MATTER_KEYS.join(', ')],
   'jpbook.metaDuplicateKey': ['title'],
   'jpbook.metaBadEnum': ['pageNumber', 'middle', 'right, left, rightLeft, leftRight, none'],
   'jpbook.metaUnterminated': [],
+  'jpbook.coverItemWithoutKey': ['- cover.jpnov'],
+  'jpbook.coverNeedsList': ['cover: 表紙.jpnov'],
   'path.empty': ['jpbookEntry'],
   'path.rootDot': ['jpbookEntry'],
   'path.homeRelative': ['jpbookEntry'], // exercises the localized-label branch

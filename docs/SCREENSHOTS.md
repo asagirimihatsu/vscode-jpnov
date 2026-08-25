@@ -16,7 +16,7 @@ Inventory:
 | `kinsoku-off.png` / `kinsoku-on.png` | generated (A) | kinsoku comparison |
 | `vscode-workspace.png` | capture 1, whole window (B) | the writing screen: Books view + editor + preview |
 | `vscode-highlight.png` | capture 4, whole window (B) | highlight settings beside coloured narration |
-| `vscode-books-panel.png` | crop of capture 2 (B) | open book: Book Info + 目次 |
+| `vscode-books-panel.png` | crop of capture 2 (B) | open book: Book Info + 表紙 + 目次 |
 | `vscode-lint-quickfix.png` | crop of capture 2 (B) | lint squiggle + quick-fix menu |
 | `vscode-settings.png` | crop of capture 3 (B) | settings search `jpnov` |
 | `vscode-encoding-statusbar.png` / `vscode-encoding-reopen.png` | ad-hoc crops | FAQ: Shift JIS reopen; UI-stable, retake only if that VS Code flow changes |
@@ -93,6 +93,7 @@ Sample project to open (any temp folder):
 novel-sample/
 ├── 第一章.jpnov        ← paste the source below
 ├── 第二章.jpnov        ← a few plain lines are enough
+├── 表紙.jpnov          ← the cover sample from README「応募用の表紙と扉」
 ├── 作品集.jpbook       ← the front-mattered sample below
 └── .vscode/settings.json
 ```
@@ -100,8 +101,8 @@ novel-sample/
 ```json
 {
   "chat.disableAIFeatures": true,
-  "jpnov.editor.highlight.characters": ["神木 林", "Arill Stains"],
-  "jpnov.editor.highlight.keywords": ["境無"],
+  "jpnov.editor.highlight.characters": ["山田 太郎", "John Smith"],
+  "jpnov.editor.highlight.keywords": ["王都"],
   "jpnov.lint.narration.indent": false
 }
 ```
@@ -111,8 +112,11 @@ novel-sample/
 ```
 ---
 title: My 作品集
+author: みんな
 header: 作品集　その一
 divider: ＊　＊　＊
+cover:
+  - 表紙.jpnov
 ---
 第一章.jpnov
 第二章.jpnov
@@ -124,7 +128,7 @@ divider: ＊　＊　＊
 　ようこそ、物語《ものがたり》の世界へ。
 ここぞという言葉には傍点［＃「傍点」に傍点］を打てます。
 　太字［＃「太字」は太字］や字下げも青空文庫の注記のままに。
-　その日、林は境無をもらった。
+　その日、太郎は王都に着いた。
 「!?」
 ［＃改ページ］
 　まさか――これが、［＃太字］事実――［＃太字終わり］ということか。
@@ -138,7 +142,7 @@ divider: ＊　＊　＊
 「えっ、作者の魔術って？」
 「［＃丸傍点］あれ［＃丸傍点終わり］を勝てる術あるのかよ」
 「あるさ」
-　神木林は片方の口角だけを引き上げた。
+　山田太郎は片方の口角だけを引き上げた。
 「編集部からご指示により、全文を書き直せ！」
 「何だと!?」
 　次のシーン「焼肉、やっぱうまくね？」
@@ -163,7 +167,7 @@ Whole window, saved as `vscode-workspace.png`.
 
 ### Capture 2 — book management + quick fix
 
-Expand 「本の情報」, re-enable `jpnov.lint.narration.indent` (delete the
+Expand 「本の情報」 and 「表紙」, re-enable `jpnov.lint.narration.indent` (delete the
 settings line or set it true — the line-2 sample text is its bait), and open
 the lightbulb menu on the squiggle.
 Whole window, then two crops:
@@ -171,7 +175,9 @@ Whole window, then two crops:
 - `vscode-books-panel.png` (sidebar incl. activity bar): from the view header
   down through the 「新しい章…」 row. Must show all six 本の情報 rows
   (題名・ヘッダー・章区切り filled in; 著者 and the ページ番号 rows at their
-  defaults), the chapter rows, and the 目次 header's 「章を追加…」 button.
+  defaults), the 表紙 section (the 表紙.jpnov row, its header's 「表紙を追加…」
+  button and the 「新しい表紙…」 row), the chapter rows, and the 目次 header's
+  「章を追加…」 button.
   The build buttons are deliberately outside this crop — they are visible in
   `vscode-workspace.png`.
 - `vscode-lint-quickfix.png` (editor area): the squiggle, its hover, and the
@@ -189,12 +195,12 @@ the 40 × 34 defaults visible.
 
 Back on the Books view **list** screen (the `<` arrow), open Settings
 (<kbd>⌘,</kbd>) in the preview's editor group, search `jpnov`, and scroll
-until **Highlight: Characters** (神木 林 / Arill Stains) and
-**Highlight: Keywords** (境無) sit beside the chapter text. Whole window,
+until **Highlight: Characters** (山田 太郎 / John Smith) and
+**Highlight: Keywords** (王都) sit beside the chapter text. Whole window,
 saved as `vscode-highlight.png` — no crop.
 
 - Must show: both populated highlight lists in the settings pane, and
-  `神木林は` coloured / `境無` bold in the narration at 1:1 — config and
+  `山田太郎は` coloured / `王都` bold in the narration at 1:1 — config and
   effect side by side are the point of this image. If nothing is coloured,
   the workspace highlight settings didn't load; fix that before capturing.
 

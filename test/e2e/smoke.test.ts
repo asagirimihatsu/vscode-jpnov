@@ -160,7 +160,7 @@ test('jpnov/listBooks + jpnov/build round-trip a real workspace over the wire', 
   const htmlArtifact = result.artifacts[0];
   assert.ok(htmlArtifact?.kind === 'html');
   assert.equal(htmlArtifact.path, `${wsUri}/dist/hon.html`);
-  assert.ok(htmlArtifact.content.includes('class="page"'), 'built HTML must paginate');
+  assert.ok(/class="page[ "]/.test(htmlArtifact.content), 'built HTML must paginate');
   assert.ok(htmlArtifact.content.includes('class="line"'), 'built HTML must emit line columns');
   assert.ok(htmlArtifact.content.includes('<ruby'), 'built HTML must keep the ruby markup');
 

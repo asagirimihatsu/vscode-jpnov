@@ -464,8 +464,8 @@ test('ranges and fixes on an annotated line map back without positional drift', 
 // --- ruby drop-down ---
 
 test('ruby kana=hiragana flags a reading that is not all hiragana', () => {
-  assert.deepEqual(lint('巳一《みハつ》と一郎《いちろう》', { 'jpnov.lint.ruby.kana': 'hiragana' }), [
-    { code: 'lint.ruby.kana', text: 'みハつ' },
+  assert.deepEqual(lint('太郎《たロう》と一郎《いちろう》', { 'jpnov.lint.ruby.kana': 'hiragana' }), [
+    { code: 'lint.ruby.kana', text: 'たロう' },
   ]);
 });
 

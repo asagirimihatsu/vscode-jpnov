@@ -15,10 +15,11 @@ import {
   buildSemanticTokens,
   tokenTypeIndex,
 } from '../../../src/server/semanticTokens.ts';
+import { VALUE_FIELD_BY_NAME } from '../../../src/shared/compiler/tokenizer.ts';
 import { at, covers, decode, doc } from './tokens.ts';
 
-// A small project: 朝霧 巳一 as cast, 黒剣 as a coined keyword.
-const rec = createRecognizer(['朝霧　巳一'], ['黒剣']);
+// A small project: 山田 太郎 as cast, 聖剣 as a coined keyword.
+const rec = createRecognizer(['山田　太郎'], ['聖剣']);
 
 const MARKER = tokenTypeIndex('marker');
 const CHARACTER = tokenTypeIndex('character');
@@ -33,21 +34,21 @@ test('legend is the distinct LSP types in first-seen order', () => {
 
 // ----------------------------------------------------------------------- narration
 
-test('a narration subject 巳一は -> character; the は particle is not coloured', () => {
-  const toks = decode(buildSemanticTokens(doc('巳一は走った'), rec).data);
-  assert.deepEqual(at(toks, 0, 0), { line: 0, char: 0, len: 3, type: CHARACTER }); // 巳一は
+test('a narration subject 太郎は -> character; the は particle is not coloured', () => {
+  const toks = decode(buildSemanticTokens(doc('太郎は走った'), rec).data);
+  assert.deepEqual(at(toks, 0, 0), { line: 0, char: 0, len: 3, type: CHARACTER }); // 太郎は
 });
 
 test('a coined keyword is bolded', () => {
-  const toks = decode(buildSemanticTokens(doc('黒剣を抜いた'), rec).data);
-  assert.deepEqual(at(toks, 0, 0), { line: 0, char: 0, len: 2, type: KEYWORD }); // 黒剣
+  const toks = decode(buildSemanticTokens(doc('聖剣を抜いた'), rec).data);
+  assert.deepEqual(at(toks, 0, 0), { line: 0, char: 0, len: 2, type: KEYWORD }); // 聖剣
 });
 
 // ----------------------------------------------------------------------- dialogue
 
 test('dialogue 「」 are markers; their content keeps the body colour', () => {
-  // 「(0) 巳(1) 一(2) は(3) 」(4) — 巳一は would be a subject in narration, but is masked here.
-  const toks = decode(buildSemanticTokens(doc('「巳一は」'), rec).data);
+  // 「(0) 太(1) 郎(2) は(3) 」(4) — 太郎は would be a subject in narration, but is masked here.
+  const toks = decode(buildSemanticTokens(doc('「太郎は」'), rec).data);
   assert.equal(at(toks, 0, 0)?.type, MARKER); // 「
   assert.equal(at(toks, 0, 4)?.type, MARKER); // 」
   assert.ok(!covers(toks, 1, CHARACTER));
@@ -56,9 +57,9 @@ test('dialogue 「」 are markers; their content keeps the body colour', () => {
 // ----------------------------------------------------------------------- ruby
 
 test('ruby base flows into recognition; ｜《》 are markers, the reading is not coloured', () => {
-  // ｜(0) 巳(1) 一(2) 《(3) み(4) い(5) ち(6) 》(7) は(8)
-  const toks = decode(buildSemanticTokens(doc('｜巳一《みいち》は'), rec).data);
-  assert.equal(at(toks, 0, 1)?.type, CHARACTER); // 巳一 base recognised
+  // ｜(0) 太(1) 郎(2) 《(3) た(4) ろ(5) う(6) 》(7) は(8)
+  const toks = decode(buildSemanticTokens(doc('｜太郎《たろう》は'), rec).data);
+  assert.equal(at(toks, 0, 1)?.type, CHARACTER); // 太郎 base recognised
   assert.equal(at(toks, 0, 1)?.len, 2);
   assert.equal(at(toks, 0, 0)?.type, MARKER); // ｜
   assert.equal(at(toks, 0, 3)?.type, MARKER); // 《
@@ -67,11 +68,11 @@ test('ruby base flows into recognition; ｜《》 are markers, the reading is no
 });
 
 test('a recognised span splits across a ruby reading hole', () => {
-  // 巳(0) 《(1) み(2) 》(3) 一(4) は(5): the name 巳一 spans the base + the post-reading 一.
-  const toks = decode(buildSemanticTokens(doc('巳《み》一は'), rec).data);
-  assert.equal(at(toks, 0, 0)?.type, CHARACTER); // 巳
-  assert.equal(at(toks, 0, 4)?.type, CHARACTER); // 一, across the 《み》 hole
-  assert.ok(!covers(toks, 2, CHARACTER)); // the reading み is not coloured
+  // 太(0) 《(1) た(2) 》(3) 郎(4) は(5): the name 太郎 spans the base + the post-reading 郎.
+  const toks = decode(buildSemanticTokens(doc('太《た》郎は'), rec).data);
+  assert.equal(at(toks, 0, 0)?.type, CHARACTER); // 太
+  assert.equal(at(toks, 0, 4)?.type, CHARACTER); // 郎, across the 《た》 hole
+  assert.ok(!covers(toks, 2, CHARACTER)); // the reading た is not coloured
 });
 
 // ----------------------------------------------------------------------- markup (unchanged)
@@ -81,6 +82,39 @@ test('［＃改ページ］: brackets marker, 改ページ directive', () => {
   assert.deepEqual(at(toks, 0, 0), { line: 0, char: 0, len: 2, type: MARKER }); // ［＃
   assert.deepEqual(at(toks, 0, 2), { line: 0, char: 2, len: 4, type: tokenTypeIndex('directive') }); // 改ページ
   assert.deepEqual(at(toks, 0, 6), { line: 0, char: 6, len: 1, type: MARKER }); // ］
+});
+
+test('［＃ここに「…」の値を表示］: only the field name is a directive, the scaffolding demotes', () => {
+  // Derived from the field table: a new name is covered without editing this test.
+  for (const name of VALUE_FIELD_BY_NAME.keys()) {
+    const src = `［＃ここに「${name}」の値を表示］`;
+    const toks = decode(buildSemanticTokens(doc(src), rec).data);
+    const open = '［＃'.length;
+    const scaffold = 'ここに「'.length;
+    const tail = '」の値を表示'.length;
+    assert.deepEqual(at(toks, 0, 0), { line: 0, char: 0, len: open, type: MARKER }, name);
+    assert.deepEqual(at(toks, 0, open), { line: 0, char: open, len: scaffold, type: MARKER }, name);
+    assert.deepEqual(
+      at(toks, 0, open + scaffold),
+      { line: 0, char: open + scaffold, len: name.length, type: tokenTypeIndex('directive') },
+      name,
+    );
+    assert.deepEqual(
+      at(toks, 0, open + scaffold + name.length),
+      { line: 0, char: open + scaffold + name.length, len: tail, type: MARKER },
+      name,
+    );
+    assert.deepEqual(
+      at(toks, 0, src.length - 1),
+      { line: 0, char: src.length - 1, len: 1, type: MARKER },
+      name,
+    );
+    // The keyword must stop at the field name — never spill onto the closing corner.
+    assert.ok(!covers(toks, open + scaffold + name.length, tokenTypeIndex('directive')), name);
+  }
+  // An unknown name degrades to one greyed span, exactly like any mistyped annotation.
+  const unknown = decode(buildSemanticTokens(doc('［＃ここに「発行日」の値を表示］'), rec).data);
+  assert.ok(!unknown.some((t) => t.type === tokenTypeIndex('directive')));
 });
 
 test('emphasis span: variant -> directive, 左に -> direction', () => {
@@ -112,9 +146,9 @@ test('an unclosed ［＃ (its ］ on a later line) is greyed on its own line ONL
 });
 
 test('a broken ［＃ is greyed to its line end; the next line is recognized normally', () => {
-  const toks = decode(buildSemanticTokens(doc('本［＃こわれ\n巳一は走った'), rec).data);
+  const toks = decode(buildSemanticTokens(doc('本［＃こわれ\n太郎は走った'), rec).data);
   assert.deepEqual(at(toks, 0, 1), { line: 0, char: 1, len: 5, type: MARKER }); // ［＃こわれ
-  assert.deepEqual(at(toks, 1, 0), { line: 1, char: 0, len: 3, type: CHARACTER }); // 巳一は
+  assert.deepEqual(at(toks, 1, 0), { line: 1, char: 0, len: 3, type: CHARACTER }); // 太郎は
 });
 
 test('offsets stay within bounds across an astral character (𠮷)', () => {

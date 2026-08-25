@@ -33,11 +33,11 @@ import { fileURLToPath } from 'node:url';
 
 import type { CancellationToken, WorkDoneProgressReporter } from 'vscode-languageserver/node';
 
-import { composeBookChrome, jpbookOutRel, parseJpbook } from '#/shared/book/jpbook.ts';
+import { composeBookChrome, coverPathOf, jpbookOutRel, parseJpbook } from '#/shared/book/jpbook.ts';
 import type { JpbookMeta, ParsedLine } from '#/shared/book/jpbook.ts';
 import { concatBookText, renderBook } from '#/shared/compiler/document.ts';
 import type { BookInput } from '#/shared/compiler/document.ts';
-import { epubMembers } from '#/shared/compiler/epub.ts';
+import { chapterStem, epubMembers } from '#/shared/compiler/epub.ts';
 import { errorText } from '#/shared/errors.ts';
 import { LocalizedError } from '#/shared/messages.ts';
 import { resolveHtmlSettings } from '#/shared/config/settings.ts';
@@ -158,26 +158,50 @@ async function readBookFiles(rootUri: string, lines: readonly ParsedLine[]): Pro
     if (pl.kind !== 'ok') {
       continue;
     }
-    const resolved = resolveContained(rootUri, pl.value, 'jpbookEntry');
-    if (!resolved.ok) {
-      throw new LocalizedError({ code: resolved.code, args: resolved.args });
-    }
-    if (!isFileScheme(resolved.abs)) {
-      throw new LocalizedError({ code: 'book.entryNeedsFileScheme', args: [pl.value] });
-    }
-    let bytes: Buffer;
-    try {
-      bytes = await readFile(fileURLToPath(resolved.abs));
-    } catch (cause) {
-      if ((cause as NodeJS.ErrnoException).code === 'ENOENT') {
-        throw new LocalizedError({ code: 'book.entryFileNotFound', args: [pl.value] });
-      }
-      const why = errorText(cause);
-      throw new LocalizedError({ code: 'book.entryReadFailed', args: [pl.value, why] });
-    }
-    files.push({ name: pl.value, src: UTF8.decode(bytes) });
+    files.push({ name: pl.value, src: await readEntry(rootUri, pl.value) });
   }
   return { files };
+}
+
+/** Reads one root-relative entry to UTF-8 text; throws a {@link LocalizedError} per failure mode. */
+async function readEntry(rootUri: string, rel: string): Promise<string> {
+  const resolved = resolveContained(rootUri, rel, 'jpbookEntry');
+  if (!resolved.ok) {
+    throw new LocalizedError({ code: resolved.code, args: resolved.args });
+  }
+  if (!isFileScheme(resolved.abs)) {
+    throw new LocalizedError({ code: 'book.entryNeedsFileScheme', args: [rel] });
+  }
+  let bytes: Buffer;
+  try {
+    bytes = await readFile(fileURLToPath(resolved.abs));
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new LocalizedError({ code: 'book.entryFileNotFound', args: [rel] });
+    }
+    const why = errorText(cause);
+    throw new LocalizedError({ code: 'book.entryReadFailed', args: [rel, why] });
+  }
+  return UTF8.decode(bytes);
+}
+
+/**
+ * Reads the built cover entries (`'coverEntry'` only — duplicates and muted lines are
+ * skipped, like chapter duplicates) in manifest order, same failure modes as the chapters.
+ */
+async function readCoverFiles(rootUri: string, lines: readonly ParsedLine[]): Promise<{ name: string; src: string }[]> {
+  const files: { name: string; src: string }[] = [];
+  for (const pl of lines) {
+    if (pl.kind !== 'coverEntry') {
+      continue;
+    }
+    const entry = coverPathOf(pl);
+    if (entry === null) {
+      continue;
+    }
+    files.push({ name: entry.value, src: await readEntry(rootUri, entry.value) });
+  }
+  return files;
 }
 
 /** A thrown cause as a {@link LocalizableMessage}: a carried code, else raw text under `build.failed`. */
@@ -303,8 +327,25 @@ async function* buildRoot(
 
       void ctx.connection.sendDiagnostics({ uri: fl.uri, diagnostics: lineDiags });
       // The divider is book identity like the page furniture, but BODY content — it rides the
-      // BookInput into the assembly seams instead of composeBookChrome.
-      const input = { ...(await readBookFiles(target.rootUri, parsed.lines)), divider: parsed.meta.divider };
+      // BookInput into the assembly seams instead of composeBookChrome. Covers are html-only,
+      // so a broken cover reference cannot fail a txt/epub build; the title fallback is the
+      // EPUB dc:title rule. Chapters read first, so a book missing both reports the same
+      // error whichever format is built.
+      const bookFiles = await readBookFiles(target.rootUri, parsed.lines);
+      const coverFiles = selection.format === 'html' ? await readCoverFiles(target.rootUri, parsed.lines) : [];
+      const input: BookInput = {
+        ...bookFiles,
+        divider: parsed.meta.divider,
+        ...(coverFiles.length > 0
+          ? {
+              cover: {
+                files: coverFiles,
+                title: parsed.meta.title ?? chapterStem(outRel),
+                author: parsed.meta.author ?? '',
+              },
+            }
+          : {}),
+      };
       yield { kind: 'artifact', outDir: target.outDirUri, artifact: emitArtifact(target, selection, outRel, input, parsed.meta) };
     } catch (cause) {
       yield { kind: 'error', error: { book: fl.fileRel, ...toBuildMessage(cause) } };

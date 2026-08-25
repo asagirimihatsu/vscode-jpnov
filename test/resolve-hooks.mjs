@@ -5,6 +5,10 @@
  * package (the extension host injects it at runtime), so it resolves to the inert shim that
  * `mock.module('vscode', …)` then overlays per test.
  */
+// NOTE for A/B or mutation work: this is THIS FILE's repo, not the importing module's tree.
+// A module copied elsewhere and imported by URL still gets the pristine `src/` for its `#/`
+// imports — give each tree under test its own copy of these hooks, or the run comes out
+// falsely clean.
 const projectRoot = new URL('../', import.meta.url);
 const vscodeShim = new URL('./client/_vscodeShim.mjs', import.meta.url);
 

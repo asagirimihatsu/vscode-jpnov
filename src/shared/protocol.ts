@@ -67,6 +67,8 @@ export type MsgCode =
   | 'jpbook.metaBadEnum' // args: [key, value, allowedList]
   | 'jpbook.dividerNotEncodable' // args: [char]
   | 'jpbook.metaUnterminated' // args: [] — front matter opened but no closing ---; range = the opening fence
+  | 'jpbook.coverItemWithoutKey' // args: [value] — a "- path" list item with no bare "cover:" line open above it
+  | 'jpbook.coverNeedsList' // args: [value] — `cover:` written with a value; it takes "- path" item lines
   | 'path.empty' // args: [LabelId]
   | 'path.rootDot' // args: [LabelId]  (the root "." or a path collapsing to it)
   | 'path.homeRelative' // args: [LabelId]

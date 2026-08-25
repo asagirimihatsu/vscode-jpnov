@@ -27,10 +27,12 @@ import {
   colonIndex,
   completeEntryLine,
   completeMetaLine,
-  isChapter,
+  entryPathOf,
+  isCoverMark,
   metaKeyOf,
   metaRegionOf,
   type JpbookCompletion,
+  type JpbookRange,
   type ParsedJpbook,
   type ParsedLine,
 } from '#/shared/book/jpbook.ts';
@@ -40,12 +42,17 @@ import { unencodableChars } from '#/shared/encoding.ts';
 import { diagnostic } from './diagnostics.ts';
 import { isFileScheme } from './fsUri.ts';
 
+/** A column span on `line` as an LSP {@link Range}. */
+function charRange(line: number, span: JpbookRange): Range {
+  return {
+    start: { line, character: span.startChar },
+    end: { line, character: span.endChar },
+  };
+}
+
 /** The on-line span of a parsed line as an LSP {@link Range}. */
 function lineRange(pl: ParsedLine): Range {
-  return {
-    start: { line: pl.line, character: pl.range.startChar },
-    end: { line: pl.line, character: pl.range.endChar },
-  };
+  return charRange(pl.line, pl.range);
 }
 
 /**
@@ -108,11 +115,11 @@ export async function diagnoseJpbook(rootUri: string | null, parsed: ParsedJpboo
       diagnostics.push(...dividerEncodingWarnings(pl));
       continue;
     }
-    if (pl.kind === 'blank' || pl.kind === 'fence') {
+    if (pl.kind === 'blank' || pl.kind === 'fence' || pl.kind === 'cover') {
       continue;
     }
-    const range = lineRange(pl);
     if (typeof pl.kind === 'object') {
+      const range = lineRange(pl);
       if ('error' in pl.kind) {
         diagnostics.push(diagnostic(range, pl.kind.error, DiagnosticSeverity.Error));
       } else {
@@ -120,16 +127,22 @@ export async function diagnoseJpbook(rootUri: string | null, parsed: ParsedJpboo
       }
       continue;
     }
-    if (pl.kind === 'duplicate') {
+    // A cover item's span is its PATH, so squiggles skip the marker.
+    const entry = entryPathOf(pl);
+    if (entry === null) {
+      continue;
+    }
+    const range = charRange(pl.line, entry.range);
+    if (pl.kind === 'duplicate' || pl.kind === 'coverDuplicate') {
       diagnostics.push(
-        diagnostic(range, { code: 'jpbook.duplicateEntry', args: [pl.value] }, DiagnosticSeverity.Warning),
+        diagnostic(range, { code: 'jpbook.duplicateEntry', args: [entry.value] }, DiagnosticSeverity.Warning),
       );
       continue;
     }
     if (rootUri === null) {
       continue; // no owning workspace folder — containment/existence unverifiable
     }
-    const resolved = resolveContained(rootUri, pl.value, 'jpbookEntry');
+    const resolved = resolveContained(rootUri, entry.value, 'jpbookEntry');
     if (!resolved.ok) {
       diagnostics.push(diagnostic(range, { code: resolved.code, args: resolved.args }, DiagnosticSeverity.Error));
       continue;
@@ -139,10 +152,12 @@ export async function diagnoseJpbook(rootUri: string | null, parsed: ParsedJpboo
     }
     const verdict = await statEntry(resolved.abs);
     if (verdict === 'missing') {
-      diagnostics.push(diagnostic(range, { code: 'jpbook.fileNotFound', args: [pl.value] }, DiagnosticSeverity.Error));
+      diagnostics.push(
+        diagnostic(range, { code: 'jpbook.fileNotFound', args: [entry.value] }, DiagnosticSeverity.Error),
+      );
     } else if (verdict === 'dir') {
       diagnostics.push(
-        diagnostic(range, { code: 'jpbook.entryIsDirectory', args: [pl.value] }, DiagnosticSeverity.Error),
+        diagnostic(range, { code: 'jpbook.entryIsDirectory', args: [entry.value] }, DiagnosticSeverity.Error),
       );
     }
   }
@@ -150,8 +165,9 @@ export async function diagnoseJpbook(rootUri: string | null, parsed: ParsedJpboo
 }
 
 /**
- * Cmd+click targets: one {@link DocumentLink} per syntactically-valid, contained chapter
- * line (`ok`/`duplicate`), pointing at the root-resolved file URI. Blank, front-matter,
+ * Cmd+click targets: one {@link DocumentLink} per syntactically-valid, contained chapter or
+ * cover line (`ok`/`duplicate`/`coverEntry`/`coverDuplicate`), pointing at the root-resolved
+ * file URI; a cover line's link covers just its path portion. Blank, front-matter,
  * error/warning lines — and every line when no root owns the book — get no link. No fs
  * access: links resolve as URIs and are cheap, so a not-yet-existing target still links
  * (its squiggle says so).
@@ -160,9 +176,13 @@ export function documentLinksForJpbook(rootUri: string | null, parsed: ParsedJpb
   if (rootUri === null) {
     return [];
   }
-  return parsed.lines.filter(isChapter).flatMap((pl) => {
-    const resolved = resolveContained(rootUri, pl.value, 'jpbookEntry');
-    return resolved.ok ? [{ range: lineRange(pl), target: resolved.abs }] : [];
+  return parsed.lines.flatMap((pl) => {
+    const entry = entryPathOf(pl);
+    if (entry === null) {
+      return [];
+    }
+    const resolved = resolveContained(rootUri, entry.value, 'jpbookEntry');
+    return resolved.ok ? [{ range: charRange(pl.line, entry.range), target: resolved.abs }] : [];
   });
 }
 
@@ -193,15 +213,31 @@ function toCompletionItem(c: JpbookCompletion, line: number): CompletionItem {
   return item;
 }
 
+/** Path start column on a `- ` cover item line, from the cursor prefix; null off-shape. */
+function coverPathStart(prefix: string): number | null {
+  let i = 0;
+  while (i < prefix.length && /\s/.test(prefix.charAt(i))) {
+    i += 1;
+  }
+  if (!isCoverMark(prefix.charAt(i))) {
+    return null;
+  }
+  i += 1;
+  while (i < prefix.length && /\s/.test(prefix.charAt(i))) {
+    i += 1;
+  }
+  return i;
+}
+
 /**
  * Completions for the cursor on `lineText` at `position`. Inside the front-matter region
  * (strictly between the fences) it offers metadata keys / enum values — pure, fs-free, so
- * it works with or without a root. On chapter lines it lists the directory the current
- * path prefix points into (relative to the OWNING ROOT) and hands it to the pure
- * {@link completeEntryLine}; that path returns nothing without a `file:` root, or when the
- * whole line already names an existing file with the cursor at its end (per the "no more
- * suggestions once the line matches" rule). Folder items re-trigger suggestions so the
- * user keeps drilling.
+ * it works with or without a root — and, on cover-shaped lines (`- ` items, `cover: `),
+ * file paths. On chapter lines it lists the directory the current path prefix points into
+ * (relative to the OWNING ROOT) and hands it to the pure {@link completeEntryLine}; the
+ * path branch returns nothing without a `file:` root, or when the line's path already
+ * names an existing file with the cursor at its end (per the "no more suggestions once the
+ * line matches" rule). Folder items re-trigger suggestions so the user keeps drilling.
  */
 export async function completeJpbook(
   rootUri: string | null,
@@ -211,10 +247,66 @@ export async function completeJpbook(
 ): Promise<CompletionItem[]> {
   const prefix = lineText.slice(0, position.character);
 
+  // Path completion for the text from `pathStart` on; chapter lines pass 0, cover lines the
+  // column after their `- `/`cover: ` marker (returned spans shift back to line columns).
+  const completePathAt = async (pathStart: number): Promise<CompletionItem[]> => {
+    if (rootUri === null || !isFileScheme(rootUri)) {
+      return [];
+    }
+
+    // Suppress when nothing meaningful follows the cursor and the path already names a file.
+    const whole = lineText.slice(pathStart).trim();
+    if (whole !== '' && prefix.slice(pathStart).trim() === whole) {
+      const resolvedWhole = resolveContained(rootUri, whole, 'jpbookEntry');
+      if (resolvedWhole.ok && (await statEntry(resolvedWhole.abs)) === 'file') {
+        return [];
+      }
+    }
+
+    const pathSoFar = prefix.slice(pathStart).replace(/^\s+/, '');
+
+    // A leading "/" is an absolute path — never a valid entry — so offer nothing rather than
+    // misleadingly listing the workspace folder root.
+    if (pathSoFar.startsWith('/')) {
+      return [];
+    }
+
+    const lastSlash = pathSoFar.lastIndexOf('/');
+    const dirPortion = lastSlash >= 0 ? pathSoFar.slice(0, lastSlash) : '';
+
+    let listDirUri: string;
+    if (dirPortion === '' || dirPortion === '.') {
+      // No directory part, or an explicit "./" — list the workspace folder root itself.
+      listDirUri = rootUri;
+    } else {
+      // The label is irrelevant here — a containment failure just yields no completions.
+      const resolvedDir = resolveContained(rootUri, dirPortion, 'jpbookEntry');
+      if (!resolvedDir.ok) {
+        return [];
+      }
+      listDirUri = resolvedDir.abs;
+    }
+
+    const entries = await readDirEntries(listDirUri);
+    return completeEntryLine(prefix.slice(pathStart), entries).map((c) =>
+      toCompletionItem(
+        {
+          ...c,
+          replace: { startChar: c.replace.startChar + pathStart, endChar: c.replace.endChar + pathStart },
+        },
+        position.line,
+      ),
+    );
+  };
+
   const region = metaRegionOf(parsed.lines);
   if (region !== null && position.line >= region.open) {
     const inMeta = position.line > region.open && (region.close === null || position.line < region.close);
     if (inMeta) {
+      const pathStart = coverPathStart(prefix);
+      if (pathStart !== null) {
+        return completePathAt(pathStart);
+      }
       return completeMetaLine(prefix).map((c) => toCompletionItem(c, position.line));
     }
     if (position.line === region.open || position.line === region.close) {
@@ -222,43 +314,5 @@ export async function completeJpbook(
     }
   }
 
-  if (rootUri === null || !isFileScheme(rootUri)) {
-    return [];
-  }
-
-  // Suppress when nothing meaningful follows the cursor and the line already names a file.
-  const whole = lineText.trim();
-  if (whole !== '' && prefix.trim() === whole) {
-    const resolvedWhole = resolveContained(rootUri, whole, 'jpbookEntry');
-    if (resolvedWhole.ok && (await statEntry(resolvedWhole.abs)) === 'file') {
-      return [];
-    }
-  }
-
-  const pathSoFar = prefix.replace(/^\s+/, '');
-
-  // A leading "/" is an absolute path — never a valid entry — so offer nothing rather than
-  // misleadingly listing the workspace folder root.
-  if (pathSoFar.startsWith('/')) {
-    return [];
-  }
-
-  const lastSlash = pathSoFar.lastIndexOf('/');
-  const dirPortion = lastSlash >= 0 ? pathSoFar.slice(0, lastSlash) : '';
-
-  let listDirUri: string;
-  if (dirPortion === '' || dirPortion === '.') {
-    // No directory part, or an explicit "./" — list the workspace folder root itself.
-    listDirUri = rootUri;
-  } else {
-    // The label is irrelevant here — a containment failure just yields no completions.
-    const resolvedDir = resolveContained(rootUri, dirPortion, 'jpbookEntry');
-    if (!resolvedDir.ok) {
-      return [];
-    }
-    listDirUri = resolvedDir.abs;
-  }
-
-  const entries = await readDirEntries(listDirUri);
-  return completeEntryLine(prefix, entries).map((c) => toCompletionItem(c, position.line));
+  return completePathAt(0);
 }

@@ -6,8 +6,8 @@
  * a name (a surname/given alone is fine, optionally followed by ONE honorific) immediately followed
  * by は or が. The particle marks the subject and is coloured together with the name. Built-in
  * pronouns (僕 私 彼 彼女 俺 あたし) follow the same subject rule. Keywords match exactly and only where
- * no character matched, so a surface in BOTH lists (e.g. 境無) reads as the character when it is a
- * subject (境無は) and as a plain keyword otherwise.
+ * no character matched, so a surface in BOTH lists reads as the character when it is a
+ * subject (followed by は or が) and as a plain keyword otherwise.
  *
  * Offsets returned are indices into the run text the caller passed; the caller maps them back to the
  * document and decides where (narration vs dialogue) a span may apply.
@@ -44,8 +44,8 @@ export function splitCharacterSurfaces(characters: readonly string[]): string[] 
     if (parts.length === 0) {
       continue;
     }
-    surfaces.add(entry); // verbatim spaced full (e.g. "Arill Stains")
-    surfaces.add(parts.join('')); // no-separator join (e.g. 朝霧巳一)
+    surfaces.add(entry); // verbatim spaced full (e.g. "John Smith")
+    surfaces.add(parts.join('')); // no-separator join (e.g. 山田太郎)
     for (const part of parts) {
       surfaces.add(part); // surname / given alone
     }
@@ -53,7 +53,7 @@ export function splitCharacterSurfaces(characters: readonly string[]): string[] 
   return [...surfaces];
 }
 
-/** Longest-first, so a greedy match prefers 朝霧巳一 over 朝霧 and 彼女 over 彼. */
+/** Longest-first, so a greedy match prefers 山田太郎 over 山田 and 彼女 over 彼. */
 const byLengthDesc = (xs: readonly string[]): string[] => [...xs].sort((a, b) => b.length - a.length);
 
 /** The longest entry of `sorted` (already length-desc) that `text` starts with at `pos`, else ''. */

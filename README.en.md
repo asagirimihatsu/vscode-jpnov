@@ -20,7 +20,8 @@ one-command HTML / PDF / EPUB / text builds. No AI anywhere in the writing path
 - **Auto indent** — every Enter starts the new line with a full-width space;
   open it with `「` or `『` and the space is removed.
 - **Book builds** — collect chapters into a paginated vertical HTML file, a
-  print-ready PDF, an EPUB for e-readers, or a concatenated Aozora-format text.
+  print-ready PDF, an EPUB for e-readers, or a concatenated Aozora-format text;
+  and the HTML and PDF can open with your submission cover sheets.
 - **Proofreading** — hygiene checks on by default, opt-in manuscript-convention
   lints, quick fixes and a fix-all action.
 - **Cast & keyword highlighting** — semantic colouring of character names and
@@ -50,7 +51,7 @@ one-command HTML / PDF / EPUB / text builds. No AI anywhere in the writing path
 1. **Make a book.** Open the **Books** view in the Activity Bar (the
    **Japanese Novel** book icon) and click **Create a Book…** (`+`): the
    input box already holds `.jpbook`, so type only the name before it. The
-   new book opens right there with its **Book Info** and
+   new book opens right there with its **Book Info**, **Cover pages** and
    **Chapters** sections. One `.jpbook` is one book: a plain text file with
    one chapter path per line, each relative to the workspace folder, so
    moving the `.jpbook` never breaks them. An optional `---`-fenced block at
@@ -257,16 +258,19 @@ and enum values), diagnostics (missing files, duplicates, escaping the
 workspace, unknown metadata keys…), and document links — Cmd/Ctrl-click an
 entry to open the chapter.
 
-The Books view edits books, too. Open one to see its **Book Info** and
-**Chapters** sections: **New chapter…** creates a chapter file and adds it
-to the book, **Add chapters…** brings in files you already have, dragging
-(or the arrow buttons) reorders them, and **×** takes an entry out of the
-book while keeping the file. Expand **Book Info** and click a row to edit
-that value in place; the buttons at the bottom build only the open book.
+The Books view edits books, too. Open one to see its **Book Info**,
+**Cover pages** and **Chapters** sections: **New chapter…** creates a chapter
+file and adds it to the book, **Add chapters…** brings in files you already
+have, dragging (or the arrow buttons) reorders them, and **×** takes an entry
+out of the book while keeping the file. **Cover pages** manages the `cover`
+list the same way (see [Submission cover sheets and title
+pages](#submission-cover-sheets-and-title-pages)). Expand **Book Info** and
+click a row to edit that value in place; the buttons at the bottom build only
+the open book.
 Every action rewrites the `.jpbook` text itself, so the view and
 hand-editing always agree.
 
-![The Books view with a book open: its Book Info rows and chapter list](docs/images/vscode-books-panel.png)
+![The Books view with a book open: its Book Info rows, cover pages and chapter list](docs/images/vscode-books-panel.png)
 
 Renaming or moving a chapter (or a folder of chapters) inside VS Code offers
 to update every `.jpbook` that references it —
@@ -284,8 +288,8 @@ optional `---`-fenced block of `key: value` lines:
 
 ```text
 ---
-title: 夜霧の姫　第一巻
-header: 夜霧の姫　一
+title: 作品名　第一巻
+header: 作品名　一
 pageNumber: right
 pageNumberFormat: {page} / {totalPage}
 divider: ＊　＊　＊
@@ -302,10 +306,55 @@ divider: ＊　＊　＊
 | `pageNumber` | `right` | Page-number placement: pinned (`right`, `left`) or alternating per page (`rightLeft`, `leftRight`), or `none` |
 | `pageNumberFormat` | `{page} / {totalPage}` | Page-number text; blank suppresses it |
 | `divider` | — | Chapter divider inserted between chapters that do not open with a heading (e.g. `＊　＊　＊`); a bare mark is centred along the line at build time, a `［＃３字下げ］` prefix indents it instead; omit for a single blank line |
+| `cover` | — | Cover pages placed before the body: a cover sheet, a title page, a synopsis (see below) |
 
 Every key is optional; unknown keys warn and are ignored, so future keys stay
-forward-compatible. The same six keys are also editable from the **Book
-Info** rows in the Books view.
+forward-compatible. The six keys from `title` to `divider` are also editable from
+the **Book Info** rows in the Books view, and `cover` from its **Cover pages**
+section.
+
+### Submission cover sheets and title pages
+
+Competition guidelines routinely ask for pages ahead of the manuscript — a cover
+sheet, a title page, a synopsis. The files listed under `cover` become those
+pages, in order:
+
+```text
+---
+title: 作品名
+author: 著者名
+cover:
+  - cover.jpnov
+  - synopsis.jpnov
+---
+chapter1.jpnov
+```
+
+Paths work exactly like chapter paths. Each file starts a new page, and the pages
+ship in the HTML and PDF builds. The running head and page numbering start on the
+first body page, however many cover sheets precede it.
+
+The Books view's **Cover pages** section adds, creates and reorders these files
+just like chapters; **New cover page…** seeds the new file with the sample below.
+
+A cover file can pull in the book's own metadata:
+
+| Book value | Annotation |
+| --- | --- |
+| Title | `［＃ここに「題名」の値を表示］` |
+| Author | `［＃ここに「著者」の値を表示］` |
+| Total pages | `［＃ここに「総ページ数」の値を表示］` |
+
+```text
+［＃５字下げ］［＃ここに「題名」の値を表示］
+［＃５字下げ］［＃ここに「著者」の値を表示］
+［＃５字下げ］全［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］ページ
+```
+
+A build fills in that book's values. The preview shows stand-ins — 題名, 著者, and
+NaN — so one cover file serves any number of books. To decorate a substituted value,
+wrap it in the start/end form
+(`［＃大見出し］［＃ここに「題名」の値を表示］［＃大見出し終わり］`).
 
 ## Character & keyword highlighting
 
@@ -316,8 +365,8 @@ write — handy where Japanese drops the subject:
 ```json
 // .vscode/settings.json
 {
-  "jpnov.editor.highlight.characters": ["神木　林", "Arill Stains"],
-  "jpnov.editor.highlight.keywords": ["境無"]
+  "jpnov.editor.highlight.characters": ["山田　太郎", "John Smith"],
+  "jpnov.editor.highlight.keywords": ["王都"]
 }
 ```
 
@@ -325,8 +374,8 @@ write — handy where Japanese drops the subject:
   space into surname + given, so the full name, the surname alone, and the
   given name alone are all recognised. A character is highlighted only where it
   reads as a **subject**: a name (optionally with one honorific such as `さん` /
-  `先生` / `ちゃん`) immediately followed by `は` or `が` — e.g. `林は`,
-  `神木ちゃんが`. Common pronouns (`僕` / `私` / `俺` / `彼` / `彼女` …) are
+  `先生` / `ちゃん`) immediately followed by `は` or `が` — e.g. `太郎は`,
+  `山田さんが`. Common pronouns (`僕` / `私` / `俺` / `彼` / `彼女` …) are
   recognised the same way. Dialogue inside `「」` / `『』` is left in the body
   colour; only narration is scanned.
 - **`jpnov.editor.highlight.keywords`** — coined terms (a fantasy noun, a place, …)

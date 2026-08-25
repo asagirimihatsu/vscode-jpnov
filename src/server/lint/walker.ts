@@ -278,8 +278,9 @@ export function* walkLines(src: string): Generator<LintLine, void, undefined> {
         builder.sawAnnotation = true;
         break;
       default:
-        // rubyLeftPostfix / emphasis* / tcy* / comment / brokenAnnotation / pageBreak contribute
-        // no prose (a 左ルビ reading lives only inside its annotation and is not linted); they
+        // rubyLeftPostfix / emphasis* / tcy* / comment / brokenAnnotation / pageBreak /
+        // valueField contribute no prose (a 左ルビ reading lives only inside its annotation
+        // and is not linted; a valueField's substituted text is never author prose); they
         // only advance `offset`, which alone breaks piece contiguity.
         builder.sawAnnotation = true;
         break;

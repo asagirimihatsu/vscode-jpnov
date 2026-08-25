@@ -6,6 +6,7 @@ import type { JpbookMeta } from '../../../src/shared/book/jpbook.ts';
 import type { BookInput } from '../../../src/shared/compiler/document.ts';
 import { epubMembers, ocfZip } from '../../../src/shared/compiler/epub.ts';
 import { assertWellFormedXml } from '../xml.ts';
+import { VALUE_FIELD_PLACEHOLDERS } from '../../../src/shared/compiler/tokenizer.ts';
 
 const MODIFIED = '2026-08-04T00:00:00Z';
 
@@ -135,4 +136,10 @@ test('ocfZip puts the STORED mimetype first and round-trips every member', () =>
   for (const m of out) {
     assert.equal(strFromU8(back[m.name] ?? new Uint8Array()), m.content);
   }
+});
+
+test('a value annotation reflows as its bookless placeholder (EPUB has no page count)', () => {
+  const out = members({ files: [{ name: 'vol1/a.jpnov', src: '全［＃ここに「総ページ数」の値を表示］ページ' }] });
+  const xhtml = out.find((m) => m.name === 'OEBPS/text/ch001.xhtml')?.content ?? '';
+  assert.match(xhtml, new RegExp(`全${VALUE_FIELD_PLACEHOLDERS.totalPages}ページ`));
 });

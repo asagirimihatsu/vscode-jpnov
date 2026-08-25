@@ -35,16 +35,16 @@ test('plain narration: one line, one piece, prose is identity', () => {
 });
 
 test('dialogue interior collapses to 〇 in the narration view and fills the dialogue view', () => {
-  const src = '「ヤッホー」と、巳一は言った。';
+  const src = '「ヤッホー」と、太郎は言った。';
   const [l] = lines(src);
   assert.ok(l);
-  assert.equal(l.narration().text, '「〇」と、巳一は言った。');
+  assert.equal(l.narration().text, '「〇」と、太郎は言った。');
   assert.equal(l.dialogue().text, 'ヤッホー');
   assert.equal(l.prose().text, src); // the full view keeps everything in place
   assert.equal(covered(src, l.dialogue(), 0, 4), 'ヤッホー');
   const n = l.narration();
-  const i = n.text.indexOf('巳一');
-  assert.equal(covered(src, n, i, i + 2), '巳一');
+  const i = n.text.indexOf('太郎');
+  assert.equal(covered(src, n, i, i + 2), '太郎');
   // the 〇 sentinel is synthetic: no piece, mapped at the interior's first unit
   const s = n.units[n.text.indexOf('〇')];
   assert.equal(s?.piece, null);
@@ -66,25 +66,25 @@ test('depth: top-level corners are 地の文 (0), interiors ≥ 1, nested corner
 });
 
 test('ruby: the base flows into prose (merging with adjacent text), the reading into rubies', () => {
-  const src = 'この巳一《みはつ》は言った。';
+  const src = 'この太郎《たろう》は言った。';
   const [l] = lines(src);
   assert.ok(l);
-  assert.equal(l.narration().text, 'この巳一は言った。');
-  // この + 巳一 are source-contiguous at the same depth -> ONE piece; は… starts after 《みはつ》
-  assert.deepEqual(l.pieces.map((p) => p.text), ['この巳一', 'は言った。']);
-  assert.deepEqual(l.rubies, [{ text: 'みはつ', srcStart: src.indexOf('みはつ') }]);
+  assert.equal(l.narration().text, 'この太郎は言った。');
+  // この + 太郎 are source-contiguous at the same depth -> ONE piece; は… starts after 《たろう》
+  assert.deepEqual(l.pieces.map((p) => p.text), ['この太郎', 'は言った。']);
+  assert.deepEqual(l.rubies, [{ text: 'たろう', srcStart: src.indexOf('たろう') }]);
 });
 
 test('explicit ｜ ruby: base starts after the marker; the marker splits the piece', () => {
-  const src = 'あ｜巳一《みはつ》は';
+  const src = 'あ｜太郎《たろう》は';
   const [l] = lines(src);
   assert.ok(l);
   assert.deepEqual(l.pieces.map((p) => [p.text, p.srcStart]), [
     ['あ', 0],
-    ['巳一', src.indexOf('巳一')],
+    ['太郎', src.indexOf('太郎')],
     ['は', src.lastIndexOf('は')], // the prose は after 》 — not the one inside the reading
   ]);
-  assert.deepEqual(l.rubies, [{ text: 'みはつ', srcStart: src.indexOf('みはつ') }]);
+  assert.deepEqual(l.rubies, [{ text: 'たろう', srcStart: src.indexOf('たろう') }]);
 });
 
 test('ruby inside dialogue: base -> dialogue view, reading -> rubies, narration 〇', () => {
@@ -250,7 +250,7 @@ test('indent and heading stay in lockstep with buildRows per source line', () =>
     'ブロック内の行。',
     '「ブロック内のセリフ。」',
     '［＃０字下げ］ブロック内のゼロ行。',
-    '｜巳一《みはつ》のルビ行。',
+    '｜太郎《たろう》のルビ行。',
     '［＃ここから４字下げ］',
     '四字に切り替わった行。',
     '［＃ここで字下げ終わり］終端と同じ行。',

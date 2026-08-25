@@ -4,10 +4,11 @@
  *
  * A `.jpbook` is plain text in two parts. An OPTIONAL front-matter block — opened by a
  * `---` on the first non-blank line and closed by a second `---` — holds `key: value`
- * metadata (the book's OWN properties: title, page furniture, chapter divider). Everything after it (or
- * the whole file when no block opens) is the chapter list: one `.jpnov` source path per
- * line, in reading order, relative to the book's OWNING WORKSPACE FOLDER root (so moving
- * the `.jpbook` itself never invalidates them).
+ * metadata (the book's OWN properties: title, page furniture, chapter divider); `cover` alone
+ * is list-valued — a bare `cover:` line followed by `- path` item lines. Everything after
+ * the block (or the whole file when no block opens) is the chapter list: one `.jpnov` source
+ * path per line, in reading order, relative to the book's OWNING WORKSPACE FOLDER root (so
+ * moving the `.jpbook` itself never invalidates them).
  *
  * The `.jpbook`'s OWN name and location imply the output path (mirroring the source
  * tree) — JS-module style: `volume01/index.jpbook` and `volume01.jpbook` both build
@@ -39,6 +40,9 @@ export interface JpbookRange {
  * - `'meta'`      — a recognized, valid `key: value` front-matter line.
  * - `'ok'`        — a syntactically valid `.jpnov` path (existence/containment unverified).
  * - `'duplicate'` — a valid path that repeats an earlier `'ok'` line; a Warning, not built.
+ * - `'cover'`     — a bare `cover:` key line, opening the cover list.
+ * - `'coverEntry'` — a `- ` cover path; a front page in the html build ({@link coverPathOf}).
+ * - `'coverDuplicate'` — a cover path repeating an earlier one; a Warning, not built.
  * - `{ error }`   — a syntax problem (e.g. backslash, non-`.jpnov`, key-less metadata) to
  *                  surface as an Error. Its value is a {@link LocalizableMessage}.
  * - `{ warning }` — a tolerated metadata problem (unknown/duplicate key, bad enum value);
@@ -50,6 +54,9 @@ export type JpbookLineKind =
   | 'meta'
   | 'ok'
   | 'duplicate'
+  | 'cover'
+  | 'coverEntry'
+  | 'coverDuplicate'
   | { readonly error: LocalizableMessage }
   | { readonly warning: LocalizableMessage };
 
@@ -70,22 +77,90 @@ export function isChapter(pl: ParsedLine): boolean {
   return pl.kind === 'ok' || pl.kind === 'duplicate';
 }
 
+/** A cover path line — `coverDuplicate` counts too (it links and rename-tracks). */
+export function isCover(pl: ParsedLine): boolean {
+  return pl.kind === 'coverEntry' || pl.kind === 'coverDuplicate';
+}
+
+/** The two editable entry lists of a book — the panel's sections and the `list` its verbs carry. */
+const ENTRY_LISTS = ['chapters', 'covers'] as const;
+export type EntryList = (typeof ENTRY_LISTS)[number];
+
+/** The line predicate of one list: chapters = ok|duplicate, covers = coverEntry|coverDuplicate. */
+export function isEntryOf(list: EntryList): (pl: ParsedLine) => boolean {
+  return list === 'chapters' ? isChapter : isCover;
+}
+
+/** Narrows an untrusted value (a webview message field) to a list name. */
+export function isEntryList(v: unknown): v is EntryList {
+  return typeof v === 'string' && (ENTRY_LISTS as readonly string[]).includes(v);
+}
+
 /**
- * The recognized front-matter keys, in completion order; the page-furniture keys are shared
+ * The recognized single-valued front-matter keys; the page-furniture keys are shared
  * VERBATIM with {@link BuildChrome}'s field names. Adding a key: extend {@link JpbookMeta},
  * handle it in the parser's key switch and — when it feeds the render — in
  * {@link composeBookChrome} for page furniture, or at the assembly seam
- * (`renderBook`/`concatBookText`) for BODY content like `divider`, which is never chrome;
- * the unknown-key message derives its list from here.
+ * (`renderBook`/`concatBookText`) for BODY content like `divider`, which is never chrome.
  */
 export const META_KEYS = ['title', 'author', 'header', 'pageNumber', 'pageNumberFormat', 'divider'] as const;
 export type MetaKey = (typeof META_KEYS)[number];
+
+/** The list-valued front-page key — parsed as line kinds, never a {@link JpbookMeta} field. */
+export const COVER_KEY = 'cover';
+
+/** Cover list-item markers; the `.jpbook` grammar derives its class from this (grammar-sync). */
+export const COVER_ITEM_MARKS = ['-', '－'] as const;
+
+/** True iff `ch` opens a cover list item. The ONE marker test — the completion router runs it
+ *  at the cursor's path start, the parser at the head of a trimmed line. */
+export function isCoverMark(ch: string): boolean {
+  return (COVER_ITEM_MARKS as readonly string[]).includes(ch);
+}
+
+/** Every recognized key (unknown-key message + key completion). `cover` stays out of
+ *  {@link META_KEYS}: the panel's meta rows and `upsertMeta` are single-line only. */
+export const FRONT_MATTER_KEYS = [...META_KEYS, COVER_KEY] as const;
 
 /** The key portion of a front-matter line's trimmed content, or null when key-less. */
 export function metaKeyOf(value: string): string | null {
   const sep = colonIndex(value);
   const key = sep < 0 ? '' : value.slice(0, sep).trim();
   return key === '' ? null : key;
+}
+
+/** The path portion of an ITEM line's TRIMMED value and its offset within it; null otherwise. */
+function coverShape(value: string): { readonly path: string; readonly offset: number } | null {
+  if (!isCoverMark(value.charAt(0))) {
+    return null;
+  }
+  let offset = 1;
+  while (offset < value.length && isEdgeWhitespace(value.charAt(offset))) {
+    offset += 1;
+  }
+  return { path: value.slice(offset), offset };
+}
+
+/**
+ * A cover item's path and its absolute column span — the ONE slicing rule diagnostics,
+ * document links and rename tracking share. Keyed on the line's KIND, never its shape: a
+ * fence is item-shaped too (`---` slices to `--`).
+ */
+export function coverPathOf(pl: ParsedLine): { readonly value: string; readonly range: JpbookRange } | null {
+  if (!isCover(pl)) {
+    return null;
+  }
+  const shape = coverShape(pl.value);
+  if (shape === null || shape.path === '') {
+    return null;
+  }
+  const startChar = pl.range.startChar + shape.offset;
+  return { value: shape.path, range: { startChar, endChar: startChar + shape.path.length } };
+}
+
+/** The path + span a chapter or cover line points at; null for every other line. */
+export function entryPathOf(pl: ParsedLine): { readonly value: string; readonly range: JpbookRange } | null {
+  return isChapter(pl) ? { value: pl.value, range: pl.range } : coverPathOf(pl);
 }
 
 /**
@@ -135,26 +210,72 @@ const FENCE = '---';
  * {@link JpbookMeta}. CRLF-safe; blank lines are skipped everywhere; interior whitespace is
  * preserved (a filename may contain spaces). Front matter opens ONLY on the first non-blank
  * line; inside it, duplicate keys keep the FIRST value, and an unclosed block turns the
- * opening fence into an Error (the remaining lines still parse as metadata). Chapter lines
- * must be backslash-free `.jpnov` paths; later exact repeats of an earlier valid path are
- * marked `'duplicate'`. Never throws.
+ * opening fence into an Error (the remaining lines still parse as metadata). A `cover` list
+ * survives blank lines and closes at any other metadata line or the fence. Chapter and cover
+ * paths must be backslash-free `.jpnov`; later exact repeats are `'duplicate'`/
+ * `'coverDuplicate'`, the two lists deduping independently. Never throws.
  */
 export function parseJpbook(text: string): ParsedJpbook {
   const seen = new Set<string>();
+  const seenCovers = new Set<string>();
   const lines: ParsedLine[] = [];
   const meta: { -readonly [K in keyof JpbookMeta]: JpbookMeta[K] } = {};
 
   // 'start' until the first non-blank line; 'meta' inside an open front-matter block.
   let state: 'start' | 'meta' | 'body' = 'start';
   let openFence = -1;
+  let coverKeySeen = false;
+  // 'muted' = a DUPLICATE bare `cover:`: its items warn instead of collecting, so a whole
+  // second list cannot cascade into orphan-item Errors.
+  let coverList: 'open' | 'muted' | null = null;
+
+  // Rejections quote the WHOLE line: a sliced marker can leave a fence-lookalike (`----`).
+  const coverPathKind = (path: string, line: string): JpbookLineKind => {
+    if (path.includes('\\')) {
+      return { error: { code: 'jpbook.backslashSeparator', args: [line] } };
+    }
+    if (!path.endsWith('.jpnov')) {
+      return { error: { code: 'jpbook.notJpnov', args: [line] } };
+    }
+    if (seenCovers.has(path)) {
+      return 'coverDuplicate';
+    }
+    seenCovers.add(path);
+    return 'coverEntry';
+  };
+
+  const coverItemKind = (value: string): JpbookLineKind => {
+    if (coverList === null) {
+      return { error: { code: 'jpbook.coverItemWithoutKey', args: [value] } };
+    }
+    if (coverList === 'muted') {
+      return { warning: { code: 'jpbook.metaDuplicateKey', args: [COVER_KEY] } };
+    }
+    return coverPathKind(coverShape(value)?.path ?? '', value);
+  };
 
   const metaKind = (value: string): JpbookLineKind => {
+    coverList = null; // any key/value (or broken) metadata line ends an open cover list
     const key = metaKeyOf(value);
     if (key === null) {
       return { error: { code: 'jpbook.metaNotKeyValue', args: [value] } };
     }
+    if (key === COVER_KEY) {
+      // List-only: the grammar paints any `key: value` as a string and VS Code withholds
+      // completion inside strings, so cover paths live on `- ` lines, like chapters.
+      if (value.slice(colonIndex(value) + 1).trim() !== '') {
+        return { error: { code: 'jpbook.coverNeedsList', args: [value] } };
+      }
+      if (coverKeySeen) {
+        coverList = 'muted';
+        return { warning: { code: 'jpbook.metaDuplicateKey', args: [key] } };
+      }
+      coverKeySeen = true;
+      coverList = 'open';
+      return 'cover';
+    }
     if (!(META_KEYS as readonly string[]).includes(key)) {
-      return { warning: { code: 'jpbook.metaUnknownKey', args: [key, META_KEYS.join(', ')] } };
+      return { warning: { code: 'jpbook.metaUnknownKey', args: [key, FRONT_MATTER_KEYS.join(', ')] } };
     }
     const metaKey = key as MetaKey;
     if (meta[metaKey] !== undefined) {
@@ -219,6 +340,8 @@ export function parseJpbook(text: string): ParsedJpbook {
       if (value === FENCE) {
         state = 'body';
         kind = 'fence';
+      } else if (isCoverMark(value.charAt(0))) {
+        kind = coverItemKind(value);
       } else {
         kind = metaKind(value);
       }
@@ -400,7 +523,7 @@ export function completeMetaLine(linePrefix: string): JpbookCompletion[] {
   if (sep < 0) {
     const typed = linePrefix.slice(keyStart).toLowerCase();
     const replace = { startChar: keyStart, endChar: linePrefix.length };
-    return META_KEYS.filter((k) => k.toLowerCase().startsWith(typed)).map((k) => ({
+    return FRONT_MATTER_KEYS.filter((k) => k.toLowerCase().startsWith(typed)).map((k) => ({
       label: k,
       insertText: `${k}: `,
       kind: 'key',

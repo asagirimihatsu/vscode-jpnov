@@ -15,6 +15,15 @@
       },
       "patterns": [
         {
+          "comment": "A cover list item `- path.jpnov` (full-width － tolerated like the parser). Error-agnostic: whether the item is orphaned, duplicated, or missing is the server's diagnostic; a non-.jpnov item goes unpainted exactly like a non-.jpnov chapter line. Must precede the key-value rule (a path may contain a colon).",
+          "match": "^[ \\t　]*([-－])[ \\t　]*(\\S.*?)(\\.jpnov)[ \\t　]*$",
+          "captures": {
+            "1": { "name": "punctuation.definition.list.begin.jpbook" },
+            "2": { "name": "string.unquoted.path.jpbook" },
+            "3": { "name": "keyword.other.extension.jpbook" }
+          }
+        },
+        {
           "match": "^[ \\t　]*([^:：]+?)[ \\t　]*([:：])[ \\t　]*(.*?)[ \\t　]*$",
           "captures": {
             "1": { "name": "support.type.property-name.jpbook" },

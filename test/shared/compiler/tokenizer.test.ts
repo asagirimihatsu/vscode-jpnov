@@ -5,8 +5,11 @@ import {
   findTcyIssues,
   findUnpairedBlocks,
   tokenize,
+  VALUE_FIELD_BY_NAME,
+  VALUE_FIELD_PLACEHOLDERS,
   type Token,
 } from '../../../src/shared/compiler/tokenizer.ts';
+import { buildRows } from '../../../src/shared/compiler/layout.ts';
 
 const kinds = (tokens: readonly Token[]): string[] => tokens.map((t) => t.kind);
 
@@ -422,6 +425,51 @@ test('縦中横 postfix requires the は connector (like 太字/斜体)', () => 
   // 縦中横 has no block (ここから/ここで) form.
   assert.deepEqual(kinds(tokenize('［＃ここから縦中横］')), ['comment']);
   assert.deepEqual(kinds(tokenize('［＃ここで縦中横終わり］')), ['comment']);
+});
+
+// --------------------------------------------------------------- 値の表示
+
+test('値の表示 tokenizes each field name; an unknown name greys out like any typo', () => {
+  for (const [name, field] of VALUE_FIELD_BY_NAME) {
+    const raw = `［＃ここに「${name}」の値を表示］`;
+    assert.deepEqual(tokenize(raw), [{ kind: 'valueField', raw, field }]);
+  }
+  assert.deepEqual(kinds(tokenize('［＃ここに「発行日」の値を表示］')), ['comment']);
+  assert.deepEqual(kinds(tokenize('［＃ここに「題名」の値］')), ['comment']); // truncated tail
+  assert.deepEqual(kinds(tokenize('［＃ここに題名の値を表示］')), ['comment']); // no corner quotes
+});
+
+test('値の表示: an Object.prototype name is just an unknown name, never a field', () => {
+  // The name comes from the document: a plain object lookup would resolve these through the
+  // prototype chain and hand the layout a function to substitute.
+  for (const name of ['toString', 'constructor', 'valueOf', 'hasOwnProperty', '__proto__']) {
+    const raw = `［＃ここに「${name}」の値を表示］`;
+    assert.deepEqual(tokenize(raw), [{ kind: 'comment', raw, inner: raw.slice(2, -1) }]);
+    assert.doesNotThrow(() => buildRows(tokenize(raw)));
+    assert.doesNotThrow(() => findTcyIssues(`［＃縦中横］${raw}［＃縦中横終わり］`));
+  }
+});
+
+test('値の表示 is not line-head gated and keeps its neighbours as text', () => {
+  assert.deepEqual(kinds(tokenize('全［＃ここに「総ページ数」の値を表示］ページ')), [
+    'text', 'valueField', 'text',
+  ]);
+});
+
+test('findTcyIssues counts a value field at its BOOKLESS placeholder length', () => {
+  // Relational, so the too-long threshold stays a private tuning value: a span holding a value
+  // field must be judged exactly as one holding that field's placeholder typed out.
+  const spanned = (content: string): string => `［＃縦中横］${content}［＃縦中横終わり］`;
+  for (const [name, field] of VALUE_FIELD_BY_NAME) {
+    const asField = findTcyIssues(spanned(`［＃ここに「${name}」の値を表示］`)).map((i) => i.kind);
+    const asTyped = findTcyIssues(spanned(VALUE_FIELD_PLACEHOLDERS[field])).map((i) => i.kind);
+    assert.deepEqual(asField, asTyped, `${name} must be accounted like its typed stand-in`);
+  }
+  // Two fields in one span accumulate, exactly as two typed runs would.
+  assert.deepEqual(
+    findTcyIssues(spanned('［＃ここに「題名」の値を表示］［＃ここに「著者」の値を表示］')).map((i) => i.kind),
+    findTcyIssues(spanned(VALUE_FIELD_PLACEHOLDERS.title + VALUE_FIELD_PLACEHOLDERS.author)).map((i) => i.kind),
+  );
 });
 
 // --------------------------------------------------------------- 見出し

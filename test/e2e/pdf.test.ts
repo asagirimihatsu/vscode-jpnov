@@ -190,7 +190,7 @@ function assertPdfPaper(pdf: Buffer, fit: PaperFit, expectedPages: number, label
 test('the printed PDF is true A4 (auto → landscape), one PDF page per rendered page', BROWSER_SKIP, async () => {
   assert.ok(browser, 'JPNOV_E2E_REQUIRE_BROWSER=1 but no Chromium-family browser was found');
   const html = await buildHtml(BASE_SETTINGS);
-  const expectedPages = (html.match(/class="page"/g) ?? []).length;
+  const expectedPages = (html.match(/class="page[ "]/g) ?? []).length;
   assert.equal(expectedPages, 2, 'the fixture must paginate to exactly two pages');
   const fit = fitPaper({
     charsPerLine: BASE_SETTINGS.charsPerLine,
@@ -208,7 +208,7 @@ test('the printed PDF follows paper size and forced orientation (A6 portrait)', 
   assert.ok(browser, 'JPNOV_E2E_REQUIRE_BROWSER=1 but no Chromium-family browser was found');
   const settings: HtmlSettings = { ...BASE_SETTINGS, paperSize: 'a6', paperOrientation: 'portrait' };
   const html = await buildHtml(settings);
-  const expectedPages = (html.match(/class="page"/g) ?? []).length;
+  const expectedPages = (html.match(/class="page[ "]/g) ?? []).length;
   assert.equal(expectedPages, 2, 'the fixture must paginate to exactly two pages');
   const fit = fitPaper({
     charsPerLine: settings.charsPerLine,

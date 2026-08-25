@@ -8,8 +8,18 @@ import {
   flowToHtml,
   paginate,
   pagesToHtml,
+  type DisplayLine,
+  type RenderPage,
 } from '../../../src/shared/compiler/layout.ts';
-import { tokenize } from '../../../src/shared/compiler/tokenizer.ts';
+import {
+  tokenize,
+  VALUE_FIELD_PLACEHOLDERS,
+  type ValueField,
+} from '../../../src/shared/compiler/tokenizer.ts';
+import { DASH_GLYPH } from '../../../src/shared/chars.ts';
+
+/** Paginated lines as BODY pages (the cover-less shape every plain-book test wants). */
+const sheets = (ps: readonly DisplayLine[][]): RenderPage[] => ps.map((lines) => ({ lines }));
 
 /** All-off chrome: pagesToHtml emits the bare page/line skeleton with no furniture. */
 const OFF: BuildChrome = {
@@ -37,7 +47,7 @@ const klines = (src: string, charsPerLine: number, kinsoku: KinsokuMode = 'norma
         (line.hang === undefined ? '' : `⟪${line.hang.text}⟫`),
     );
 const html = (src: string, charsPerLine = 40, linesPerPage = 34) =>
-  pagesToHtml(pages(src, charsPerLine, linesPerPage), undefined, OFF);
+  pagesToHtml(sheets(pages(src, charsPerLine, linesPerPage)), undefined, OFF);
 
 test('one display line per source line; trailing newline dropped, middle blank kept', () => {
   assert.equal(
@@ -303,7 +313,7 @@ test('ぶら下げ: trailing zero-width units ride the hung column (no orphan em
 
 test('ぶら下げ: a decorated hung 句読点 keeps its channel span around the .hang span', () => {
   const out = pagesToHtml(
-    paginate(buildRows(tokenize('文だ。［＃「文だ。」に傍点］')), 2, 34, 'normal'),
+    sheets(paginate(buildRows(tokenize('文だ。［＃「文だ。」に傍点］')), 2, 34, 'normal')),
     undefined,
     OFF,
   );
@@ -386,7 +396,7 @@ test('flowToHtml: a break followed by a blank line opens the next segment on the
 const dashFlow = (src: string, dash: DashMode = 'horizontalBar'): string =>
   flowToHtml(buildRows(tokenize(src), { dash }), 40, 'none');
 const dashHtml = (src: string): string =>
-  pagesToHtml(paginate(buildRows(tokenize(src), { dash: 'horizontalBar' }), 40, 34, 'none'), undefined, OFF);
+  pagesToHtml(sheets(paginate(buildRows(tokenize(src), { dash: 'horizontalBar' }), 40, 34, 'none')), undefined, OFF);
 
 test('ダッシュ: the configured spelling is emitted as the em dash — bare glyph, no markup', () => {
   assert.equal(
@@ -616,7 +626,7 @@ test('左ルビ stretches its base like native ruby when the reading is longer',
   assert.equal(p.flat()[0]?.units.reduce((n, u) => n + u.cells, 0), 5); // 4 (stretched) + い
   assert.match(html(src), /<ruby class="lr rh-4">/);
   const used = new Set<string>();
-  pagesToHtml(pages(src, 5), used, OFF);
+  pagesToHtml(sheets(pages(src, 5)), used, OFF);
   assert.ok(used.has('lr') && used.has('rh-4')); // both on-demand classes reach the sink
 });
 
@@ -658,7 +668,7 @@ test('左ルビ inherits the replaced units’ channels and stays postfix-matcha
 
 test('the used sink collects lr / br', () => {
   const used = new Set<string>();
-  pagesToHtml(pages('青空文庫《あ》［＃「青空文庫」の左に「b」のルビ］'), used, OFF);
+  pagesToHtml(sheets(pages('青空文庫《あ》［＃「青空文庫」の左に「b」のルビ］')), used, OFF);
   assert.ok(used.has('br'));
   assert.ok(!used.has('lr'));
 });
@@ -724,10 +734,10 @@ test('縦中横 inside a 太字 span inherits the weight channel', () => {
 
 test('the used sink collects the tcy class (on-demand stylesheet)', () => {
   const used = new Set<string>();
-  pagesToHtml(pages('令和［＃縦中横］12［＃縦中横終わり］年'), used, OFF);
+  pagesToHtml(sheets(pages('令和［＃縦中横］12［＃縦中横終わり］年')), used, OFF);
   assert.ok(used.has('tcy'));
   const clean = new Set<string>();
-  pagesToHtml(pages('ただの本文'), clean, OFF);
+  pagesToHtml(sheets(pages('ただの本文')), clean, OFF);
   assert.ok(!clean.has('tcy'));
 });
 
@@ -976,4 +986,131 @@ test('block 太字: the directive lines vanish and the body lines carry the b cl
       '<div class="line" data-line="1"><span class="b">強い</span></div>' +
       '<div class="line" data-line="3">後</div></div></div>',
   );
+});
+
+// --------------------------------------------------------------- 値の表示 (value substitution)
+
+/** Every unit's text across the rows, concatenated — what the layout measured. */
+const unitText = (src: string, values?: Readonly<Record<ValueField, string>>): string =>
+  buildRows(tokenize(src), values === undefined ? undefined : { values })
+    .flatMap((row) => (row.kind === 'line' ? row.units : []))
+    .map((u) => u.text)
+    .join('');
+
+const REAL: Readonly<Record<ValueField, string>> = {
+  title: '作品名',
+  author: '著者名',
+  totalPages: '215',
+};
+
+test('値の表示: a bookless compile substitutes the fixed placeholders', () => {
+  assert.equal(unitText('［＃ここに「題名」の値を表示］'), VALUE_FIELD_PLACEHOLDERS.title);
+  assert.equal(unitText('［＃ここに「著者」の値を表示］'), VALUE_FIELD_PLACEHOLDERS.author);
+  assert.equal(unitText('［＃ここに「総ページ数」の値を表示］'), VALUE_FIELD_PLACEHOLDERS.totalPages);
+});
+
+test('値の表示: opts.values substitutes the real values, an empty one emitting nothing', () => {
+  assert.equal(unitText('［＃ここに「題名」の値を表示］', REAL), REAL.title);
+  assert.equal(unitText('全［＃ここに「総ページ数」の値を表示］ページ', REAL), `全${REAL.totalPages}ページ`);
+  assert.equal(unitText('［＃ここに「著者」の値を表示］', { ...REAL, author: '' }), '');
+});
+
+test('値の表示: substituted text is per-char units — it measures and wraps like prose', () => {
+  const rows = buildRows(tokenize('［＃ここに「題名」の値を表示］'), { values: REAL });
+  const units = rows.flatMap((row) => (row.kind === 'line' ? row.units : []));
+  assert.equal(units.length, Array.from(REAL.title).length);
+  assert.ok(units.every((u) => u.cells === 1));
+  // cpl 2 splits the 3-character title across two display lines, like any typed run.
+  assert.equal(
+    paginate(rows, 2, 34, 'none').flat().map((l) => l.units.map((u) => u.text).join('')).join('|'),
+    '作品|名',
+  );
+});
+
+test('値の表示: the configured dash inside a value translates like typed prose', () => {
+  const rows = buildRows(tokenize('［＃ここに「題名」の値を表示］'), {
+    values: { ...REAL, title: '光―闇' },
+    dash: 'horizontalBar',
+  });
+  const units = rows.flatMap((row) => (row.kind === 'line' ? row.units : []));
+  assert.equal(units.map((u) => u.text).join(''), '光―闇'); // text keeps the SOURCE glyph
+  assert.equal(units[1]?.html, DASH_GLYPH); // …the html carries the em dash
+});
+
+test('値の表示: a value inside ［＃縦中横］ joins the combined cell', () => {
+  const rows = buildRows(tokenize('全［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］ページ'), {
+    values: REAL,
+  });
+  const units = rows.flatMap((row) => (row.kind === 'line' ? row.units : []));
+  const tcy = units.filter((u) => u.cssClass === 'tcy');
+  assert.equal(tcy.length, 1);
+  assert.equal(tcy[0]?.text, REAL.totalPages);
+  assert.equal(tcy[0].cells, 1); // combined cells are always one cell wide
+  assert.equal(tcy[0].html, `<span class="tcy">${REAL.totalPages}</span>`);
+});
+
+// --------------------------------------------------------------- cover pages
+
+/** Chrome with both furniture pieces on — covers must still show neither. */
+const FURNISHED: BuildChrome = {
+  lineNumbers: false,
+  edgeLine: 'none',
+  pageNumber: 'rightLeft',
+  pageNumberFormat: '{page} / {totalPage}',
+  header: '柱',
+};
+
+/** One page's worth of display lines. */
+const page1 = (src: string): DisplayLine[] => pages(src)[0] ?? [];
+/** The emitted body split into per-page markup. */
+const sheetsOf = (out: string): string[] => out.split(/(?=<div class="page)/).slice(1);
+
+test('cover pages: the cover class, no furniture, and a folio that counts BODY pages only', () => {
+  const out = pagesToHtml(
+    [
+      { lines: page1('表紙'), cover: true },
+      { lines: page1('扉'), cover: true },
+      { lines: page1('本文一') },
+      { lines: page1('本文二') },
+    ],
+    undefined,
+    FURNISHED,
+  );
+  const parts = sheetsOf(out);
+  assert.equal(parts.length, 4);
+  // data-page is the DOM ordinal over ALL sheets…
+  assert.ok(parts[0]?.startsWith('<div class="page cover" data-page="0">'));
+  assert.ok(parts[1]?.startsWith('<div class="page cover" data-page="1">'));
+  assert.ok(parts[2]?.startsWith('<div class="page" data-page="2">'));
+  assert.ok(parts[3]?.startsWith('<div class="page" data-page="3">'));
+  // …while the folio numbers the body alone, page 1 first and odd (so 'rightLeft' starts right).
+  for (const cover of [parts[0], parts[1]]) {
+    assert.ok(cover !== undefined && !cover.includes('class="pn') && !cover.includes('class="hd'));
+  }
+  assert.match(parts[2] ?? '', /<div class="hd">柱<\/div><div class="pn r">1 \/ 2<\/div>/);
+  assert.match(parts[3] ?? '', /<div class="hd">柱<\/div><div class="pn l">2 \/ 2<\/div>/);
+});
+
+test('cover pages: a cover-less document emits exactly what it always did', () => {
+  // Pinned literally: comparing two liftings of the same pages would hold for any impl.
+  const plain = paginate(buildRows(tokenize('前\n［＃改ページ］\n後')), 40, 34, 'none');
+  assert.equal(
+    pagesToHtml(sheets(plain), undefined, FURNISHED),
+    '<div class="book">' +
+      '<div class="page" data-page="0"><div class="line" data-line="0">前</div>' +
+      '<div class="hd">柱</div><div class="pn r">1 / 2</div></div>' +
+      '<div class="page" data-page="1"><div class="line" data-line="2">後</div>' +
+      '<div class="hd">柱</div><div class="pn l">2 / 2</div></div>' +
+      '</div>',
+  );
+});
+
+test('値の表示: a postfix after a value field is left unjudged (the scan is bookless)', () => {
+  const targets = (src: string): string[] => findPostfixTargetIssues(src).map((i) => i.target);
+  // Targeting the REAL value builds correctly, so a warning here would flag working markup.
+  assert.deepEqual(targets('［＃ここに「題名」の値を表示］［＃「作品名」は大見出し］'), []);
+  // …scoped: a value field excuses neither an earlier postfix nor a later line.
+  assert.deepEqual(targets('です［＃「ですす」に傍点］［＃ここに「題名」の値を表示］'), ['ですす']);
+  assert.deepEqual(targets('［＃ここに「題名」の値を表示］\nです［＃「ですす」に傍点］'), ['ですす']);
+  assert.deepEqual(targets('です［＃「ですす」に傍点］'), ['ですす']);
 });
