@@ -397,8 +397,8 @@ test('line numbers and edge lines never change the body DOM (pure CSS features)'
 // --- cover pages (応募用表紙・扉) ---------------------------------------------------
 
 const COVER_SRC = '［＃５字下げ］［＃ここに「題名」の値を表示］\n' +
-  '［＃５字下げ］［＃ここに「著者」の値を表示］\n' +
-  '［＃５字下げ］全［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］ページ';
+  '［＃７字下げ］［＃ここに「著者」の値を表示］\n' +
+  '［＃７字下げ］全［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］ページ';
 
 /** Render `books` with the shared option baseline; `chrome` overrides ride on top. */
 const renderBooks = (
@@ -478,11 +478,11 @@ test('cover: the template annotations substitute the book values; 総ページ�
   const bodyPages = (body.match(/<div class="page" data-page=/g) ?? []).length;
   assert.equal(bodyPages, 3);
   assert.match(body, /<div class="line indent-5" data-line="0">作品名<\/div>/);
-  assert.match(body, /<div class="line indent-5" data-line="1">著者名<\/div>/);
+  assert.match(body, /<div class="line indent-7" data-line="1">著者名<\/div>/);
   // The count is derived, never pinned: it must equal the number of BODY sheets…
   assert.match(
     body,
-    new RegExp(`<div class="line indent-5" data-line="2">全<span class="tcy">${String(bodyPages)}</span>ページ</div>`),
+    new RegExp(`<div class="line indent-7" data-line="2">全<span class="tcy">${String(bodyPages)}</span>ページ</div>`),
   );
   // …which is exactly what the folio's {totalPage} reports.
   assert.match(body, new RegExp(`<div class="pn r">1 / ${String(bodyPages)}</div>`));
@@ -593,8 +593,8 @@ test('cover: an unset author leaves its column blank, indent and neighbours inta
     ]),
   );
   assert.match(body, /<div class="line indent-5" data-line="0">題<\/div>/);
-  assert.match(body, /<div class="line indent-5" data-line="1"><\/div>/); // the author column
-  assert.match(body, /<div class="line indent-5" data-line="2">全<span class="tcy">1<\/span>ページ<\/div>/);
+  assert.match(body, /<div class="line indent-7" data-line="1"><\/div>/); // the author column
+  assert.match(body, /<div class="line indent-7" data-line="2">全<span class="tcy">1<\/span>ページ<\/div>/);
 });
 
 test('per-book pagination: an empty book adds no blank sheet and never breaks the run', () => {

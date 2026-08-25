@@ -347,8 +347,8 @@ A cover file can pull in the book's own metadata:
 
 ```text
 ［＃５字下げ］［＃ここに「題名」の値を表示］
-［＃５字下げ］［＃ここに「著者」の値を表示］
-［＃５字下げ］全［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］ページ
+［＃７字下げ］［＃ここに「著者」の値を表示］
+［＃７字下げ］全［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］ページ
 ```
 
 A build fills in that book's values. The preview shows stand-ins — 題名, 著者, and
