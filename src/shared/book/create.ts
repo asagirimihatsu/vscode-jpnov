@@ -8,12 +8,9 @@ import { isAbsoluteLocation } from '../config/validate.ts';
  * Starter content of a cover file created from the panel: README's 応募用の表紙 sample,
  * verbatim (test/shared/book/create.test.ts pins both READMEs to it).
  */
-export const COVER_TEMPLATE = [
-  '［＃５字下げ］［＃ここに「題名」の値を表示］',
-  '［＃５字下げ］［＃ここに「著者」の値を表示］',
-  '［＃５字下げ］全［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］ページ',
-  '',
-].join('\n');
+export const COVER_TEMPLATE = '［＃５字下げ］［＃ここに「題名」の値を表示］\n' +
+  '［＃７字下げ］［＃ここに「著者」の値を表示］\n' +
+  '［＃７字下げ］全［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］ページ\n';
 
 /** Why a typed path is unusable; the command maps each code to a localized message. */
 export type FileInputError = 'empty' | 'absolute' | 'escapes' | 'badName';
