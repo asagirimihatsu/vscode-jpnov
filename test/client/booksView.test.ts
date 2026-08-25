@@ -322,6 +322,32 @@ test('print asks the wire for html, writes it, and opens the FILES in the browse
   assert.deepEqual(state.openedExternal, [`${root}/out/a.html`, `${root}/out/sub/b.html`]);
 });
 
+test('a successful build sets jpnov.hasBuilt (the walkthrough step completion); a cancelled one does not', async () => {
+  const root = 'file:///ws';
+  const result = {
+    ok: true,
+    outDirs: [`${root}/out`],
+    artifacts: [{ kind: 'txt', path: `${root}/out/a.txt`, content: 'a' }],
+    errors: [],
+  };
+  const hasBuilt = (): boolean =>
+    state.executedCommands.some((c) => c.command === 'setContext' && c.args[0] === 'jpnov.hasBuilt' && c.args[1] === true);
+  {
+    const { view } = await setup([entry(root, 'a')], result);
+    state.progressCancelled = true;
+    view.webview.receive({ type: 'build', format: 'txt' });
+    await tick();
+    assert.equal(hasBuilt(), false);
+  }
+  state.progressCancelled = false;
+  {
+    const { view } = await setup([entry(root, 'a')], result);
+    view.webview.receive({ type: 'build', format: 'txt' });
+    await tick();
+    assert.equal(hasBuilt(), true);
+  }
+});
+
 test('the reveal-output toggle turns the reveal off; the toast still fires', async () => {
   const root = 'file:///ws';
   const { view } = await setup(

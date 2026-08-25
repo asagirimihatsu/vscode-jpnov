@@ -19,9 +19,10 @@
  *   - A standalone ］ or 》 is ordinary text.
  */
 
+import { isCjkIdeograph } from '../chars.ts';
 import { resolveStyle, type Channel } from './emphasis.ts';
 
-export type TokenKind =
+type TokenKind =
   | 'text'
   | 'rubyExplicit'
   | 'rubyImplicit'
@@ -672,9 +673,7 @@ export function tokenize(src: string): Token[] {
   return tokens;
 }
 
-// ---------------------------------------------------------------------------
 // Broken-annotation spans (compile errors)
-// ---------------------------------------------------------------------------
 
 /** A broken (unclosed) ［＃ annotation as absolute source UTF-16 offsets `[start, end)`. */
 export interface BrokenAnnotation {
@@ -700,9 +699,7 @@ export function findBrokenAnnotations(src: string): BrokenAnnotation[] {
   return spans;
 }
 
-// ---------------------------------------------------------------------------
 // Unpaired block directives (Warning diagnostics)
-// ---------------------------------------------------------------------------
 
 /** An unpaired block directive as absolute source offsets. `kind` picks the message code. */
 export interface UnpairedBlock {
@@ -783,9 +780,7 @@ export function findUnpairedBlocks(src: string): UnpairedBlock[] {
   return spans.sort((a, b) => a.start - b.start);
 }
 
-// ---------------------------------------------------------------------------
 // 縦中横 structural issues (Warning diagnostics)
-// ---------------------------------------------------------------------------
 
 /** A structural 縦中横 problem as absolute source offsets. `kind` picks the message code. */
 export interface TcyIssue {
@@ -886,23 +881,12 @@ export function findTcyIssues(src: string): TcyIssue[] {
   return issues;
 }
 
-// ---------------------------------------------------------------------------
 // Implicit ruby-base detection
-// ---------------------------------------------------------------------------
 
 /**
- * Given the text immediately before a 《reading》 with no explicit ｜ marker, walk back over
- * a MAXIMAL run of ONE character class, stopping at a class change, space, punctuation, or ［.
- *
- * There are FOUR symmetric character classes:
- *   - Kanji 漢字   — CJK ideographs, including the iteration/abbreviation marks 々〆ヶ.
- *   - Hiragana 平仮名.
- *   - Katakana 片仮名 — including the prolonged-sound mark ー (U+30FC).
- *   - Alnum        — ASCII *and* full-width Latin letters / digits (treated as one class).
- *
- * The class of the LAST character before 《 fixes the run; the walk-back then extends left
- * while characters stay in that same class. Anything else (a different class, whitespace,
- * punctuation, the annotation opener ［, etc.) terminates the base.
+ * Implicit ruby base (no ｜ marker): the MAXIMAL run of ONE character class — kanji, hiragana,
+ * katakana, or alnum of either width — ending at the 《; the last character's class fixes the
+ * run and anything else (a class change, whitespace, punctuation, ［) terminates it.
  */
 type CharClass = 'kanji' | 'hiragana' | 'katakana' | 'alnum' | null;
 
@@ -912,16 +896,7 @@ type CharClass = 'kanji' | 'hiragana' | 'katakana' | 'alnum' | null;
  * https://www.aozora.gr.jp/annotation/etc.html#ruby
  */
 function isKanji(cp: number): boolean {
-  return (
-    cp === 0x3005 ||
-    cp === 0x3006 ||
-    cp === 0x3007 ||
-    cp === 0x30f6 ||
-    (cp >= 0x3400 && cp <= 0x4dbf) || // CJK Ext A
-    (cp >= 0x4e00 && cp <= 0x9fff) || // CJK Unified Ideographs
-    (cp >= 0xf900 && cp <= 0xfaff) || // CJK Compatibility Ideographs
-    (cp >= 0x20000 && cp <= 0x2ffff) // SIP (Ext B..F)
-  );
+  return isCjkIdeograph(cp) || cp === 0x3005 || cp === 0x3006 || cp === 0x3007 || cp === 0x30f6; // 々〆〇ヶ
 }
 
 /** Hiragana block (U+3041..U+3096); the small ヶ is intentionally NOT hiragana. */

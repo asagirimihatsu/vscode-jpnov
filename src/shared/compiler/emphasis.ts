@@ -1,38 +1,18 @@
 /**
- * Maps an Aozora style-annotation variant name DIRECTLY to its CSS class name + presentation
- * channel, and supplies each class's CSS rule for the stylesheet. The compiler emits
- * `<span class="…">`, never an inline `style=` attribute: class rules live inside the webview's
- * nonce-able `<style>`, which inline style attributes cannot (the CSP strips them). There is no
- * intermediate CSS-value representation — a variant is translated to a class in one step.
- * Pure + vscode-free.
+ * Maps an Aozora style-annotation variant name to its CSS class + presentation channel, and
+ * supplies each class's rule for the stylesheet. The compiler emits `<span class="…">`, never an
+ * inline `style=` attribute: class rules live inside the nonce'd `<style>`, which the webview CSP
+ * allows and inline style attributes cannot. Pure + vscode-free.
  *
  * FOUR ORTHOGONAL presentation channels — one CSS property family each, so all four can sit on
  * one `<span>` together:
- *   emph    傍点 (nine dot kinds)     text-emphasis-style     emph-<slug> / emph-<slug>-l
- *   line    傍線 (five line styles)   text-decoration-*       dec-<slug>  / dec-<slug>-l
- *   weight  太字                      font-weight:bold        b
- *   style   斜体                      font-style:italic       i
- *
- * The nine dot kinds (locked spec): 傍点 fs, 白ゴマ傍点 os, 丸傍点 fc, 白丸傍点 oc, 二重丸傍点 fd,
- * 蛇の目傍点 od, 黒三角傍点 ft, 白三角傍点 ot, ばつ傍点/×傍点 x. The five line styles: 傍線 solid,
- * 二重傍線 double, 鎖線 dotted, 破線 dashed, 波線 wavy.
+ *   emph    傍点     text-emphasis-style     emph-<slug> / emph-<slug>-l
+ *   line    傍線     text-decoration-*       dec-<slug>  / dec-<slug>-l
+ *   weight  太字     font-weight:bold        b
+ *   style   斜体     font-style:italic       i
  *
  * A leading 左に / の左に yields the `-l` (left-side) class, valid ONLY on emph/line — 太字/斜体
- * have no side, so 左に太字 → null. In vertical-rl the default side is the RIGHT of the column;
- * `-l` moves the mark to the left:
- *   - emph `-l` uses `text-emphasis-position:under left`. A bare `left` is INVALID CSS (the
- *     grammar is `[ over | under ] && [ right | left ]?` — the browser drops the whole
- *     declaration); `under` is the horizontal fallback (below the text), matching JP convention.
- *   - line rules pin `text-underline-position:right` explicitly (Chromium draws vertical-rl
- *     underlines on the LEFT by default — verified in headless Chromium); `-l` uses `left`.
- *   - `i` relies on the browser synthesising an oblique for JP fonts; never set
- *     `font-synthesis:none`, which silences it entirely (verified).
- *
- * The CSS values live in ONE place — the {@link RULES} table built from {@link STYLES} (b/i
- * included: css.ts's classRule generates only indent-* itself and forwards everything else
- * here). Slugs are a PRIVATE compiler detail (free to rename), not a public theming contract.
- * NOTE: the slug `x` is an HTML abbreviation; its emitted CSS value is the real full-width ×
- * glyph, never the ASCII letter. {@link styleVariantsByChannel} feeds the grammar-sync drift
+ * have no side, so 左に太字 → null. {@link styleVariantsByChannel} feeds the grammar-sync drift
  * test, which keeps the tmLanguage alternations literally equal to this table — regenerate them
  * from that test's failure output, never by hand.
  */
@@ -65,6 +45,7 @@ const STYLES: readonly StyleEntry[] = [
   { variants: ['蛇の目傍点'], channel: 'emph', className: 'emph-od', css: 'open double-circle' },
   { variants: ['黒三角傍点'], channel: 'emph', className: 'emph-ft', css: 'filled triangle' },
   { variants: ['白三角傍点'], channel: 'emph', className: 'emph-ot', css: 'open triangle' },
+  // The slug `x` abbreviates; the emitted value is the full-width × glyph, never the ASCII letter.
   // The CSS <string> is single-quoted so the value stays well-formed wherever it is emitted.
   { variants: ['ばつ傍点', '×傍点'], channel: 'emph', className: 'emph-x', css: "'×'" },
   { variants: ['傍線'], channel: 'line', className: 'dec-solid', css: 'solid' },
@@ -76,8 +57,9 @@ const STYLES: readonly StyleEntry[] = [
   { variants: ['斜体'], channel: 'style', className: 'i', css: '' },
 ];
 
-const LEFT_LONG = 'の左に';
-const LEFT_SHORT = '左に';
+/** The left-side prefixes, fixed by form: postfix = の左に, span = bare 左に (semanticTokens.ts reads the same two). */
+export const LEFT_LONG = 'の左に';
+export const LEFT_SHORT = '左に';
 
 /**
  * Which left prefix a variant may carry — fixed BY FORM in the Aozora spec (postfix = の左に,
@@ -108,6 +90,8 @@ const RULES: ReadonlyMap<string, string> = (() => {
     const cn = s.className;
     switch (s.channel) {
       case 'emph':
+        // `-l`: a bare `left` is INVALID CSS (`[ over | under ] && [ right | left ]?` — the browser
+        // drops the whole declaration); `under` is the horizontal fallback, matching JP convention.
         m.set(cn, `.${cn}{text-emphasis-style:${s.css}}`);
         m.set(
           `${cn}-l`,
@@ -115,6 +99,8 @@ const RULES: ReadonlyMap<string, string> = (() => {
         );
         break;
       case 'line':
+        // `text-underline-position:right` is pinned: Chromium draws vertical-rl underlines on the
+        // LEFT by default; `-l` uses `left`.
         m.set(
           cn,
           `.${cn}{text-decoration-line:underline;text-decoration-style:${s.css};text-underline-position:right}`,
@@ -128,6 +114,7 @@ const RULES: ReadonlyMap<string, string> = (() => {
         m.set(cn, `.${cn}{font-weight:bold}`); // no -l variant (太字 has no side)
         break;
       case 'style':
+        // Relies on the browser synthesising an oblique for JP fonts: never set `font-synthesis:none`.
         m.set(cn, `.${cn}{font-style:italic}`); // no -l variant (斜体 has no side)
         break;
     }

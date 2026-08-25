@@ -1,6 +1,3 @@
-/**
- * Tiny URI/path helpers shared by the host-side client modules.
- */
 import * as vscode from 'vscode';
 
 /**

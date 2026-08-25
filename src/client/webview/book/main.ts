@@ -9,11 +9,7 @@
  * Because every push rebuilds the DOM, cross-render continuity rides on two mechanisms: `data-fk`
  * focus keys captured/restored around each rebuild (capture/restore/focusFk), and applyControls(),
  * which owns the list footer's disabled state after each list render and optimistic toggle.
- *
- * Layout is master/detail: a LIST screen (per-root book rows) drills into a DETAIL screen (one
- * book's covers, chapters + Book Info); both carry a pinned footer with the build actions, the list's
- * adding the selection links. Localized strings arrive once via the host's `__INIT` bootstrap;
- * icons are codicons (`CODICON`).
+ * Localized strings arrive once via the host's `__INIT` bootstrap.
  */
 import type {
   BooksInbound,

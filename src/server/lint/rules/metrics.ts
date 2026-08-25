@@ -6,6 +6,8 @@
  *
  * Relative imports only (native test loader); vscode-free.
  */
+import { isCjkIdeograph } from '../../../shared/chars.ts';
+
 import { splitSentences } from '../sentences.ts';
 import type { LineRule, LintLine, ProseView, RuleContext } from '../types.ts';
 
@@ -57,17 +59,10 @@ export function maxTenRule(ctx: RuleContext): LineRule {
   };
 }
 
-/** Kanji per max-kanji-continuous-len: CJK ideographs (ext blocks included) + 々〇〻. The 〇
- *  sentinel never appears in the prose view, so it cannot join two runs. */
+/** Kanji per max-kanji-continuous-len: CJK ideographs + 々〇〻. The 〇 sentinel never appears in
+ *  the prose view, so it cannot join two runs. */
 function isKanjiCp(cp: number): boolean {
-  return (
-    (cp >= 0x3400 && cp <= 0x9fff) ||
-    (cp >= 0xf900 && cp <= 0xfaff) ||
-    (cp >= 0x20000 && cp <= 0x2ffff) ||
-    cp === 0x3005 || // 々
-    cp === 0x3007 || // 〇
-    cp === 0x303b // 〻
-  );
+  return isCjkIdeograph(cp) || cp === 0x3005 || cp === 0x3007 || cp === 0x303b; // 々 〇 〻
 }
 
 /** 漢字の連続: a run of more than `max` kanji CODE POINTS, counted across elided markup — the

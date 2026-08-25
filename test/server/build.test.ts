@@ -393,7 +393,7 @@ test('build with an empty projectDirs map returns ok with no artifacts', async (
   assert.deepEqual(result, { ok: true, outDirs: [], artifacts: [], errors: [] });
 });
 
-test('build targeting a specific root only builds that root', async () => {
+test('build targets only the roots in projectDirs', async () => {
   await using wsA = await makeTmpWorkspace();
   await using wsB = await makeTmpWorkspace();
   const { ctx } = boot();
@@ -403,10 +403,9 @@ test('build targeting a specific root only builds that root', async () => {
   await writeUnder(wsB.dir, 'vb/y.jpnov', 'B');
 
   const result = await handleBuild(ctx, {
-    root: wsA.uri,
     format: 'txt',
     settings: SETTINGS,
-    projectDirs: { ...projectsFor(wsA.uri), ...projectsFor(wsB.uri) },
+    projectDirs: projectsFor(wsA.uri),
   });
 
   assert.equal(result.artifacts.length, 1);

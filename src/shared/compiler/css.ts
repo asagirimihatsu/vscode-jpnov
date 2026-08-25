@@ -1,33 +1,20 @@
 /**
- * Assembles the document stylesheet — vertical-rl (縦書き) in both modes — from the static
- * fragments authored in `styles/*.css` (compiled to strings in `styles.generated.ts` by
- * `scripts/gen-styles.ts`) plus the small dynamic residue TypeScript still owns:
- *
- * - the `:root{}` variable block (`--cpl`/`--pitch`/`--lpp`/`--htop` numbers, `--edge` base
- *   colour) the fragments' static `calc(var())` geometry reads — a RULE inside the document's one
- *   `<style>`, never a `style=` attribute (the webview CSP strips those);
- * - the paper rules (BUILD): the `@page` box in mm, the root font size and the sheet→paper
- *   border, all computed from geometry.ts's fitPaper because `@page` cannot read `var()`
- *   portably (the build artifact must stay portable);
- * - the 罫線 layers ({@link edgeRules}) — one per interior column boundary, count = lpp − 1;
- * - the on-demand `indent-N` (字下げ — unbounded N) and emphasis class rules (usedClasses).
- *
- * Mode and chrome conditionality is FRAGMENT INCLUSION — zero dead rules: a disabled
- * feature's selectors are entirely absent from the output:
- * - paginate=true (BUILD): buildBase + buildPrint (the always-on 印刷／PDF 保存 button)
- *   (+anchor +ln +edge +header +folio) — the explicit
- *   `.book > .page > .line` skeleton the layout engine emits, one printed sheet per `.page`;
- * - paginate=false (PREVIEW): previewBase (+anchor +ln +edge) — a single continuous flow of
- *   the SAME `.line` columns grouped into per-break `.segment` blocks, fit-to-viewport, with
- *   ［＃改ページ］ as a labelled marker between segments.
- *
- * In BOTH modes the EDGE_INSET gap is reserved and the pitch is the one `--pitch` value whether
- * edgeLine is on or off, so toggling it never moves a glyph within its segment/page; the
- * preview frame look reserves a full --lpp page extent for short segments (preview.edge.css).
- * Chrome sub-elements (`.pn` / `.hd` / `.ln` / `.line::before`)
- * are horizontal-tb INSIDE a vertical-rl container and are positioned with PHYSICAL
- * properties only — the per-rule rationale lives as comments on the owning fragment.
- *
+ * Assembles the document stylesheet from the static fragments in `styles/*.css` (compiled to
+ * strings in `styles.generated.ts` by `scripts/gen-styles.ts`) plus the dynamic residue: the
+ * `:root{}` variable block (`--cpl`/`--pitch`/`--lpp`/`--htop`, `--edge`), the BUILD paper
+ * rules, the 罫線 layers ({@link edgeRules}) and the on-demand `indent-N` / emphasis class rules.
+ * Constraints:
+ * - everything is a RULE inside the document's one `<style>`, never a `style=` attribute (the
+ *   webview CSP strips those);
+ * - the paper rules (`@page` box in mm, root font size, sheet→paper border) are computed in TS
+ *   from geometry.ts's fitPaper because `@page` cannot read `var()` portably (the build
+ *   artifact must stay portable);
+ * - mode and chrome conditionality is FRAGMENT INCLUSION — a disabled feature's selectors are
+ *   absent from the output;
+ * - in BOTH modes the EDGE_INSET gap is reserved and the pitch is the one `--pitch` value
+ *   whether edgeLine is on or off, so toggling it never moves a glyph;
+ * - chrome sub-elements (`.pn` / `.hd` / `.ln` / `.line::before`) are horizontal-tb INSIDE a
+ *   vertical-rl container and use PHYSICAL positioning properties only.
  * Pure + vscode-free.
  */
 

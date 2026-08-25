@@ -142,9 +142,9 @@ export async function diagnoseJpbook(rootUri: string | null, parsed: ParsedJpboo
     if (rootUri === null) {
       continue; // no owning workspace folder — containment/existence unverifiable
     }
-    const resolved = resolveContained(rootUri, entry.value, 'jpbookEntry');
+    const resolved = resolveContained(rootUri, entry.value);
     if (!resolved.ok) {
-      diagnostics.push(diagnostic(range, { code: resolved.code, args: resolved.args }, DiagnosticSeverity.Error));
+      diagnostics.push(diagnostic(range, { code: resolved.code }, DiagnosticSeverity.Error));
       continue;
     }
     if (!canCheckFs) {
@@ -181,7 +181,7 @@ export function documentLinksForJpbook(rootUri: string | null, parsed: ParsedJpb
     if (entry === null) {
       return [];
     }
-    const resolved = resolveContained(rootUri, entry.value, 'jpbookEntry');
+    const resolved = resolveContained(rootUri, entry.value);
     return resolved.ok ? [{ range: charRange(pl.line, entry.range), target: resolved.abs }] : [];
   });
 }
@@ -257,7 +257,7 @@ export async function completeJpbook(
     // Suppress when nothing meaningful follows the cursor and the path already names a file.
     const whole = lineText.slice(pathStart).trim();
     if (whole !== '' && prefix.slice(pathStart).trim() === whole) {
-      const resolvedWhole = resolveContained(rootUri, whole, 'jpbookEntry');
+      const resolvedWhole = resolveContained(rootUri, whole);
       if (resolvedWhole.ok && (await statEntry(resolvedWhole.abs)) === 'file') {
         return [];
       }
@@ -280,7 +280,7 @@ export async function completeJpbook(
       listDirUri = rootUri;
     } else {
       // The label is irrelevant here — a containment failure just yields no completions.
-      const resolvedDir = resolveContained(rootUri, dirPortion, 'jpbookEntry');
+      const resolvedDir = resolveContained(rootUri, dirPortion);
       if (!resolvedDir.ok) {
         return [];
       }

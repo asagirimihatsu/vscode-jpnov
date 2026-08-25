@@ -62,7 +62,6 @@ export interface RuleMeta {
  * exact code union) while still type-checking each row against {@link RuleMeta}.
  */
 export const RULES = [
-  // --- common (地の文 + セリフ): global typography / structure ------------------
   { id: 'sentenceLength', scope: 'common', kind: 'threshold', min: 1, max: 1000, suggested: 100 },
   { id: 'maxTen', scope: 'common', kind: 'threshold', min: 1, max: 20, suggested: 3 },
   { id: 'maxKanjiRun', scope: 'common', kind: 'threshold', min: 1, max: 20, suggested: 6 },
@@ -90,13 +89,10 @@ export const RULES = [
   { id: 'jaNoSpaceBetweenFullWidth', scope: 'common', kind: 'boolean' },
   { id: 'jaUnnaturalAlphabet', scope: 'common', kind: 'boolean' },
   { id: 'minusPosition', scope: 'common', kind: 'boolean' },
-  // --- narration (地の文) only: paragraph form ------------------------------
   { id: 'indent', scope: 'narration', kind: 'boolean', default: true },
   { id: 'endPeriod', scope: 'narration', kind: 'boolean', default: true },
-  // --- dialogue (セリフ) only: utterance form -------------------------------
   { id: 'closingPunct', scope: 'dialogue', kind: 'boolean', default: true },
   { id: 'noIndent', scope: 'dialogue', kind: 'boolean', default: true },
-  // --- ruby (ルビ / 読み): one drop-down ------------------------------------
   { id: 'kana', scope: 'ruby', kind: 'enum', values: ['off', 'hiragana', 'katakana'] },
 ] as const satisfies readonly RuleMeta[];
 

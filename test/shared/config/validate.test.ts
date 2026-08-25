@@ -14,13 +14,13 @@ test('resolveContained accepts contained relative subpaths', () => {
     ['./deep/../src', 'file:///Users/x/proj/src'],
   ];
   for (const [rel, expected] of cases) {
-    const got = resolveContained(ROOT, rel, 'jpbookEntry');
+    const got = resolveContained(ROOT, rel);
     assert.deepEqual(got, { ok: true, abs: expected }, `for rel=${rel}`);
   }
 });
 
 test('resolveContained accepts when the root already has a trailing slash', () => {
-  assert.deepEqual(resolveContained('file:///Users/x/proj/', './src', 'jpbookEntry'), {
+  assert.deepEqual(resolveContained('file:///Users/x/proj/', './src'), {
     ok: true,
     abs: 'file:///Users/x/proj/src',
   });
@@ -28,42 +28,35 @@ test('resolveContained accepts when the root already has a trailing slash', () =
 
 test('resolveContained rejects empty / root-only paths', () => {
   for (const rel of ['', '   ', '.', './', 'foo/..']) {
-    const got = resolveContained(ROOT, rel, 'jpbookEntry');
+    const got = resolveContained(ROOT, rel);
     assert.equal(got.ok, false, `should reject rel=${JSON.stringify(rel)}`);
   }
 });
 
 test('resolveContained rejects paths that escape above the root', () => {
   for (const rel of ['..', '../sibling', './a/../../escape', '../../etc']) {
-    const got = resolveContained(ROOT, rel, 'jpbookEntry');
+    const got = resolveContained(ROOT, rel);
     assert.equal(got.ok, false, `should reject rel=${rel}`);
   }
 });
 
 test('resolveContained rejects absolute paths and URIs', () => {
   for (const rel of ['/etc/passwd', 'C:\\Windows', '\\\\server\\share', 'file:///etc', 'http://evil']) {
-    const got = resolveContained(ROOT, rel, 'jpbookEntry');
+    const got = resolveContained(ROOT, rel);
     assert.equal(got.ok, false, `should reject rel=${rel}`);
   }
 });
 
 test('resolveContained rejects leading "~" (home-relative)', () => {
   for (const rel of ['~', '~/secrets', '~root/x']) {
-    const got = resolveContained(ROOT, rel, 'jpbookEntry');
+    const got = resolveContained(ROOT, rel);
     assert.equal(got.ok, false, `should reject rel=${rel}`);
   }
 });
 
-test('resolveContained carries the label in the rejection args', () => {
-  const got = resolveContained(ROOT, '', 'jpbookEntry');
-  assert.ok(!got.ok);
-  assert.equal(got.code, 'path.empty');
-  assert.deepEqual(got.args, ['jpbookEntry']);
-});
-
 test('resolveContained maps each rejection family to its code', () => {
   const code = (rel: string): string => {
-    const got = resolveContained(ROOT, rel, 'jpbookEntry');
+    const got = resolveContained(ROOT, rel);
     assert.ok(!got.ok, `should reject ${JSON.stringify(rel)}`);
     return got.code;
   };

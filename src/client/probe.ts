@@ -1,22 +1,11 @@
 /**
- * The startup probe: decides whether one workspace folder looks like a novel project, so
- * `startIfProjectPresent` (extension.ts) can fork the server without any document open.
- *
- * Three signals, cheapest first:
- *  1. Settings presence — any `jpnov.*` key saved at the WORKSPACE or FOLDER level (never
- *     the user level: a personal cast list in user settings must not auto-start every
- *     window). Synchronous, zero I/O — one section-level `inspect('jpnov')`.
- *  2. Filenames — one shallow `readDirectory` of the folder root matching a root-level
- *     `*.jpbook` that is a PLAIN FILE (strict FileType.File: a directory named
- *     `x.jpbook` is no book, and symlinks match the server's discovery, which never
- *     follows them). A single round-trip; also the only file signal on virtual
- *     filesystems without a search provider (signal 3 needs one).
- *  3. Deep search — one `findFiles` capped at a single match, for book files that live
- *     only in subfolders. Excludes node_modules and dot-directories like the server's
- *     discovery; its deltas (symlinked matches, no outDir exclusion, glob case rules)
- *     can only cause a benign start — the server stays the arbiter of what is a book.
- *
- * Beyond that, name-only membership — the server is the robust arbiter.
+ * The startup probe: whether one workspace folder looks like a novel project, so
+ * `startIfProjectPresent` (extension.ts) can fork the server with no document open. Three
+ * signals, cheapest first: a `jpnov.*` setting at the WORKSPACE or FOLDER level — never the
+ * user level (a personal cast list must not auto-start every window); a root-level `*.jpbook`
+ * that is a PLAIN FILE (strict `FileType.File`); a `findFiles` capped at one match, which needs
+ * a search provider. A false positive only causes a benign start — the server stays the
+ * arbiter of what is a book.
  */
 import * as vscode from 'vscode';
 

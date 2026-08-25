@@ -596,36 +596,6 @@
     ],
     "commands": [
       {
-        "command": "jpbook.buildTxt",
-        "category": "%command.category%",
-        "title": "%command.books.buildTxt.title%",
-        "icon": "$(file)"
-      },
-      {
-        "command": "jpbook.print",
-        "category": "%command.category%",
-        "title": "%command.books.print.title%",
-        "icon": "$(browser)"
-      },
-      {
-        "command": "jpbook.buildEpub",
-        "category": "%command.category%",
-        "title": "%command.books.buildEpub.title%",
-        "icon": "$(book)"
-      },
-      {
-        "command": "jpbook.selectAll",
-        "category": "%command.category%",
-        "title": "%command.books.selectAll.title%",
-        "icon": "$(check-all)"
-      },
-      {
-        "command": "jpbook.deselectAll",
-        "category": "%command.category%",
-        "title": "%command.books.deselectAll.title%",
-        "icon": "$(clear-all)"
-      },
-      {
         "command": "jpbook.refresh",
         "category": "%command.category%",
         "title": "%command.books.refresh.title%",
@@ -641,33 +611,6 @@
         "command": "jpnov.openGuide",
         "category": "%command.category%",
         "title": "%command.openGuide.title%"
-      },
-      {
-        "command": "jpbook.addFiles",
-        "category": "%command.category%",
-        "title": "%command.book.addFiles.title%",
-        "icon": "$(checklist)"
-      },
-      {
-        "command": "jpbook.removeEntry",
-        "category": "%command.category%",
-        "title": "%command.book.removeEntry.title%",
-        "icon": "$(remove)"
-      },
-      {
-        "command": "jpbook.moveEntryUp",
-        "category": "%command.category%",
-        "title": "%command.book.moveEntryUp.title%"
-      },
-      {
-        "command": "jpbook.moveEntryDown",
-        "category": "%command.category%",
-        "title": "%command.book.moveEntryDown.title%"
-      },
-      {
-        "command": "jpbook.editMeta",
-        "category": "%command.category%",
-        "title": "%command.book.editMeta.title%"
       },
       {
         "command": "jpnov.preview",
@@ -723,52 +666,12 @@
           "when": "editorLangId == jpnov"
         },
         {
-          "command": "jpbook.buildTxt",
-          "when": "false"
-        },
-        {
-          "command": "jpbook.print",
-          "when": "false"
-        },
-        {
-          "command": "jpbook.buildEpub",
-          "when": "false"
-        },
-        {
-          "command": "jpbook.selectAll",
-          "when": "false"
-        },
-        {
-          "command": "jpbook.deselectAll",
-          "when": "false"
-        },
-        {
           "command": "jpbook.refresh",
-          "when": "false"
-        },
-        {
-          "command": "jpbook.addFiles",
           "when": "false"
         },
         {
           "command": "jpbook.createFile",
           "when": "workspaceFolderCount != 0"
-        },
-        {
-          "command": "jpbook.removeEntry",
-          "when": "false"
-        },
-        {
-          "command": "jpbook.moveEntryUp",
-          "when": "false"
-        },
-        {
-          "command": "jpbook.moveEntryDown",
-          "when": "false"
-        },
-        {
-          "command": "jpbook.editMeta",
-          "when": "false"
         }
       ]
     },
@@ -821,9 +724,7 @@
               "markdown": "media/walkthrough/build.md"
             },
             "completionEvents": [
-              "onCommand:jpbook.print",
-              "onCommand:jpbook.buildTxt",
-              "onCommand:jpbook.buildEpub"
+              "onContext:jpnov.hasBuilt"
             ]
           },
           {

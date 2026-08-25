@@ -53,7 +53,6 @@ export type RuleImpl =
   | { readonly kind: 'line'; readonly create: (ctx: RuleContext) => LineRule }
   | { readonly kind: 'raw'; readonly scan: PreScan };
 
-/** Shorthand for the common case. */
 function line(create: (ctx: RuleContext) => LineRule): RuleImpl {
   return { kind: 'line', create };
 }
@@ -61,7 +60,6 @@ function line(create: (ctx: RuleContext) => LineRule): RuleImpl {
 /** Catalog id -> implementation. The `Record<CatalogId, …>` type requires exactly the catalog ids
  *  (a missing/extra impl fails to compile). */
 export const RULE_IMPL: Record<CatalogId, RuleImpl> = {
-  // common
   sentenceLength: line(sentenceLengthRule),
   maxTen: line(maxTenRule),
   maxKanjiRun: line(maxKanjiRunRule),
@@ -81,12 +79,9 @@ export const RULE_IMPL: Record<CatalogId, RuleImpl> = {
   jaNoSpaceBetweenFullWidth: line(viewScan(fullWidthSpaceScan, 'prose')),
   jaUnnaturalAlphabet: line(unnaturalAlphabetRule),
   minusPosition: line(viewScan(minusPositionScan, 'prose')),
-  // narration
   indent: line(indentRule),
   endPeriod: line(endPeriodRule),
-  // dialogue
   closingPunct: line(closingPunctRule),
   noIndent: line(noIndentRule),
-  // ruby
   kana: line(rubyKanaRule),
 };

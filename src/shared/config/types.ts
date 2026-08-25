@@ -34,13 +34,11 @@ export function isDashMode(value: string): value is DashMode {
 
 /**
  * `jpnov.layout.linePitch` members: 行送り as a multiple of the character size — the CSS
- * line-height, injected as `--pitch`, and fitPaper's block-axis quantum. A ruby reading's
- * outer edge sits 1.0em off its column centre (0.5em glyph half + 0.5em lane), the drawn
- * rule at pitch/2, an opposing left-side reading at pitch−1.0, the neighboring glyphs at
- * pitch−0.5. So: 2.25 keeps 0.125em clear of rules and opposing readings; 2.0 sits exactly
- * flush with both; below 2.0 a reading crosses a drawn rule / an opposing left-side reading;
- * plain right-side ruby touches the neighboring glyphs only at 1.5. The author's tradeoff,
- * deliberately unguarded.
+ * line-height (`--pitch`) and fitPaper's block-axis quantum. Ruby geometry per column: a
+ * reading's outer edge at 1.0em off the column centre, the drawn rule at pitch/2, an opposing
+ * left-side reading at pitch−1.0, the neighbouring glyphs at pitch−0.5 — so 2.25 keeps 0.125em
+ * clear of rules and opposing readings, 2.0 sits flush, below 2.0 a reading crosses them, and
+ * plain right-side ruby touches the neighbours only at 1.5. The author's tradeoff, unguarded.
  */
 export const LINE_PITCHES = [1.5, 1.75, 2, 2.25] as const;
 export type LinePitch = (typeof LINE_PITCHES)[number];
@@ -53,13 +51,10 @@ export type LinePitch = (typeof LINE_PITCHES)[number];
 export interface LayoutSettings {
   readonly charsPerLine: number;
   readonly linesPerPage: number;
-  /** 行送り in character-size multiples. */
   readonly linePitch: LinePitch;
   /** 組版 font-family list; '' = the built-in 明朝 stack (css.ts DEFAULT_FONT_STACK). */
   readonly fontFamily: string;
-  /** 禁則処理 mode. */
   readonly kinsoku: KinsokuMode;
-  /** 自動縦中横 mode. */
   readonly autoTcy: AutoTcyMode;
   /** ダッシュ choice (`jpnov.lint.common.dash`) — the one lint key the render pipeline also reads. */
   readonly dash: DashMode;

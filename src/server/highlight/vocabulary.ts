@@ -17,7 +17,7 @@
  * module (and its test) without a resolver hook.
  */
 import { createRecognizer } from './recognizer.ts';
-import { normalizeRootUri } from '../fsUri.ts';
+import { longestPrefixRoot, normalizeRootUri } from '../fsUri.ts';
 
 import type { Connection } from 'vscode-languageserver/node';
 import type { HighlightChangedParams, HighlightVocabulary, HighlightVocabularyMap } from '#/shared/protocol.ts';
@@ -71,17 +71,9 @@ export function createHighlightStore(): HighlightStore {
     },
 
     recognizerFor(docUri: string): Recognizer | undefined {
-      let best: string | undefined;
-      let bestEntry: StoreEntry | undefined;
-      for (const [rootUri, entry] of entries) {
-        if (docUri === rootUri || docUri.startsWith(`${rootUri}/`)) {
-          if (best === undefined || rootUri.length > best.length) {
-            best = rootUri;
-            bestEntry = entry;
-          }
-        }
-      }
-      if (!bestEntry) {
+      const root = longestPrefixRoot(entries.keys(), docUri);
+      const bestEntry = root === null ? undefined : entries.get(root);
+      if (bestEntry === undefined) {
         return undefined;
       }
       const { characters, keywords } = bestEntry.vocab;

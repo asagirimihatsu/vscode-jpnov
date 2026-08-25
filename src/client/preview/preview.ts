@@ -1,25 +1,11 @@
 /**
- * The live preview: a single client-owned WebviewPanel that mirrors the
- * CURRENTLY active Japanese Novel (`.jpnov`) editor, re-rendered on the live (dirty) buffer.
- *
- * Rendering is done by the SERVER (`jpnov/renderFile` -> standalone `<html>` doc via the
- * pure compiler's `renderPreview`); the client only drives WHEN to render, owns webview
- * security, and keeps the preview scrolled to the editor's TOP-MOST cursor.
- *
- * The server HTML carries an inline `<style>` plus per-paragraph `data-line` anchors.
- * Before assigning it to `webview.html` we harden it with a strict CSP `<meta>` + a
- * per-render nonce on the inline `<style>`, and inject a small nonce'd script that parks
- * the paragraph for the active cursor line at the golden-ratio viewport position — on
- * load, on `reveal` messages, and on resize — so an edit keeps the view anchored at the
- * cursor instead of snapping to the start.
- *
- * The panel survives window reloads: the injected script persists `{uri, line}` through
- * the webview state API, and extension.ts registers a WebviewPanelSerializer that hands
- * the workbench-restored panel back to `adopt()` to re-wire listeners and re-render.
- *
- * Scope (per spec): a SINGLE current file, no book assembly, no pagination; lines wrap at
- * the `jpnov.layout.charsPerLine` setting; ［＃改ページ］ appears as a labelled
- * `<div class="pagebreak">` marker.
+ * The live preview: one client-owned WebviewPanel mirroring the active `.jpnov` editor on its
+ * live (dirty) buffer. The SERVER renders (`jpnov/renderFile`); this class decides WHEN to
+ * render, follows the editor's top-most cursor, and owns webview security: the server HTML must
+ * be hardened (strict CSP `<meta>`, a per-render nonce on the inline `<style>`, the nonce'd
+ * cursor-follow script) before it is assigned to `webview.html`. The panel survives window
+ * reloads through the serializer in extension.ts — `adopt()` must stay synchronous through its
+ * first paint and never throw.
  */
 import * as vscode from 'vscode';
 
@@ -153,12 +139,7 @@ export class Preview {
     }
   }
 
-  /**
-   * Re-render the current document with FRESH settings. The config-change hook in
-   * extension.ts calls this on jpnov.layout / jpnov.preview edits; a no-op when nothing
-   * is shown. renderDocument re-reads buildPreviewSettings(), so the new values ride the
-   * next request.
-   */
+  /** Re-renders the shown document with fresh settings (extension.ts calls this on `jpnov.layout.*` edits); a no-op when nothing is shown. */
   refresh(): void {
     const uri = this.currentDocUri;
     if (uri === undefined) {
@@ -178,8 +159,6 @@ export class Preview {
     this.teardown();
     panel?.dispose();
   }
-
-  // --- internals ----------------------------------------------------------
 
   /** Only Japanese Novel source documents (jpnov / `.jpnov`) are previewable. */
   private isPreviewable(doc: vscode.TextDocument): boolean {

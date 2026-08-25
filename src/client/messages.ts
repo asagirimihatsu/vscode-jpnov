@@ -8,16 +8,7 @@
  */
 import * as vscode from 'vscode';
 
-import type { LabelId, LocalizableMessage } from '#/shared/protocol.ts';
-
-/**
- * Localized text for a label id. `jpbookEntry` (the only label) is prose and is
- * translated. Built per-call — `vscode.l10n` is ready by the time anything renders.
- */
-function labelText(label: LabelId): string {
-  const texts: Record<LabelId, string> = { jpbookEntry: vscode.l10n.t('a book entry') };
-  return texts[label];
-}
+import type { LocalizableMessage } from '#/shared/protocol.ts';
 
 /** Runtime guard for an `LSPAny` (a Diagnostic's `data`, or a custom-payload field). */
 export function isLocalizableMessage(value: unknown): value is LocalizableMessage {
@@ -73,17 +64,17 @@ export function renderMessage(msg: LocalizableMessage): string {
     case 'jpbook.coverNeedsList':
       return vscode.l10n.t('write "cover:" alone, then one "- path" line per cover file: {0}', s(0));
     case 'path.empty':
-      return vscode.l10n.t('{0} must not be empty', labelText(a[0] as LabelId));
+      return vscode.l10n.t('a book entry must not be empty');
     case 'path.rootDot':
-      return vscode.l10n.t('{0} must name a subpath, not the root "."', labelText(a[0] as LabelId));
+      return vscode.l10n.t('a book entry must name a subpath, not the root "."');
     case 'path.homeRelative':
-      return vscode.l10n.t('{0} must not start with "~" (home-relative)', labelText(a[0] as LabelId));
+      return vscode.l10n.t('a book entry must not start with "~" (home-relative)');
     case 'path.absolute':
-      return vscode.l10n.t('{0} must be a relative path, not absolute', labelText(a[0] as LabelId));
+      return vscode.l10n.t('a book entry must be a relative path, not absolute');
     case 'path.invalid':
-      return vscode.l10n.t('{0} is not a valid path', labelText(a[0] as LabelId));
+      return vscode.l10n.t('a book entry is not a valid path');
     case 'path.escapesRoot':
-      return vscode.l10n.t('{0} must not escape the workspace root', labelText(a[0] as LabelId));
+      return vscode.l10n.t('a book entry must not escape the workspace root');
     case 'syntax.unclosedAnnotation':
       return vscode.l10n.t('unterminated ［＃ annotation (missing ］)');
     case 'syntax.unterminatedBlock':
@@ -98,7 +89,7 @@ export function renderMessage(msg: LocalizableMessage): string {
       return vscode.l10n.t('［＃縦中横終わり］ without a matching ［＃縦中横］');
     case 'syntax.tcyTooLong':
       return vscode.l10n.t('縦中横 is too long (keep it to 3 characters or fewer to avoid distortion)');
-    // --- prose lint (kept byte-identical to renderEnglish). ---
+    // prose lint (kept byte-identical to renderEnglish).
     case 'lint.common.sentenceLength':
       return vscode.l10n.t('this sentence is too long');
     case 'lint.common.maxTen':
@@ -140,7 +131,7 @@ export function renderMessage(msg: LocalizableMessage): string {
     case 'lint.common.jaNoSpaceBetweenFullWidth':
       return vscode.l10n.t('space between full-width characters');
     case 'lint.common.jaUnnaturalAlphabet':
-      return vscode.l10n.t('unnatural run of half-width letters');
+      return vscode.l10n.t('a stray letter between Japanese characters');
     case 'lint.common.minusPosition':
       return vscode.l10n.t('a minus sign is allowed only before a number');
     case 'lint.narration.indent':

@@ -208,7 +208,7 @@ function layoutSection(): unknown {
   };
 }
 
-/** The single merged Lint section: every rule, ordered common → narration → ruby. */
+/** The single merged Lint section: every rule, ordered common → narration → dialogue → ruby. */
 function lintSection(): unknown {
   const properties: Record<string, unknown> = {};
   let order = 1;

@@ -12,13 +12,14 @@
  *
  * Pure + vscode-free.
  */
-import { DASH_BY_MODE, DASH_CHARS, DASH_GLYPH } from '../chars.ts';
+import { DASH_BY_MODE, DASH_GLYPH } from '../chars.ts';
 import type { DashMode } from '../config/types.ts';
 import { escapeHtml } from './escape.ts';
 import {
   emitUnits,
-  INSEP_LEADER,
+  insepClass,
   reflowRubyHtml,
+  unitKey,
   type Row,
   type Unit,
 } from './layout.ts';
@@ -27,22 +28,6 @@ import {
 export interface ReflowSegment {
   readonly body: string;
   readonly heading: string | null;
-}
-
-/** The cl-08 分離禁止 class of a reflowed unit, or undefined (classed / ruby / multi-char). */
-function insepSetOf(u: Unit): Set<string> | undefined {
-  if (u.cells !== 1 || u.text.length !== 1 || u.ruby !== undefined || u.cssClass !== undefined) {
-    return undefined;
-  }
-  if (DASH_CHARS.has(u.text)) {
-    return DASH_CHARS;
-  }
-  return INSEP_LEADER.has(u.text) ? INSEP_LEADER : undefined;
-}
-
-/** Equal presentation channels — the same requirement the engine's 分離禁止 merge has. */
-function sameChannels(a: Unit, b: Unit): boolean {
-  return a.emph === b.emph && a.line === b.line && a.weight === b.weight && a.style === b.style;
 }
 
 /**
@@ -71,12 +56,12 @@ function bindInsepRuns(units: readonly Unit[]): Unit[] {
       i += 1;
       continue;
     }
-    const cls = insepSetOf(head);
+    const cls = insepClass(head, { bang: false });
     let end = i + 1;
     if (cls !== undefined) {
       while (end < units.length) {
         const next = units[end];
-        if (next === undefined || insepSetOf(next) !== cls || !sameChannels(head, next)) {
+        if (next === undefined || insepClass(next, { bang: false }) !== cls || unitKey(next) !== unitKey(head)) {
           break;
         }
         end += 1;

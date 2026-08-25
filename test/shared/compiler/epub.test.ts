@@ -4,7 +4,8 @@ import { strFromU8, unzipSync } from 'fflate';
 
 import type { JpbookMeta } from '../../../src/shared/book/jpbook.ts';
 import type { BookInput } from '../../../src/shared/compiler/document.ts';
-import { epubMembers, ocfZip } from '../../../src/shared/compiler/epub.ts';
+import { epubMembers } from '../../../src/shared/compiler/epub.ts';
+import { ocfZip } from '../../../src/shared/compiler/ocf.ts';
 import { assertWellFormedXml } from '../xml.ts';
 import { VALUE_FIELD_PLACEHOLDERS } from '../../../src/shared/compiler/tokenizer.ts';
 
