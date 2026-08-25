@@ -233,6 +233,18 @@ export function buildSemanticTokens(
         markDirective(); // ［＃○字下げ］ (the tokenizer emits this kind only at a line head)
         break;
       }
+      case 'valueField': {
+        flushRun();
+        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
+        const ds = offset + ANNOT_OPEN;
+        const open = 'ここに「'.length;
+        const close = '」の値を表示'.length;
+        mark(ds, open, 'marker'); // ここに「 (demoted, like the block scaffolding)
+        mark(ds + open, raw - ANNOT_OPEN - open - close - ONE, 'directive'); // 題名/著者/総ページ数
+        mark(ds + raw - ANNOT_OPEN - close - ONE, close, 'marker'); // 」の値を表示 (demoted)
+        mark(last, ONE, 'marker'); // ］
+        break;
+      }
       case 'indentBlockStart': {
         flushRun();
         mark(offset, ANNOT_OPEN, 'marker'); // ［＃

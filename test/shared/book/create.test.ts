@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { normalizeFileInput } from '../../../src/shared/book/create.ts';
+import { COVER_TEMPLATE, normalizeFileInput } from '../../../src/shared/book/create.ts';
+import { readRepoFile } from '../repo.ts';
 
 test('normalizeFileInput appends the suffix and normalizes separators', () => {
   const cases: readonly (readonly [string, string])[] = [
@@ -53,5 +54,11 @@ test('normalizeFileInput rejects unusable paths with a typed code', () => {
   ];
   for (const [raw, error] of cases) {
     assert.deepEqual(normalizeFileInput(raw, '.jpnov'), { ok: false, error }, raw === '' ? '(empty)' : raw);
+  }
+});
+
+test('COVER_TEMPLATE is the README sample, verbatim, in both languages', () => {
+  for (const file of ['README.md', 'README.en.md']) {
+    assert.ok(readRepoFile(file).includes(COVER_TEMPLATE.trimEnd()), file);
   }
 });

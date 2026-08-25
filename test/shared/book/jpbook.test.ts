@@ -5,6 +5,10 @@ import {
   completeMetaLine,
   composeBookChrome,
   composeDividerValue,
+  COVER_ITEM_MARKS,
+  coverPathOf,
+  FRONT_MATTER_KEYS,
+  isCover,
   jpbookOutRel,
   metaRegionOf,
   parseDividerValue,
@@ -90,9 +94,9 @@ test('parseJpbook with no front matter yields an empty meta', () => {
 });
 
 test('parseJpbook collects fenced metadata and still parses the body', () => {
-  const got = parseJpbook('---\ntitle: 夜霧の姫　第一巻\nheader: 夜霧の姫　一\n---\na.jpnov');
+  const got = parseJpbook('---\ntitle: 作品名　第一巻\nheader: 作品名　一\n---\na.jpnov');
   assert.deepEqual(got.lines.map((l) => l.kind), ['fence', 'meta', 'meta', 'fence', 'ok']);
-  assert.deepEqual(got.meta, { title: '夜霧の姫　第一巻', header: '夜霧の姫　一' });
+  assert.deepEqual(got.meta, { title: '作品名　第一巻', header: '作品名　一' });
 });
 
 test('parseJpbook accepts every recognized key and validates the enum', () => {
@@ -127,7 +131,7 @@ test('parseJpbook warns on an unknown key (with the known-key list) and ignores 
   assert.deepEqual(got.lines[1]?.kind, {
     warning: {
       code: 'jpbook.metaUnknownKey',
-      args: ['publisher', 'title, author, header, pageNumber, pageNumberFormat, divider'],
+      args: ['publisher', FRONT_MATTER_KEYS.join(', ')],
     },
   });
 });
@@ -187,6 +191,152 @@ test('parseJpbook: front matter opens ONLY on the first non-blank line', () => {
   assert.deepEqual(parseJpbook('a.jpnov\n---').lines[1]?.kind, {
     error: { code: 'jpbook.notJpnov', args: ['---'] },
   });
+});
+
+// --- parseJpbook: the cover list ---------------------------------------------
+
+const ORPHAN = (value: string): JpbookLineKind => ({
+  error: { code: 'jpbook.coverItemWithoutKey', args: [value] },
+});
+const DUP_COVER: JpbookLineKind = { warning: { code: 'jpbook.metaDuplicateKey', args: ['cover'] } };
+
+test('cover: a bare key opens a list of "- " items; the body still parses', () => {
+  assert.deepEqual(kinds('---\ncover:\n- c1.jpnov\n- c2.jpnov\n---\nch.jpnov\n'), [
+    'fence', 'cover', 'coverEntry', 'coverEntry', 'fence', 'ok', 'blank',
+  ]);
+});
+
+test('cover: a value on the key line is an error steering to the list form', () => {
+  // ONE spelling: a `key: value` paints as a string, where VS Code withholds completion.
+  const NEEDS_LIST = (value: string): JpbookLineKind => ({
+    error: { code: 'jpbook.coverNeedsList', args: [value] },
+  });
+  assert.deepEqual(kinds('---\ncover: c.jpnov\n---\n'), [
+    'fence', NEEDS_LIST('cover: c.jpnov'), 'fence', 'blank',
+  ]);
+  // The rejected key opens nothing…
+  assert.deepEqual(kinds('---\ncover: c.jpnov\n- c2.jpnov\n---\n'), [
+    'fence', NEEDS_LIST('cover: c.jpnov'), ORPHAN('- c2.jpnov'), 'fence', 'blank',
+  ]);
+  // …and does not consume the key, so a real list still works below it.
+  assert.deepEqual(kinds('---\ncover: c.jpnov\ncover:\n- c2.jpnov\n---\n'), [
+    'fence', NEEDS_LIST('cover: c.jpnov'), 'cover', 'coverEntry', 'fence', 'blank',
+  ]);
+});
+
+test('cover: an item with no open list is an error; the fence and any other key close one', () => {
+  assert.deepEqual(kinds('---\n- c.jpnov\n---\n'), ['fence', ORPHAN('- c.jpnov'), 'fence', 'blank']);
+  assert.deepEqual(kinds('---\ncover:\n- c1.jpnov\ntitle: t\n- c2.jpnov\n---\n'), [
+    'fence', 'cover', 'coverEntry', 'meta', ORPHAN('- c2.jpnov'), 'fence', 'blank',
+  ]);
+  // Past the closing fence a "- x.jpnov" line is an ordinary chapter path again.
+  assert.deepEqual(kinds('---\ncover:\n---\n- c.jpnov\n'), ['fence', 'cover', 'fence', 'ok', 'blank']);
+});
+
+test('cover: blank lines do not close an open list', () => {
+  assert.deepEqual(kinds('---\ncover:\n\n- c.jpnov\n---\n'), [
+    'fence', 'cover', 'blank', 'coverEntry', 'fence', 'blank',
+  ]);
+});
+
+test('cover: an empty list is as legal as an absent key', () => {
+  const got = parseJpbook('---\ncover:\n---\nch.jpnov\n');
+  assert.deepEqual(got.lines.map((l) => l.kind), ['fence', 'cover', 'fence', 'ok', 'blank']);
+  assert.deepEqual(got.meta, {}); // cover is never a JpbookMeta field
+});
+
+test('cover: items take a full-width dash and need no space after it', () => {
+  assert.deepEqual(kinds('---\ncover:\n－c1.jpnov\n-c2.jpnov\n　- c3.jpnov\n---\n'), [
+    'fence', 'cover', 'coverEntry', 'coverEntry', 'coverEntry', 'fence', 'blank',
+  ]);
+});
+
+test('cover: the key takes a full-width colon like every other key', () => {
+  assert.deepEqual(kinds('---\ncover：\n- c.jpnov\n---\n'), [
+    'fence', 'cover', 'coverEntry', 'fence', 'blank',
+  ]);
+  assert.deepEqual(parseJpbook('---\ncover：c.jpnov\n---\n').lines[1]?.kind, {
+    error: { code: 'jpbook.coverNeedsList', args: ['cover：c.jpnov'] },
+  });
+});
+
+test('cover: item paths validate like chapter paths, quoting the line an item stands on', () => {
+  // Items quote the WHOLE line: a sliced marker can leave a fence-lookalike (`----`).
+  assert.deepEqual(parseJpbook('---\ncover:\n- note.md\n---\n').lines[2]?.kind, {
+    error: { code: 'jpbook.notJpnov', args: ['- note.md'] },
+  });
+  assert.deepEqual(parseJpbook('---\ncover:\n- sub\\c.jpnov\n---\n').lines[2]?.kind, {
+    error: { code: 'jpbook.backslashSeparator', args: ['- sub\\c.jpnov'] },
+  });
+  assert.deepEqual(parseJpbook('---\ncover:\n----\n---\n').lines[2]?.kind, {
+    error: { code: 'jpbook.notJpnov', args: ['----'] },
+  });
+});
+
+test('the front-matter key list is the user-visible contract', () => {
+  // A stable contract, pinned literally: everything else derives from these constants.
+  assert.deepEqual([...FRONT_MATTER_KEYS], [
+    'title', 'author', 'header', 'pageNumber', 'pageNumberFormat', 'divider', 'cover',
+  ]);
+  assert.deepEqual([...COVER_ITEM_MARKS], ['-', '－']);
+});
+
+test('cover: a marker with no path behind it reports the line, not an empty name', () => {
+  assert.deepEqual(parseJpbook('---\ncover:\n-\n－\n---\n').lines[2]?.kind, {
+    error: { code: 'jpbook.notJpnov', args: ['-'] },
+  });
+  assert.deepEqual(parseJpbook('---\ncover:\n-\n－\n---\n').lines[3]?.kind, {
+    error: { code: 'jpbook.notJpnov', args: ['－'] },
+  });
+});
+
+test('cover: repeats dedupe among covers only — a chapter may also be a cover', () => {
+  assert.deepEqual(kinds('---\ncover:\n- c.jpnov\n- c.jpnov\n---\n'), [
+    'fence', 'cover', 'coverEntry', 'coverDuplicate', 'fence', 'blank',
+  ]);
+  assert.deepEqual(kinds('---\ncover:\n- a.jpnov\n---\na.jpnov\n'), [
+    'fence', 'cover', 'coverEntry', 'fence', 'ok', 'blank',
+  ]);
+});
+
+test('cover: a duplicate key warns; a duplicate bare key mutes its items (no orphan cascade)', () => {
+  assert.deepEqual(kinds('---\ncover:\n- c1.jpnov\ncover:\n- c2.jpnov\n---\n'), [
+    'fence', 'cover', 'coverEntry', DUP_COVER, DUP_COVER, 'fence', 'blank',
+  ]);
+  // A second BARE key is the only duplicate shape left; each `cover: value` line is its own error.
+  assert.deepEqual(kinds('---\ncover:\ncover:\n---\n'), ['fence', 'cover', DUP_COVER, 'fence', 'blank']);
+});
+
+test('cover: an unterminated front matter still parses its list', () => {
+  assert.deepEqual(kinds('---\ncover:\n- c.jpnov\n'), [
+    { error: { code: 'jpbook.metaUnterminated', args: [] } }, 'cover', 'coverEntry', 'blank',
+  ]);
+});
+
+test('coverPathOf spans the PATH only, past the marker and any leading whitespace', () => {
+  const lines = parseJpbook('---\ncover:\n  - src/c2.jpnov\n---\n').lines;
+  const item = lines[2];
+  assert.ok(item);
+  assert.deepEqual(coverPathOf(item), {
+    value: 'src/c2.jpnov',
+    range: { startChar: 4, endChar: 16 },
+  });
+  // The span ends where the trimmed line does — only the marker is excluded.
+  assert.equal(coverPathOf(item)?.range.endChar, item.range.endChar);
+  assert.ok(isCover(item));
+  const fence = lines[0];
+  assert.ok(fence);
+  // The fence IS item-shaped (`coverShape('---')` slices `--`); what makes this null is the
+  // line's KIND. Never relax that guard back to a shape test.
+  assert.equal(coverPathOf(fence), null);
+});
+
+test('coverPathOf returns null for the bare key line (no path to point at)', () => {
+  const key = parseJpbook('---\ncover:\n- c.jpnov\n---\n').lines[1];
+  assert.ok(key);
+  assert.equal(key.kind, 'cover');
+  assert.equal(isCover(key), false);
+  assert.equal(coverPathOf(key), null);
 });
 
 // --- metaRegionOf ------------------------------------------------------------
@@ -307,7 +457,7 @@ test('completeEntryLine respects the cap', () => {
 
 test('completeMetaLine offers every key on an empty line, inserted as "key: "', () => {
   const got = completeMetaLine('');
-  assert.deepEqual(got.map((c) => c.label), ['title', 'author', 'header', 'pageNumber', 'pageNumberFormat', 'divider']);
+  assert.deepEqual(got.map((c) => c.label), [...FRONT_MATTER_KEYS]);
   const first = got[0];
   assert.ok(first);
   assert.equal(first.insertText, 'title: ');

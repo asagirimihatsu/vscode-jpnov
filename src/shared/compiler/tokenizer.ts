@@ -40,7 +40,8 @@ export type TokenKind =
   | 'pageBreak'
   | 'indent'
   | 'indentBlockStart'
-  | 'indentBlockEnd';
+  | 'indentBlockEnd'
+  | 'valueField';
 
 interface TokenBase {
   readonly kind: TokenKind;
@@ -213,6 +214,18 @@ export interface IndentBlockEndToken extends TokenBase {
   readonly kind: 'indentBlockEnd';
 }
 
+/**
+ * Value display ［＃ここに「題名／著者／総ページ数」の値を表示］ — a standalone command that
+ * renders as text: the html build substitutes the book's value on cover pages, every other
+ * compile (preview, body chapters, EPUB, the issue scans) the fixed placeholder from
+ * {@link VALUE_FIELD_PLACEHOLDERS} — a cover template serves many books, so the editor side
+ * is bookless by design. The `.txt` build keeps the annotation verbatim like all others.
+ */
+export interface ValueFieldToken extends TokenBase {
+  readonly kind: 'valueField';
+  readonly field: ValueField;
+}
+
 export type Token =
   | TextToken
   | RubyExplicitToken
@@ -232,7 +245,8 @@ export type Token =
   | PageBreakToken
   | IndentToken
   | IndentBlockStartToken
-  | IndentBlockEndToken;
+  | IndentBlockEndToken
+  | ValueFieldToken;
 
 // Full-width annotation/ruby markers (see codepoints in the locked spec).
 const OPEN_BRACKET = '［';
@@ -255,11 +269,39 @@ const ITALIC = '斜体';
 const TCY = '縦中横';
 const LEFT_RUBY_OPEN = 'の左に「';
 const LEFT_RUBY_CLOSE = '」のルビ';
+const VALUE_OPEN = 'ここに「';
+const VALUE_CLOSE = '」の値を表示';
 
 /** The three 通常の見出し literals; `level` = index + 1 (大=1, 中=2, 小=3). Shared with the
  * tmLanguage heading rule via the grammar-sync test. */
 export const HEADING_LITERALS = ['大見出し', '中見出し', '小見出し'] as const;
 export type HeadingLevel = 1 | 2 | 3;
+
+/**
+ * The value fields ［＃ここに「…」の値を表示］ accepts, as ONE source: `name` is what the
+ * author writes, `field` is what the book supplies, `stand` is what a bookless compile
+ * substitutes. A field's own name doubles as its stand-in, except the page count, which has
+ * no text form. The two lookups below derive from this, so they cannot drift apart.
+ */
+const VALUE_FIELDS = [
+  { name: '題名', field: 'title', stand: '題名' },
+  { name: '著者', field: 'author', stand: '著者' },
+  { name: '総ページ数', field: 'totalPages', stand: 'NaN' },
+] as const;
+
+export type ValueField = (typeof VALUE_FIELDS)[number]['field'];
+
+/** Accepted JA names; shared with the tmLanguage rule via grammar-sync. A Map, not an object:
+ *  the name comes from the DOCUMENT, where `toString` would hit Object.prototype. */
+export const VALUE_FIELD_BY_NAME: ReadonlyMap<string, ValueField> = new Map(
+  VALUE_FIELDS.map((f) => [f.name, f.field]),
+);
+
+/** The bookless stand-ins (preview / body chapters / EPUB / the issue scans), keyed to match
+ *  the per-book `values` the cover compile passes instead. */
+export const VALUE_FIELD_PLACEHOLDERS: Readonly<Record<ValueField, string>> = Object.fromEntries(
+  VALUE_FIELDS.map((f) => [f.field, f.stand]),
+) as Record<ValueField, string>;
 
 /** The heading level `s` names, or null when `s` is not one of {@link HEADING_LITERALS}. */
 function headingLevelOf(s: string): HeadingLevel | null {
@@ -332,6 +374,16 @@ function connectorMatches(family: 'ni' | 'ha' | null, channel: Channel): boolean
 function classifyAnnotation(inner: string, raw: string, atLineStart: boolean): Token {
   if (inner === PAGE_BREAK) {
     return { kind: 'pageBreak', raw };
+  }
+
+  // Value display ［＃ここに「題名」の値を表示］ — a closed name set; an unknown name greys
+  // out like any mistyped annotation. ここに… collides with no other branch's literals.
+  if (inner.startsWith(VALUE_OPEN) && inner.endsWith(VALUE_CLOSE)) {
+    const field = VALUE_FIELD_BY_NAME.get(inner.slice(VALUE_OPEN.length, inner.length - VALUE_CLOSE.length));
+    if (field !== undefined) {
+      return { kind: 'valueField', raw, field };
+    }
+    return { kind: 'comment', raw, inner };
   }
 
   // Corner-target postfix ［＃「対象」に傍点／の左に傍線／は太字…］.
@@ -814,6 +866,14 @@ export function findTcyIssues(src: string): TcyIssue[] {
       case 'brokenAnnotation':
         if (open !== null) {
           contentLen += Array.from(token.raw).length;
+          contentEnd = end;
+        }
+        break;
+      case 'valueField':
+        // Bookless length: the editor compile substitutes the placeholder, a cover build may
+        // run longer.
+        if (open !== null) {
+          contentLen += Array.from(VALUE_FIELD_PLACEHOLDERS[token.field]).length;
           contentEnd = end;
         }
         break;

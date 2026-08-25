@@ -46,7 +46,7 @@ function bookIdentifier(outRel: string): string {
 }
 
 /** The chapter file's own name (no directories, no `.jpnov`) — the nav label of last resort. */
-function chapterStem(fileName: string): string {
+export function chapterStem(fileName: string): string {
   const base = fileName.split('/').pop() ?? fileName;
   return base.endsWith('.jpnov') ? base.slice(0, -'.jpnov'.length) : base;
 }

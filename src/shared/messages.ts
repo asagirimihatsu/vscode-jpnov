@@ -54,6 +54,10 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return `invalid value "${a(1)}" for ${a(0)} (allowed: ${a(2)})`;
     case 'jpbook.metaUnterminated':
       return 'unterminated metadata block (missing a closing ---)';
+    case 'jpbook.coverItemWithoutKey':
+      return `a "- " item needs a bare "cover:" line above it; any other key ends the list: ${a(0)}`;
+    case 'jpbook.coverNeedsList':
+      return `write "cover:" alone, then one "- path" line per cover file: ${a(0)}`;
     case 'path.empty':
       return `${englishLabel(args[0] as LabelId)} must not be empty`;
     case 'path.rootDot':

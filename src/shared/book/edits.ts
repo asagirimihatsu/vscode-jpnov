@@ -4,14 +4,21 @@
  * `WorkspaceEdit` (text stays the single source of truth — the panel and code mode can
  * never disagree). Metadata is UPSERT-ONLY by design: an existing key is edited in place
  * (its line never moves), an absent key is appended, and nothing here ever deletes or
- * reorders a metadata line — authors who care about metadata layout use code mode.
+ * reorders a metadata line — authors who care about metadata layout use code mode. The
+ * entry planners take an {@link EntryList} (chapters = body lines, covers = the `- path`
+ * items under `cover:`) and never touch the other list.
  */
 import {
-  isChapter,
+  COVER_KEY,
+  coverPathOf,
+  entryPathOf,
+  isCover,
+  isEntryOf,
   META_KEYS,
   metaKeyOf,
   metaRegionOf,
   parseJpbook,
+  type EntryList,
   type JpbookMeta,
   type MetaKey,
   type ParsedLine,
@@ -23,6 +30,9 @@ export interface TextReplace {
   readonly end: { readonly line: number; readonly character: number };
   readonly newText: string;
 }
+
+/** README-style cover item prefix, used when the list has no existing item to mirror. */
+const COVER_ITEM_PREFIX = '  - ';
 
 /** The document's newline flavour, so inserted lines never mix EOLs into a CRLF file. */
 function eolOf(text: string): string {
@@ -52,6 +62,11 @@ function appendAtEnd(lines: readonly ParsedLine[], eol: string, text: string): T
   return { start: at(last.line, last.raw.length), end: at(last.line, last.raw.length), newText: `${eol}${text}` };
 }
 
+/** Inserts `text` right after `pl`'s content — safe on the document's last line and in CRLF files. */
+function appendAfterLine(pl: ParsedLine, text: string): TextReplace {
+  return { start: at(pl.line, pl.raw.length), end: at(pl.line, pl.raw.length), newText: text };
+}
+
 /**
  * Sets `key` to `value` (canonical `key: value` form). The FIRST occurrence of the key —
  * the one the parser lets win — is rewritten in place; an absent key is appended at the
@@ -69,56 +84,76 @@ export function upsertMeta(text: string, key: MetaKey, value: string): TextRepla
       return { start: at(pl.line, pl.range.startChar), end: at(pl.line, pl.range.endChar), newText: entry };
     }
   }
+  return insertMetaBlock(parsed.lines, eol, entry);
+}
 
-  const region = metaRegionOf(parsed.lines);
+/** Inserts front-matter line(s) at the end of the block, creating the block when absent. */
+function insertMetaBlock(lines: readonly ParsedLine[], eol: string, block: string): TextReplace {
+  const region = metaRegionOf(lines);
   if (region === null) {
     // No front matter: create the block above everything (the fence must be the first
     // non-blank line, and line 0 always satisfies that).
-    return { start: at(0, 0), end: at(0, 0), newText: `---${eol}${entry}${eol}---${eol}` };
+    return { start: at(0, 0), end: at(0, 0), newText: `---${eol}${block}${eol}---${eol}` };
   }
   if (region.close !== null) {
-    return { start: at(region.close, 0), end: at(region.close, 0), newText: `${entry}${eol}` };
+    return { start: at(region.close, 0), end: at(region.close, 0), newText: `${block}${eol}` };
   }
   // Unterminated block (an Error state): everything below the fence is already metadata
   // territory, so appending at the end of the document stays inside it.
-  return appendAtEnd(parsed.lines, eol, entry);
+  return appendAtEnd(lines, eol, block);
 }
 
-/** Chapter paths already listed — the set GUI adds dedupe against. */
-export function listedChapters(lines: readonly ParsedLine[]): Set<string> {
-  return new Set(lines.filter(isChapter).map((pl) => pl.value));
+/** Paths already in `list` (a cover item's path excludes its marker) — the set GUI adds dedupe against. */
+export function listedEntries(lines: readonly ParsedLine[], list: EntryList): Set<string> {
+  return new Set(lines.filter(isEntryOf(list)).map((pl) => entryPathOf(pl)?.value ?? pl.value));
 }
 
 /**
- * Appends chapters (root-relative paths) at the end of the document, skipping any already
- * listed (a GUI add must not manufacture `duplicate` warnings). Null when nothing new.
+ * Appends entries (root-relative paths) to `list`, skipping any already listed there (a GUI
+ * add must not manufacture `duplicate` warnings). Chapters go at the end of the document;
+ * covers after the open list's last item (its indent and marker mirrored), or as a new
+ * `cover:` key at the end of the front matter. Null when nothing is new.
  */
-export function appendChapters(text: string, rels: readonly string[]): TextReplace | null {
+export function appendEntries(text: string, list: EntryList, rels: readonly string[]): TextReplace | null {
   const parsed = parseJpbook(text);
   const eol = eolOf(text);
-  const listed = listedChapters(parsed.lines);
+  const listed = listedEntries(parsed.lines, list);
   const fresh = rels.filter((rel) => !listed.has(rel));
   if (fresh.length === 0) {
     return null;
   }
+  if (list === 'chapters') {
+    return appendAtEnd(parsed.lines, eol, fresh.join(eol));
+  }
 
-  return appendAtEnd(parsed.lines, eol, fresh.join(eol));
+  // Only the first bare `cover:` opens a list (a repeat is a muted warning), so every
+  // `isCover` line belongs to it.
+  const key = parsed.lines.find((pl) => pl.kind === 'cover');
+  if (key === undefined) {
+    return insertMetaBlock(parsed.lines, eol, [`${COVER_KEY}:`, ...fresh.map((rel) => `${COVER_ITEM_PREFIX}${rel}`)].join(eol));
+  }
+  const items = parsed.lines.filter(isCover);
+  const last = items[items.length - 1];
+  const path = last === undefined ? null : coverPathOf(last);
+  const prefix = last === undefined || path === null ? COVER_ITEM_PREFIX : last.raw.slice(0, path.range.startChar);
+  return appendAfterLine(last ?? key, fresh.map((rel) => `${eol}${prefix}${rel}`).join(''));
 }
 
-/** The chapter line at `line`, or null — the guard every mover uses. */
-function chapterAt(lines: readonly ParsedLine[], line: number): ParsedLine | null {
+/** The entry line of `list` at `line`, or null — the guard every mover uses (other lists are null). */
+function entryAt(lines: readonly ParsedLine[], list: EntryList, line: number): ParsedLine | null {
   const pl = lines[line];
-  return pl !== undefined && isChapter(pl) ? pl : null;
+  return pl !== undefined && isEntryOf(list)(pl) ? pl : null;
 }
 
 /**
- * Deletes the chapter line entirely (the file itself is untouched). The trailing newline
+ * Deletes the entry line entirely (the file itself is untouched). The trailing newline
  * goes with it; deleting the document's last line swallows the PRECEDING newline instead,
- * so no blank tail accumulates. Null when `line` is not a chapter.
+ * so no blank tail accumulates. A cover list emptied this way keeps its bare `cover:`
+ * line. Null when `line` is not an entry of `list`.
  */
-export function removeChapter(text: string, line: number): TextReplace | null {
+export function removeEntry(text: string, list: EntryList, line: number): TextReplace | null {
   const parsed = parseJpbook(text);
-  const pl = chapterAt(parsed.lines, line);
+  const pl = entryAt(parsed.lines, list, line);
   if (pl === null) {
     return null;
   }
@@ -131,55 +166,55 @@ export function removeChapter(text: string, line: number): TextReplace | null {
 }
 
 /**
- * Moves the chapter at `fromLine` to sit BEFORE the chapter at `beforeLine` (`null` =
- * after the last chapter). Planned as delete + insert against the ORIGINAL text — the
- * ranges never overlap, so they apply as one `WorkspaceEdit`. Blank lines and metadata
- * stay where they are; only the chapter line travels. Null when the move is a no-op or
- * either line is not a chapter.
+ * Moves the entry at `fromLine` to sit BEFORE the entry at `beforeLine` (`null` = after the
+ * list's last entry). Planned as delete + insert against the ORIGINAL text — the ranges
+ * never overlap, so they apply as one `WorkspaceEdit`. Blank lines and metadata stay where
+ * they are; only the entry line travels (with its own indent and marker). Null when the
+ * move is a no-op or either line is not an entry of `list`.
  */
-export function moveChapterTo(
+export function moveEntryTo(
   text: string,
+  list: EntryList,
   fromLine: number,
   beforeLine: number | null,
 ): TextReplace[] | null {
   const parsed = parseJpbook(text);
   const eol = eolOf(text);
-  const from = chapterAt(parsed.lines, fromLine);
+  const from = entryAt(parsed.lines, list, fromLine);
   if (from === null) {
     return null;
   }
 
-  const removal = removeChapter(text, fromLine);
+  const removal = removeEntry(text, list, fromLine);
   if (removal === null) {
     return null;
   }
 
+  const entries = parsed.lines.filter(isEntryOf(list));
   if (beforeLine !== null) {
-    const target = chapterAt(parsed.lines, beforeLine);
+    const target = entryAt(parsed.lines, list, beforeLine);
     if (target === null || beforeLine === fromLine) {
-      return null; // not a chapter, or dropping onto itself
+      return null; // not an entry of this list, or dropping onto itself
     }
-    // No-op if `beforeLine` is already the chapter immediately after `fromLine`. Blank lines can sit
-    // between chapters, so compare chapter ORDER, not raw line adjacency (fromLine + 1).
-    const chapters = parsed.lines.filter(isChapter);
-    const fromIdx = chapters.findIndex((pl) => pl.line === fromLine);
-    if (chapters[fromIdx + 1]?.line === beforeLine) {
+    // No-op if `beforeLine` is already the entry immediately after `fromLine`. Blank lines can sit
+    // between entries, so compare list ORDER, not raw line adjacency (fromLine + 1).
+    const fromIdx = entries.findIndex((pl) => pl.line === fromLine);
+    if (entries[fromIdx + 1]?.line === beforeLine) {
       return null;
     }
     return [removal, { start: at(beforeLine, 0), end: at(beforeLine, 0), newText: `${from.raw}${eol}` }];
   }
 
-  const chapters = parsed.lines.filter(isChapter);
-  const last = chapters[chapters.length - 1];
+  const last = entries[entries.length - 1];
   if (last === undefined || last.line === fromLine) {
-    return null; // already the last chapter
+    return null; // already the last entry
   }
-  return [removal, { start: at(last.line, last.raw.length), end: at(last.line, last.raw.length), newText: `${eol}${from.raw}` }];
+  return [removal, appendAfterLine(last, `${eol}${from.raw}`)];
 }
 
-/** The chapter line numbers in document order — the panel's row → line mapping. */
-export function chapterLines(lines: readonly ParsedLine[]): number[] {
-  return lines.filter(isChapter).map((pl) => pl.line);
+/** The line numbers of `list`'s entries in document order — the panel's row → line mapping. */
+export function entryLines(lines: readonly ParsedLine[], list: EntryList): number[] {
+  return lines.filter(isEntryOf(list)).map((pl) => pl.line);
 }
 
 /** Fixed display order + current values for the panel's metadata rows (absent = undefined). */

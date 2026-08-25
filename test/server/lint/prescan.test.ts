@@ -28,7 +28,7 @@ test('rubyKana hiragana mode: katakana / mixed / non-kana readings fail (ー sta
 test('rubyKana katakana mode: hiragana readings fail (ー stays neutral)', () => {
   assert.deepEqual(flagged(rubyKanaScan, 'カード', { mode: 'katakana' }), []);
   assert.deepEqual(flagged(rubyKanaScan, 'らーめん', { mode: 'katakana' }), ['らーめん']);
-  assert.deepEqual(flagged(rubyKanaScan, 'みはつ', { mode: 'katakana' }), ['みはつ']);
+  assert.deepEqual(flagged(rubyKanaScan, 'たろう', { mode: 'katakana' }), ['たろう']);
 });
 
 const BAR = { mode: 'horizontalBar' } as const; // the shipped default: ― U+2015

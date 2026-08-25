@@ -90,3 +90,35 @@ test('normalizeFsPath flips Windows separators only', () => {
   assert.equal(normalizeFsPath('C:\\ws\\novel\\a.jpnov'), 'C:/ws/novel/a.jpnov');
   assert.equal(normalizeFsPath('/ws/novel/a.jpnov'), '/ws/novel/a.jpnov');
 });
+
+test('cover entries rename too, the "- " / "cover: " marker surviving untouched', () => {
+  const text = ['---', 'cover:', '  - src/c1.jpnov', '  - src/c1.jpnov', '---', 'src/a.jpnov'].join('\n');
+  const plan = planBookEdits(ROOT, text, [R('/ws/novel/src', '/ws/novel/前付')]);
+  // The duplicate moves too — it must keep duplicating what it did.
+  assert.deepEqual(plan.edits, [
+    { line: 2, startChar: 4, endChar: 16, newText: '前付/c1.jpnov' },
+    { line: 3, startChar: 4, endChar: 16, newText: '前付/c1.jpnov' },
+    { line: 5, startChar: 0, endChar: 11, newText: '前付/a.jpnov' },
+  ]);
+});
+
+test('a single-file cover list renames like any other item', () => {
+  const plan = planBookEdits(ROOT, '---\ncover:\n- c.jpnov\n---\na.jpnov', [
+    R('/ws/novel/c.jpnov', '/ws/novel/front/c.jpnov'),
+  ]);
+  assert.deepEqual(plan.edits, [{ line: 2, startChar: 2, endChar: 9, newText: 'front/c.jpnov' }]);
+});
+
+test('a cover leaving the workspace folder is reported, never rewritten', () => {
+  const plan = planBookEdits(ROOT, '---\ncover:\n- c.jpnov\n---\na.jpnov', [
+    R('/ws/novel/c.jpnov', '/elsewhere/c.jpnov'),
+  ]);
+  assert.deepEqual(plan, { edits: [], unrepresentable: ['c.jpnov'] });
+});
+
+test('cover lines the parser rejected are never rewritten', () => {
+  // Orphan and muted items are problem lines, so neither is rewritten.
+  const text = ['---', 'title: t', '- c.jpnov', 'cover:', '- c.jpnov', 'cover:', '- c.jpnov', '---'].join('\n');
+  const plan = planBookEdits(ROOT, text, [R('/ws/novel/c.jpnov', '/ws/novel/z.jpnov')]);
+  assert.deepEqual(plan.edits.map((e) => e.line), [4]); // only the one real cover entry
+});

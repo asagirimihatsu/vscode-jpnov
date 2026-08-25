@@ -11,7 +11,7 @@
  * which owns the list footer's disabled state after each list render and optimistic toggle.
  *
  * Layout is master/detail: a LIST screen (per-root book rows) drills into a DETAIL screen (one
- * book's chapters + Book Info); both carry a pinned footer with the build actions, the list's
+ * book's covers, chapters + Book Info); both carry a pinned footer with the build actions, the list's
  * adding the selection links. Localized strings arrive once via the host's `__INIT` bootstrap;
  * icons are codicons (`CODICON`).
  */
@@ -21,8 +21,9 @@ import type {
   BooksOutbound,
   BookVM,
   BuildAction,
-  ChapterVM,
   DetailMessage,
+  EntryList,
+  EntryVM,
   MetaVM,
   StateMessage,
   WelcomeAction,
@@ -61,6 +62,12 @@ function poster(m: BooksOutbound): () => void {
 
 const L = (window.__INIT as BooksInit).labels;
 
+/** Per-list strings: the two entry sections render identically, only the words differ. */
+const LIST_TEXT: Record<EntryList, { title: string; add: string; create: string; open: string; empty: string }> = {
+  chapters: { title: L.chapters, add: L.addChapters, create: L.newChapter, open: L.openChapter, empty: L.noChapters },
+  covers: { title: L.covers, add: L.addCovers, create: L.newCover, open: L.openCover, empty: L.noCovers },
+};
+
 /** The root element, guaranteed present (the shell always emits `<div id="app">`). Returning a
  * non-null type keeps it narrowed inside the render closures below. */
 function requireApp(): HTMLElement {
@@ -77,7 +84,8 @@ let detail: DetailMessage | null = null;
 let screen: 'list' | 'detail' = 'list';
 let lastDetailUri: string | null = null;
 let infoOpen = false;
-let dragLine: number | null = null;
+let coverOpen = false; // the cover list is rarely touched, so it folds like Book Info
+let drag: { readonly list: EntryList; readonly line: number } | null = null;
 let detailWanted = false; // true while the detail screen is intended (user click, or an adopted host reveal)
 
 /** The attributes/handlers this panel sets; keys mirror the DOM attribute names, so a grep for
@@ -276,12 +284,12 @@ function applyControls(): void {
     }
   }
 }
-// The chapter line after the given one in the current detail (null if it is the last) — DnD target.
-function nextLine(line: number): number | null {
-  const chs = detail?.chapters ?? [];
-  for (let i = 0; i < chs.length; i++) {
-    if (chs[i]?.line === line) {
-      return i + 1 < chs.length ? chs[i + 1]?.line ?? null : null;
+// The entry after the given one in the current detail's list (null if it is the last) — DnD target.
+function nextLine(list: EntryList, line: number): number | null {
+  const entries = detail?.[list] ?? [];
+  for (let i = 0; i < entries.length; i++) {
+    if (entries[i]?.line === line) {
+      return i + 1 < entries.length ? entries[i + 1]?.line ?? null : null;
     }
   }
   return null;
@@ -421,7 +429,7 @@ function renderDetail(): void {
     return;
   }
   const d = detail;
-  dragLine = null; // a rebuild mid-drag (e.g. an edit-triggered refresh) cancels the in-progress drag
+  drag = null; // a rebuild mid-drag (e.g. an edit-triggered refresh) cancels the in-progress drag
   const hdr = h('div', { class: 'dhdr' },
     iconBtn('chevL', L.back, () => {
       detailWanted = false;
@@ -432,104 +440,143 @@ function renderDetail(): void {
       focusFk('book:' + (lastDetailUri ?? ''));
     }, { 'data-fk': 'back' }),
     h('div', { class: 'dtitle' }, d.title));
-  // Book Info: collapsible (collapsed by default), ABOVE the table of contents.
+  // Book Info: collapsible (collapsed by default), ABOVE the lists.
   const info = h('div', { class: 'section' },
-    h('button', {
-      class: 'shead sectoggle',
-      'aria-expanded': infoOpen,
-      'data-fk': 'infohead',
-      onClick: () => {
-        infoOpen = !infoOpen;
-        const c = capture();
-        render();
-        restore(c);
-      },
-    },
-    icon(infoOpen ? 'down' : 'chevR', 'caret'),
-    h('span', { class: 'stitle' }, L.bookInfo)),
+    h('div', { class: 'shead' }, disclosure(infoOpen, L.bookInfo, 'infohead', () => {
+      infoOpen = !infoOpen;
+    })),
     ...(infoOpen ? d.meta.map((mi) => metaRow(d, mi)) : []));
-  // Table of contents (chapters): always expanded; pick/create actions + per-row move/remove.
-  const chs = d.chapters;
-  const toc = h('div', { class: 'section' },
-    h('div', { class: 'shead' },
-      h('span', { class: 'stitle' }, L.chapters),
-      iconBtn('pick', L.addChapters, poster({ type: 'addChapters', uri: d.uri }), { 'data-fk': 'add' })),
-    chs.length === 0 && h('div', { class: 'empty' }, L.noChapters),
-    ...chs.map((ch, i) => chapterRow(d, ch, i, chs.length)),
-    h('button', {
-      class: 'row action',
-      'data-fk': 'newch',
-      onClick: poster({ type: 'createChapter', uri: d.uri }),
-    }, icon('newFile'), L.newChapter));
-  app.replaceChildren(scrollPane(hdr, info, toc), footer(d.uri));
+  // Covers precede chapters, as in the printed book. The cover list folds like Book Info; the
+  // chapter list is always open.
+  app.replaceChildren(scrollPane(hdr, info, listSection(d, 'covers'), listSection(d, 'chapters')), footer(d.uri));
 }
 
-function chapterRow(d: DetailMessage, ch: ChapterVM, idx: number, count: number): HTMLElement {
+/** The disclosure button of a collapsible section (caret + title); `flip` toggles the state it reflects. */
+function disclosure(open: boolean, title: string, fkKey: string, flip: () => void): HTMLButtonElement {
+  return h('button', {
+    class: 'sectoggle',
+    'aria-expanded': open,
+    'data-fk': fkKey,
+    onClick: () => {
+      flip();
+      const c = capture();
+      render();
+      restore(c);
+    },
+  },
+  icon(open ? 'down' : 'chevR', 'caret'),
+  h('span', { class: 'stitle' }, title));
+}
+
+/** Focus keys carry the list: a file may be both a cover and a chapter, so its URI alone is not unique. */
+function fk(list: EntryList, part: 'open' | 'up' | 'down' | 'rm', fileUri: string): string {
+  return list + ':' + part + ':' + fileUri;
+}
+
+/**
+ * One entry list: a header with the pick action, the rows (or the empty text), and the create-file
+ * tail row. The cover list is collapsible — folded, only its disclosure shows.
+ */
+function listSection(d: DetailMessage, list: EntryList): HTMLElement {
+  const text = LIST_TEXT[list];
+  const entries = d[list];
+  const collapsible = list === 'covers';
+  const open = !collapsible || coverOpen;
+  let title: HTMLElement;
+  if (collapsible) {
+    title = disclosure(coverOpen, text.title, 'coverhead', () => {
+      coverOpen = !coverOpen;
+    });
+  } else {
+    title = h('span', { class: 'stitle' }, text.title);
+  }
+  const body: Child[] = [];
+  if (open) {
+    body.push(
+      entries.length === 0 && h('div', { class: 'empty' }, text.empty),
+      ...entries.map((e, i) => entryRow(d, list, e, i, entries.length)),
+      h('button', {
+        class: 'row action',
+        'data-fk': list + ':new',
+        onClick: poster({ type: 'createEntry', uri: d.uri, list }),
+      }, icon('newFile'), text.create),
+    );
+  }
+  return h('div', { class: 'section' },
+    h('div', { class: 'shead' },
+      title,
+      open && iconBtn('pick', text.add, poster({ type: 'addEntries', uri: d.uri, list }), { 'data-fk': list + ':add' })),
+    ...body);
+}
+
+function entryRow(d: DetailMessage, list: EntryList, e: EntryVM, idx: number, count: number): HTMLElement {
   const grip = icon('grip', 'grip');
-  const row = h('div', { class: 'row chapter' + (ch.missing ? ' missing' : '') },
+  const row = h('div', { class: 'row entry' + (e.missing ? ' missing' : '') },
     grip,
     h('button', {
-      class: 'chmain',
-      title: ch.missing ? (L.missing + ': ' + ch.name) : L.openChapter,
-      'aria-label': ch.name,
-      'data-fk': 'chopen:' + ch.fileUri,
-      onClick: poster({ type: 'openFile', uri: ch.fileUri }),
+      class: 'emain',
+      title: e.missing ? (L.missing + ': ' + e.name) : LIST_TEXT[list].open,
+      'aria-label': e.name,
+      'data-fk': fk(list, 'open', e.fileUri),
+      onClick: poster({ type: 'openFile', uri: e.fileUri }),
     },
-    ch.missing && icon('warn', 'warn'),
+    e.missing && icon('warn', 'warn'),
     h('div', { class: 'maincol' },
       h('div', { class: 'title' },
-        ch.folder !== '' && h('span', { class: 'dir' }, ch.folder + '/'),
-        ch.name))),
-    // Focus keys use the chapter's fileUri (stable across a move) so keyboard focus follows the row.
+        e.folder !== '' && h('span', { class: 'dir' }, e.folder + '/'),
+        e.name))),
+    // Focus keys use the entry's fileUri (stable across a move) so keyboard focus follows the row.
     h('div', { class: 'acts' },
-      iconBtn('up', L.moveUp, poster({ type: 'moveChapter', uri: d.uri, line: ch.line, dir: -1 }),
-        { 'data-fk': 'ch:' + ch.fileUri + ':up', disabled: idx === 0 }),
-      iconBtn('down', L.moveDown, poster({ type: 'moveChapter', uri: d.uri, line: ch.line, dir: 1 }),
-        { 'data-fk': 'ch:' + ch.fileUri + ':down', disabled: idx === count - 1 }),
-      iconBtn('close', L.remove, poster({ type: 'removeChapter', uri: d.uri, line: ch.line }),
-        { 'data-fk': 'ch:' + ch.fileUri + ':rm' })));
+      iconBtn('up', L.moveUp, poster({ type: 'moveEntry', uri: d.uri, list, line: e.line, dir: -1 }),
+        { 'data-fk': fk(list, 'up', e.fileUri), disabled: idx === 0 }),
+      iconBtn('down', L.moveDown, poster({ type: 'moveEntry', uri: d.uri, list, line: e.line, dir: 1 }),
+        { 'data-fk': fk(list, 'down', e.fileUri), disabled: idx === count - 1 }),
+      iconBtn('close', L.remove, poster({ type: 'removeEntry', uri: d.uri, list, line: e.line }),
+        { 'data-fk': fk(list, 'rm', e.fileUri) })));
+
   // Drag wiring attaches after construction — the handlers mutate `row` from both elements.
   grip.draggable = true;
-  grip.addEventListener('dragstart', (e: DragEvent) => {
-    dragLine = ch.line;
-    e.dataTransfer?.setData('text/plain', '');
-    if (e.dataTransfer) {
-      e.dataTransfer.effectAllowed = 'move';
+  grip.addEventListener('dragstart', (ev: DragEvent) => {
+    drag = { list, line: e.line };
+    ev.dataTransfer?.setData('text/plain', '');
+    if (ev.dataTransfer) {
+      ev.dataTransfer.effectAllowed = 'move';
     }
     row.classList.add('dragging');
   });
   grip.addEventListener('dragend', () => {
-    dragLine = null;
+    drag = null;
     row.classList.remove('dragging');
     clearDrop();
   });
-  // Drop target: the pointer in a row's top half inserts before it, bottom half after it (before next).
-  row.addEventListener('dragover', (e: DragEvent) => {
-    if (dragLine === null || dragLine === ch.line) {
+  // Drop target: the pointer in a row's top half inserts before it, bottom half after it (before
+  // next). Rows of the other list never preventDefault, so the browser refuses the drop there.
+  row.addEventListener('dragover', (ev: DragEvent) => {
+    if (drag?.list !== list || drag.line === e.line) {
       return;
     }
-    e.preventDefault();
-    if (e.dataTransfer) {
-      e.dataTransfer.dropEffect = 'move';
+    ev.preventDefault();
+    if (ev.dataTransfer) {
+      ev.dataTransfer.dropEffect = 'move';
     }
     const r = row.getBoundingClientRect();
-    const after = (e.clientY - r.top) > r.height / 2;
+    const after = (ev.clientY - r.top) > r.height / 2;
     row.classList.toggle('drop-after', after);
     row.classList.toggle('drop-before', !after);
   });
   row.addEventListener('dragleave', () => {
     row.classList.remove('drop-before', 'drop-after');
   });
-  row.addEventListener('drop', (e: DragEvent) => {
-    if (dragLine === null) {
+  row.addEventListener('drop', (ev: DragEvent) => {
+    if (drag?.list !== list) {
       return;
     }
-    e.preventDefault();
+    ev.preventDefault();
     const r = row.getBoundingClientRect();
-    const after = (e.clientY - r.top) > r.height / 2;
+    const after = (ev.clientY - r.top) > r.height / 2;
     row.classList.remove('drop-before', 'drop-after');
-    post({ type: 'moveChapterTo', uri: d.uri, line: dragLine, before: after ? nextLine(ch.line) : ch.line });
-    dragLine = null;
+    post({ type: 'moveEntryTo', uri: d.uri, list, line: drag.line, before: after ? nextLine(list, e.line) : e.line });
+    drag = null;
   });
   return row;
 }
@@ -590,7 +637,8 @@ window.addEventListener('message', (e: MessageEvent) => {
         render();
         restore(c2);
       } else {
-        infoOpen = false; // a freshly opened book starts collapsed
+        infoOpen = false; // a freshly opened book starts with both collapsible sections folded
+        coverOpen = false;
         render();
         focusFk('back');
       }

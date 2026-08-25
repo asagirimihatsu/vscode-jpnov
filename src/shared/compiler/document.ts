@@ -3,7 +3,7 @@ import { applyAutoTcy } from './autoTcy.ts';
 import type { BuildChrome } from './chrome.ts';
 import { emrProbe, stylesheet } from './css.ts';
 import type { PaperOrientation, PaperSize } from './geometry.ts';
-import { buildRows, paginate, pagesToHtml, type Row } from './layout.ts';
+import { buildRows, paginate, pagesToHtml, type DisplayLine, type RenderPage, type Row } from './layout.ts';
 import { indentAnnotation, tokenize } from './tokenizer.ts';
 
 export interface BookInput {
@@ -14,6 +14,16 @@ export interface BookInput {
    * server can assign `meta.divider` verbatim under exactOptionalPropertyTypes.
    */
   readonly divider?: string | undefined;
+  /**
+   * The `cover` sources, rendered by the html build as unnumbered front pages (txt and EPUB
+   * never see them). `title`/`author` are the ［＃ここに「…」の値を表示］ substitutions,
+   * pre-resolved by the caller. Absent/empty = no cover pages.
+   */
+  readonly cover?: {
+    readonly files: readonly { readonly name: string; readonly src: string }[];
+    readonly title: string;
+    readonly author: string;
+  } | undefined;
 }
 
 /** The first (or last) non-blank line of a chapter source, `\r`-stripped; null when none. */
@@ -138,12 +148,16 @@ function glueRows(glue: string, dash: DashMode): Row[] {
  * page numbers, header) around that grid.
  *
  * Each book concatenates its `files[]` in order with {@link chapterGlue} between chapters
- * (a blank line, plus the book's divider where it applies); books are separated by a forced
- * page break. ［＃改ページ］ forces a page break. `kinsoku` selects the 禁則処理 tier of the line-break
- * engine; `autoTcy` runs the 自動縦中横 source rewrite per file before tokenizing
- * (the same front door as the `.txt` build and the preview). All options are required and
- * pre-resolved (the settings resolver is the only default layer); "off" is the explicit
- * all-off chrome. Pure + vscode-free.
+ * (a blank line, plus the book's divider where it applies); each book starts on a fresh
+ * page (the bodies paginate per book). ［＃改ページ］ forces a page break. A book's `cover`
+ * files render BEFORE its body as unnumbered, furniture-free pages, each starting on a
+ * fresh page; they compile AFTER the bodies are paginated, so ［＃ここに「総ページ数」の値を
+ * 表示］ substitutes the document's body page count — the same count the folio's
+ * `{totalPage}` shows. `kinsoku` selects the 禁則処理 tier of the line-break engine;
+ * `autoTcy` runs the 自動縦中横 source rewrite per file before tokenizing (the same front
+ * door as the `.txt` build and the preview). All options are required and pre-resolved (the
+ * settings resolver is the only default layer); "off" is the explicit all-off chrome.
+ * Pure + vscode-free.
  */
 export function renderBook(opts: {
   books: readonly BookInput[];
@@ -159,9 +173,9 @@ export function renderBook(opts: {
   fontFamily: string;
   chrome: BuildChrome;
 }): string {
-  const rows = opts.books.flatMap((book, bookIndex): Row[] => {
+  const bodyRowsOf = (book: BookInput): Row[] => {
     const sources = book.files.map((file) => applyAutoTcy(file.src, opts.autoTcy));
-    const bookRows = sources.flatMap((src, fileIndex): Row[] => {
+    return sources.flatMap((src, fileIndex): Row[] => {
       const glue = fileIndex > 0
         ? glueRows(
             chapterGlue(sources[fileIndex - 1] ?? '', src, book.divider ?? '', opts.charsPerLine),
@@ -170,10 +184,33 @@ export function renderBook(opts: {
         : [];
       return [...glue, ...buildRows(tokenize(src), { dash: opts.dash })];
     });
-    return bookIndex > 0 ? [{ kind: 'pagebreak' }, ...bookRows] : bookRows;
-  });
+  };
 
-  const pages = paginate(rows, opts.charsPerLine, opts.linesPerPage, opts.kinsoku);
+  const coverPagesOf = (book: BookInput, totalBody: number): DisplayLine[][] => {
+    const cover = book.cover;
+    if (cover === undefined || cover.files.length === 0) {
+      return [];
+    }
+    const values = { title: cover.title, author: cover.author, totalPages: String(totalBody) };
+    const rows = cover.files.flatMap((file, i): Row[] => {
+      const r = buildRows(tokenize(applyAutoTcy(file.src, opts.autoTcy)), { dash: opts.dash, values });
+      return i > 0 ? [{ kind: 'pagebreak' }, ...r] : r; // each cover file starts on a fresh page
+    });
+    return paginate(rows, opts.charsPerLine, opts.linesPerPage, opts.kinsoku);
+  };
+
+  // Bodies paginate FIRST — covers need the count. Per book is output-identical to one run
+  // with a pagebreak row at each seam: paginate flushes only non-empty pages.
+  const bodies = opts.books.map((book) => ({
+    book,
+    pages: paginate(bodyRowsOf(book), opts.charsPerLine, opts.linesPerPage, opts.kinsoku),
+  }));
+  const totalBody = bodies.reduce((n, b) => n + b.pages.length, 0);
+
+  const pages = bodies.flatMap(({ book, pages: bodyPages }): RenderPage[] => [
+    ...coverPagesOf(book, totalBody).map((lines): RenderPage => ({ lines, cover: true })),
+    ...bodyPages.map((lines): RenderPage => ({ lines })),
+  ]);
 
   // Blank-template normalization (single source): a template that is blank after trim
   // means "no folio", folded into the one `pageNumber === 'none'` gate so the

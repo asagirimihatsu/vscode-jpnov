@@ -65,6 +65,13 @@ export function renderMessage(msg: LocalizableMessage): string {
       return vscode.l10n.t('invalid value "{1}" for {0} (allowed: {2})', s(0), s(1), s(2));
     case 'jpbook.metaUnterminated':
       return vscode.l10n.t('unterminated metadata block (missing a closing ---)');
+    case 'jpbook.coverItemWithoutKey':
+      return vscode.l10n.t(
+        'a "- " item needs a bare "cover:" line above it; any other key ends the list: {0}',
+        s(0),
+      );
+    case 'jpbook.coverNeedsList':
+      return vscode.l10n.t('write "cover:" alone, then one "- path" line per cover file: {0}', s(0));
     case 'path.empty':
       return vscode.l10n.t('{0} must not be empty', labelText(a[0] as LabelId));
     case 'path.rootDot':

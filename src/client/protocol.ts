@@ -1,6 +1,7 @@
 /**
  * The host ↔ webview wire contract for the client's two webviews (the Books panel and the live
- * preview). PURE types + no imports: this module is compiled into BOTH the Node host bundle
+ * preview). PURE types + no imports (a type-only mirror of a shared literal union is fine, an
+ * import is not): this module is compiled into BOTH the Node host bundle
  * (view.ts / preview.ts, which post and receive these) and the browser webview bundles
  * (webview/book/main.ts, webview/preview/scroll.ts, which are the other end). It must therefore
  * stay vscode-free, node-free and DOM-free — only shapes crossing `postMessage`'s structured
@@ -28,14 +29,20 @@ export interface BookGroupVM {
   readonly books: readonly BookVM[];
 }
 
-/** One chapter row in a `detail`. */
-export interface ChapterVM {
+/** One chapter or cover row in a `detail`. */
+export interface EntryVM {
   readonly line: number;
   readonly name: string;
   readonly folder: string;
   readonly fileUri: string;
   readonly missing: boolean;
 }
+
+/**
+ * Which entry list a detail row or a panel verb refers to — also the `DetailMessage` field
+ * names. Mirrors `EntryList` in `#/shared/book/jpbook.ts` (this module imports nothing).
+ */
+export type EntryList = 'chapters' | 'covers';
 
 /** One Book-Info metadata row in a `detail` (`note` is the （既定）/（未設定） status beside the label). */
 export interface MetaVM {
@@ -60,12 +67,13 @@ export interface StateMessage {
   readonly groups: readonly BookGroupVM[];
 }
 
-/** Host → webview: one book's DETAIL screen (chapters + Book Info). */
+/** Host → webview: one book's DETAIL screen (covers, chapters + Book Info). */
 export interface DetailMessage {
   readonly type: 'detail';
   readonly uri: string;
   readonly title: string;
-  readonly chapters: readonly ChapterVM[];
+  readonly chapters: readonly EntryVM[];
+  readonly covers: readonly EntryVM[];
   readonly meta: readonly MetaVM[];
   /** Host-initiated open (create-book reveal, ready re-hydration): the webview adopts the
    *  intent instead of dropping the push as a stale race. Refresh re-pushes omit it. */
@@ -99,11 +107,18 @@ export type BooksOutbound =
   | { readonly type: 'closeDetail' }
   | { readonly type: 'openFile'; readonly uri: string }
   | { readonly type: 'editMeta'; readonly uri: string; readonly metaKey: string }
-  | { readonly type: 'addChapters'; readonly uri: string }
-  | { readonly type: 'createChapter'; readonly uri: string }
-  | { readonly type: 'removeChapter'; readonly uri: string; readonly line: number }
-  | { readonly type: 'moveChapter'; readonly uri: string; readonly line: number; readonly dir: -1 | 1 }
-  | { readonly type: 'moveChapterTo'; readonly uri: string; readonly line: number; readonly before: number | null }
+  // Entry-list verbs: `list` names the target list; `line` is the entry's document line.
+  | { readonly type: 'addEntries'; readonly uri: string; readonly list: EntryList }
+  | { readonly type: 'createEntry'; readonly uri: string; readonly list: EntryList }
+  | { readonly type: 'removeEntry'; readonly uri: string; readonly list: EntryList; readonly line: number }
+  | { readonly type: 'moveEntry'; readonly uri: string; readonly list: EntryList; readonly line: number; readonly dir: -1 | 1 }
+  | {
+    readonly type: 'moveEntryTo';
+    readonly uri: string;
+    readonly list: EntryList;
+    readonly line: number;
+    readonly before: number | null;
+  }
   | { readonly type: 'welcome'; readonly action: WelcomeAction };
 
 /**
@@ -131,6 +146,11 @@ export interface Labels {
   readonly remove: string;
   readonly missing: string;
   readonly noChapters: string;
+  readonly covers: string;
+  readonly addCovers: string;
+  readonly newCover: string;
+  readonly openCover: string;
+  readonly noCovers: string;
   readonly noBooksTitle: string;
   readonly noBooksBody: string;
   readonly createBook: string;

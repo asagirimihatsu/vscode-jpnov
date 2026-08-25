@@ -2,8 +2,8 @@
  * The "Books" panel: a client-owned WebviewView in the extension's own Activity Bar container
  * (`contributes.views.jpnov`, `"type": "webview"`, see package.json). It lists every buildable
  * book — one `*.jpbook` discovered under each workspace folder root — each with a checkbox, and
- * drills into a per-book DETAIL screen (chapters + Book Info). The bottom build bar renders ONLY
- * the checked books, to ONE format: "Build to PDF" (primary), "txt", "HTML", or "EPUB".
+ * drills into a per-book DETAIL screen (covers, chapters + Book Info). The bottom build bar
+ * renders ONLY the checked books, to ONE format: "Build to PDF" (primary), "txt", "HTML", or "EPUB".
  *
  * Split of concerns: the SERVER enumerates books
  * (`jpnov/listBooks`) and renders them (`jpnov/build`); this provider owns the VS Code UI and the
@@ -33,13 +33,21 @@ import {
   type ListBooksResult,
 } from '#/shared/protocol.ts';
 
-import { chapterLines, metaRows, moveChapterTo } from '#/shared/book/edits.ts';
-import { META_KEYS, parseJpbook, type MetaKey } from '#/shared/book/jpbook.ts';
+import { entryLines, metaRows, moveEntryTo } from '#/shared/book/edits.ts';
+import {
+  entryPathOf,
+  isEntryList,
+  META_KEYS,
+  parseJpbook,
+  type EntryList,
+  type MetaKey,
+  type ParsedLine,
+} from '#/shared/book/jpbook.ts';
 import { encodeTxt, TXT_ENCODING_DEFAULT, type TxtEncoding } from '#/shared/encoding.ts';
 import { errorText } from '#/shared/errors.ts';
 import { ocfZip } from '#/shared/compiler/epub.ts';
 
-import type { BookVM, BuildAction, ChapterVM, DetailMessage, MetaVM, StateMessage } from '../protocol.ts';
+import type { BookVM, BuildAction, DetailMessage, EntryVM, MetaVM, StateMessage } from '../protocol.ts';
 
 import { applyBookEdits, metaLabel, metaValueParts } from './manage.ts';
 import type { BookNode } from './nodes.ts';
@@ -368,20 +376,20 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       case 'editMeta':
         await this.dispatchEditMeta(msg.uri, msg.metaKey);
         break;
-      case 'addChapters':
-        await this.dispatchBook('jpbook.addChapters', msg.uri);
+      case 'addEntries':
+        await this.dispatchList('jpbook.addFiles', msg.uri, msg.list);
         break;
-      case 'createChapter':
-        await this.dispatchBook('jpbook.createFile', msg.uri);
+      case 'createEntry':
+        await this.dispatchList('jpbook.createFile', msg.uri, msg.list);
         break;
-      case 'removeChapter':
-        await this.dispatchChapter('jpbook.removeChapter', msg.uri, msg.line);
+      case 'removeEntry':
+        await this.dispatchEntry('jpbook.removeEntry', msg.uri, msg.list, msg.line);
         break;
-      case 'moveChapter':
-        await this.dispatchChapter(msg.dir === -1 ? 'jpbook.moveChapterUp' : 'jpbook.moveChapterDown', msg.uri, msg.line);
+      case 'moveEntry':
+        await this.dispatchEntry(msg.dir === -1 ? 'jpbook.moveEntryUp' : 'jpbook.moveEntryDown', msg.uri, msg.list, msg.line);
         break;
-      case 'moveChapterTo':
-        await this.dispatchMoveTo(msg.uri, msg.line, msg.before);
+      case 'moveEntryTo':
+        await this.dispatchMoveTo(msg.uri, msg.list, msg.line, msg.before);
         break;
       case 'welcome':
         this.dispatchWelcome(msg.action);
@@ -406,32 +414,34 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     await vscode.commands.executeCommand('jpbook.editMeta', node);
   }
 
-  /** Dispatch a book command (add / create) with a synthesized book node. */
-  private async dispatchBook(command: string, uri: unknown): Promise<void> {
+  /** Dispatch a list command (add / create) with a synthesized list node. */
+  private async dispatchList(command: string, uri: unknown, list: unknown): Promise<void> {
     const entry = this.entryOf(uri);
-    if (entry !== undefined) {
-      const node: BookNode = { kind: 'book', entry };
-      await vscode.commands.executeCommand(command, node);
-    }
-  }
-
-  /** Dispatch a chapter command (remove / move) with a synthesized node — `manage.ts` keys off `line`. */
-  private async dispatchChapter(command: string, uri: unknown, line: unknown): Promise<void> {
-    const entry = this.entryOf(uri);
-    if (entry === undefined || typeof line !== 'number') {
+    if (entry === undefined || !isEntryList(list)) {
       return;
     }
-    const node: BookNode = { kind: 'chapter', entry, line };
+    const node: BookNode = { kind: 'list', list, entry };
+    await vscode.commands.executeCommand(command, node);
+  }
+
+  /** Dispatch an entry command (remove / move) with a synthesized node — `manage.ts` keys off `line`. */
+  private async dispatchEntry(command: string, uri: unknown, list: unknown, line: unknown): Promise<void> {
+    const entry = this.entryOf(uri);
+    if (entry === undefined || !isEntryList(list) || typeof line !== 'number') {
+      return;
+    }
+    const node: BookNode = { kind: 'entry', list, entry, line };
     await vscode.commands.executeCommand(command, node);
   }
 
   /**
-   * Drag-and-drop reorder: move the chapter at `line` to sit before `before` (null = end of list),
-   * reusing the same pure planner + save path as the up/down buttons. A no-op move plans nothing.
+   * Drag-and-drop reorder: move the entry at `line` to sit before `before` (null = end of its
+   * list), reusing the same pure planner + save path as the up/down buttons. A no-op move
+   * plans nothing.
    */
-  private async dispatchMoveTo(uri: unknown, line: unknown, before: unknown): Promise<void> {
+  private async dispatchMoveTo(uri: unknown, list: unknown, line: unknown, before: unknown): Promise<void> {
     const entry = this.entryOf(uri);
-    if (entry === undefined || typeof line !== 'number') {
+    if (entry === undefined || !isEntryList(list) || typeof line !== 'number') {
       return;
     }
     const beforeLine = typeof before === 'number' ? before : null;
@@ -441,7 +451,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     } catch {
       return;
     }
-    const edits = moveChapterTo(doc.getText(), line, beforeLine);
+    const edits = moveEntryTo(doc.getText(), list, line, beforeLine);
     if (edits !== null) {
       await applyBookEdits(doc.uri, edits);
     }
@@ -491,8 +501,8 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   /**
-   * Parse one book and push its chapters (with missing-file flags) + metadata rows to the
-   * webview. `reveal` marks a host-initiated open — without it the webview drops the push
+   * Parse one book and push its covers and chapters (with missing-file flags) + metadata rows
+   * to the webview. `reveal` marks a host-initiated open — without it the webview drops the push
    * unless its detail screen is already the user's intent.
    */
   private async postDetail(uri: string, reveal = false): Promise<void> {
@@ -512,27 +522,10 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       return; // the user navigated away while the document loaded
     }
     const parsed = parseJpbook(text);
-    const chapters = await Promise.all(
-      chapterLines(parsed.lines).map(async (line): Promise<ChapterVM> => {
-        const rel = parsed.lines[line]?.value ?? '';
-        const { name, dir } = splitRelPath(rel);
-        const target = chapterUri(entry.rootUri, rel);
-        let missing = false;
-        try {
-          const st = await vscode.workspace.fs.stat(target);
-          missing = (st.type & vscode.FileType.File) === 0;
-        } catch {
-          missing = true;
-        }
-        return {
-          line,
-          name,
-          folder: dir,
-          fileUri: target.toString(),
-          missing,
-        };
-      }),
-    );
+    const [chapters, covers] = await Promise.all([
+      this.entryVMs(entry, parsed.lines, 'chapters'),
+      this.entryVMs(entry, parsed.lines, 'covers'),
+    ]);
     const meta: MetaVM[] = metaRows(parsed.meta).map((row) => {
       const parts = metaValueParts(row.key, row.value);
       return { key: row.key, label: metaLabel(row.key), value: parts.value, note: parts.note };
@@ -545,10 +538,31 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       uri,
       title: bookTitle(entry),
       chapters,
+      covers,
       meta,
       ...(reveal ? { reveal } : {}),
     };
     void view.webview.postMessage(message);
+  }
+
+  /** One list's rows: root-relative path split into name/folder, file URI, fs.stat-backed missing flag. */
+  private async entryVMs(entry: BookEntry, lines: readonly ParsedLine[], list: EntryList): Promise<EntryVM[]> {
+    return Promise.all(
+      entryLines(lines, list).map(async (line): Promise<EntryVM> => {
+        const pl = lines[line];
+        const rel = pl === undefined ? '' : (entryPathOf(pl)?.value ?? '');
+        const { name, dir } = splitRelPath(rel);
+        const target = chapterUri(entry.rootUri, rel);
+        let missing = false;
+        try {
+          const st = await vscode.workspace.fs.stat(target);
+          missing = (st.type & vscode.FileType.File) === 0;
+        } catch {
+          missing = true;
+        }
+        return { line, name, folder: dir, fileUri: target.toString(), missing };
+      }),
+    );
   }
 
   /**

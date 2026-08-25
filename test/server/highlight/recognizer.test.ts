@@ -18,35 +18,35 @@ const spans = (r: Recognizer, text: string): string[] =>
     .map((s) => `${s.kind}:${text.slice(s.start, s.start + s.len)}@${String(s.start)}`);
 
 test('splitCharacterSurfaces yields each part, the no-space join, and the spaced full', () => {
-  const s = splitCharacterSurfaces(['朝霧　巳一', 'Arill Stains']);
-  assert.ok(s.includes('朝霧')); // surname
-  assert.ok(s.includes('巳一')); // given
-  assert.ok(s.includes('朝霧巳一')); // join (JP body text)
-  assert.ok(s.includes('朝霧　巳一')); // verbatim spaced full
-  assert.ok(s.includes('Arill') && s.includes('Stains') && s.includes('Arill Stains'));
+  const s = splitCharacterSurfaces(['山田　太郎', 'John Smith']);
+  assert.ok(s.includes('山田')); // surname
+  assert.ok(s.includes('太郎')); // given
+  assert.ok(s.includes('山田太郎')); // join (JP body text)
+  assert.ok(s.includes('山田　太郎')); // verbatim spaced full
+  assert.ok(s.includes('John') && s.includes('Smith') && s.includes('John Smith'));
 });
 
 test('splitCharacterSurfaces dedups a part shared across entries', () => {
-  const s = splitCharacterSurfaces(['朝霧　巳一', '朝霧　郁']);
-  assert.equal(s.filter((x) => x === '朝霧').length, 1);
+  const s = splitCharacterSurfaces(['山田　太郎', '山田　花子']);
+  assert.equal(s.filter((x) => x === '山田').length, 1);
 });
 
 test('a name + subject particle highlights as a character; the particle is excluded', () => {
-  const r = createRecognizer(['朝霧　巳一'], []);
-  assert.deepEqual(spans(r, '巳一は走った'), ['character:巳一は@0']);
-  assert.deepEqual(spans(r, '朝霧巳一が来た'), ['character:朝霧巳一が@0']);
+  const r = createRecognizer(['山田　太郎'], []);
+  assert.deepEqual(spans(r, '太郎は走った'), ['character:太郎は@0']);
+  assert.deepEqual(spans(r, '山田太郎が来た'), ['character:山田太郎が@0']);
 });
 
 test('an honorific between the name and particle is highlighted together with the name', () => {
-  const r = createRecognizer(['朝霧　巳一'], []);
-  assert.deepEqual(spans(r, '朝霧先生が頷いた'), ['character:朝霧先生が@0']);
-  assert.deepEqual(spans(r, '巳一ちゃんは笑った'), ['character:巳一ちゃんは@0']);
+  const r = createRecognizer(['山田　太郎'], []);
+  assert.deepEqual(spans(r, '山田先生が頷いた'), ['character:山田先生が@0']);
+  assert.deepEqual(spans(r, '太郎ちゃんは笑った'), ['character:太郎ちゃんは@0']);
 });
 
 test('a name with no subject particle (の / を) is not highlighted', () => {
-  const r = createRecognizer(['朝霧　巳一'], []);
-  assert.deepEqual(spans(r, '巳一の本'), []);
-  assert.deepEqual(spans(r, '巳一を見た'), []);
+  const r = createRecognizer(['山田　太郎'], []);
+  assert.deepEqual(spans(r, '太郎の本'), []);
+  assert.deepEqual(spans(r, '太郎を見た'), []);
 });
 
 test('built-in pronouns are recognised, gated by a subject particle', () => {
@@ -56,12 +56,12 @@ test('built-in pronouns are recognised, gated by a subject particle', () => {
 });
 
 test('keywords match exactly and are bolded', () => {
-  const r = createRecognizer([], ['黒剣', '境無']);
-  assert.deepEqual(spans(r, '黒剣を抜く'), ['keyword:黒剣@0']);
+  const r = createRecognizer([], ['聖剣', '王都']);
+  assert.deepEqual(spans(r, '聖剣を抜く'), ['keyword:聖剣@0']);
 });
 
 test('a surface in both lists: subject form → character, bare → keyword', () => {
-  const r = createRecognizer(['境無'], ['境無']);
-  assert.deepEqual(spans(r, '境無は強い'), ['character:境無は@0']); // subject wins
-  assert.deepEqual(spans(r, '黒剣境無の力'), ['keyword:境無@2']); // bare → keyword
+  const r = createRecognizer(['王都'], ['王都']);
+  assert.deepEqual(spans(r, '王都は強い'), ['character:王都は@0']); // subject wins
+  assert.deepEqual(spans(r, '古の王都の力'), ['keyword:王都@2']); // bare → keyword
 });

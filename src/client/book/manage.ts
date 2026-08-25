@@ -5,14 +5,22 @@
  * action persists on the spot; the saved file then re-enters through the panel's own
  * watcher, so no manual refresh plumbing exists here). Metadata is upsert-only: every
  * META_KEYS key is always shown and never deleted or reordered — layout-conscious authors
- * use code mode.
+ * use code mode. Chapters and covers are the two entry lists; a list action takes an
+ * `EntryList` and never touches the other list.
  */
 import * as vscode from 'vscode';
 
-import { normalizeFileInput } from '#/shared/book/create.ts';
-import { appendChapters, chapterLines, listedChapters, moveChapterTo, removeChapter, upsertMeta } from '#/shared/book/edits.ts';
+import { COVER_TEMPLATE, normalizeFileInput } from '#/shared/book/create.ts';
+import { appendEntries, entryLines, listedEntries, moveEntryTo, removeEntry, upsertMeta } from '#/shared/book/edits.ts';
 import type { TextReplace } from '#/shared/book/edits.ts';
-import { composeDividerValue, DIVIDER_PRESETS, parseDividerValue, parseJpbook, type MetaKey } from '#/shared/book/jpbook.ts';
+import {
+  composeDividerValue,
+  DIVIDER_PRESETS,
+  parseDividerValue,
+  parseJpbook,
+  type EntryList,
+  type MetaKey,
+} from '#/shared/book/jpbook.ts';
 import { PAGE_NUMBER_POSITIONS, type PageNumberPosition } from '#/shared/compiler/chrome.ts';
 import { BUILD_CHROME_DEFAULT } from '#/shared/config/settings.ts';
 import { unencodableChars } from '#/shared/encoding.ts';
@@ -112,60 +120,80 @@ async function fileExists(uri: vscode.Uri): Promise<boolean> {
   }
 }
 
+/** The list-specific wording of the add / create flows; everything else is shared. */
+function listText(list: EntryList): { placeHolder: string; noneLeft: string; alreadyIn: string; prompt: string } {
+  if (list === 'chapters') {
+    return {
+      placeHolder: vscode.l10n.t('Select chapter files to add'),
+      noneLeft: vscode.l10n.t('Japanese Novel: no chapter files left to add.'),
+      alreadyIn: vscode.l10n.t('Japanese Novel: those chapters are already in this book.'),
+      prompt: vscode.l10n.t('File name of the new chapter'),
+    };
+  }
+  return {
+    placeHolder: vscode.l10n.t('Select cover page files to add'),
+    noneLeft: vscode.l10n.t('Japanese Novel: no cover page files left to add.'),
+    alreadyIn: vscode.l10n.t('Japanese Novel: those cover pages are already in this book.'),
+    prompt: vscode.l10n.t('File name of the new cover page'),
+  };
+}
+
 /** The folder's `.jpnov` files as sorted root-relative paths (book entries are root-relative). */
-async function findChapterCandidates(rootUri: vscode.Uri): Promise<string[]> {
+async function findJpnovFiles(rootUri: vscode.Uri): Promise<string[]> {
   const found = await vscode.workspace.findFiles(new vscode.RelativePattern(rootUri, '**/*.jpnov'), FIND_FILES_EXCLUDE);
   return found.map((uri) => normalizeFsPath(vscode.workspace.asRelativePath(uri, false))).sort();
 }
 
 /**
- * The multi-select chapter picker (add-chapters). Preserves the QuickPick distinction:
+ * The multi-select file picker (add-files). Preserves the QuickPick distinction:
  * Esc = undefined, OK with none ticked = [].
  */
-async function pickChapterFiles(rels: readonly string[]): Promise<string[] | undefined> {
-  type ChapterItem = vscode.QuickPickItem & { rel: string };
-  const items = rels.map((rel): ChapterItem => {
+async function pickFiles(rels: readonly string[], placeHolder: string): Promise<string[] | undefined> {
+  type FileItem = vscode.QuickPickItem & { rel: string };
+  const items = rels.map((rel): FileItem => {
     const { name, dir } = splitRelPath(rel);
     return dir === '' ? { label: name, rel } : { label: name, description: dir, rel };
   });
   const picked = await vscode.window.showQuickPick(items, {
     canPickMany: true,
     matchOnDescription: true,
-    placeHolder: vscode.l10n.t('Select chapter files to add'),
+    placeHolder,
   });
   return picked?.map((p) => p.rel);
 }
 
-async function addChapters(arg: unknown): Promise<void> {
+async function addFiles(arg: unknown): Promise<void> {
   const node = nodeOf(arg);
-  if (node?.kind !== 'book') {
+  if (node?.kind !== 'list') {
     return;
   }
+  const wording = listText(node.list);
   // Entries are root-relative, so candidates come from THIS book's workspace folder only.
-  const candidates = await findChapterCandidates(vscode.Uri.parse(node.entry.rootUri));
+  const candidates = await findJpnovFiles(vscode.Uri.parse(node.entry.rootUri));
   if (candidates.length === 0) {
     void vscode.window.showInformationMessage(vscode.l10n.t('Japanese Novel: no .jpnov files found in this workspace folder.'));
     return;
   }
 
-  const listed = listedChapters(parseJpbook((await bookText(node.entry)).text).lines);
+  // The lists dedupe independently: a file that is already a chapter may still become a cover.
+  const listed = listedEntries(parseJpbook((await bookText(node.entry)).text).lines, node.list);
   const fresh = candidates.filter((rel) => !listed.has(rel));
   if (fresh.length === 0) {
-    void vscode.window.showInformationMessage(vscode.l10n.t('Japanese Novel: no chapter files left to add.'));
+    void vscode.window.showInformationMessage(wording.noneLeft);
     return;
   }
 
-  const picked = await pickChapterFiles(fresh);
+  const picked = await pickFiles(fresh, wording.placeHolder);
   if (picked === undefined || picked.length === 0) {
     return;
   }
 
   // Re-read AFTER the pick: the book may have changed while the picker was open, and the
-  // edit must anchor to the live text (appendChapters re-dedupes against it too).
+  // edit must anchor to the live text (appendEntries re-dedupes against it too).
   const { uri, text } = await bookText(node.entry);
-  const edit = appendChapters(text, picked);
+  const edit = appendEntries(text, node.list, picked);
   if (edit === null) {
-    void vscode.window.showInformationMessage(vscode.l10n.t('Japanese Novel: those chapters are already in this book.'));
+    void vscode.window.showInformationMessage(wording.alreadyIn);
     return;
   }
   await applyBookEdits(uri, [edit]);
@@ -218,8 +246,8 @@ async function promptNewFile(rootUri: string, suffix: string, prompt: string): P
   return parsed.rel;
 }
 
-/** Creates `rel` (empty, parent folders included) under the root; null = exists / write failed (toasted). */
-async function writeNewFile(rootUri: string, rel: string): Promise<vscode.Uri | null> {
+/** Creates `rel` holding `content` (parent folders included) under the root; null = exists / write failed (toasted). */
+async function writeNewFile(rootUri: string, rel: string, content = ''): Promise<vscode.Uri | null> {
   const root = vscode.Uri.parse(rootUri);
   const segments = rel.split('/');
   const target = vscode.Uri.joinPath(root, ...segments);
@@ -229,7 +257,7 @@ async function writeNewFile(rootUri: string, rel: string): Promise<vscode.Uri | 
   }
   try {
     await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(root, ...segments.slice(0, -1)));
-    await vscode.workspace.fs.writeFile(target, new Uint8Array());
+    await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(content));
   } catch (err) {
     const message = errorText(err);
     void vscode.window.showErrorMessage(vscode.l10n.t("Japanese Novel: couldn't write {0}. {1}", rel, message));
@@ -238,20 +266,20 @@ async function writeNewFile(rootUri: string, rel: string): Promise<vscode.Uri | 
   return target;
 }
 
-/** Chapter mode: create the typed `.jpnov` under the book's root, list it in the book, open it. */
-async function createChapter(entry: BookEntry): Promise<void> {
-  const rel = await promptNewFile(entry.rootUri, '.jpnov', vscode.l10n.t('File name of the new chapter'));
+/** List mode: create the typed `.jpnov` under the book's root (a cover starts from the README sample), list it, open it. */
+async function createEntry(entry: BookEntry, list: EntryList): Promise<void> {
+  const rel = await promptNewFile(entry.rootUri, '.jpnov', listText(list).prompt);
   if (rel === undefined) {
     return;
   }
-  const target = await writeNewFile(entry.rootUri, rel);
+  const target = await writeNewFile(entry.rootUri, rel, list === 'covers' ? COVER_TEMPLATE : '');
   if (target === null) {
     return;
   }
   const { uri, text } = await bookText(entry);
-  const edit = appendChapters(text, [rel]);
+  const edit = appendEntries(text, list, [rel]);
   if (edit !== null) {
-    // null = already listed (re-creating a missing chapter's file) — nothing to append then.
+    // null = already listed (re-creating a missing entry's file) — nothing to append then.
     await applyBookEdits(uri, [edit]);
   }
   await vscode.commands.executeCommand('vscode.open', target);
@@ -281,43 +309,44 @@ async function createBook(view: BooksViewProvider | undefined): Promise<void> {
 
 /**
  * `jpbook.createFile` — one input creates a file, the parked suffix trailing what's typed.
- * A book node makes a `.jpnov` chapter; no node (title bar, welcome, palette) makes an
- * empty `.jpbook`, revealed in the panel — chapters and metadata are then added right there.
+ * A list node makes a `.jpnov` for that list (chapter or cover); no node (title bar, welcome,
+ * palette) makes an empty `.jpbook`, revealed in the panel — entries and metadata are then
+ * added right there.
  */
 export async function createFile(view: BooksViewProvider | undefined, arg?: unknown): Promise<void> {
   const node = nodeOf(arg);
   if (node === null) {
     await createBook(view);
-  } else if (node.kind === 'book') {
-    await createChapter(node.entry);
+  } else if (node.kind === 'list') {
+    await createEntry(node.entry, node.list);
   }
 }
 
-async function removeChapterCmd(arg: unknown): Promise<void> {
+async function removeEntryCmd(arg: unknown): Promise<void> {
   const node = nodeOf(arg);
-  if (node?.kind !== 'chapter') {
+  if (node?.kind !== 'entry') {
     return;
   }
   const { uri, text } = await bookText(node.entry);
-  const edit = removeChapter(text, node.line);
+  const edit = removeEntry(text, node.list, node.line);
   if (edit !== null) {
     await applyBookEdits(uri, [edit]);
   }
 }
 
-async function moveChapter(arg: unknown, direction: -1 | 1): Promise<void> {
+async function moveEntry(arg: unknown, direction: -1 | 1): Promise<void> {
   const node = nodeOf(arg);
-  if (node?.kind !== 'chapter') {
+  if (node?.kind !== 'entry') {
     return;
   }
   const { uri, text } = await bookText(node.entry);
-  const lines = chapterLines(parseJpbook(text).lines);
+  const lines = entryLines(parseJpbook(text).lines, node.list);
   const index = lines.indexOf(node.line);
   if (index < 0) {
     return;
   }
-  // Up: insert before the previous chapter. Down: insert before the one PAST the next
-  // (or at the end when the next chapter is the last).
+  // Up: insert before the previous entry. Down: insert before the one PAST the next
+  // (or at the end when the next entry is the last).
   const before =
     direction === -1
       ? lines[index - 1]
@@ -327,7 +356,7 @@ async function moveChapter(arg: unknown, direction: -1 | 1): Promise<void> {
   if (before === undefined || (direction === 1 && index + 1 >= lines.length)) {
     return; // already first / already last
   }
-  const edits = moveChapterTo(text, node.line, before);
+  const edits = moveEntryTo(text, node.list, node.line, before);
   if (edits !== null) {
     await applyBookEdits(uri, edits);
   }
@@ -445,10 +474,10 @@ async function editMeta(arg: unknown): Promise<void> {
 /** Registers the five panel commands (plain — they only fire from the Books panel). */
 export function registerBookCommands(): vscode.Disposable[] {
   return [
-    command('jpbook.addChapters', addChapters),
-    command('jpbook.removeChapter', removeChapterCmd),
-    command('jpbook.moveChapterUp', (arg?: unknown) => moveChapter(arg, -1)),
-    command('jpbook.moveChapterDown', (arg?: unknown) => moveChapter(arg, 1)),
+    command('jpbook.addFiles', addFiles),
+    command('jpbook.removeEntry', removeEntryCmd),
+    command('jpbook.moveEntryUp', (arg?: unknown) => moveEntry(arg, -1)),
+    command('jpbook.moveEntryDown', (arg?: unknown) => moveEntry(arg, 1)),
     command('jpbook.editMeta', editMeta),
   ];
 }

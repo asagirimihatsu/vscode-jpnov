@@ -16,12 +16,16 @@ const state = createMockState();
 mock.module('vscode', { namedExports: buildVscode(state) });
 
 const { createFile, registerBookCommands } = await import('../../src/client/book/manage.ts');
+const { COVER_TEMPLATE } = await import('../../src/shared/book/create.ts');
 
 const ROOT = 'file:///ws';
 const BOOK = `${ROOT}/book.jpbook`;
 
-function bookNode(): unknown {
-  return { kind: 'book', entry: { uri: BOOK, rootUri: ROOT, fileRel: 'book.jpbook', outRel: 'book' } };
+type List = 'chapters' | 'covers';
+const ENTRY = { uri: BOOK, rootUri: ROOT, fileRel: 'book.jpbook', outRel: 'book' };
+
+function listNode(list: List = 'chapters'): unknown {
+  return { kind: 'list', list, entry: ENTRY };
 }
 
 /** One folder at ROOT, the book document with `text`, and the folder's .jpnov sweep results. */
@@ -31,10 +35,10 @@ function seed(text: string, files: readonly string[]): void {
   state.findFilesResults.set(ROOT, files.map((rel) => Uri.parse(`${ROOT}/${rel}`)));
 }
 
-async function runAddChapters(): Promise<void> {
-  const handler = state.registeredCommands.get('jpbook.addChapters');
-  assert.ok(handler, 'jpbook.addChapters must be registered');
-  await handler(bookNode());
+async function runAddFiles(list: List = 'chapters'): Promise<void> {
+  const handler = state.registeredCommands.get('jpbook.addFiles');
+  assert.ok(handler, 'jpbook.addFiles must be registered');
+  await handler(listNode(list));
   assert.deepEqual(state.errorMessages, []);
 }
 
@@ -43,10 +47,10 @@ beforeEach(() => {
   registerBookCommands();
 });
 
-test('addChapters offers unlisted .jpnov files sorted, split into label/description', async () => {
+test('addFiles(chapters) offers unlisted .jpnov files sorted, split into label/description', async () => {
   seed('ichi.jpnov\n', ['zoku/ni.jpnov', 'ichi.jpnov', '第三章.jpnov']);
   state.quickPickQueue.push([{ label: '第三章.jpnov', rel: '第三章.jpnov' }]);
-  await runAddChapters();
+  await runAddFiles();
 
   const call = state.quickPickCalls[0];
   assert.ok(call, 'expected one QuickPick');
@@ -66,44 +70,44 @@ test('addChapters offers unlisted .jpnov files sorted, split into label/descript
   assert.match(edit.newText, /第三章\.jpnov/);
 });
 
-test('addChapters with no .jpnov files informs and never opens a picker', async () => {
+test('addFiles with no .jpnov files informs and never opens a picker', async () => {
   seed('', []);
-  await runAddChapters();
+  await runAddFiles();
 
   assert.deepEqual(state.quickPickCalls, []);
   assert.deepEqual(state.infoMessages, ['Japanese Novel: no .jpnov files found in this workspace folder.']);
   assert.deepEqual(state.appliedEdits, []);
 });
 
-test('addChapters with every candidate already listed informs and never opens a picker', async () => {
+test('addFiles(chapters) with every candidate already listed informs and never opens a picker', async () => {
   seed('a.jpnov\nzoku/b.jpnov\n', ['a.jpnov', 'zoku/b.jpnov']);
-  await runAddChapters();
+  await runAddFiles();
 
   assert.deepEqual(state.quickPickCalls, []);
   assert.deepEqual(state.infoMessages, ['Japanese Novel: no chapter files left to add.']);
   assert.deepEqual(state.appliedEdits, []);
 });
 
-test('addChapters dismissed picker applies nothing', async () => {
+test('addFiles dismissed picker applies nothing', async () => {
   seed('', ['a.jpnov']);
   // Empty quickPickQueue -> showQuickPick resolves undefined (Esc).
-  await runAddChapters();
+  await runAddFiles();
 
   assert.equal(state.quickPickCalls.length, 1);
   assert.deepEqual(state.infoMessages, []);
   assert.deepEqual(state.appliedEdits, []);
 });
 
-// --- createFile (chapter mode: invoked with a book node) ----------------------
+// --- createFile (list mode: invoked with a list node) --------------------------
 
-async function runCreateChapter(): Promise<void> {
-  await createFile(undefined, bookNode());
+async function runCreateEntry(list: List = 'chapters'): Promise<void> {
+  await createFile(undefined, listNode(list));
 }
 
-test('createFile with a book node parks the .jpnov suffix after the caret', async () => {
+test('createFile with a list node parks the .jpnov suffix after the caret', async () => {
   seed('', []);
   // Empty inputBoxQueue -> showInputBox resolves undefined (Esc): nothing happens.
-  await runCreateChapter();
+  await runCreateEntry();
 
   const options = state.inputBoxCalls[0]?.options;
   assert.ok(options, 'expected one input box');
@@ -119,7 +123,7 @@ test('the chapter validator rejects empty, unusable, and taken paths', async () 
   seed('', []);
   state.fsEntries.set(`${ROOT}/taken.jpnov`, FileType.File);
   state.inputBoxQueue.push('fresh');
-  await runCreateChapter();
+  await runCreateEntry();
 
   // The mock never invokes validateInput; probe the recorded validator directly.
   const validate = state.inputBoxCalls[0]?.options?.validateInput;
@@ -132,11 +136,11 @@ test('the chapter validator rejects empty, unusable, and taken paths', async () 
   assert.equal(await validate('another.jpnov'), null);
 });
 
-test('createFile with a book node writes the chapter, appends it root-relative, and opens it', async () => {
+test('createFile with a chapters node writes the chapter, appends it root-relative, and opens it', async () => {
   seed('ichi.jpnov\n', []);
   // Backslash separator and a missing suffix: both normalized on accept.
   state.inputBoxQueue.push('src\\my-chapter');
-  await runCreateChapter();
+  await runCreateEntry();
 
   assert.deepEqual(state.errorMessages, []);
   assert.deepEqual(state.createdDirs, [`${ROOT}/src`]);
@@ -154,7 +158,7 @@ test('createFile with a book node writes the chapter, appends it root-relative, 
 test('createFile for an already-listed missing chapter skips the append and opens it', async () => {
   seed('src/lost.jpnov\n', []);
   state.inputBoxQueue.push('src/lost.jpnov');
-  await runCreateChapter();
+  await runCreateEntry();
 
   assert.deepEqual(state.errorMessages, []);
   assert.deepEqual(state.writtenFiles, [{ uri: `${ROOT}/src/lost.jpnov`, content: '' }]);
@@ -166,9 +170,84 @@ test('createFile never overwrites an existing chapter file', async () => {
   seed('', []);
   state.fsEntries.set(`${ROOT}/taken.jpnov`, FileType.File);
   state.inputBoxQueue.push('taken');
-  await runCreateChapter();
+  await runCreateEntry();
 
   assert.deepEqual(state.errorMessages, ['Japanese Novel: taken.jpnov already exists. Nothing was created.']);
   assert.deepEqual(state.writtenFiles, []);
+  assert.deepEqual(state.appliedEdits, []);
+});
+
+// --- the cover list ---------------------------------------------------------------
+
+test('addFiles(covers) offers files not yet in the cover list — chapters included — under the cover wording', async () => {
+  seed('---\ncover:\n  - c.jpnov\n---\na.jpnov\n', ['a.jpnov', 'c.jpnov', 'd.jpnov']);
+  state.quickPickQueue.push([{ label: 'd.jpnov', rel: 'd.jpnov' }]);
+  await runAddFiles('covers');
+
+  const call = state.quickPickCalls[0];
+  assert.ok(call, 'expected one QuickPick');
+  assert.deepEqual(call.items, [{ label: 'a.jpnov', rel: 'a.jpnov' }, { label: 'd.jpnov', rel: 'd.jpnov' }]);
+  assert.equal((call.options as { placeHolder: string }).placeHolder, 'Select cover page files to add');
+  assert.deepEqual(state.appliedEdits, [{ uri: BOOK, range: [2, 11, 2, 11], newText: '\n  - d.jpnov' }]);
+});
+
+test('addFiles(covers) with every candidate listed informs with the cover wording', async () => {
+  seed('---\ncover:\n  - a.jpnov\n---\n', ['a.jpnov']);
+  await runAddFiles('covers');
+
+  assert.deepEqual(state.quickPickCalls, []);
+  assert.deepEqual(state.infoMessages, ['Japanese Novel: no cover page files left to add.']);
+});
+
+test('createFile with a covers node prompts for a cover page, seeds the sample, and opens a cover list', async () => {
+  seed('---\ntitle: t\n---\na.jpnov\n', []);
+  state.inputBoxQueue.push('表紙');
+  await runCreateEntry('covers');
+
+  assert.deepEqual(state.errorMessages, []);
+  const options = state.inputBoxCalls[0]?.options;
+  assert.ok(options, 'expected one input box');
+  assert.equal(options.prompt, 'File name of the new cover page');
+  assert.equal(options.value, '.jpnov');
+  assert.deepEqual(state.writtenFiles, [{ uri: `${ROOT}/表紙.jpnov`, content: COVER_TEMPLATE }]);
+  assert.deepEqual(state.appliedEdits, [{ uri: BOOK, range: [2, 0, 2, 0], newText: 'cover:\n  - 表紙.jpnov\n' }]);
+  assert.deepEqual(
+    state.executedCommands.filter((c) => c.command === 'vscode.open').map((c) => String(c.args[0])),
+    [`${ROOT}/表紙.jpnov`],
+  );
+});
+
+test('createFile for a cover in a book without front matter creates the block at the top', async () => {
+  seed('a.jpnov\n', []);
+  state.inputBoxQueue.push('cover');
+  await runCreateEntry('covers');
+
+  assert.deepEqual(state.appliedEdits, [{ uri: BOOK, range: [0, 0, 0, 0], newText: '---\ncover:\n  - cover.jpnov\n---\n' }]);
+});
+
+test('removeEntry / moveEntryUp / moveEntryDown plan edits inside the named list only', async () => {
+  const run = async (command: string, list: List, line: number): Promise<void> => {
+    const handler = state.registeredCommands.get(command);
+    assert.ok(handler, `${command} must be registered`);
+    await handler({ kind: 'entry', list, line, entry: ENTRY });
+    assert.deepEqual(state.errorMessages, []);
+  };
+  // The mock records edits without rewriting the document, so every run sees this text.
+  seed('---\ncover:\n  - a.jpnov\n  - b.jpnov\n---\nx.jpnov\n', []);
+
+  await run('jpbook.removeEntry', 'covers', 2);
+  assert.deepEqual(state.appliedEdits, [{ uri: BOOK, range: [2, 0, 3, 0], newText: '' }]);
+  state.appliedEdits.length = 0;
+
+  await run('jpbook.moveEntryDown', 'covers', 2);
+  assert.deepEqual(state.appliedEdits, [
+    { uri: BOOK, range: [2, 0, 3, 0], newText: '' },
+    { uri: BOOK, range: [3, 11, 3, 11], newText: '\n  - a.jpnov' },
+  ]);
+  state.appliedEdits.length = 0;
+
+  await run('jpbook.moveEntryUp', 'covers', 2); // already first
+  await run('jpbook.removeEntry', 'chapters', 2); // a cover line is not a chapter
+  await run('jpbook.moveEntryDown', 'chapters', 2);
   assert.deepEqual(state.appliedEdits, []);
 });

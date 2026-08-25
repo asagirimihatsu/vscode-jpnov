@@ -18,7 +18,7 @@ import type { DashMode, KinsokuMode } from '../config/types.ts';
 import type { BuildChrome, PageNumberPosition } from './chrome.ts';
 import { resolveStyle } from './emphasis.ts';
 import { escapeComment, escapeHtml } from './escape.ts';
-import { tokenize, type HeadingLevel, type Token } from './tokenizer.ts';
+import { tokenize, VALUE_FIELD_PLACEHOLDERS, type HeadingLevel, type Token, type ValueField } from './tokenizer.ts';
 
 /**
  * One laid-out glyph group: a char (1 cell), a ruby unit (base char count, atomic), or a
@@ -346,11 +346,17 @@ function applyPostfix(
  * source character — omitted = no translation (structural probes, the issue scan). The optional
  * `opts.issues` sink collects the token indices of unresolved corner-target postfixes — the
  * render's own failure list, mapped back to source spans by {@link findPostfixTargetIssues} so
- * the Warnings can never disagree with what was applied.
+ * the Warnings can never disagree with what was applied. `opts.values` supplies the real
+ * ［＃ここに「…」の値を表示］ substitutions (the html build's cover compile); omitted = the
+ * fixed placeholders — so `Unit.text` carries the SUBSTITUTED characters for these units.
  */
 export function buildRows(
   tokens: readonly Token[],
-  opts?: { readonly issues?: number[]; readonly dash?: DashMode },
+  opts?: {
+    readonly issues?: number[];
+    readonly dash?: DashMode;
+    readonly values?: Readonly<Record<ValueField, string>>;
+  },
 ): Row[] {
   const issues = opts?.issues;
   const want = opts?.dash === undefined ? undefined : DASH_BY_MODE[opts.dash];
@@ -365,7 +371,7 @@ export function buildRows(
     weight?: string | undefined;
     style?: string | undefined;
   } = {};
-  // Mirrored by the lint stream extractor (server/lint/streams.ts); lockstep guarded by streams.test.ts.
+  // Mirrored by the lint line walker (server/lint/walker.ts); lockstep guarded by walker.test.ts.
   let activeIndent = 0; // block 字下げ in effect, carried ACROSS lines
   let curIndent = 0; // indent for the line under construction (line start = activeIndent)
   let activeHeading: HeadingLevel | undefined; // 見出し span/block in effect, carried ACROSS lines
@@ -614,6 +620,19 @@ export function buildRows(
       case 'pageBreak':
         isPageBreak = true;
         break;
+      case 'valueField': {
+        // Per-char units, so 禁則/分離禁止/dash translation apply as to typed text. Values are
+        // never re-tokenized (a 《 or ［＃ in a title stays literal) and carry no line break.
+        const substituted = (opts?.values ?? VALUE_FIELD_PLACEHOLDERS)[token.field];
+        if (tcyBuf !== null) {
+          tcyBuf += substituted;
+          break;
+        }
+        for (const ch of substituted) {
+          cur.push(mk(1, ch === want ? DASH_GLYPH : escapeHtml(ch), ch));
+        }
+        break;
+      }
       default: {
         const exhaustive: never = token;
         throw new Error(`buildRows: unhandled token ${JSON.stringify(exhaustive)}`);
@@ -636,6 +655,10 @@ export interface PostfixTargetIssue {
  * Source spans of every corner-target postfix whose target could not be resolved (absent, or
  * not unit-aligned) — derived by RUNNING {@link buildRows} itself, offsets recovered by
  * accumulating `raw.length` like findBrokenAnnotations.
+ *
+ * A postfix following a ［＃ここに「…」の値を表示］ on its line is skipped: this scan is
+ * bookless, so whether the target resolves is unknowable here. One LATER on the line cannot
+ * affect an earlier postfix (targets bind to units already built), so those still report.
  */
 export function findPostfixTargetIssues(src: string): PostfixTargetIssue[] {
   const tokens = tokenize(src);
@@ -647,17 +670,24 @@ export function findPostfixTargetIssues(src: string): PostfixTargetIssue[] {
   const failed = new Set(misses);
   const out: PostfixTargetIssue[] = [];
   let offset = 0;
+  let valueSeen = false; // a value field earlier on THIS line
   for (let i = 0; i < tokens.length; i += 1) {
     const t = tokens[i];
     if (t !== undefined) {
       if (
         failed.has(i) &&
+        !valueSeen &&
         (t.kind === 'emphasisPostfix' ||
           t.kind === 'tcyPostfix' ||
           t.kind === 'rubyLeftPostfix' ||
           t.kind === 'headingPostfix')
       ) {
         out.push({ start: offset, end: offset + t.raw.length, target: t.target });
+      }
+      if (t.kind === 'valueField') {
+        valueSeen = true;
+      } else if (t.kind === 'text' && t.text.includes('\n')) {
+        valueSeen = false; // next line starts knowable again
       }
       offset += t.raw.length;
     }
@@ -1136,21 +1166,38 @@ function pageFurniture(chrome: BuildChrome, pi: number, totalPage: number): stri
 }
 
 /**
+ * One output sheet. `cover: true` marks an unnumbered front page: no header, folio or line
+ * numbers, and outside the folio's `{page}`/`{totalPage}` counts. The grid and its reserved
+ * bands are unchanged. Only the first two are withheld here — the line number is a CSS
+ * counter matching `.page`, so its exemption lives in `build.ln.css`; 罫線/枠 stays on.
+ */
+export interface RenderPage {
+  readonly lines: readonly DisplayLine[];
+  readonly cover?: true;
+}
+
+/**
  * Renders paginated pages into the `<div class="book">…</div>` body fragment, each page
  * carrying its chrome furniture AFTER the lines (so line-adjacency is preserved for
  * anything matching consecutive `.line`s). When a `used` sink is passed, every emphasis
- * class emitted is recorded into it so the caller can emit only those rules (on-demand CSS).
+ * class emitted is recorded into it so the caller can emit only those rules (on-demand CSS)
+ * — the structural `cover` class stays out of the sink. `data-page` is the sequential DOM
+ * ordinal over ALL pages; the folio number and its {@link folioSide} parity count BODY pages
+ * only, so cover sheets never shift where body page 1 lands.
  */
 export function pagesToHtml(
-  pages: readonly DisplayLine[][],
+  pages: readonly RenderPage[],
   used: Set<string> | undefined,
   chrome: BuildChrome,
 ): string {
-  const totalPage = pages.length;
+  const totalPage = pages.reduce((n, page) => n + (page.cover === true ? 0 : 1), 0);
+  let bodyPi = 0;
   const body = pages
-    .map((page, pi) => {
-      const lines = page.map((line) => emitLine(line, used)).join('');
-      return `<div class="page" data-page="${String(pi)}">${lines}${pageFurniture(chrome, pi, totalPage)}</div>`;
+    .map((page, di) => {
+      const lines = page.lines.map((line) => emitLine(line, used)).join('');
+      const furniture = page.cover === true ? '' : pageFurniture(chrome, bodyPi++, totalPage);
+      const cls = page.cover === true ? 'page cover' : 'page';
+      return `<div class="${cls}" data-page="${String(di)}">${lines}${furniture}</div>`;
     })
     .join('');
   return `<div class="book">${body}</div>`;

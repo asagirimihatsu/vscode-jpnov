@@ -319,10 +319,10 @@ test('state pushes mirror the reveal-output toggle (default on)', async () => {
 
 // --- detail -----------------------------------------------------------------
 
-test('openDetail posts chapters (missing flagged) and the metadata rows', async () => {
+test('openDetail posts covers and chapters (missing flagged) and the metadata rows', async () => {
   const root = 'file:///ws';
   const bookUri = `${root}/src/a.jpbook`;
-  state.textDocuments.push(doc(bookUri, 'jpbook', '---\ntitle: A\n---\nch1.jpnov\nsub/ch2.jpnov\n'));
+  state.textDocuments.push(doc(bookUri, 'jpbook', '---\ntitle: A\ncover:\n  - 表紙.jpnov\n  - sub/ch2.jpnov\n---\nch1.jpnov\nsub/ch2.jpnov\n'));
   state.fsEntries.set('file:///ws/ch1.jpnov', FileType.File); // ch1 exists; ch2 does not
   const { view } = await setup([entry(root, 'a', 'A')]);
   view.webview.receive({ type: 'openDetail', uri: bookUri });
@@ -331,9 +331,15 @@ test('openDetail posts chapters (missing flagged) and the metadata rows', async 
     uri: string;
     title: string;
     chapters: { name: string; folder: string; missing: boolean; line: number }[];
+    covers: { name: string; folder: string; missing: boolean; line: number }[];
     meta: { key: string; value: string; note: string }[];
   };
   assert.equal(detail.uri, bookUri);
+  // Cover rows carry the item's path (marker stripped) and line; a file may sit in both lists.
+  assert.deepEqual(
+    detail.covers.map((c) => [c.line, c.folder, c.name, c.missing]),
+    [[3, '', '表紙.jpnov', true], [4, 'sub', 'ch2.jpnov', true]],
+  );
   assert.equal(detail.chapters.length, 2);
   const ch1 = detail.chapters.find((c) => c.name === 'ch1.jpnov');
   assert.ok(ch1);
@@ -342,6 +348,7 @@ test('openDetail posts chapters (missing flagged) and the metadata rows', async 
   assert.ok(ch2);
   assert.equal(ch2.missing, true);
   assert.equal(ch2.folder, 'sub');
+  assert.equal(ch2.line, 7);
   assert.equal(detail.meta.length, 6);
   // A set value carries no status note; the note is separate from the value (rendered by the label).
   const titleRow = detail.meta.find((m) => m.key === 'title');
@@ -383,33 +390,65 @@ test('an unknown metaKey is ignored (no dispatch)', async () => {
   assert.equal(state.executedCommands.find((c) => c.command === 'jpbook.editMeta'), undefined);
 });
 
-test('chapter actions dispatch the matching jpbook command carrying the line', async () => {
+test('entry actions dispatch the matching jpbook command carrying the list and line', async () => {
   const root = 'file:///ws';
   const bookUri = `${root}/src/a.jpbook`;
   const { view } = await setup([entry(root, 'a')]);
-  view.webview.receive({ type: 'moveChapter', uri: bookUri, line: 4, dir: -1 });
-  view.webview.receive({ type: 'moveChapter', uri: bookUri, line: 4, dir: 1 });
-  view.webview.receive({ type: 'removeChapter', uri: bookUri, line: 4 });
-  view.webview.receive({ type: 'addChapters', uri: bookUri });
-  view.webview.receive({ type: 'createChapter', uri: bookUri });
+  view.webview.receive({ type: 'moveEntry', uri: bookUri, list: 'covers', line: 4, dir: -1 });
+  view.webview.receive({ type: 'moveEntry', uri: bookUri, list: 'covers', line: 4, dir: 1 });
+  view.webview.receive({ type: 'removeEntry', uri: bookUri, list: 'covers', line: 4 });
+  view.webview.receive({ type: 'addEntries', uri: bookUri, list: 'covers' });
+  view.webview.receive({ type: 'createEntry', uri: bookUri, list: 'chapters' });
   await tick();
   const cmds = state.executedCommands.map((c) => c.command);
-  assert.ok(cmds.includes('jpbook.moveChapterUp'));
-  assert.ok(cmds.includes('jpbook.moveChapterDown'));
-  assert.ok(cmds.includes('jpbook.removeChapter'));
-  assert.ok(cmds.includes('jpbook.addChapters'));
+  assert.ok(cmds.includes('jpbook.moveEntryUp'));
+  assert.ok(cmds.includes('jpbook.moveEntryDown'));
+  assert.ok(cmds.includes('jpbook.removeEntry'));
+  assert.ok(cmds.includes('jpbook.addFiles'));
   assert.ok(cmds.includes('jpbook.createFile'));
-  const rm = state.executedCommands.find((c) => c.command === 'jpbook.removeChapter');
+  const rm = state.executedCommands.find((c) => c.command === 'jpbook.removeEntry');
   assert.ok(rm);
-  const node = rm.args[0] as { kind: string; line: number; entry: { uri: string } };
-  assert.equal(node.kind, 'chapter');
+  const node = rm.args[0] as { kind: string; list: string; line: number; entry: { uri: string } };
+  assert.equal(node.kind, 'entry');
+  assert.equal(node.list, 'covers');
   assert.equal(node.line, 4);
   assert.equal(node.entry.uri, bookUri);
   const create = state.executedCommands.find((c) => c.command === 'jpbook.createFile');
   assert.ok(create);
-  const bookArg = create.args[0] as { kind: string; entry: { uri: string } };
-  assert.equal(bookArg.kind, 'book');
-  assert.equal(bookArg.entry.uri, bookUri);
+  const listArg = create.args[0] as { kind: string; list: string; entry: { uri: string } };
+  assert.equal(listArg.kind, 'list');
+  assert.equal(listArg.list, 'chapters');
+  assert.equal(listArg.entry.uri, bookUri);
+  const add = state.executedCommands.find((c) => c.command === 'jpbook.addFiles');
+  assert.ok(add);
+  assert.equal((add.args[0] as { list: string }).list, 'covers');
+});
+
+test('an unknown list is ignored (no dispatch)', async () => {
+  const root = 'file:///ws';
+  const bookUri = `${root}/src/a.jpbook`;
+  const { view } = await setup([entry(root, 'a')]);
+  view.webview.receive({ type: 'removeEntry', uri: bookUri, list: 'bogus', line: 4 });
+  view.webview.receive({ type: 'addEntries', uri: bookUri, list: 1 });
+  await tick();
+  assert.deepEqual(state.executedCommands.filter((c) => c.command.startsWith('jpbook.')), []);
+});
+
+test('moveEntryTo (drag-and-drop) plans against the named list only', async () => {
+  const root = 'file:///ws';
+  const bookUri = `${root}/src/a.jpbook`;
+  state.textDocuments.push(doc(bookUri, 'jpbook', '---\ncover:\n  - a.jpnov\n  - b.jpnov\n---\nx.jpnov\ny.jpnov\n'));
+  const { view } = await setup([entry(root, 'a')]);
+  view.webview.receive({ type: 'moveEntryTo', uri: bookUri, list: 'covers', line: 3, before: 2 });
+  await tick();
+  assert.deepEqual(state.appliedEdits, [
+    { uri: bookUri, range: [3, 0, 4, 0], newText: '' },
+    { uri: bookUri, range: [2, 0, 2, 0], newText: '  - b.jpnov\n' },
+  ]);
+  // The same lines under the other list name are not that list's entries: nothing is planned.
+  view.webview.receive({ type: 'moveEntryTo', uri: bookUri, list: 'chapters', line: 3, before: 2 });
+  await tick();
+  assert.equal(state.appliedEdits.length, 2);
 });
 
 test('openFile opens the given uri', async () => {

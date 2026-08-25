@@ -20,6 +20,17 @@
           }
         },
         {
+          "comment": "Value display ［＃ここに「題名/著者/総ページ数」の値を表示］ — only the field name is a directive; the structural ここに「 and 」の値を表示 demote to comment (mirrors the semantic layer emitting `marker` over each). The name alternation is checked against src/shared/compiler/tokenizer.ts VALUE_FIELD_BY_NAME by grammar-sync (canonical length-desc order); an unknown name falls through to the generic comment rule, exactly like the tokenizer.",
+          "match": "(［＃)(ここに「)(総ページ数|著者|題名)(」の値を表示)(］)",
+          "captures": {
+            "1": { "name": "comment.block.annotation.jpnov" },
+            "2": { "name": "comment.other.annotation.jpnov" },
+            "3": { "name": "keyword.other.directive.jpnov" },
+            "4": { "name": "comment.other.annotation.jpnov" },
+            "5": { "name": "comment.block.annotation.jpnov" }
+          }
+        },
+        {
           "comment": "Block END ［＃ここで(字下げ|太字|斜体)終わり］ — only the style keyword (字下げ/太字/斜体) is a directive; the structural ここで and 終わり are demoted to comment (mirrors the semantic layer, which emits `marker` over each — like the connector に). BEFORE block START (終わり suffix) and BEFORE the span rules. ここで傍点終わり etc. is NOT here (傍点/傍線 have no block form) and falls through to the generic comment rule, exactly like the tokenizer.",
           "match": "(［＃)(ここで)(字下げ|太字|斜体)(終わり)(］)",
           "captures": {

@@ -38,36 +38,36 @@ test('seeding: apply(undefined) leaves no vocabulary anywhere', () => {
 test('per-root isolation: each root recognizes only its own cast', () => {
   const store = createHighlightStore();
   store.apply({
-    [ROOT_A]: vocab(['朝霧　巳一']),
-    [ROOT_B]: vocab(['境無']),
+    [ROOT_A]: vocab(['山田　太郎']),
+    [ROOT_B]: vocab(['王都']),
   });
-  assert.ok(recognizes(store, `${ROOT_A}/ch1.jpnov`, '巳一'));
-  assert.ok(!recognizes(store, `${ROOT_A}/ch1.jpnov`, '境無'));
-  assert.ok(recognizes(store, `${ROOT_B}/ch1.jpnov`, '境無'));
-  assert.ok(!recognizes(store, `${ROOT_B}/ch1.jpnov`, '巳一'));
+  assert.ok(recognizes(store, `${ROOT_A}/ch1.jpnov`, '太郎'));
+  assert.ok(!recognizes(store, `${ROOT_A}/ch1.jpnov`, '王都'));
+  assert.ok(recognizes(store, `${ROOT_B}/ch1.jpnov`, '王都'));
+  assert.ok(!recognizes(store, `${ROOT_B}/ch1.jpnov`, '太郎'));
 });
 
 test('replacement semantics: a root absent from the next push is cleared', () => {
   const store = createHighlightStore();
-  store.apply({ [ROOT_A]: vocab(['巳一']), [ROOT_B]: vocab(['境無']) });
-  assert.ok(recognizes(store, `${ROOT_B}/ch1.jpnov`, '境無'));
+  store.apply({ [ROOT_A]: vocab(['太郎']), [ROOT_B]: vocab(['王都']) });
+  assert.ok(recognizes(store, `${ROOT_B}/ch1.jpnov`, '王都'));
 
-  store.apply({ [ROOT_A]: vocab(['巳一']) });
+  store.apply({ [ROOT_A]: vocab(['太郎']) });
   assert.equal(store.recognizerFor(`${ROOT_B}/ch1.jpnov`), undefined, 'absent root = no vocabulary');
-  assert.ok(recognizes(store, `${ROOT_A}/ch1.jpnov`, '巳一'), 'the surviving root is untouched');
+  assert.ok(recognizes(store, `${ROOT_A}/ch1.jpnov`, '太郎'), 'the surviving root is untouched');
 });
 
 test('normalization: empties, duplicates, non-strings, and non-array values are dropped, not fatal', () => {
   const store = createHighlightStore();
   store.apply({
     [ROOT_A]: {
-      characters: ['', '巳一', '巳一', 42, null] as unknown as readonly string[],
+      characters: ['', '太郎', '太郎', 42, null] as unknown as readonly string[],
       keywords: 'not-an-array' as unknown as readonly string[],
     },
   });
   const rec = store.recognizerFor(`${ROOT_A}/ch1.jpnov`);
   assert.ok(rec, 'the good item survives');
-  assert.equal(rec.recognize('巳一は').filter((s) => s.kind === 'character').length, 1);
+  assert.equal(rec.recognize('太郎は').filter((s) => s.kind === 'character').length, 1);
 
   // Nothing usable at all -> no recognizer (the fast path stays).
   store.apply({ [ROOT_A]: { characters: [''], keywords: [] } });
@@ -76,33 +76,33 @@ test('normalization: empties, duplicates, non-strings, and non-array values are 
 
 test('invalidation: a fresh apply swaps recognizers — old words out, new words in', () => {
   const store = createHighlightStore();
-  store.apply({ [ROOT_A]: vocab(['巳一']) });
+  store.apply({ [ROOT_A]: vocab(['太郎']) });
   const before = store.recognizerFor(`${ROOT_A}/ch1.jpnov`);
   assert.ok(before);
 
-  store.apply({ [ROOT_A]: vocab(['境無']) });
+  store.apply({ [ROOT_A]: vocab(['王都']) });
   const after = store.recognizerFor(`${ROOT_A}/ch1.jpnov`);
   assert.ok(after);
   assert.notEqual(after, before, 'the recognizer instance was rebuilt');
-  assert.ok(recognizes(store, `${ROOT_A}/ch1.jpnov`, '境無'));
-  assert.ok(!recognizes(store, `${ROOT_A}/ch1.jpnov`, '巳一'));
+  assert.ok(recognizes(store, `${ROOT_A}/ch1.jpnov`, '王都'));
+  assert.ok(!recognizes(store, `${ROOT_A}/ch1.jpnov`, '太郎'));
 });
 
 test('key normalization: a trailing-slash root key still routes its documents', () => {
   const store = createHighlightStore();
-  store.apply({ [`${ROOT_A}/`]: vocab(['巳一']) });
-  assert.ok(recognizes(store, `${ROOT_A}/ch1.jpnov`, '巳一'));
+  store.apply({ [`${ROOT_A}/`]: vocab(['太郎']) });
+  assert.ok(recognizes(store, `${ROOT_A}/ch1.jpnov`, '太郎'));
 });
 
 test('nested roots: longest prefix wins, and an empty child entry shadows its parent', () => {
   const store = createHighlightStore();
   store.apply({
-    'file:///ws': vocab(['巳一']),
+    'file:///ws': vocab(['太郎']),
     'file:///ws/sub': vocab([], []),
-    'file:///ws/deep': vocab(['境無']),
+    'file:///ws/deep': vocab(['王都']),
   });
-  assert.ok(recognizes(store, 'file:///ws/ch1.jpnov', '巳一'), 'parent doc uses the parent vocab');
-  assert.ok(recognizes(store, 'file:///ws/deep/ch1.jpnov', '境無'), 'deepest matching root wins');
+  assert.ok(recognizes(store, 'file:///ws/ch1.jpnov', '太郎'), 'parent doc uses the parent vocab');
+  assert.ok(recognizes(store, 'file:///ws/deep/ch1.jpnov', '王都'), 'deepest matching root wins');
   assert.equal(
     store.recognizerFor('file:///ws/sub/ch1.jpnov'),
     undefined,
@@ -112,7 +112,7 @@ test('nested roots: longest prefix wins, and an empty child entry shadows its pa
 
 test('memoization: the same entry hands out the same recognizer instance', () => {
   const store = createHighlightStore();
-  store.apply({ [ROOT_A]: vocab(['巳一']) });
+  store.apply({ [ROOT_A]: vocab(['太郎']) });
   const first = store.recognizerFor(`${ROOT_A}/ch1.jpnov`);
   const second = store.recognizerFor(`${ROOT_A}/ch2.jpnov`);
   assert.ok(first);
@@ -122,10 +122,10 @@ test('memoization: the same entry hands out the same recognizer instance', () =>
 test('handleHighlightChanged applies the map AND asks the client to re-pull tokens', () => {
   const conn = makeFakeConnection();
   const store = createHighlightStore();
-  const highlight: HighlightVocabularyMap = { [ROOT_A]: vocab(['巳一']) };
+  const highlight: HighlightVocabularyMap = { [ROOT_A]: vocab(['太郎']) };
 
   handleHighlightChanged(conn.asConnection(), store, { highlight });
 
   assert.equal(conn.semanticTokenRefreshes(), 1, 'exactly one semanticTokens.refresh');
-  assert.ok(recognizes(store, `${ROOT_A}/ch1.jpnov`, '巳一'), 'the snapshot was applied');
+  assert.ok(recognizes(store, `${ROOT_A}/ch1.jpnov`, '太郎'), 'the snapshot was applied');
 });

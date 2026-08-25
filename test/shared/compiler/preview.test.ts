@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import type { PreviewChrome } from '../../../src/shared/compiler/chrome.ts';
 import { EDGE_INSET } from '../../../src/shared/compiler/geometry.ts';
 import { renderPreview } from '../../../src/shared/compiler/preview.ts';
+import { VALUE_FIELD_PLACEHOLDERS } from '../../../src/shared/compiler/tokenizer.ts';
 
 /**
  * The single 80%-alpha edge recipe (base-INDEPENDENT — the base colour rides the `--edge`
@@ -225,4 +226,11 @@ test('renderPreview all-off chrome emits neither number spans nor edge rules', (
   assert.doesNotMatch(html, /::after/);
   assert.doesNotMatch(html, /--lpp|min-block-size/); // the page extent rides the edge fragment only
   assert.match(html, /\.pb-label\{/); // the page-break label styling is unconditional
+});
+
+test('renderPreview: value annotations show the bookless placeholders (a template serves many books)', () => {
+  const out = preview('［＃ここに「題名」の値を表示］\n［＃ここに「著者」の値を表示］\n全［＃ここに「総ページ数」の値を表示］ページ');
+  assert.match(out, new RegExp(`<div class="line" data-line="0">${VALUE_FIELD_PLACEHOLDERS.title}</div>`));
+  assert.match(out, new RegExp(`<div class="line" data-line="1">${VALUE_FIELD_PLACEHOLDERS.author}</div>`));
+  assert.match(out, new RegExp(`全${VALUE_FIELD_PLACEHOLDERS.totalPages}ページ`));
 });
