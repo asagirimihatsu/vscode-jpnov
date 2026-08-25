@@ -1,0 +1,53 @@
+name: バグ報告
+description: 表示が崩れる・警告がおかしい・出力に失敗する
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: わかる範囲で構いません。
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 起きた場所
+      options:
+        - エディター（注記のハイライト・自動字下げ）
+        - 文章校正
+        - 登場人物と造語のハイライト
+        - 縦書きプレビュー
+        - 本の出力（印刷／PDF 保存・HTML）
+        - 本の出力（EPUB）
+        - 本の出力（テキスト）
+        - 本の一覧
+        - その他・わからない
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 起きたこと
+      description: 何をしたら何が起きたか、本来はどうなるはずだったかを書いてください。スクリーンショットも、ここに貼り付けられます。
+    validations:
+      required: true
+
+  - type: textarea
+    id: sample
+    attributes:
+      label: 原稿の抜粋
+      description: 問題が起きる行だけで構いません。注記やルビ、行頭の全角スペースもそのまま貼り付けてください。本のファイル（`.jpbook`）の問題なら、その中身をどうぞ。
+      render: text
+      placeholder: |
+        　物語《ものがたり》が始まる。
+        　覚悟［＃「覚悟」に傍点］を決めた。
+
+  - type: textarea
+    id: env
+    attributes:
+      label: 環境
+      description: メニューの「ヘルプ」→「バージョン情報」（macOS では「Code」メニュー）を開き、「コピー」を押してここに貼り付けてください。この拡張機能のバージョンは、拡張機能の一覧で「Japanese Novel」を開くと、名前の横に表示されます。変更した設定があれば、それも書いてください。
+      placeholder: |
+        バージョン: 1.131.0
+        OS: Windows_NT x64 10.0.26100
+        Japanese Novel 0.7.0
+        変更した設定: 1 行の文字数 20、禁則処理「厳格」

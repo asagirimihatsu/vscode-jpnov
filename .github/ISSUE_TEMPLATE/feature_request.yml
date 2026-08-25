@@ -1,0 +1,17 @@
+name: 機能の要望
+description: こんなことができたら・この注記にも対応してほしい
+labels: [enhancement]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: やりたいこと
+      description: どんな場面で、何ができると助かるかを書いてください。いまはどうしているかも書いてあると、検討しやすくなります。
+    validations:
+      required: true
+
+  - type: textarea
+    id: refs
+    attributes:
+      label: 参考
+      description: 青空文庫の注記の名前、ほかのツールでの例、投稿先の規定など。
