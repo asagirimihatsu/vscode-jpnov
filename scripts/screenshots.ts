@@ -18,7 +18,7 @@ mkdirSync(OUT, { recursive: true });
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const FFMPEG = '/opt/homebrew/bin/ffmpeg';
 
-// ---- サンプルテキスト ----------------------------------------------------
+// サンプルテキスト
 
 // 夏目漱石『吾輩は猫である』冒頭（青空文庫、パブリックドメイン）。
 // 差し替えるときは README 両方のクレジット表記も合わせて更新する。
@@ -45,7 +45,7 @@ const NOTATION = `　物語《ものがたり》が始まる。
 const KINSOKU = `　長い夜がようやく終わりを告げていくのだ。そのときに、彼はしずかにこう呟いた。「まだ続きがある」と彼は思った。
 `;
 
-// ---- ショット定義 --------------------------------------------------------
+// ショット定義
 
 // フォントは製品既定（css.ts DEFAULT_FONT_STACK — Hiragino 先頭）をそのまま使う。
 // プレビューは透明背景 + --vscode-* 変数なので、紙色を与える。
@@ -68,6 +68,20 @@ const folio = {
   pageNumberFormat: '{page} / {totalPage}',
   header: '吾輩は猫である',
 } as const;
+
+type PreviewOpts = Parameters<typeof renderPreview>[1];
+/** 特写ショットのプレビュー設定。既定値を土台に、各ショットは差分だけ渡す。 */
+const previewOpts = (overrides: Partial<PreviewOpts> = {}): PreviewOpts => ({
+  charsPerLine: 20,
+  linesPerPage: 34,
+  linePitch: 1.5,
+  fontFamily: '',
+  kinsoku: 'normal',
+  autoTcy: 'punctuationPairs',
+  dash: 'horizontalBar',
+  chrome: { lineNumbers: false, edgeLine: 'none' },
+  ...overrides,
+});
 
 interface PdfShot {
   name: string;
@@ -125,16 +139,8 @@ const shots: Shot[] = [
   {
     name: 'notation',
     mode: 'screenshot',
-    html: renderPreview(NOTATION, {
-      charsPerLine: 9,
-      linesPerPage: 34,
-      linePitch: 2, // 見本に左ルビがある — 既定 1.5 では隣の行に重なる
-      fontFamily: '',
-      kinsoku: 'normal',
-      autoTcy: 'punctuationPairs',
-      dash: 'horizontalBar',
-      chrome: { lineNumbers: false, edgeLine: 'none' },
-    }),
+    // linePitch 2: 見本に左ルビがある — 既定 1.5 では隣の行に重なる
+    html: renderPreview(NOTATION, previewOpts({ charsPerLine: 9, linePitch: 2 })),
     style: PAPER,
     w: 1080,
     h: 620,
@@ -143,16 +149,7 @@ const shots: Shot[] = [
   {
     name: 'kinsoku-off',
     mode: 'screenshot',
-    html: renderPreview(KINSOKU, {
-      charsPerLine: 20,
-      linesPerPage: 34,
-      linePitch: 1.5,
-      fontFamily: '',
-      kinsoku: 'none',
-      autoTcy: 'punctuationPairs',
-      dash: 'horizontalBar',
-      chrome: { lineNumbers: false, edgeLine: 'none' },
-    }),
+    html: renderPreview(KINSOKU, previewOpts({ kinsoku: 'none' })),
     style: PAPER,
     w: 500, // 最小幅ちょうど。撮影後に左余白を crop
     h: 640,
@@ -161,16 +158,7 @@ const shots: Shot[] = [
   {
     name: 'kinsoku-on',
     mode: 'screenshot',
-    html: renderPreview(KINSOKU, {
-      charsPerLine: 20,
-      linesPerPage: 34,
-      linePitch: 1.5,
-      fontFamily: '',
-      kinsoku: 'normal',
-      autoTcy: 'punctuationPairs',
-      dash: 'horizontalBar',
-      chrome: { lineNumbers: false, edgeLine: 'none' },
-    }),
+    html: renderPreview(KINSOKU, previewOpts()),
     style: PAPER,
     w: 500,
     h: 640,
@@ -178,7 +166,7 @@ const shots: Shot[] = [
   },
 ];
 
-// ---- 撮影 ----------------------------------------------------------------
+// 撮影
 
 /** 出力ファイルの生成をサイズ安定で検知し、Chrome を止める（headless は自然終了しない） */
 async function runChromeUntilSettled(args: string[], outFile: string): Promise<void> {

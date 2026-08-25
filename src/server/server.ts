@@ -74,12 +74,6 @@ const context: ServerContext = {
 const documents = new TextDocuments(TextDocument);
 documents.listen(connection);
 
-/** The document selector the client uses to route docs/requests to this server. */
-const DOCUMENT_SELECTOR = [
-  { language: 'jpnov' },
-  { language: 'jpbook' },
-] as const;
-
 connection.onInitialize((params: InitializeParams): InitializeResult => {
   const options = params.initializationOptions as InitializationOptions | undefined;
   context.lintSelection = selectRules(options?.lintConfig ?? {});
@@ -117,9 +111,6 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         codeActionKinds: [CodeActionKind.QuickFix, CodeActionKind.SourceFixAll],
       },
       // No executeCommandProvider: this extension drives everything through custom requests.
-      // The document selector is advertised for the client to mirror onto its
-      // LanguageClient (ServerCapabilities has no standard slot for it).
-      experimental: { documentSelector: DOCUMENT_SELECTOR },
     },
   };
 });
@@ -160,7 +151,7 @@ connection.onNotification(
   },
 );
 
-// Build: omit `root` to build all valid roots. Progress flows over $/progress via the
+// Build: every root in the request's projectDirs. Progress flows over $/progress via the
 // request's work-done reporter (3rd handler arg), tied to the client's workDoneToken.
 connection.onRequest(
   BuildRequest,
@@ -202,8 +193,6 @@ connection.languages.semanticTokens.on((params) => {
   }
   return buildSemanticTokens(doc, context.highlight.recognizerFor(params.textDocument.uri));
 });
-
-// --- *.jpbook editor features (jpbook) -------------------------------
 
 /** Returns line `n`'s text (no terminator); `position.character` indexes into this. */
 function lineAt(doc: TextDocument, line: number): string {

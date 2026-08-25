@@ -15,9 +15,7 @@ import type { PaperOrientation, PaperSize } from './compiler/geometry.ts';
 import type { LayoutSettings } from './config/types.ts';
 import type { LintCode } from './lint/catalog.ts';
 
-// ---------------------------------------------------------------------------
 // initialize (C->S)
-// ---------------------------------------------------------------------------
 
 /**
  * A flat snapshot of the user's `jpnov.lint.*` settings, keyed by full setting key
@@ -38,9 +36,7 @@ export interface InitializationOptions {
   readonly highlight?: HighlightVocabularyMap;
 }
 
-// ---------------------------------------------------------------------------
 // Localizable server messages (S->C)
-// ---------------------------------------------------------------------------
 
 /**
  * The forked server is vscode-free (no `vscode.l10n`), so it never produces final UI text.
@@ -69,12 +65,12 @@ export type MsgCode =
   | 'jpbook.metaUnterminated' // args: [] — front matter opened but no closing ---; range = the opening fence
   | 'jpbook.coverItemWithoutKey' // args: [value] — a "- path" list item with no bare "cover:" line open above it
   | 'jpbook.coverNeedsList' // args: [value] — `cover:` written with a value; it takes "- path" item lines
-  | 'path.empty' // args: [LabelId]
-  | 'path.rootDot' // args: [LabelId]  (the root "." or a path collapsing to it)
-  | 'path.homeRelative' // args: [LabelId]
-  | 'path.absolute' // args: [LabelId]
-  | 'path.invalid' // args: [LabelId]
-  | 'path.escapesRoot' // args: [LabelId]
+  | 'path.empty' // args: [] — the path.* codes are resolveContained's verdicts on a book entry
+  | 'path.rootDot' // args: []  (the root "." or a path collapsing to it)
+  | 'path.homeRelative' // args: []
+  | 'path.absolute' // args: []
+  | 'path.invalid' // args: []
+  | 'path.escapesRoot' // args: []
   | 'syntax.unclosedAnnotation' // args: [] — unterminated ［＃ (no ］ before the line end); the diagnostic range IS the span
   | 'syntax.unterminatedBlock' // args: [] — ［＃ここから…］ with no matching ［＃ここで…終わり］ before EOF; range = the ここから annotation
   | 'syntax.danglingBlockEnd' // args: [] — ［＃ここで…終わり］ with no open block; range = the 終わり annotation
@@ -89,22 +85,13 @@ export type MsgCode =
   | 'lint.common.exclamationRun.single' // args: [] — its third fault: a lone half-width ! or ?
   | 'server.unexpected'; // args: [detail]  (detail = raw unexpected server error, untranslatable)
 
-/**
- * Config-field labels carried by the `path.*` codes. Only `jpbookEntry` exists (the
- * `jpnov.layout.outDir` paths fail silently to their defaults instead of diagnosing); it is
- * prose and is localized client-side.
- */
-export type LabelId = 'jpbookEntry';
-
 /** A server-produced message: a code plus the positional args its template substitutes. */
 export interface LocalizableMessage {
   readonly code: MsgCode;
   readonly args?: readonly (string | number)[];
 }
 
-// ---------------------------------------------------------------------------
 // jpnov/serverError (S->C notification)
-// ---------------------------------------------------------------------------
 
 export const ServerErrorNotification = 'jpnov/serverError';
 
@@ -118,9 +105,7 @@ export interface ServerErrorParams {
   readonly message: LocalizableMessage;
 }
 
-// ---------------------------------------------------------------------------
 // jpnov/lintConfigChanged (C->S notification)
-// ---------------------------------------------------------------------------
 
 export const LintConfigChangedNotification = 'jpnov/lintConfigChanged';
 
@@ -133,9 +118,7 @@ export interface LintConfigChangedParams {
   readonly lintConfig: RawLintConfigWire;
 }
 
-// ---------------------------------------------------------------------------
 // jpnov/highlightChanged (C->S notification)
-// ---------------------------------------------------------------------------
 
 export const HighlightChangedNotification = 'jpnov/highlightChanged';
 
@@ -166,9 +149,7 @@ export interface HighlightChangedParams {
   readonly highlight: HighlightVocabularyMap;
 }
 
-// ---------------------------------------------------------------------------
 // Render settings (C->S, carried on jpnov/renderFile and jpnov/build)
-// ---------------------------------------------------------------------------
 
 /**
  * The layout-core / `jpnov.layout.preview.*` snapshot the client ships on every
@@ -180,10 +161,10 @@ export interface PreviewSettings extends LayoutSettings, PreviewChrome {}
 
 /**
  * The layout-core / `jpnov.layout.paper.*` snapshot the client ships on every `jpnov/build`
- * request. Only the `.html` artifact consumes it (`.txt` is the raw Aozora source; its encoding is
- * a client-side setting, never part of this snapshot).
- * Page furniture (ヘッダー/ノンブル) is deliberately ABSENT: it is book identity, carried by each
- * `.jpbook`'s own front matter and composed per book via `composeBookChrome`.
+ * request. Every artifact reads its slice (`.txt`: autoTcy + charsPerLine; `.epub`: kinsoku,
+ * autoTcy, dash); the paper and chrome fields are `.html`-only. The `.txt` encoding is a
+ * client-side setting, never part of this snapshot. Page furniture (ヘッダー/ページ番号) is
+ * ABSENT: it is book identity, carried by each `.jpbook`'s own front matter (`composeBookChrome`).
  */
 export interface HtmlSettings extends LayoutSettings {
   /** Line-head numbers on built pages (proofing chrome — workspace preference, not book identity). */
@@ -196,9 +177,7 @@ export interface HtmlSettings extends LayoutSettings {
   readonly paperOrientation: PaperOrientation;
 }
 
-// ---------------------------------------------------------------------------
 // jpnov/build (C->S request)
-// ---------------------------------------------------------------------------
 
 export const BuildRequest = 'jpnov/build';
 
@@ -224,8 +203,6 @@ export type ProjectDirsMap = Readonly<Record<string, ProjectDirs>>;
 
 /**
  * Build selectors:
- * - `root`        — restrict to a single root. The Books panel leaves it unset and selects
- *                   with `books` instead.
  * - `books`       — restrict to these `.jpbook` URIs. ABSENT = every discovered book;
  *                   PRESENT-BUT-EMPTY (`[]`) = build NOTHING. The two are deliberately distinct.
  * - `format`      — the artifact kind to emit (always stated; there is no both-kinds request).
@@ -234,7 +211,6 @@ export type ProjectDirsMap = Readonly<Record<string, ProjectDirs>>;
  * - `projectDirs` — the per-root output dir (see {@link ProjectDirsMap}).
  */
 export interface BuildParams {
-  readonly root?: string;
   readonly books?: readonly string[];
   readonly format: BuildFormat;
   readonly settings: HtmlSettings;
@@ -291,15 +267,12 @@ export interface BuildResult {
   readonly errors: readonly BuildError[];
 }
 
-// ---------------------------------------------------------------------------
 // jpnov/listBooks (C->S request)
-// ---------------------------------------------------------------------------
 
 export const ListBooksRequest = 'jpnov/listBooks';
 
-/** Omit `root` to enumerate the books of EVERY root in `projectDirs`. */
+/** Enumerates the books of every root in `projectDirs`. */
 export interface ListBooksParams {
-  readonly root?: string;
   readonly projectDirs: ProjectDirsMap;
 }
 
@@ -326,9 +299,7 @@ export interface ListBooksResult {
   readonly books: readonly BookEntry[];
 }
 
-// ---------------------------------------------------------------------------
 // jpnov/renderFile (C->S request)
-// ---------------------------------------------------------------------------
 
 export const RenderFileRequest = 'jpnov/renderFile';
 

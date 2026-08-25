@@ -90,7 +90,6 @@ export class Uri {
   }
 }
 
-/** vscode.FileType bitmask. */
 export const FileType = { Unknown: 0, File: 1, Directory: 2, SymbolicLink: 64 } as const;
 
 /** vscode.FileSystemError: an Error carrying the `.code` the client narrows on. */

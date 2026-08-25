@@ -14,11 +14,13 @@
  * enters the host's module graph: the host imports only the string it produces, so the browser code
  * is never bundled as node-target code into `dist/client/extension.js`.
  */
-import { copyFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { copyFile, mkdir, readdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import * as esbuild from 'esbuild';
+
+import { writeIfChanged } from './write.ts';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 
@@ -90,22 +92,6 @@ async function renderModule(mod: WebviewModule, production: boolean): Promise<st
     cssDecl = `export const ${mod.css.cssExport} = ${JSON.stringify(css)};\n`;
   }
   return HEADER + cssDecl + `export const ${mod.jsExport} = ${JSON.stringify(js)};\n`;
-}
-
-/** Write a file iff its content changed; returns whether a write happened. */
-async function writeIfChanged(path: string, next: string): Promise<boolean> {
-  let prev: string | undefined;
-  try {
-    prev = await readFile(path, 'utf8');
-  } catch {
-    prev = undefined;
-  }
-  if (prev === next) {
-    return false;
-  }
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, next);
-  return true;
 }
 
 /** Vendor the codicon font + stylesheet into `media/codicon/` (served via asWebviewUri). */

@@ -1,25 +1,13 @@
 /**
- * Extension entry (client / host side). This is the ONLY tree permitted to
- * value-import `vscode`. It launches the forked Node language server over IPC and owns
- * the host-side concerns: the Books build panel (in the extension's own Activity Bar
- * container) and the live preview. The jpnov language id is bound declaratively to
- * `.jpnov` (package.json), so there is no runtime language-id management here.
+ * Extension entry (host side) — the ONLY tree permitted to value-import `vscode`. It forks the
+ * language server over IPC and owns the host-side UI (Books panel, live preview).
  *
- * The pure compiler + all book parsing live server-side; the client is a thin
- * orchestrator that translates `jpnov/*` protocol messages into VS Code UI effects
- * and translates VS Code events (settings pushes, build actions) back to the server.
- *
- * Activation is two-phase so the window-open path stays cheap (`onStartupFinished`
- * activates this extension in EVERY window, novel or not):
- *   Phase 1 `activate()`  — synchronous registrations only (commands, serializer,
- *     lazy-start listeners). No LanguageClient, no fork, no fs beyond one
- *     root readDirectory per workspace folder. Instant `.jpnov` colorization does not
- *     depend on any of this — the TextMate grammar is applied by VS Code core.
- *   Phase 2 `ensureStarted()` — single-flight; constructs the client + UI singletons
- *     and forks the server on the FIRST real demand: a jpnov/jpbook document, a
- *     jpnov command, a restored preview panel, or a probe hit on a workspace folder
- *     (so a novel workspace still self-populates its Books view shortly after
- *     startup, just off the window-open critical path).
+ * Activation is two-phase because `onStartupFinished` activates this extension in EVERY window:
+ *   Phase 1 `activate()`  — synchronous registrations only (commands, serializer, lazy-start
+ *     listeners); no LanguageClient, no fork, no fs beyond one root readDirectory per folder.
+ *   Phase 2 `ensureStarted()` — single-flight; constructs the client + UI singletons and forks
+ *     the server on the FIRST real demand (a jpnov/jpbook document, a jpnov command, a restored
+ *     preview panel, or a probe hit on a workspace folder).
  */
 import * as vscode from 'vscode';
 
@@ -279,20 +267,10 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  // Commands. All server-dependent bodies go through ensureStarted() (via serverCommand) so
-  // any command is a start trigger. The build actions live on the Books panel (the extension's
-  // Activity Bar container) and operate on its checkbox selection; there is no command-palette
-  // build entry — a build needs at least one discovered, selected book, so the palette is the
-  // wrong home for it.
-  const buildCommands = [
-    ['jpbook.print', 'print'],
-    ['jpbook.buildTxt', 'txt'],
-    ['jpbook.buildEpub', 'epub'],
-  ] as const;
+  // Commands. Every server-dependent body goes through ensureStarted() (via serverCommand), so
+  // any command is a start trigger. The Books panel's build and selection actions are webview
+  // messages handled in view.ts, not commands.
   context.subscriptions.push(
-    ...buildCommands.map(([id, format]) => serverCommand(id, () => booksView?.buildSelected(format))),
-    serverCommand('jpbook.selectAll', () => booksView?.selectAll()),
-    serverCommand('jpbook.deselectAll', () => booksView?.deselectAll()),
     serverCommand('jpbook.refresh', () => booksView?.refresh()),
     serverCommand('jpbook.createFile', (arg?: unknown) => createFile(booksView, arg)),
     serverCommand('jpnov.preview', () => preview?.open(false)),
@@ -306,7 +284,7 @@ export function activate(context: vscode.ExtensionContext): void {
         `${context.extension.id}#jpnov.gettingStarted`,
       );
     }),
-    // The Books panel's tree-as-form editing (plain: they only fire from tree nodes).
+    // The Books panel's form editing (plain: dispatched by view.ts, never from the palette).
     ...registerBookCommands(),
   );
 

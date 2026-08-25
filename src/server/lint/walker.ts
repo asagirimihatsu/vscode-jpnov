@@ -4,7 +4,7 @@
  * state machine": it owns the dialogue stack, the 字下げ and 見出し line state, and the
  * piece/sentinel bookkeeping; rules are small per-document state machines fed its lines.
  *
- * Inherited semantics (each guarded by walker.test.ts):
+ * Semantics (each guarded by walker.test.ts):
  *   - The dialogue stack is driven from PROSE characters only, exactly as in semanticTokens.ts —
  *     Aozora's ［＃「対象」に傍点］ carries its 「対象」 inside an annotation token, so it can never
  *     be mistaken for a quote (the Aozora trap).

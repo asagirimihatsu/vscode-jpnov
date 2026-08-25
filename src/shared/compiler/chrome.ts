@@ -30,7 +30,6 @@ export const PAGE_NUMBER_POSITIONS = [
 ] as const;
 export type PageNumberPosition = (typeof PAGE_NUMBER_POSITIONS)[number];
 
-/** Resolved preview chrome. */
 export interface PreviewChrome {
   /** Line-head numbers, restarting at 1 after every ［＃改ページ］ marker. */
   readonly lineNumbers: boolean;
@@ -38,7 +37,6 @@ export interface PreviewChrome {
   readonly edgeLine: EdgeLineStyle;
 }
 
-/** Resolved HTML-build chrome. */
 export interface BuildChrome {
   /** Line-head numbers, restarting at 1 on every page. */
   readonly lineNumbers: boolean;

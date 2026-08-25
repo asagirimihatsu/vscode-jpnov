@@ -1,21 +1,12 @@
 /**
- * The "Books" panel: a client-owned WebviewView in the extension's own Activity Bar container
- * (`contributes.views.jpnov`, `"type": "webview"`, see package.json). It lists every buildable
- * book — one `*.jpbook` discovered under each workspace folder root — each with a checkbox, and
- * drills into a per-book DETAIL screen (chapters + Book Info). The bottom build bar renders ONLY
- * the checked books, to ONE action: "Print / Save as PDF" (primary — the HTML build, opened in
- * the browser), "txt", or "EPUB".
- *
- * Split of concerns: the SERVER enumerates books
- * (`jpnov/listBooks`) and renders them (`jpnov/build`); this provider owns the VS Code UI and the
- * artifact writes (the server never touches `vscode.fs`). The provider is the single source of
- * truth for the book list and the checkbox selection; the webview is a render + dispatch surface
- * that reflects the last `state` it was pushed. All the presentation lives in `webviewHtml.ts`.
- *
- * The host owns the heavy work: `buildSelected` (build + write + txt Shift_JIS encoding + the
- * Print action's browser hand-off) here, and the form editing in `manage.ts` (reached from the
- * webview by dispatching the `jpbook.*` commands with a synthesized node). The view's visibility
- * is gated by the `jpnov.active` context key set in extension.ts.
+ * The "Books" panel: a client-owned WebviewView (`contributes.views.jpnov`, `"type": "webview"`)
+ * listing every buildable book with a checkbox, plus a per-book DETAIL screen; the bottom bar
+ * builds ONLY the checked books. This provider is the single source of truth for the book list
+ * and the selection — the webview only renders the last pushed `state` and dispatches actions.
+ * The SERVER enumerates and renders (`jpnov/listBooks`, `jpnov/build`); the provider owns every
+ * artifact write (the server never touches `vscode.fs`) and the Print action's browser hand-off.
+ * Form editing lives in `manage.ts`, reached by dispatching `jpbook.*` commands with a
+ * synthesized node. Visibility is gated by the `jpnov.active` context key (extension.ts).
  */
 import * as vscode from 'vscode';
 
@@ -45,7 +36,7 @@ import {
 } from '#/shared/book/jpbook.ts';
 import { encodeTxt, TXT_ENCODING_DEFAULT, type TxtEncoding } from '#/shared/encoding.ts';
 import { errorText } from '#/shared/errors.ts';
-import { ocfZip } from '#/shared/compiler/epub.ts';
+import { ocfZip } from '#/shared/compiler/ocf.ts';
 
 import type { BookVM, BuildAction, DetailMessage, EntryVM, MetaVM, StateMessage } from '../protocol.ts';
 
@@ -153,8 +144,6 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     );
   }
 
-  // --- WebviewViewProvider -------------------------------------------------
-
   resolveWebviewView(view: vscode.WebviewView): void {
     this.view = view;
     // Scripts are locked to a per-render nonce (CSP); the only loadable resource is the codicon
@@ -197,9 +186,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     (view as { title?: string | undefined }).title = entry === undefined ? this.defaultTitle : bookTitle(entry);
   }
 
-  // --- commands (wired in extension.ts) ------------------------------------
-
-  /** `jpbook.selectAll`: tick every book. */
+  /** Webview `selectAll`: tick every book. */
   selectAll(): void {
     for (const b of this.books) {
       this.checked.add(b.uri);
@@ -207,7 +194,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     this.postState();
   }
 
-  /** `jpbook.deselectAll`: clear every tick. */
+  /** Webview `deselectAll`: clear every tick. */
   deselectAll(): void {
     this.checked.clear();
     this.postState();
@@ -310,8 +297,6 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     this.disposables.length = 0;
   }
-
-  // --- webview messaging ---------------------------------------------------
 
   /** Book entry for a URI from the current enumeration, or undefined if it vanished. */
   private entryOf(uri: unknown): BookEntry | undefined {
@@ -592,8 +577,8 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   /**
-   * The build driver behind the panel's build actions (`jpbook.print`/`buildTxt`/
-   * `buildEpub`): render the CHECKED books (or exactly `only`, when given) to `action`'s one
+   * The build driver behind the panel's build buttons (webview `build` messages): render
+   * the CHECKED books (or exactly `only`, when given) to `action`'s one
    * format (`print` = `.html` on the wire, then opened in the OS default browser — the HTML
    * artifact's only build path; `epub` comes back as member files the client zips), write
    * the results (the client owns all filesystem writes), and report. An empty selection is
@@ -715,6 +700,8 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           }
           // One artifact per book now (a single format), so the file count IS the book count.
           this.reportBuilt(written.length, label, action === 'print' ? [] : result.outDirs);
+          // Checks off the walkthrough's build step (`onContext:jpnov.hasBuilt` in package.json).
+          void vscode.commands.executeCommand('setContext', 'jpnov.hasBuilt', true);
           if (substitutions > 0) {
             void vscode.window.showWarningMessage(
               vscode.l10n.t('Japanese Novel: {0} character(s) became 〓 in the text output.', String(substitutions)),

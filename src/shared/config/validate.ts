@@ -1,10 +1,9 @@
-import type { LabelId, MsgCode } from '#/shared/protocol.ts';
+import type { MsgCode } from '#/shared/protocol.ts';
 
-/** Failure of {@link resolveContained}: a `path.*` code plus the config-field label it concerns. */
+/** Failure of {@link resolveContained}: the `path.*` code. */
 export interface ContainmentError {
-  ok: false;
-  code: MsgCode;
-  args: readonly [LabelId];
+  readonly ok: false;
+  readonly code: MsgCode;
 }
 
 /**
@@ -27,8 +26,8 @@ export function isAbsoluteLocation(value: string): boolean {
  *
  * Pure + vscode-free: `rootUri` and the returned `abs` are URI strings
  * (e.g. `file:///Users/x/proj`). On success `abs` is guaranteed to be at or below
- * `rootUri`. On failure it returns a `path.*` {@link MsgCode} plus `label` as the sole arg;
- * the CLIENT renders the localized text (the server fills the English diagnostic fallback).
+ * `rootUri`. On failure it returns a `path.*` {@link MsgCode}; the CLIENT renders the
+ * localized text (the server fills the English diagnostic fallback).
  *
  * Rejected:
  * - `""` and whitespace-only
@@ -37,25 +36,21 @@ export function isAbsoluteLocation(value: string): boolean {
  * - absolute paths (`/foo`, `C:\foo`, `\\server\share`, or a `scheme:` URI)
  * - a leading `~` (home-relative)
  */
-export function resolveContained(
-  rootUri: string,
-  rel: string,
-  label: LabelId,
-): { ok: true; abs: string } | ContainmentError {
+export function resolveContained(rootUri: string, rel: string): { ok: true; abs: string } | ContainmentError {
   const trimmed = rel.trim();
 
   if (trimmed === '') {
-    return { ok: false, code: 'path.empty', args: [label] };
+    return { ok: false, code: 'path.empty' };
   }
   if (trimmed === '.') {
-    return { ok: false, code: 'path.rootDot', args: [label] };
+    return { ok: false, code: 'path.rootDot' };
   }
   if (trimmed.startsWith('~')) {
-    return { ok: false, code: 'path.homeRelative', args: [label] };
+    return { ok: false, code: 'path.homeRelative' };
   }
 
   if (isAbsoluteLocation(trimmed)) {
-    return { ok: false, code: 'path.absolute', args: [label] };
+    return { ok: false, code: 'path.absolute' };
   }
 
   // Resolve against the root using URL semantics (handles ./ and ../ collapsing).
@@ -65,7 +60,7 @@ export function resolveContained(
   try {
     resolved = new URL(trimmed.split('\\').join('/'), base);
   } catch {
-    return { ok: false, code: 'path.invalid', args: [label] };
+    return { ok: false, code: 'path.invalid' };
   }
 
   const baseUrl = new URL(base);
@@ -80,13 +75,13 @@ export function resolveContained(
     resolved.host !== baseUrl.host ||
     !(resolved.pathname === rootPath || resolved.pathname.startsWith(rootDir))
   ) {
-    return { ok: false, code: 'path.escapesRoot', args: [label] };
+    return { ok: false, code: 'path.escapesRoot' };
   }
 
   // Equal to the root after collapsing (e.g. "foo/..") is also a rejection: a config
   // field must name a real subpath. (Shares `path.rootDot` with the literal "." case.)
   if (resolved.pathname === rootPath || resolved.pathname === rootDir) {
-    return { ok: false, code: 'path.rootDot', args: [label] };
+    return { ok: false, code: 'path.rootDot' };
   }
 
   return { ok: true, abs: resolved.href.replace(/\/$/, '') };

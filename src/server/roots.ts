@@ -2,7 +2,7 @@
  * The standard-LSP workspace-folder list (initialize + `workspace/didChangeWorkspaceFolders`)
  * the live `.jpbook` features use to resolve root-relative entries.
  */
-import { normalizeRootUri } from './fsUri.ts';
+import { longestPrefixRoot, normalizeRootUri } from './fsUri.ts';
 
 /** The workspace-folder set, answering "which root owns this URI" by longest prefix. */
 export interface WorkspaceRoots {
@@ -25,13 +25,7 @@ export function createWorkspaceRoots(): WorkspaceRoots {
       roots = roots.filter((r) => !gone.has(r)).concat(added.map(normalizeRootUri));
     },
     rootOf(uri) {
-      let best: string | null = null;
-      for (const root of roots) {
-        if ((uri === root || uri.startsWith(`${root}/`)) && (best === null || root.length > best.length)) {
-          best = root;
-        }
-      }
-      return best;
+      return longestPrefixRoot(roots, uri);
     },
   };
 }

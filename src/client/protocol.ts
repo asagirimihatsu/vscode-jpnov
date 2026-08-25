@@ -11,11 +11,8 @@
  * shape change is safe as long as both sides change in one commit.
  */
 
-// ---------------------------------------------------------------------------
 // Books panel — view models (host → webview `state` / `detail` payloads)
-// ---------------------------------------------------------------------------
 
-/** One book row in a `state` group. */
 export interface BookVM {
   readonly uri: string;
   readonly title: string;
@@ -53,9 +50,7 @@ export interface MetaVM {
   readonly note: string;
 }
 
-// ---------------------------------------------------------------------------
 // Books panel — messages
-// ---------------------------------------------------------------------------
 
 /** Host → webview: the full book list + selection. The sole authority; every push reconciles the view. */
 export interface StateMessage {
@@ -166,9 +161,7 @@ export interface BooksInit {
   readonly labels: Labels;
 }
 
-// ---------------------------------------------------------------------------
 // Live preview — messages + bootstrap
-// ---------------------------------------------------------------------------
 
 /** Host → preview webview: scroll the anchor for `line` to the reveal position (with a glide). */
 export interface RevealMessage {

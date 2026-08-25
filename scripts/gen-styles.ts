@@ -13,9 +13,11 @@
  * plus a watch plugin re-runs it on a fragment change). styles-codegen.test.ts guards the @page
  * geometry double-home against these fragments.
  */
-import { readdir, readFile, writeFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+
+import { writeIfChanged } from './write.ts';
 
 const STYLES_DIR = fileURLToPath(new URL('../src/shared/compiler/styles/', import.meta.url));
 const GENERATED = join(STYLES_DIR, 'styles.generated.ts');
@@ -50,7 +52,7 @@ export async function styleSourcePaths(): Promise<string[]> {
 }
 
 /** Renders the full generated-module text (pure). */
-export async function generateStylesModule(): Promise<string> {
+async function generateStylesModule(): Promise<string> {
   const paths = await styleSourcePaths();
   const styles = await Promise.all(paths.map(async (path) => [path, normalize(await readFile(path, 'utf8'))] as const));
   const exports = styles.map(([path, css]) => {
@@ -62,18 +64,7 @@ export async function generateStylesModule(): Promise<string> {
 
 /** Write the module iff its content changed; returns whether a write happened. */
 export async function writeStylesModule(): Promise<boolean> {
-  const next = await generateStylesModule();
-  let prev: string | undefined;
-  try {
-    prev = await readFile(GENERATED, 'utf8');
-  } catch {
-    prev = undefined; // first generation
-  }
-  if (prev === next) {
-    return false;
-  }
-  await writeFile(GENERATED, next);
-  return true;
+  return writeIfChanged(GENERATED, await generateStylesModule());
 }
 
 // CLI: `node scripts/gen-styles.ts` (or via `npm run gen:styles`).

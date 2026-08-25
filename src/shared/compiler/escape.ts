@@ -1,6 +1,4 @@
-/**
- * HTML escaping helpers for the jpnov -> HTML compiler. Pure + vscode-free.
- */
+/** Pure + vscode-free. */
 
 /**
  * Escapes the four characters that are unsafe in HTML text/attribute contexts:

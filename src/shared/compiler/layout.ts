@@ -807,8 +807,11 @@ function lastReal(units: readonly Unit[], start: number, before: number): number
 export const INSEP_LEADER = new Set('…‥'); // U+2026 U+2025
 const INSEP_BANG = new Set('!?'); // half-width; exactly-2 runs only
 
-/** The 分離禁止 class a unit binds under, or undefined (classed / ruby / multi-char / zero-width). */
-function insepClass(u: Unit | undefined): Set<string> | undefined {
+/**
+ * The 分離禁止 class a unit binds under, or undefined (classed / ruby / multi-char / zero-width).
+ * `bang: false` leaves the half-width `!?` class out (the reflow emitter — the reader wraps there).
+ */
+export function insepClass(u: Unit | undefined, { bang = true }: { bang?: boolean } = {}): Set<string> | undefined {
   if (u?.cells !== 1 || u.text.length !== 1 || u.cssClass !== undefined || u.ruby !== undefined) {
     return undefined;
   }
@@ -818,7 +821,7 @@ function insepClass(u: Unit | undefined): Set<string> | undefined {
   if (INSEP_LEADER.has(u.text)) {
     return INSEP_LEADER;
   }
-  return INSEP_BANG.has(u.text) ? INSEP_BANG : undefined;
+  return bang && INSEP_BANG.has(u.text) ? INSEP_BANG : undefined;
 }
 
 /** One atomic unit from `units[start..end)`; channels are `head`'s (the run requires them equal). */
@@ -1021,7 +1024,7 @@ export function paginate(
  * The four channels in a FIXED order → a deterministic class attribute that doubles as the
  * adjacent-merge key. '' = no decoration (the common case — no allocation, no `<span>`).
  */
-function unitKey(u: Unit): string {
+export function unitKey(u: Unit): string {
   if (
     u.emph === undefined &&
     u.line === undefined &&
@@ -1110,8 +1113,8 @@ function emitLine(line: DisplayLine, used?: Set<string>, anchor = true, head = '
   if (used && line.heading !== undefined) {
     used.add('midashi');
   }
-  // Right-side 傍点 anywhere on the line: Chromium displaces the whole line's baseline for the
-  // mark band at pitch < 2, so the line carries the counter-shift class (class.emr.css).
+  // Right-side 傍点 anywhere on the line: Chromium pushes the whole line's baseline for the mark
+  // band, so the line carries the counter-shift class (class.emr.css measures and pins the amount).
   const rightEmph = (u: Unit): boolean => u.emph !== undefined && !u.emph.endsWith('-l');
   const emrClass =
     line.units.some(rightEmph) || (line.hang !== undefined && rightEmph(line.hang)) ? ' emr' : '';

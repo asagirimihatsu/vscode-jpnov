@@ -8,8 +8,8 @@ body{margin:0;}
 /* One sheet: linesPerPage columns (block axis, var(--pitch) em each) × charsPerLine chars
    (inline axis, 1em each). The bands are padding OUTSIDE the content box, so the grid keeps its
    exact size and the sheet grows instead; overflow's clip box is the padding box, so band
-   content stays visible while anything past it is cut. --htop = header band 3 + on-demand
-   line-number band 1 (em); the 3em end pad = FOLIO_BAND and the 1.5em block pads = SIDE_PAD
+   content stays visible while anything past it is cut. --htop = header band 2 + on-demand
+   line-number band 1 (em); the 2em end pad = FOLIO_BAND and the 1.5em block pads = SIDE_PAD
    (see geometry.ts — fitPaper consumes the same numbers, guarded by styles-codegen.test.ts).
    The sheet's own band padding stays LOGICAL: .page is vertical-rl itself, so
    padding-inline-start/end = physical top/bottom and padding-block-start/end = physical

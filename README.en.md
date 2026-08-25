@@ -102,7 +102,7 @@ but not Japanese typesetting:
   opening brackets never end a line; closing punctuation, small kana, `ー` and
   `々` never start one; `――` and `……` pairs never split; and a trailing `、`/`。`
   hangs into the margin (ぶら下げ) instead of pushing text down. `strict` adds
-  the middle-dot and repetition-mark classes and keeps symbol runs unbroken;
+  the middle-dot and repetition-mark (ゝゞヽヾ〻) classes and keeps symbol runs unbroken;
   `none` is a bare wrap at the column width.
 
   | kinsoku `none` | kinsoku `normal` (default) |
@@ -330,9 +330,9 @@ cover:
 chapter1.jpnov
 ```
 
-Paths work exactly like chapter paths. Each file starts a new page, and the pages
-ship in the HTML and PDF builds. The running head and page numbering start on the
-first body page, however many cover sheets precede it.
+Paths work exactly like chapter paths. Each file starts a new page. The pages ship in
+the HTML build, and so in any PDF saved from it. The running head and page numbering
+start on the first body page, however many cover sheets precede it.
 
 The Books view's **Cover pages** section adds, creates and reorders these files
 just like chapters; **New cover page…** seeds the new file with the sample below.
@@ -482,7 +482,7 @@ form, and `ruby.kana` to ruby readings.
 | `jpnov.lint.common.blankRun` | `null` | Consecutive blank lines (suggested 2) |
 | `jpnov.lint.common.noUnmatchedPair` | `true` | Unmatched brackets / quotes |
 | `jpnov.lint.common.jaNoSpaceBetweenFullWidth` | `false` | Space between full-width characters (auto-fix) |
-| `jpnov.lint.common.jaUnnaturalAlphabet` | `false` | Unnatural runs of half-width letters |
+| `jpnov.lint.common.jaUnnaturalAlphabet` | `false` | Lone letter between Japanese characters (IME slip) |
 | `jpnov.lint.common.minusPosition` | `false` | Minus sign not before a number |
 | `jpnov.lint.ruby.kana` | `off` | Ruby readings all-hiragana / all-katakana |
 

@@ -1,24 +1,15 @@
 /**
- * Pure, vscode-free parsing for the per-book `*.jpbook` manifest, plus the output-name
+ * Pure, vscode-free parsing of the per-book `*.jpbook` manifest, plus the output-name
  * derivation, per-book chrome composition, and the fs-free completion logic.
  *
- * A `.jpbook` is plain text in two parts. An OPTIONAL front-matter block — opened by a
- * `---` on the first non-blank line and closed by a second `---` — holds `key: value`
- * metadata (the book's OWN properties: title, page furniture, chapter divider); `cover` alone
- * is list-valued — a bare `cover:` line followed by `- path` item lines. Everything after
- * the block (or the whole file when no block opens) is the chapter list: one `.jpnov` source
- * path per line, in reading order, relative to the book's OWNING WORKSPACE FOLDER root (so
- * moving the `.jpbook` itself never invalidates them).
+ * Chapter and cover paths are relative to the book's OWNING WORKSPACE FOLDER root, so moving
+ * the `.jpbook` itself never invalidates them. The `.jpbook`'s OWN name and location imply the
+ * output path (mirroring the source tree): `volume01/index.jpbook` and `volume01.jpbook` both
+ * build `volume01`, `part1/vol2.jpbook` builds `part1/vol2`. Metadata never affects the output
+ * path.
  *
- * The `.jpbook`'s OWN name and location imply the output path (mirroring the source
- * tree) — JS-module style: `volume01/index.jpbook` and `volume01.jpbook` both build
- * `volume01` (-> `volume01.txt` + `volume01.html`), and `part1/vol2.jpbook` builds
- * `part1/vol2`. Metadata never affects the output path.
- *
- * Split of concerns: this module does syntax/grammar, naming, and completion *decisions*
- * only. It never touches the filesystem — path containment and existence are resolved by the
- * server (`src/server/jpbook.ts`) where the root URI and `node:fs` are available. An `'ok'`
- * line here means "a backslash-free relative `.jpnov` path"; the server still resolves it
+ * Syntax, naming and completion decisions only — never the filesystem: an `'ok'` line means
+ * "a backslash-free relative `.jpnov` path"; the server (`src/server/jpbook.ts`) resolves it
  * through {@link resolveContained} and stats it before trusting it.
  */
 import type { BuildChrome, PageNumberPosition } from '../compiler/chrome.ts';
@@ -73,7 +64,7 @@ export interface ParsedLine {
 }
 
 /** A chapter entry line — `duplicate` still counts (it renders, moves, and dedupes like `ok`). */
-export function isChapter(pl: ParsedLine): boolean {
+function isChapter(pl: ParsedLine): boolean {
   return pl.kind === 'ok' || pl.kind === 'duplicate';
 }
 

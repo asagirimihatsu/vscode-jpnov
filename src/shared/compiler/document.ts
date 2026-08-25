@@ -110,10 +110,9 @@ function dividerLine(divider: string, charsPerLine: number): string {
  * divider dangling at a page seam serves nothing — the blank line still applies).
  *
  * Chapter edges are read LITERALLY: author blank lines are preserved and stack with the
- * glue. Passing the txt path's stripped previous source is equivalent — the strip only drops
- * the final-newline artifact. The glue is never autoTcy'd (both callers pass post-rewrite
- * sources); a divider that is itself a bare `!?` pair would only be combined on a `.txt`
- * re-render — documented here, not compensated.
+ * glue (the txt path's stripped previous source is equivalent — the strip only drops the
+ * final-newline artifact). The glue is never autoTcy'd; known limitation: a divider that is
+ * itself a bare `!?` pair combines only on a `.txt` re-render.
  */
 export function chapterGlue(
   prevSrc: string,
@@ -159,24 +158,14 @@ function glueRows(glue: string, dash: DashMode): Row[] {
 }
 
 /**
- * Renders one or more books into a full, PAGINATED `<html>` document. The pure layout
- * engine ({@link paginate}) flows each book's text into an explicit
- * `<div class="book"><div class="page"><div class="line">…` skeleton sized by
- * `charsPerLine` x `linesPerPage` (vertical-rl by default), so the output is WYSIWYG
- * page-per-sheet; `chrome` adds the page furniture (line numbers, edge rules + frame,
- * page numbers, header) around that grid.
- *
- * Each book concatenates its `files[]` in order with {@link chapterGlue} between chapters
- * (a blank line, plus the book's divider where it applies); each book starts on a fresh
- * page (the bodies paginate per book). ［＃改ページ］ forces a page break. A book's `cover`
- * files render BEFORE its body as unnumbered, furniture-free pages, each starting on a
- * fresh page; they compile AFTER the bodies are paginated, so ［＃ここに「総ページ数」の値を
- * 表示］ substitutes the document's body page count — the same count the folio's
- * `{totalPage}` shows. `kinsoku` selects the 禁則処理 tier of the line-break engine;
- * `autoTcy` runs the 自動縦中横 source rewrite per file before tokenizing (the same front
- * door as the `.txt` build and the preview). All options are required and pre-resolved (the
- * settings resolver is the only default layer); "off" is the explicit all-off chrome.
- * Pure + vscode-free.
+ * Renders one or more books into a full, PAGINATED `<html>` document: {@link paginate} flows
+ * each book's text into the `.book > .page > .line` skeleton sized by `charsPerLine` x
+ * `linesPerPage`; `chrome` adds the page furniture. Each book concatenates its `files[]` with
+ * {@link chapterGlue} between chapters and starts on a fresh page. Cover files render BEFORE
+ * the body as unnumbered, furniture-free pages and compile AFTER the bodies are paginated, so
+ * ［＃ここに「総ページ数」の値を表示］ shows the body page count — the same count as the
+ * folio's `{totalPage}`. All options are required and pre-resolved (the settings resolver is
+ * the only default layer). Pure + vscode-free.
  */
 export function renderBook(opts: {
   books: readonly BookInput[];

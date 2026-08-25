@@ -1,31 +1,15 @@
 /**
- * The `jpnov/build` request handler. The request's `projectDirs` map (the client's per-folder
- * `jpnov.layout.outDir` snapshot) defines the targeted roots; for each one it enumerates every
- * `*.jpbook` anywhere under the workspace folder root (skipping dot-folders, `node_modules`,
- * and the resolved output folder), reads the `.jpnov` files each one lists (in order, resolved
- * relative to the WORKSPACE FOLDER ROOT, the same base the live editor features use), and
- * emits the requested {@link BuildParams.format} per book (`.txt` = the concatenated Aozora
- * source via `concatBookText`; `.html` = the paginated render via `renderBook`; `.epub` = the
- * reflowable container members via `epubMembers`, zipped and written client-side),
- * returning the artifacts for the CLIENT to write. The output path is derived from
- * the `.jpbook`'s name/location (`jpbookOutRel`, mirroring the tree under the folder root);
- * two distinct book files that derive the same path are a build error and neither is emitted.
- * Page furniture (ヘッダー/ノンブル) comes from each book's OWN front matter (`composeBookChrome`),
- * so one build renders per-volume headers; the settings snapshot carries only the shared
- * layout + proofing chrome.
- *
- * A build may be narrowed by {@link BuildParams.books} (a subset of `.jpbook` URIs); every
- * request states its {@link BuildParams.format}. The companion {@link handleListBooks}
- * enumerates those same book files as {@link BookEntry}s WITHOUT building, to populate the
- * client's Books selection panel.
- *
- * Book enumeration / file reads use `node:fs` on the `file:` scheme only (the server never
- * touches `vscode.fs`); the client owns artifact writes, and with them the output encoding —
- * artifacts leave here as text. Per-line diagnostics are computed by
- * the shared {@link diagnoseJpbook} (the same path the live editor uses) and published on each
- * `.jpbook` URI, plus a file-level collision diagnostic when one applies.
- *
- * vscode-free: the runtime `Connection` is reached only through {@link ServerContext}.
+ * The `jpnov/build` and `jpnov/listBooks` request handlers. Constraints:
+ * - the request's `projectDirs` map DEFINES the targeted roots; every `*.jpbook` under a root
+ *   is a book (dot-folders, `node_modules` and the resolved output dir are never scanned);
+ * - two book files that derive the same output path (`jpbookOutRel`) are a build error and
+ *   neither is emitted;
+ * - `.jpbook` entries resolve against the WORKSPACE FOLDER ROOT (the same base the live editor
+ *   features use), and page furniture comes from each book's OWN front matter
+ *   (`composeBookChrome`), so one batch build carries a different header per volume;
+ * - the server never touches `vscode.fs`: artifacts leave here as text and the CLIENT writes
+ *   them (and owns the `.txt` encoding);
+ * - vscode-free — the runtime `Connection` is reached only through {@link ServerContext}.
  */
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -86,9 +70,8 @@ interface ProjectRoot {
 interface BuildSelection {
   /** When set, only book files whose URI is in the set are built; `undefined` = every book. */
   readonly books: ReadonlySet<string> | undefined;
-  /** The artifact kind this build emits. */
   readonly format: BuildFormat;
-  /** The re-resolved render settings the `.html` artifacts use (grid geometry + proofing chrome). */
+  /** The re-resolved render settings; every format reads its slice, the paper/chrome fields are html-only. */
   readonly settings: HtmlSettings;
 }
 
@@ -165,9 +148,9 @@ async function readBookFiles(rootUri: string, lines: readonly ParsedLine[]): Pro
 
 /** Reads one root-relative entry to UTF-8 text; throws a {@link LocalizedError} per failure mode. */
 async function readEntry(rootUri: string, rel: string): Promise<string> {
-  const resolved = resolveContained(rootUri, rel, 'jpbookEntry');
+  const resolved = resolveContained(rootUri, rel);
   if (!resolved.ok) {
-    throw new LocalizedError({ code: resolved.code, args: resolved.args });
+    throw new LocalizedError({ code: resolved.code });
   }
   if (!isFileScheme(resolved.abs)) {
     throw new LocalizedError({ code: 'book.entryNeedsFileScheme', args: [rel] });
@@ -223,7 +206,7 @@ type BuildOutput =
  * expensive step, so a `txt` build never runs it.
  */
 function emitArtifact(
-  target: ProjectRoot,
+  outDirUri: string,
   selection: BuildSelection,
   outRel: string,
   input: BookInput,
@@ -233,7 +216,7 @@ function emitArtifact(
     case 'txt':
       return {
         kind: 'txt',
-        path: childUri(target.outDirUri, `${outRel}.txt`),
+        path: childUri(outDirUri, `${outRel}.txt`),
         content: concatBookText(input, selection.settings.autoTcy, selection.settings.charsPerLine),
       };
     case 'html':
@@ -242,7 +225,7 @@ function emitArtifact(
       // one batch build carry a different header per volume).
       return {
         kind: 'html',
-        path: childUri(target.outDirUri, `${outRel}.html`),
+        path: childUri(outDirUri, `${outRel}.html`),
         content: renderBook({
           books: [input],
           charsPerLine: selection.settings.charsPerLine,
@@ -260,7 +243,7 @@ function emitArtifact(
     case 'epub':
       return {
         kind: 'epub',
-        path: childUri(target.outDirUri, `${outRel}.epub`),
+        path: childUri(outDirUri, `${outRel}.epub`),
         members: epubMembers({
           book: input,
           meta,
@@ -346,7 +329,7 @@ async function* buildRoot(
             }
           : {}),
       };
-      yield { kind: 'artifact', outDir: target.outDirUri, artifact: emitArtifact(target, selection, outRel, input, parsed.meta) };
+      yield { kind: 'artifact', outDir: target.outDirUri, artifact: emitArtifact(target.outDirUri, selection, outRel, input, parsed.meta) };
     } catch (cause) {
       yield { kind: 'error', error: { book: fl.fileRel, uri: fl.uri, ...toBuildMessage(cause) } };
     }
@@ -356,31 +339,24 @@ async function* buildRoot(
 /**
  * Resolves one configured project dir against its root: a contained relative path becomes
  * its absolute URI; anything invalid (empty / absolute / escaping / `.` …) silently falls
- * back to the default. The `'jpbookEntry'` label is a placeholder — a failed resolution
- * is discarded here, never rendered.
+ * back to the default.
  */
 function resolveProjectDir(rootUri: string, value: string, fallback: string): string {
-  const resolved = resolveContained(rootUri, value, 'jpbookEntry');
+  const resolved = resolveContained(rootUri, value);
   // The defaults are single-segment relative paths, so this join cannot escape the root.
   return resolved.ok ? resolved.abs : childUri(rootUri, fallback);
 }
 
-/**
- * The roots a request targets: every `projectDirs` entry (narrowed to `root` when set),
- * each with its output dir resolved. The map is the SOLE source of buildable roots.
- */
-function targetRoots(projectDirs: ProjectDirsMap, root?: string): ProjectRoot[] {
-  const wanted = root === undefined ? undefined : normalizeRootUri(root);
-  return Object.entries(projectDirs).flatMap(([rawUri, dirs]) => {
+/** The roots a request targets: every `projectDirs` entry with its output dir resolved — the map is the SOLE source of buildable roots. */
+function targetRoots(projectDirs: ProjectDirsMap): ProjectRoot[] {
+  return Object.entries(projectDirs).map(([rawUri, dirs]) => {
     const rootUri = normalizeRootUri(rawUri);
-    return wanted === undefined || rootUri === wanted
-      ? [{ rootUri, outDirUri: resolveProjectDir(rootUri, dirs.outDir, PROJECT_DEFAULT.outDir) }]
-      : [];
+    return { rootUri, outDirUri: resolveProjectDir(rootUri, dirs.outDir, PROJECT_DEFAULT.outDir) };
   });
 }
 
 /**
- * Handles `jpnov/build`. Omitting `root` builds every root in `projectDirs`. Reports coarse
+ * Handles `jpnov/build` for every root in `projectDirs`. Reports coarse
  * `$/progress` via the supplied work-done reporter (one tick per root). The result is
  * `ok` when no build-level errors were collected; per-book errors are surfaced in
  * `errors[]` and as diagnostics on each offending `.jpbook`. A cancelled `token` makes it
@@ -393,7 +369,7 @@ export async function handleBuild(
   progress?: WorkDoneProgressReporter,
   token?: CancellationToken,
 ): Promise<BuildResult> {
-  const roots = targetRoots(params.projectDirs, params.root);
+  const roots = targetRoots(params.projectDirs);
   const artifacts: BuildArtifact[] = [];
   const outDirs = new Set<string>();
   const errors: BuildError[] = [];
@@ -449,7 +425,7 @@ export async function handleBuild(
  * no diagnostics and no output-path collision check (those belong to an actual build).
  */
 export async function handleListBooks(params: ListBooksParams): Promise<ListBooksResult> {
-  const perRoot = await Promise.all(targetRoots(params.projectDirs, params.root).map(async (target) => {
+  const perRoot = await Promise.all(targetRoots(params.projectDirs).map(async (target) => {
     const jpbooks = await discoverJpbooks(target.rootUri, target.outDirUri);
     return Promise.all(jpbooks.map(async (fl): Promise<BookEntry> => {
       const bytes = await readFile(fileURLToPath(fl.uri)).catch(() => null as Buffer | null);

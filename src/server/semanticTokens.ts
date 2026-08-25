@@ -1,29 +1,17 @@
 /**
- * Unified highlighter: ONE layered pipeline produces a single semantic-token stream that colours
- * BOTH Aozora markup and the author's narration (cast names + coined keywords), so colouring lives
- * in one place and the syntax is parsed only once.
+ * Unified highlighter: one semantic-token stream colours BOTH Aozora markup and the author's
+ * narration (cast names + coined keywords) from a single tokenize pass plus the recognizer over
+ * the reconstructed body-text runs. A ruby BASE is body text and flows into its run (only the
+ * ｜《》 markers and the reading are holes), so okurigana-split ruby (立《た》ち) still recognises.
  *
- *   Layer 1  tokenize(src)          -> structural tokens (text / ruby / annotation / emphasis)
- *   Layer 2  recognizer.recognize() -> cast/keyword spans over the reconstructed body-text runs
- *   merge    -> one ordered SemanticTokens stream
+ * Dialogue 「」『』 is tracked by a STACK as body text is appended — NEVER by scanning the raw
+ * source: ［＃「対象」に傍点］ reuses 「」 as an emphasis-target delimiter, which a raw scan would
+ * miscount. The stack lives at document scope (Aozora dialogue may span lines); dialogue content
+ * is masked from the recognizer.
  *
- * A ruby BASE is real body text, so it FLOWS into the recognized run together with the surrounding
- * text — only the ｜《》 markers and the 読み reading are "holes" skipped from recognition. This keeps
- * okurigana-split ruby (立《た》ち) correct: the run is "立ち" and a recognised span around the 《た》 hole
- * is emitted across its two source pieces. A run is flushed at a newline or an annotation (［＃…］),
- * so recognition stays roughly line-sized. Markup needs no config (emitted with or without the
- * recognizer); cast/keyword colours are added once a recognizer is configured.
- *
- * Dialogue 「」『』 is tracked by a STACK as body text is appended (NOT by scanning the raw source:
- * ［＃「対象」に傍点］ reuses 「」 as an emphasis-target delimiter, which a raw scan would miscount and let
- * an inner 』 wrongly flip the rest of a quote back to narration). The delimiters are coloured as
- * markers; their content is masked so the recognizer never colours inside dialogue. The stack lives
- * at document scope and persists across line flushes — Aozora dialogue may span lines.
- *
- * Coloring is driven by ONE table ({@link HIGHLIGHTS}); the DISTINCT lsp values form the legend and
- * the protocol indices derive from it. Call sites use the semantic kind ('marker', 'character', …);
- * the kind->lsp->index step (forced by the LSP legend being an index array) lives only in
- * {@link tokenTypeIndex}.
+ * Colouring is driven by ONE table ({@link HIGHLIGHTS}): the DISTINCT lsp values form the legend
+ * and the protocol indices derive from it — reference kinds by name via {@link tokenTypeIndex},
+ * never a hard-coded index.
  */
 import type { SemanticTokens, SemanticTokensLegend } from 'vscode-languageserver/node';
 import { SemanticTokensBuilder } from 'vscode-languageserver/node';
@@ -32,6 +20,7 @@ import type { TextDocument } from 'vscode-languageserver-textdocument';
 // Relative (not `#/shared/...`) on purpose: this is a runtime value import, and `npm test` runs
 // semanticTokens.test.ts on Node's native loader, which rejects `#/`-prefixed specifiers. A
 // relative path keeps the test in the default suite. See test/server/highlight/semanticTokens.test.ts.
+import { LEFT_LONG, LEFT_SHORT } from '../shared/compiler/emphasis.ts';
 import { tokenize } from '../shared/compiler/tokenizer.ts';
 
 import type { Recognizer } from './highlight/recognizer.ts';
@@ -98,11 +87,11 @@ interface Span {
  * tokens this equals an unconditional strip; the parameter keeps the layers congruent.
  */
 function directionLen(variant: string, form: 'postfix' | 'span'): number {
-  if (form === 'postfix' && variant.startsWith('の左に')) {
-    return 'の左に'.length;
+  if (form === 'postfix' && variant.startsWith(LEFT_LONG)) {
+    return LEFT_LONG.length;
   }
-  if (form === 'span' && variant.startsWith('左に')) {
-    return '左に'.length;
+  if (form === 'span' && variant.startsWith(LEFT_SHORT)) {
+    return LEFT_SHORT.length;
   }
   return 0;
 }
@@ -319,8 +308,8 @@ export function buildSemanticTokens(
         // 《》 reading, のルビ the directive.
         const closeCorner = markCorners(token.target);
         const dirStart = closeCorner + ONE;
-        mark(dirStart, 'の左に'.length, 'direction'); // の左に
-        const openReading = dirStart + 'の左に'.length;
+        mark(dirStart, LEFT_LONG.length, 'direction'); // の左に
+        const openReading = dirStart + LEFT_LONG.length;
         mark(openReading, ONE + token.reading.length + ONE, 'marker'); // 「よみ」 greyed whole
         mark(openReading + ONE + token.reading.length + ONE, 'のルビ'.length, 'directive'); // のルビ
         mark(last, ONE, 'marker'); // ］

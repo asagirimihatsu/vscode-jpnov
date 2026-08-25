@@ -9,14 +9,7 @@
  *
  * Imports only the wire types; never `vscode` (this stays a dependency-free leaf the server can use).
  */
-import type { LabelId, LocalizableMessage, MsgCode } from './protocol.ts';
-
-/** English text per label id (`jpbookEntry`, the only label, is prose). */
-const LABEL_EN: Record<LabelId, string> = { jpbookEntry: 'a book entry' };
-
-function englishLabel(label: LabelId): string {
-  return LABEL_EN[label];
-}
+import type { LocalizableMessage, MsgCode } from './protocol.ts';
 
 /** Render a code + positional args to its English string. */
 export function renderEnglish(code: MsgCode, args: readonly (string | number)[] = []): string {
@@ -59,17 +52,17 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
     case 'jpbook.coverNeedsList':
       return `write "cover:" alone, then one "- path" line per cover file: ${a(0)}`;
     case 'path.empty':
-      return `${englishLabel(args[0] as LabelId)} must not be empty`;
+      return 'a book entry must not be empty';
     case 'path.rootDot':
-      return `${englishLabel(args[0] as LabelId)} must name a subpath, not the root "."`;
+      return 'a book entry must name a subpath, not the root "."';
     case 'path.homeRelative':
-      return `${englishLabel(args[0] as LabelId)} must not start with "~" (home-relative)`;
+      return 'a book entry must not start with "~" (home-relative)';
     case 'path.absolute':
-      return `${englishLabel(args[0] as LabelId)} must be a relative path, not absolute`;
+      return 'a book entry must be a relative path, not absolute';
     case 'path.invalid':
-      return `${englishLabel(args[0] as LabelId)} is not a valid path`;
+      return 'a book entry is not a valid path';
     case 'path.escapesRoot':
-      return `${englishLabel(args[0] as LabelId)} must not escape the workspace root`;
+      return 'a book entry must not escape the workspace root';
     case 'syntax.unclosedAnnotation':
       return 'unterminated ［＃ annotation (missing ］)';
     case 'syntax.unterminatedBlock':
@@ -84,7 +77,7 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return '［＃縦中横終わり］ without a matching ［＃縦中横］';
     case 'syntax.tcyTooLong':
       return '縦中横 is too long (keep it to 3 characters or fewer to avoid distortion)';
-    // --- prose lint (one code per (scope, rule); see lint/catalog.ts).
+    // prose lint (one code per (scope, rule); see lint/catalog.ts).
     // `common` rules run on both 地の文 + セリフ under one code; JA lives in bundle.l10n.ja.json.
     case 'lint.common.sentenceLength':
       return 'this sentence is too long';
@@ -127,7 +120,7 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
     case 'lint.common.jaNoSpaceBetweenFullWidth':
       return 'space between full-width characters';
     case 'lint.common.jaUnnaturalAlphabet':
-      return 'unnatural run of half-width letters';
+      return 'a stray letter between Japanese characters';
     case 'lint.common.minusPosition':
       return 'a minus sign is allowed only before a number';
     case 'lint.narration.indent':

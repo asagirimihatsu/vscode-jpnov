@@ -1,6 +1,6 @@
 /**
  * EPUB 3 container assembly: one book → the member files of an OCF container (reflowable,
- * vertical-rl, right-to-left spine), plus the zip step the client runs. Spec:
+ * vertical-rl, right-to-left spine); the zip step is `ocf.ts`. Spec:
  * https://www.w3.org/TR/epub-33/. Chapters map to spine files 1:1 (＃改ページ splits again
  * within a chapter); there is NO inter-chapter glue — every chapter junction is a page seam,
  * where the divider is suppressed by the same rule `chapterGlue` applies at ［＃改ページ］.
@@ -8,11 +8,9 @@
  * `epubMembers` is pure and deterministic given `modified` (the injected build timestamp):
  * the identifier derives from `outRel`, the same identity the output path keys on, so
  * rebuilding a book keeps its identity and readers treat it as an update, not a new book.
- * Pure + vscode-free (fflate does the DEFLATE work; the `mimetype` member is added at zip
- * time, STORED and first, as OCF requires).
+ * Pure + vscode-free.
  */
 import { createHash } from 'node:crypto';
-import { strToU8, zipSync, type Zippable } from 'fflate';
 
 import type { JpbookMeta } from '../book/jpbook.ts';
 import type { AutoTcyMode, DashMode, KinsokuMode } from '../config/types.ts';
@@ -67,12 +65,6 @@ interface SpineDoc {
   readonly body: string;
 }
 
-/** One `.jpbook` chapter for the nav: its first spine file and its label. */
-interface NavChapter {
-  readonly href: string;
-  readonly label: string;
-}
-
 export function epubMembers(opts: {
   readonly book: BookInput;
   readonly meta: JpbookMeta;
@@ -111,7 +103,6 @@ export function epubMembers(opts: {
         nav: { href: 'text/ch001.xhtml', label: title },
       }];
   const docs = effective.flatMap((c) => c.docs);
-  const navChapters = effective.map((c): NavChapter => c.nav);
 
   const creator = opts.meta.author === undefined
     ? ''
@@ -137,8 +128,8 @@ export function epubMembers(opts: {
     `<spine page-progression-direction="rtl">${spine}</spine>` +
     '</package>';
 
-  const navList = navChapters
-    .map((c) => `<li><a href="${c.href}">${escapeHtml(c.label)}</a></li>`)
+  const navList = effective
+    .map((c) => `<li><a href="${c.nav.href}">${escapeHtml(c.nav.label)}</a></li>`)
     .join('');
   const nav =
     '<?xml version="1.0" encoding="utf-8"?>\n' +
@@ -157,17 +148,4 @@ export function epubMembers(opts: {
       content: reflowDocument(d.title, d.body, '../styles.css'),
     })),
   ];
-}
-
-/**
- * Zips the members into the OCF container. The `mimetype` member is prepended here — STORED
- * (never compressed) and FIRST, as OCF requires — so it is a constant of the format, not
- * wire payload. Insertion order is the archive order.
- */
-export function ocfZip(members: readonly EpubMember[]): Uint8Array {
-  const record: Zippable = { mimetype: [strToU8('application/epub+zip'), { level: 0 }] };
-  for (const m of members) {
-    record[m.name] = strToU8(m.content);
-  }
-  return zipSync(record);
 }

@@ -5,6 +5,8 @@
  *
  * Relative imports only (native test loader); vscode-free.
  */
+import { isCjkIdeograph } from '../../../shared/chars.ts';
+
 import { rubyKanaScan } from '../prescan.ts';
 import type { PreScan } from '../prescan.ts';
 import type { LineRule, LintLine, RuleContext } from '../types.ts';
@@ -85,14 +87,10 @@ const controlCharScan: PreScan = (text) => {
   return out;
 };
 
+/** Kana or a CJK ideograph. */
 const isJa = (ch: string): boolean => {
   const cp = ch.codePointAt(0) ?? 0;
-  return (
-    (cp >= 0x3040 && cp <= 0x30ff) || // hiragana + katakana
-    (cp >= 0x3400 && cp <= 0x9fff) ||
-    (cp >= 0xf900 && cp <= 0xfaff) ||
-    (cp >= 0x20000 && cp <= 0x2ffff)
-  );
+  return (cp >= 0x3040 && cp <= 0x30ff) || isCjkIdeograph(cp);
 };
 
 const isAlpha = (ch: string): boolean => /[A-Za-zＡ-Ｚａ-ｚ]/.test(ch);
