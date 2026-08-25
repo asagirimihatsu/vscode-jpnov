@@ -2,8 +2,9 @@
  * The "Books" panel: a client-owned WebviewView in the extension's own Activity Bar container
  * (`contributes.views.jpnov`, `"type": "webview"`, see package.json). It lists every buildable
  * book — one `*.jpbook` discovered under each workspace folder root — each with a checkbox, and
- * drills into a per-book DETAIL screen (covers, chapters + Book Info). The bottom build bar
- * renders ONLY the checked books, to ONE format: "Build to PDF" (primary), "txt", "HTML", or "EPUB".
+ * drills into a per-book DETAIL screen (chapters + Book Info). The bottom build bar renders ONLY
+ * the checked books, to ONE action: "Print / Save as PDF" (primary — the HTML build, opened in
+ * the browser), "txt", or "EPUB".
  *
  * Split of concerns: the SERVER enumerates books
  * (`jpnov/listBooks`) and renders them (`jpnov/build`); this provider owns the VS Code UI and the
@@ -11,13 +12,11 @@
  * truth for the book list and the checkbox selection; the webview is a render + dispatch surface
  * that reflects the last `state` it was pushed. All the presentation lives in `webviewHtml.ts`.
  *
- * The host owns the heavy work: `buildSelected` (build + write + PDF conversion + txt Shift_JIS
- * encoding) here, and the form editing in `manage.ts` (reached from the webview by dispatching the
- * `jpbook.*` commands with a synthesized node). The view's visibility is gated by the
- * `jpnov.active` context key set in extension.ts.
+ * The host owns the heavy work: `buildSelected` (build + write + txt Shift_JIS encoding + the
+ * Print action's browser hand-off) here, and the form editing in `manage.ts` (reached from the
+ * webview by dispatching the `jpbook.*` commands with a synthesized node). The view's visibility
+ * is gated by the `jpnov.active` context key set in extension.ts.
  */
-import { existsSync } from 'node:fs';
-
 import * as vscode from 'vscode';
 
 import type { LanguageClient } from 'vscode-languageclient/node';
@@ -52,10 +51,8 @@ import type { BookVM, BuildAction, DetailMessage, EntryVM, MetaVM, StateMessage 
 import { applyBookEdits, metaLabel, metaValueParts } from './manage.ts';
 import type { BookNode } from './nodes.ts';
 import { booksHtml } from './webviewHtml.ts';
-import { resolveBrowserExecutable } from '../browser.ts';
 import { renderMessage } from '../messages.ts';
 import { chapterUri, lastPathSegment, splitRelPath } from '../paths.ts';
-import { convertHtmlToPdf } from '../pdf.ts';
 import { buildProjectDirs } from '../projectConfig.ts';
 import { buildHtmlSettings } from '../renderConfig.ts';
 import { raceRequest } from '../requests.ts';
@@ -101,8 +98,6 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   /** False until the first successful enumeration, so the webview shows a loading state (not the
    *  misleading "no books yet" welcome) during the server-start window before books are known. */
   private hasLoaded = false;
-  /** True while a PDF build runs, so a second click can't spawn an overlapping browser batch. */
-  private pdfBuilding = false;
   /** The book whose DETAIL screen is currently open, so edits/refreshes re-push it. */
   private openDetailUri: string | undefined;
   /** Trailing-edge timer coalescing chapter-file events into one detail re-post per burst. */
@@ -347,7 +342,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         this.revealOutput = msg.on === true;
         break;
       case 'build':
-        if (msg.format === 'html' || msg.format === 'txt' || msg.format === 'pdf' || msg.format === 'epub') {
+        if (msg.format === 'print' || msg.format === 'txt' || msg.format === 'epub') {
           if (typeof msg.uri === 'string') {
             if (this.entryOf(msg.uri) !== undefined) {
               await this.buildSelected(msg.format, [msg.uri]);
@@ -585,234 +580,139 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   /**
-   * The build driver behind the panel's build actions (`jpbook.buildHtml`/`buildTxt`/
-   * `buildPdf`/`buildEpub`): render the CHECKED books (or exactly `only`, when given) to
-   * `action`'s one format (`pdf` = `.html` on the wire, converted client-side; `epub` comes
-   * back as member files the client zips), write the results (the client owns all filesystem
-   * writes), and report. An empty selection is a no-op with a nudge rather than a silent
-   * "built 0".
+   * The build driver behind the panel's build actions (`jpbook.print`/`buildTxt`/
+   * `buildEpub`): render the CHECKED books (or exactly `only`, when given) to `action`'s one
+   * format (`print` = `.html` on the wire, then opened in the OS default browser — the HTML
+   * artifact's only build path; `epub` comes back as member files the client zips), write
+   * the results (the client owns all filesystem writes), and report. An empty selection is
+   * a no-op with a nudge rather than a silent "built 0".
    */
   async buildSelected(action: BuildAction, only?: readonly string[]): Promise<void> {
     const books = only ?? [...this.checked];
-    // 'HTML' / 'PDF' / 'EPUB' are proper nouns (not localized); 'text' translates. The label
-    // is passed already-localized into the count templates below.
+    // 'HTML' / 'EPUB' are proper nouns (not localized); 'text' translates. The label is
+    // passed already-localized into the count templates below (Print builds HTML files, so
+    // its progress/report honestly say HTML).
     const label = action === 'txt'
       ? vscode.l10n.t('text')
-      : { pdf: 'PDF', html: 'HTML', epub: 'EPUB' }[action];
+      : { print: 'HTML', epub: 'EPUB' }[action];
     if (books.length === 0) {
       void vscode.window.showInformationMessage(
         vscode.l10n.t('Japanese Novel: no books selected. Check a book in the Books view, then build.'),
       );
       return;
     }
-    // A PDF build spawns a browser per book and is slow; block an overlapping second run.
-    if (action === 'pdf') {
-      if (this.pdfBuilding) {
-        void vscode.window.showInformationMessage(
-          vscode.l10n.t('Japanese Novel: a PDF build is already in progress.'),
-        );
-        return;
-      }
-      this.pdfBuilding = true;
-    }
 
     const c = this.client;
-    // A PDF build asks the server for HTML on the wire, then converts client-side; txt/html pass through.
-    const wireFormat: BuildFormat = action === 'pdf' ? 'html' : action;
-    try {
-      await vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Notification,
-          title: vscode.l10n.t('Japanese Novel: building {0} book(s) to {1}…', String(books.length), label),
-          cancellable: true,
-        },
-        async (progress, token) => {
-          let result: BuildResult;
-          try {
-            const params: BuildParams = {
-              books,
-              format: wireFormat,
-              settings: buildHtmlSettings(),
-              projectDirs: buildProjectDirs(),
-            };
-            // The token rides the wire too: $/cancelRequest lets the server stop early.
-            result = await raceRequest(
-              c.sendRequest<BuildResult>(BuildRequest, params, token),
-              token,
-              BUILD_REQUEST_TIMEOUT_MS,
-            );
-          } catch (err) {
-            if (token.isCancellationRequested) {
-              return; // user cancelled: silence, not a failure toast
-            }
-            const message = errorText(err);
-            // This granular popup means buildSelected returns normally (no rethrow) -> no
-            // boundary double-popup from the command wrapper.
-            void vscode.window.showErrorMessage(vscode.l10n.t('Japanese Novel: build failed. {0}', message));
-            return;
-          }
-          if (token.isCancellationRequested) {
-            return; // cancelled while the reply was landing: write nothing
-          }
-
-          // The CLIENT owns all filesystem writes and encodings.
-          const txtEncoding = vscode.workspace
-            .getConfiguration()
-            .get<TxtEncoding>('jpnov.layout.txt.encoding', TXT_ENCODING_DEFAULT);
-          const written: string[] = [];
-          let substitutions = 0;
-          // One write shape for every artifact kind: success lands in `written`, failure
-          // toasts and moves on (a bad uri never aborts the batch).
-          const write = async (uri: string, bytes: Uint8Array): Promise<void> => {
-            try {
-              await vscode.workspace.fs.writeFile(vscode.Uri.parse(uri), bytes);
-              written.push(uri);
-            } catch (err) {
-              const message = errorText(err);
-              void vscode.window.showErrorMessage(
-                vscode.l10n.t("Japanese Novel: couldn't write {0}. {1}", uri, message),
-              );
-            }
-          };
-          for (const artifact of result.artifacts) {
-            let bytes: Uint8Array;
-            switch (artifact.kind) {
-              case 'txt': {
-                const encoded = encodeTxt(artifact.content, txtEncoding);
-                bytes = encoded.bytes;
-                substitutions += encoded.substitutions;
-                break;
-              }
-              case 'html':
-                bytes = Buffer.from(artifact.content, 'utf8');
-                break;
-              case 'epub':
-                bytes = ocfZip(artifact.members);
-                break;
-              default: {
-                const exhaustive: never = artifact;
-                throw new Error(`buildSelected: unhandled artifact ${JSON.stringify(exhaustive)}`);
-              }
-            }
-            await write(artifact.path, bytes);
-          }
-
-          // The server sends a {code,args}; the client renders it to localized text.
-          const errors = result.errors;
-          for (const e of errors) {
-            void vscode.window.showErrorMessage(
-              vscode.l10n.t('Japanese Novel: build error for {0}. {1}', e.book, renderMessage(e)),
-            );
-          }
-
-          // PDF: convert the just-written .html files, then report the PDF count in place of HTML.
-          if (action === 'pdf' && written.length > 0) {
-            await this.convertToPdf(written, label, result.outDirs, progress, token);
-            return;
-          }
-
-          if (written.length > 0) {
-            // One artifact per book now (a single format), so the file count IS the book count.
-            this.reportBuilt(written.length, label, result.outDirs);
-            if (substitutions > 0) {
-              void vscode.window.showWarningMessage(
-                vscode.l10n.t('Japanese Novel: {0} character(s) became 〓 in the text output.', String(substitutions)),
-              );
-            }
-          } else if (errors.length === 0) {
-            void vscode.window.showInformationMessage(
-              vscode.l10n.t('Japanese Novel: nothing to build.'),
-            );
-          }
-        },
-      );
-    } finally {
-      if (action === 'pdf') {
-        this.pdfBuilding = false;
-      }
-    }
-  }
-
-  /**
-   * Converts the just-written `.html` artifacts to sibling `.pdf` files with a detected
-   * Chromium-family browser. With no browser found the HTML is left in place and the
-   * user is nudged to print it or set a path, so a PDF build never hard-fails once the HTML
-   * exists. Conversions run serially (one browser at a time) and stop on cancellation.
-   */
-  private async convertToPdf(
-    files: readonly string[],
-    label: string,
-    outDirs: readonly string[],
-    progress: vscode.Progress<{ message?: string }>,
-    token: vscode.CancellationToken,
-  ): Promise<void> {
-    const browserExe = resolveBrowserExecutable({
-      configuredPath: vscode.workspace.getConfiguration().get<string>('jpnov.layout.browserPath', ''),
-      env: process.env,
-      platform: process.platform,
-      exists: existsSync,
-    });
-    if (browserExe === undefined) {
-      const openFolder = vscode.l10n.t('Open Output Folder');
-      const configure = vscode.l10n.t('Configure Browser Path');
-      // showWarningMessage never rejects; void the button-handling promise so this can't re-throw.
-      void vscode.window
-        .showWarningMessage(
-          vscode.l10n.t(
-            'Japanese Novel: no Chrome, Edge, Chromium, or Brave browser found. Built the HTML instead — open it in a browser and print to PDF, or set jpnov.layout.browserPath.',
-          ),
-          openFolder,
-          configure,
-        )
-        .then((pick) => {
-          const dir = outDirs[0];
-          if (pick === openFolder && dir !== undefined) {
-            void vscode.env.openExternal(vscode.Uri.parse(dir));
-          } else if (pick === configure) {
-            void vscode.commands.executeCommand('workbench.action.openSettings', 'jpnov.layout.browserPath');
-          }
-        });
-      return;
-    }
-
-    // Kill the in-flight conversion when the user cancels the progress notification.
-    const abort = new AbortController();
-    const cancelSub = token.onCancellationRequested(() => {
-      abort.abort();
-    });
-    let converted = 0;
-    try {
-      let done = 0;
-      for (const file of files) {
-        if (token.isCancellationRequested) {
-          break;
-        }
-        done += 1;
-        progress.report({
-          message: vscode.l10n.t('Converting to PDF… ({0}/{1})', String(done), String(files.length)),
-        });
-        const htmlPath = vscode.Uri.parse(file).fsPath;
-        const pdfPath = htmlPath.replace(/\.html$/i, '.pdf');
+    // Print asks the server for HTML on the wire and opens the result; txt/epub pass through.
+    const wireFormat: BuildFormat = action === 'print' ? 'html' : action;
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: vscode.l10n.t('Japanese Novel: building {0} book(s) to {1}…', String(books.length), label),
+        cancellable: true,
+      },
+      async (_progress, token) => {
+        let result: BuildResult;
         try {
-          await convertHtmlToPdf(browserExe, htmlPath, pdfPath, 60_000, abort.signal);
-          converted += 1;
+          const params: BuildParams = {
+            books,
+            format: wireFormat,
+            settings: buildHtmlSettings(),
+            projectDirs: buildProjectDirs(),
+          };
+          // The token rides the wire too: $/cancelRequest lets the server stop early.
+          result = await raceRequest(
+            c.sendRequest<BuildResult>(BuildRequest, params, token),
+            token,
+            BUILD_REQUEST_TIMEOUT_MS,
+          );
         } catch (err) {
-          // A cancel aborts the child, surfacing as a rejection here — don't report that as a failure.
-          if (abort.signal.aborted) {
-            break;
+          if (token.isCancellationRequested) {
+            return; // user cancelled: silence, not a failure toast
           }
           const message = errorText(err);
+          // This granular popup means buildSelected returns normally (no rethrow) -> no
+          // boundary double-popup from the command wrapper.
+          void vscode.window.showErrorMessage(vscode.l10n.t('Japanese Novel: build failed. {0}', message));
+          return;
+        }
+        if (token.isCancellationRequested) {
+          return; // cancelled while the reply was landing: write nothing
+        }
+
+        // The CLIENT owns all filesystem writes and encodings.
+        const txtEncoding = vscode.workspace
+          .getConfiguration()
+          .get<TxtEncoding>('jpnov.layout.txt.encoding', TXT_ENCODING_DEFAULT);
+        const written: string[] = [];
+        let substitutions = 0;
+        // One write shape for every artifact kind: success lands in `written`, failure
+        // toasts and moves on (a bad uri never aborts the batch).
+        const write = async (uri: string, bytes: Uint8Array): Promise<void> => {
+          try {
+            await vscode.workspace.fs.writeFile(vscode.Uri.parse(uri), bytes);
+            written.push(uri);
+          } catch (err) {
+            const message = errorText(err);
+            void vscode.window.showErrorMessage(
+              vscode.l10n.t("Japanese Novel: couldn't write {0}. {1}", uri, message),
+            );
+          }
+        };
+        for (const artifact of result.artifacts) {
+          let bytes: Uint8Array;
+          switch (artifact.kind) {
+            case 'txt': {
+              const encoded = encodeTxt(artifact.content, txtEncoding);
+              bytes = encoded.bytes;
+              substitutions += encoded.substitutions;
+              break;
+            }
+            case 'html':
+              bytes = Buffer.from(artifact.content, 'utf8');
+              break;
+            case 'epub':
+              bytes = ocfZip(artifact.members);
+              break;
+            default: {
+              const exhaustive: never = artifact;
+              throw new Error(`buildSelected: unhandled artifact ${JSON.stringify(exhaustive)}`);
+            }
+          }
+          await write(artifact.path, bytes);
+        }
+
+        // The server sends a {code,args}; the client renders it to localized text.
+        const errors = result.errors;
+        for (const e of errors) {
           void vscode.window.showErrorMessage(
-            vscode.l10n.t("Japanese Novel: couldn't convert {0} to PDF. {1}", lastPathSegment(file), message),
+            vscode.l10n.t('Japanese Novel: build error for {0}. {1}', e.book, renderMessage(e)),
           );
         }
-      }
-    } finally {
-      cancelSub.dispose();
-    }
 
-    if (converted > 0) {
-      this.reportBuilt(converted, label, outDirs);
-    }
+        if (written.length > 0) {
+          // Print: open each written artifact in the OS default browser — a webview
+          // cannot print (its iframe sandbox has no allow-modals, so print() is a
+          // silent no-op). The tab already presents the output, so print skips the
+          // folder reveal below.
+          if (action === 'print') {
+            for (const file of written) {
+              void vscode.env.openExternal(vscode.Uri.parse(file));
+            }
+          }
+          // One artifact per book now (a single format), so the file count IS the book count.
+          this.reportBuilt(written.length, label, action === 'print' ? [] : result.outDirs);
+          if (substitutions > 0) {
+            void vscode.window.showWarningMessage(
+              vscode.l10n.t('Japanese Novel: {0} character(s) became 〓 in the text output.', String(substitutions)),
+            );
+          }
+        } else if (errors.length === 0) {
+          void vscode.window.showInformationMessage(
+            vscode.l10n.t('Japanese Novel: nothing to build.'),
+          );
+        }
+      },
+    );
   }
 }

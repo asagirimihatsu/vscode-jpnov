@@ -94,8 +94,7 @@ function edgeLineProperty(keyPrefix: string, order: number): Record<string, unkn
  * The Layout & Output section: the shared layout core, then the preview / paper render slices
  * (derived from the same constants the resolver uses — the codegen deepEqual is what locks
  * package.json's defaults to them), then the two output-side paths. `outDir` is per-folder
- * (`scope: resource`); `browserPath` is machine-specific and client-only (never sent to the
- * resolver), so its default is a bare literal here.
+ * (`scope: resource`).
  */
 function layoutSection(): unknown {
   return {
@@ -160,8 +159,8 @@ function layoutSection(): unknown {
       'jpnov.layout.preview.edgeLine': edgeLineProperty('jpnov.layout.preview.edgeLine', 8),
       // Page furniture (ヘッダー/ノンブル) is deliberately NOT here: it is book identity, carried
       // by each `.jpbook`'s front matter (parsed in shared/book/jpbook.ts), never a setting.
-      // The `paper.*` slice governs the paper-format outputs (built HTML and the PDF printed
-      // from it): the physical paper first, then the proofing chrome drawn on it.
+      // The `paper.*` slice governs the paper-format output (the built HTML, which prints at
+      // this paper): the physical paper first, then the proofing chrome drawn on it.
       'jpnov.layout.paper.size': {
         type: 'string',
         enum: [...PAPER_SIZES],
@@ -204,13 +203,6 @@ function layoutSection(): unknown {
         scope: 'resource',
         order: 14,
         markdownDescription: '%jpnov.layout.outDir.description%',
-      },
-      'jpnov.layout.browserPath': {
-        type: 'string',
-        default: '',
-        scope: 'machine-overridable',
-        order: 15,
-        markdownDescription: '%jpnov.layout.browserPath.description%',
       },
     },
   };
@@ -314,7 +306,6 @@ function staticNlsKeys(): string[] {
     'jpnov.layout.txt.encoding.description',
     ...TXT_ENCODINGS.flatMap((v) => enumChoiceKeys(`jpnov.layout.txt.encoding.${v}`)),
     'jpnov.layout.outDir.description',
-    'jpnov.layout.browserPath.description',
     'jpnov.editor.title',
     'jpnov.editor.autoIndent.description',
     'jpnov.editor.highlight.characters.description',

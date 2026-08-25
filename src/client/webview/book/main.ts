@@ -136,7 +136,8 @@ function icon(name: IconName, extraCls?: string): HTMLSpanElement {
   return h('span', { class: cls, 'aria-hidden': true });
 }
 /**
- * Inline-SVG brand marks for the format buttons — the webview CSP loads no external images,
+ * Inline-SVG brand marks for the build buttons (the HTML mark sits on the primary print
+ * button, the EPUB mark on its icon button) — the webview CSP loads no external images,
  * and currentColor keeps them right in every theme. Mark-only cuts of the official logos
  * (both usage guides allow the bare mark): the EPUB "e" (https://www.w3.org/publishing/groups/epub-wg/)
  * and the HTML5 shield (https://www.w3.org/html/logo/, CC BY 3.0); viewBoxes are the marks'
@@ -279,7 +280,7 @@ function applyControls(): void {
       el.disabled = off.selall;
     } else if (k === 'deselall') {
       el.disabled = off.deselall;
-    } else if (k === 'bpdf' || k === 'btxt' || k === 'bhtml' || k === 'bepub') {
+    } else if (k === 'bprint' || k === 'btxt' || k === 'bepub') {
       el.disabled = off.build;
     }
   }
@@ -391,15 +392,13 @@ function footer(buildUri?: string): HTMLElement {
       h('div', { class: 'selrow' },
         h('button', { class: 'link', 'data-fk': 'deselall', onClick: poster({ type: 'deselectAll' }) }, L.deselectAll),
         h('button', { class: 'link', 'data-fk': 'selall', onClick: poster({ type: 'selectAll' }) }, L.selectAll)),
-    h('button', { class: 'btn primary', 'data-fk': 'bpdf', onClick: poster(build('pdf')) }, L.buildPdf),
-    // The text button keeps the row's growing flex (double width); HTML/EPUB are icon
-    // buttons whose accessible name doubles as the hover tooltip.
+    // Icon + text primary: the HTML brand mark rides the print button (print IS the HTML build).
+    h('button', { class: 'btn primary', 'data-fk': 'bprint', onClick: poster(build('print')) },
+      brandIcon('html'), L.print),
+    // The text button keeps the row's growing flex; EPUB is an icon button whose
+    // accessible name doubles as the hover tooltip.
     h('div', { class: 'btnrow' },
       h('button', { class: 'btn', 'data-fk': 'btxt', onClick: poster(build('txt')) }, L.buildTxt),
-      h('button', {
-        class: 'btn icon', 'data-fk': 'bhtml', title: L.buildHtml, 'aria-label': L.buildHtml,
-        onClick: poster(build('html')),
-      }, brandIcon('html')),
       h('button', {
         class: 'btn icon', 'data-fk': 'bepub', title: L.buildEpub, 'aria-label': L.buildEpub,
         onClick: poster(build('epub')),

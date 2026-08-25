@@ -1,14 +1,13 @@
 /**
- * Zero-dependency resolution of a Chromium-family browser for the Build-to-PDF step, plus the
- * headless print-to-PDF argument list. Pure and vscode-free — the filesystem check and the
- * environment are injected — so the whole resolver is unit-testable off any real machine. Chrome,
- * Edge, Chromium and Brave are all Chromium-based and accept the same flags; the candidate paths
- * mirror chrome-launcher / puppeteer's install-location lists.
+ * TEST-ONLY Chromium resolution + headless print argv for the E2E fidelity suites: the
+ * product drives no browser, but these suites still print through a real Chromium — the
+ * reference engine for the paper geometry (@page boxes, page count, vertical-flow metrics)
+ * the artifact promises to any browser's print dialog. Candidate paths mirror
+ * chrome-launcher / puppeteer's install-location lists; Chrome, Edge, Chromium and Brave
+ * accept the same flags.
  */
 
-export interface BrowserResolveOptions {
-  /** The user's `jpnov.layout.browserPath`; used verbatim when it points at an existing file. */
-  readonly configuredPath?: string | undefined;
+interface BrowserResolveOptions {
   readonly env: NodeJS.ProcessEnv;
   readonly platform: NodeJS.Platform;
   /** Existence predicate (real caller: `fs.existsSync`); injected so the resolver stays pure. */
@@ -16,15 +15,10 @@ export interface BrowserResolveOptions {
 }
 
 /**
- * The browser executable to drive, or `undefined` when none is found. Priority: the configured
- * path, then the `CHROME_PATH` / `PUPPETEER_EXECUTABLE_PATH` env vars, then per-platform defaults.
- * A configured-but-missing path falls through to auto-detect rather than hard-failing.
+ * The browser executable to drive, or `undefined` when none is found. Priority: the
+ * `CHROME_PATH` / `PUPPETEER_EXECUTABLE_PATH` env vars, then per-platform defaults.
  */
 export function resolveBrowserExecutable(opts: BrowserResolveOptions): string | undefined {
-  const configured = opts.configuredPath?.trim();
-  if (configured && opts.exists(configured)) {
-    return configured;
-  }
   for (const key of ['CHROME_PATH', 'PUPPETEER_EXECUTABLE_PATH'] as const) {
     const value = opts.env[key]?.trim();
     if (value && opts.exists(value)) {
@@ -94,12 +88,13 @@ function resolveOnPath(names: string[], env: NodeJS.ProcessEnv): string[] {
 }
 
 /**
- * The headless print-to-PDF invocation for any Chromium-family browser. A fresh `--user-data-dir`
- * is mandatory: it forces a standalone instance (never joining the user's running Chrome) and
- * sidesteps the SingletonLock a shared profile leaves behind. `--use-mock-keychain` keeps the
- * fresh profile's first run from touching the macOS Keychain, whose (invisible) unlock prompt
- * stalls a headless browser. The built HTML already keeps the browser's own header/footer off
- * the paper via `@page{margin:0}`; `--no-pdf-header-footer` is belt-and-braces.
+ * The headless print-to-PDF invocation for any Chromium-family browser. A fresh
+ * `--user-data-dir` is mandatory: it forces a standalone instance (never joining a running
+ * Chrome) and sidesteps the SingletonLock a shared profile leaves behind. `--use-mock-keychain`
+ * keeps the fresh profile's first run from touching the macOS Keychain, whose (invisible)
+ * unlock prompt stalls a headless browser. The built HTML already keeps the browser's own
+ * header/footer off the paper via `@page{margin:0}`; `--no-pdf-header-footer` is
+ * belt-and-braces.
  */
 export function printToPdfArgs(htmlFileUrl: string, outPdfPath: string, userDataDir: string): string[] {
   return [

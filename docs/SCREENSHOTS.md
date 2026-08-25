@@ -10,7 +10,7 @@ Inventory:
 
 | File | Kind | Shows |
 | --- | --- | --- |
-| `hero-page.png` | generated (A) | real "Build to PDF" page 1 |
+| `hero-page.png` | generated (A) | page 1 of the built HTML, printed |
 | `genkoyoshi.png` | generated (A) | same, line numbers + red rules |
 | `notation.png` | generated (A) | annotation specimen |
 | `kinsoku-off.png` / `kinsoku-on.png` | generated (A) | kinsoku comparison |
@@ -31,8 +31,8 @@ npm run screenshots
 ```
 
 The script, `scripts/screenshots.ts`, drives the product's own code — page
-shots through the real PDF print pipeline (`renderBook()` → headless Chrome
-`--print-to-pdf` with the exact flags of `src/client/browser.ts`
+shots by printing the built HTML the way a user's browser would (`renderBook()`
+→ headless Chrome `--print-to-pdf` with the flags of `test/e2e/_browser.ts`
 `printToPdfArgs()` → page 1 rasterized by `qlmanage`), specimen shots through
 `renderPreview()` + `--screenshot` — and overwrites the five PNGs in
 `docs/images/`. The images are unretouched product output apart from the grey
@@ -145,7 +145,7 @@ cover:
 　山田太郎は片方の口角だけを引き上げた。
 「編集部からご指示により、全文を書き直せ！」
 「何だと!?」
-　次のシーン「焼肉、やっぱうまくね？」
+　次のシーン、「焼肉、やっぱうまくね？」
 ```
 
 ### Arrangement (once)

@@ -123,16 +123,21 @@ button:focus-visible, input:focus-visible {
   color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
 }
 .btn:hover { background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-secondaryBackground)); }
-.btn.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+/* The primary is an icon + text button: the HTML brand mark beside the print label. */
+.btn.primary {
+  background: var(--vscode-button-background); color: var(--vscode-button-foreground);
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+/* Brand marks in the build buttons: one size, never shrunk by the primary's flex row. */
+.btn svg { width: 15px; height: 15px; flex: 0 0 auto; }
 .btn.primary:hover { background: var(--vscode-button-hoverBackground, var(--vscode-button-background)); }
 .btn:disabled { opacity: .5; cursor: default; }
 .btn:disabled:hover { background: var(--vscode-button-secondaryBackground, var(--vscode-button-background)); }
 .btn.primary:disabled:hover { background: var(--vscode-button-background); }
 .btnrow { display: flex; gap: 6px; margin-bottom: 4px; }
 .btnrow .btn { flex: 1 1 0; }
-/* Format icon buttons: the text button keeps the row's growing flex, these hug their mark. */
+/* The EPUB icon button hugs its mark; the text button keeps the row's growing flex. */
 .btnrow .btn.icon { flex: 0 0 auto; width: auto; display: flex; align-items: center; padding: 5px 7px; }
-.btn.icon svg { width: 15px; height: 15px; display: block; }
 /* The reveal-output preference: a muted line under the build buttons, pinned right;
    align-self keeps the click target content-sized. */
 .chkrow {

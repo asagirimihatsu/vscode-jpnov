@@ -3,7 +3,7 @@
   "displayName": "Japanese Novel",
   "publisher": "asagirimihatsu",
   "version": "0.7.0",
-  "description": "VS Code を小説の執筆環境に変える拡張機能。書いた文章はすぐ隣に縦書きで表示され、章をまとめて HTML・PDF・EPUB・テキストの本として出力できます。記法は青空文庫の注記そのまま。",
+  "description": "VS Code を小説の執筆環境に変える拡張機能。書いた文章はすぐ隣に縦書きで表示され、章をまとめて HTML・EPUB・テキストの本として出力できます。出力した HTML はブラウザーでそのまま印刷・PDF 保存できます。記法は青空文庫の注記そのまま。",
   "icon": "resources/icon.png",
   "keywords": [
     "小説",
@@ -338,13 +338,6 @@
             "scope": "resource",
             "order": 14,
             "markdownDescription": "%jpnov.layout.outDir.description%"
-          },
-          "jpnov.layout.browserPath": {
-            "type": "string",
-            "default": "",
-            "scope": "machine-overridable",
-            "order": 15,
-            "markdownDescription": "%jpnov.layout.browserPath.description%"
           }
         }
       },
@@ -603,22 +596,16 @@
     ],
     "commands": [
       {
-        "command": "jpbook.buildHtml",
-        "category": "%command.category%",
-        "title": "%command.books.buildHtml.title%",
-        "icon": "$(globe)"
-      },
-      {
         "command": "jpbook.buildTxt",
         "category": "%command.category%",
         "title": "%command.books.buildTxt.title%",
         "icon": "$(file)"
       },
       {
-        "command": "jpbook.buildPdf",
+        "command": "jpbook.print",
         "category": "%command.category%",
-        "title": "%command.books.buildPdf.title%",
-        "icon": "$(file-pdf)"
+        "title": "%command.books.print.title%",
+        "icon": "$(browser)"
       },
       {
         "command": "jpbook.buildEpub",
@@ -736,15 +723,11 @@
           "when": "editorLangId == jpnov"
         },
         {
-          "command": "jpbook.buildHtml",
-          "when": "false"
-        },
-        {
           "command": "jpbook.buildTxt",
           "when": "false"
         },
         {
-          "command": "jpbook.buildPdf",
+          "command": "jpbook.print",
           "when": "false"
         },
         {
@@ -838,9 +821,8 @@
               "markdown": "media/walkthrough/build.md"
             },
             "completionEvents": [
-              "onCommand:jpbook.buildHtml",
+              "onCommand:jpbook.print",
               "onCommand:jpbook.buildTxt",
-              "onCommand:jpbook.buildPdf",
               "onCommand:jpbook.buildEpub"
             ]
           },
@@ -883,7 +865,7 @@
     "watch:tsc:webview": "tsc -p src/client/webview/tsconfig.json --noEmit --watch",
     "watch": "npm run watch:tsc & npm run watch:tsc:webview & npm run watch:esbuild & wait",
     "pretest": "npm run gen && npm run type-check",
-    "test": "node --import ./test/register.mjs --test --experimental-test-module-mocks \"test/shared/**/*.test.ts\" \"test/server/highlight/**/*.test.ts\" \"test/server/lint/**/*.test.ts\" \"test/client/browser.test.ts\" \"test/client/pdf.test.ts\" \"test/client/bookRename.test.ts\" \"test/client/editorIndent.test.ts\"",
+    "test": "node --import ./test/register.mjs --test --experimental-test-module-mocks \"test/shared/**/*.test.ts\" \"test/server/highlight/**/*.test.ts\" \"test/server/lint/**/*.test.ts\" \"test/client/bookRename.test.ts\" \"test/client/editorIndent.test.ts\"",
     "pretest:integration": "npm run gen",
     "test:integration": "node --import ./test/register.mjs --test --experimental-test-module-mocks \"test/client/bookCreate.test.ts\" \"test/client/bookManage.test.ts\" \"test/client/booksView.test.ts\" \"test/client/highlightConfig.test.ts\" \"test/client/messages.test.ts\" \"test/client/preview.test.ts\" \"test/client/probe.test.ts\" \"test/server/build.test.ts\" \"test/server/jpbook.test.ts\"",
     "pretest:e2e": "npm run build:dev",

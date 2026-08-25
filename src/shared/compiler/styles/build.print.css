@@ -1,0 +1,12 @@
+/* 印刷／PDF 保存 button (document.ts PRINT_BUTTON) — screen-only UI floating at the
+   viewport's top-right. Out of flow and removed under @media print (a displayed fixed
+   element would repeat on every printed page), so it can never affect the paper. The
+   z-index is load-bearing: the .page sheets are positioned and later in the DOM, so
+   without it they would paint over the button. px sizing: the document's em/rem track the
+   paper's mm-derived font size (css.ts paperRules) and would scale this UI with A4/A6.
+   system-ui, never --font-family: UI chrome, not 本文. Colours are literal (no --vscode-*
+   variables exist in the standalone document): the VS Code light-theme primary-button blue. */
+.print{position:fixed;top:16px;right:16px;z-index:1;font:14px/1 system-ui,sans-serif;color:#fff;background:#005fb8;padding:10px 22px;border:none;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,0.25);cursor:pointer;}
+.print:hover{background:#0258a8;}
+.print:active{background:#024f97;}
+@media print{.print{display:none;}}

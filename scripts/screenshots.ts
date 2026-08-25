@@ -1,7 +1,7 @@
 // README 用スクリーンショット生成器（npm run screenshots）。
-// ページ物 (hero/genkoyoshi) は本物の PDF 印刷パイプライン（フラグは
-// src/client/browser.ts printToPdfArgs と同一）で出力し、1 ページ目を qlmanage で
-// ラスタライズする — 用紙余白含め「PDF に出力」の結果そのまま（A4 横）。
+// ページ物 (hero/genkoyoshi) は出力 HTML を Chromium で印刷（test/e2e/_browser.ts
+// printToPdfArgs と同じフラグ）して PDF にし、1 ページ目を qlmanage で
+// ラスタライズする — 用紙余白含め「印刷」の結果そのまま（A4 横）。
 // 見本 (notation/kinsoku) はプレビューレンダラー + headless --screenshot。
 // 最終 PNG は docs/images/ を直接上書きし、中間産物は .scratch/shots/ に残す。
 import { spawn, spawnSync } from 'node:child_process';
@@ -216,7 +216,7 @@ function screenshotArgs(png: string, w: number, h: number, url: string): string[
   ];
 }
 
-// src/client/browser.ts printToPdfArgs と同じフラグ（--user-data-dir は共通処理側）
+// test/e2e/_browser.ts printToPdfArgs と同じフラグ（--user-data-dir は共通処理側）
 function printToPdfArgs(pdf: string, url: string): string[] {
   return [
     '--headless=new',

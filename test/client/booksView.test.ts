@@ -201,11 +201,20 @@ test('build sends only the checked books, in the chosen format', async () => {
   const { view, client } = await setup([entry(root, 'a'), entry(root, 'b')]);
   view.webview.receive({ type: 'toggle', uri: `${root}/src/b.jpbook`, checked: false });
   await tick();
-  view.webview.receive({ type: 'build', format: 'html' });
+  view.webview.receive({ type: 'build', format: 'txt' });
   await tick();
   assert.ok(client.calls.build);
   assert.deepEqual(client.calls.build.books, [`${root}/src/a.jpbook`]);
-  assert.equal(client.calls.build.format, 'html');
+  assert.equal(client.calls.build.format, 'txt');
+});
+
+test('the retired html format is ignored: no request, no toast', async () => {
+  const root = 'file:///ws';
+  const { view, client } = await setup([entry(root, 'a')]);
+  view.webview.receive({ type: 'build', format: 'html' });
+  await tick();
+  assert.equal(client.calls.build, null);
+  assert.equal(state.infoMessages.length, 0);
 });
 
 test('build with an empty selection nudges and sends no request', async () => {
@@ -224,11 +233,11 @@ test('a build carrying a uri sends exactly that book and leaves the selection un
   const { view, client } = await setup([entry(root, 'a'), entry(root, 'b')]);
   view.webview.receive({ type: 'deselectAll' });
   await tick();
-  view.webview.receive({ type: 'build', format: 'html', uri: `${root}/src/a.jpbook` });
+  view.webview.receive({ type: 'build', format: 'epub', uri: `${root}/src/a.jpbook` });
   await tick();
   assert.ok(client.calls.build, 'fires despite the empty selection');
   assert.deepEqual(client.calls.build.books, [`${root}/src/a.jpbook`]);
-  assert.equal(client.calls.build.format, 'html');
+  assert.equal(client.calls.build.format, 'epub');
   // A later selection-driven build still sees the empty checked set: the uri build didn't add to it.
   client.calls.build = null;
   view.webview.receive({ type: 'build', format: 'txt' });
@@ -240,7 +249,7 @@ test('a build carrying a uri sends exactly that book and leaves the selection un
 test('a uri build for a vanished book is dropped silently', async () => {
   const root = 'file:///ws';
   const { view, client } = await setup([entry(root, 'a')]);
-  view.webview.receive({ type: 'build', format: 'html', uri: `${root}/src/ghost.jpbook` });
+  view.webview.receive({ type: 'build', format: 'txt', uri: `${root}/src/ghost.jpbook` });
   await tick();
   assert.equal(client.calls.build, null);
   assert.equal(state.infoMessages.length, 0);
@@ -250,7 +259,7 @@ test('a uri build for a vanished book is dropped silently', async () => {
 test('build runs under a cancellable progress and hands its token to the wire', async () => {
   const root = 'file:///ws';
   const { view, client } = await setup([entry(root, 'a')]);
-  view.webview.receive({ type: 'build', format: 'html' });
+  view.webview.receive({ type: 'build', format: 'txt' });
   await tick();
   const opts = state.progressOptions[0] as { cancellable?: boolean } | undefined;
   assert.equal(opts?.cancellable, true);
@@ -265,7 +274,7 @@ test('a cancelled build stays silent: no failure toast, nothing written, nothing
     { ok: true, outDirs: [`${root}/dist`], artifacts: [artifact], errors: [] },
   );
   state.progressCancelled = true;
-  view.webview.receive({ type: 'build', format: 'html' });
+  view.webview.receive({ type: 'build', format: 'print' });
   await tick();
   assert.ok(client.calls.build, 'the request went out before the cancel took effect');
   assert.equal(state.errorMessages.length, 0);
@@ -280,14 +289,37 @@ test('a successful build opens the configured output dir, once — never a neste
     // One dir for both books — the nested book's file sits below it; the server sends it once.
     outDirs: [`${root}/out`],
     artifacts: [
-      { kind: 'html', path: `${root}/out/a.html`, content: '<p>a</p>' },
-      { kind: 'html', path: `${root}/out/sub/b.html`, content: '<p>b</p>' },
+      { kind: 'txt', path: `${root}/out/a.txt`, content: 'a' },
+      { kind: 'txt', path: `${root}/out/sub/b.txt`, content: 'b' },
     ],
     errors: [],
   });
-  view.webview.receive({ type: 'build', format: 'html' });
+  view.webview.receive({ type: 'build', format: 'txt' });
   await tick();
   assert.deepEqual(state.openedExternal, [`${root}/out`]);
+});
+
+test('print asks the wire for html, writes it, and opens the FILES in the browser — not the folder', async () => {
+  const root = 'file:///ws';
+  const { view, client } = await setup(
+    [entry(root, 'a'), entry(root, 'sub/b')],
+    {
+      ok: true,
+      outDirs: [`${root}/out`],
+      artifacts: [
+        { kind: 'html', path: `${root}/out/a.html`, content: '<p>a</p>' },
+        { kind: 'html', path: `${root}/out/sub/b.html`, content: '<p>b</p>' },
+      ],
+      errors: [],
+    },
+  );
+  view.webview.receive({ type: 'build', format: 'print' });
+  await tick();
+  assert.ok(client.calls.build);
+  assert.equal(client.calls.build.format, 'html'); // print is a client-side action; the wire stays html
+  assert.deepEqual(state.writtenFiles.map((w) => w.uri), [`${root}/out/a.html`, `${root}/out/sub/b.html`]);
+  // Every written artifact opens in the browser; the folder reveal stays quiet for print.
+  assert.deepEqual(state.openedExternal, [`${root}/out/a.html`, `${root}/out/sub/b.html`]);
 });
 
 test('the reveal-output toggle turns the reveal off; the toast still fires', async () => {
@@ -297,12 +329,12 @@ test('the reveal-output toggle turns the reveal off; the toast still fires', asy
     {
       ok: true,
       outDirs: [`${root}/out`],
-      artifacts: [{ kind: 'html', path: `${root}/out/a.html`, content: '<p>a</p>' }],
+      artifacts: [{ kind: 'txt', path: `${root}/out/a.txt`, content: 'a' }],
       errors: [],
     },
   );
   view.webview.receive({ type: 'revealOutput', on: false });
-  view.webview.receive({ type: 'build', format: 'html' });
+  view.webview.receive({ type: 'build', format: 'txt' });
   await tick();
   assert.ok(state.infoMessages.some((m) => m.includes('built 1')), 'the success toast still fires');
   assert.equal(state.openedExternal.length, 0);

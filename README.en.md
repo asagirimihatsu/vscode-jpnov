@@ -4,12 +4,12 @@
 
 Write, proofread, and typeset Japanese novels in Visual Studio Code — vertical
 layout, [Aozora Bunko](https://www.aozora.gr.jp/annotation/index.html) markup,
-one-command HTML / PDF / EPUB / text builds. No AI anywhere in the writing path
-(see [No-AI policy](#no-ai-policy)).
+one-command HTML / EPUB / text builds, printing straight from your browser.
+No AI anywhere in the writing path (see [No-AI policy](#no-ai-policy)).
 
 ![A vertically typeset novel page with ruby glosses, a running head, and a page number](docs/images/hero-page.png)
 
-*Unretouched "Build to PDF" output: the opening of Natsume Sōseki's* I Am a Cat *(Aozora Bunko).*
+*A printed page of the built output, unretouched: the opening of Natsume Sōseki's* I Am a Cat *(Aozora Bunko).*
 
 ## Features
 
@@ -19,9 +19,8 @@ one-command HTML / PDF / EPUB / text builds. No AI anywhere in the writing path
   lines, bold/italic, tate-chū-yoko, indents, page breaks.
 - **Auto indent** — every Enter starts the new line with a full-width space;
   open it with `「` or `『` and the space is removed.
-- **Book builds** — collect chapters into a paginated vertical HTML file, a
-  print-ready PDF, an EPUB for e-readers, or a concatenated Aozora-format text;
-  and the HTML and PDF can open with your submission cover sheets.
+- **Book builds** — collect chapters into a paginated vertical HTML file which can
+  be **Print / Save as PDF**, EPUB, or a concatenated Aozora-format text.
 - **Proofreading** — hygiene checks on by default, opt-in manuscript-convention
   lints, quick fixes and a fix-all action.
 - **Cast & keyword highlighting** — semantic colouring of character names and
@@ -41,7 +40,7 @@ one-command HTML / PDF / EPUB / text builds. No AI anywhere in the writing path
   reason about structure.
 - **Zero runtime dependencies.** Everything ships bundled: no package manager,
   no post-install downloads, no network traffic — fully offline, with an
-  instant preview. PDF export drives a browser already on the machine.
+  instant preview. Printing opens a local file in your own browser.
 - **Non-invasive.** Sources are plain text in Aozora notation under dedicated
   extensions (`.jpnov` / `.jpbook`), so no `.txt` / `.md` project is ever
   touched, and the manuscript outlives the tool.
@@ -64,10 +63,12 @@ one-command HTML / PDF / EPUB / text builds. No AI anywhere in the writing path
    book, and opened in the editor. Aozora Bunko annotations are highlighted as you type;
    click the preview icon in the editor title bar (**Japanese Novel: Open
    Preview to the Side**) to write beside the vertical layout.
-3. **Build it.** Save everything (builds read from disk) and click **Build to
-   PDF** at the bottom of the view; the text, HTML, and EPUB buttons sit
-   beside it. With a book open, the buttons build just that book; back in
-   the list, they build every checked book.
+3. **Build it.** Save everything (builds read from disk) and click **Print /
+   Save as PDF** at the bottom of the view: the book opens in your browser,
+   and the same button floating on the page (印刷／PDF 保存) brings up
+   the print dialog — print on paper, or choose Save as PDF there for a PDF.
+   The text and EPUB buttons sit beside it. With a book open, the buttons
+   build just that book; back in the list, they build every checked book.
 
 Chapters and book files can live anywhere in the workspace folder; subfolders are
 mirrored into the output (`src/volume1.jpbook` builds to
@@ -84,8 +85,8 @@ The terms this document (and the settings UI) uses, for readers who know code
 but not Japanese typesetting:
 
 - **Vertical writing (縦書き)** — text runs top-to-bottom, lines advance
-  right-to-left, books open "backwards". The preview, HTML, and PDF are all
-  vertical; the source you edit stays ordinary horizontal text.
+  right-to-left, books open "backwards". The preview and the built pages are
+  all vertical; the source you edit stays ordinary horizontal text.
 - **Ruby (ルビ)** — small reading glosses beside the base characters (furigana).
   In vertical text they sit to the right; a second gloss can sit on the left
   (両側ルビ, "both-side ruby") — often a translation or nuance note.
@@ -112,8 +113,8 @@ but not Japanese typesetting:
   (`――`), and it is typeset as one unbroken dash. Pick the
   character you write in `jpnov.lint.common.dash` (default `―`); any other
   dash character, or a run of an odd number of dashes, is flagged with an
-  auto-fix. In HTML, PDF, and EPUB output, the chosen character is typeset as
-  the em dash (`—`), which Japanese fonts join into one unbroken line.
+  auto-fix. In HTML and EPUB output, the chosen character is typeset as
+  the em dash (`—`), and Japanese fonts join the pair into one unbroken line.
 
 - **Genkō-yōshi (原稿用紙)** — the manuscript grid Japanese prose is drafted
   on. The default page is **40 characters × 34 lines**, and the line pitch
@@ -213,16 +214,15 @@ are toggled under **Japanese Novel — Layout & Output**.
 
 The **Books** view in the Activity Bar lists every discovered `.jpbook` as
 a book with a checkbox (labelled by its front-matter `title` when it declares
-one). The buttons at the bottom of the view build the checked books (HTML
-and EPUB are icon buttons):
+one). The buttons at the bottom of the view build the checked books (EPUB
+is an icon button):
 
-- **Build to HTML** — one standalone, paginated vertical `.html` per book
-  (inline CSS, no external assets).
-- **Build to PDF** — builds the HTML, then drives a locally installed
-  Chromium-family browser headlessly to print a sibling `.pdf`. Detection
-  order: `jpnov.layout.browserPath` → `CHROME_PATH` /
-  `PUPPETEER_EXECUTABLE_PATH` → Chrome → Edge → Chromium → Brave. If none is
-  found the HTML is kept and a warning offers to configure the path.
+- **Print / Save as PDF** — builds the HTML and opens it in your default
+  browser. The same button floating on the page (印刷／PDF 保存)
+  brings up the browser's print dialog; print on paper, or save it as a PDF
+  instead. Any modern browser works. The `.html` itself lands in the output
+  folder: one standalone, paginated vertical file per book (inline CSS, no
+  external assets) that prints the same way whenever you reopen it.
 - **Build to Text** — the chapters concatenated as Aozora-format `.txt`
   (auto-tate-chū-yoko is materialised as explicit annotations, so the text
   round-trips).
@@ -231,21 +231,21 @@ and EPUB are icon buttons):
   line wrapping follow the reading device. One spine file per chapter, split again
   at ［＃改ページ］.
 
-Outputs land in `<outDir>/<book path>.{html,pdf,epub,txt}` with `outDir`
+Outputs land in `<outDir>/<book path>.{html,epub,txt}` with `outDir`
 defaulting to `dist`. Two book files that resolve to the same output path fail
 the build with a diagnostic.
 
-The built PDF embeds a subset of each font it uses. With the default stack,
-the result is fine to submit to a print shop and to sell: Hiragino Mincho
-(macOS) and Yu Mincho (Windows) are OS-bundled fonts whose licences permit
-commercial use of rendered output and PDF embedding, and Noto Serif JP is
-openly licensed (SIL OFL). When `jpnov.layout.fontFamily` names a commercial
-font, check that its licence allows PDF embedding.
+A PDF saved from the print dialog embeds a subset of each font it uses. With
+the default stack, the result is fine to submit to a print shop and to sell:
+Hiragino Mincho (macOS) and Yu Mincho (Windows) are OS-bundled fonts whose
+licences permit commercial use of rendered output and PDF embedding, and Noto
+Serif JP is openly licensed (SIL OFL). When `jpnov.layout.fontFamily` names a
+commercial font, check that its licence allows PDF embedding.
 
 A `.jpbook` is a reading-order table of contents — file names and folder
 layout never decide what a book contains or in what order. That scales to long
 works. Keep one `.jpbook` per volume and send your editor only the newest
-volume's PDF. Keep alternate drafts of a chapter side by side and swap a
+volume. Keep alternate drafts of a chapter side by side and swap a
 single line to retarget a submission. Name and move chapter files freely; the
 book keeps its order.
 
@@ -429,7 +429,7 @@ always reported, independent of lint settings.
 ## Settings reference
 
 Most settings are window-level; the output folder and the
-highlighting lists are per workspace folder; the browser path is per machine.
+highlighting lists are per workspace folder.
 
 ### Japanese Novel — Layout & Output
 
@@ -438,18 +438,17 @@ highlighting lists are per workspace folder; the browser path is per machine.
 | `jpnov.layout.charsPerLine` | `40` | Characters per line (16–64), preview and builds |
 | `jpnov.layout.linesPerPage` | `34` | Lines per page in builds (16–64) |
 | `jpnov.layout.linePitch` | `1.5` | Line pitch as a multiple of the character size: `1.5` / `1.75` / `2` / `2.25`; preview and built pages |
-| `jpnov.layout.fontFamily` | `""` | Body font as a CSS font-family list: blank uses the default Mincho stack; preview and built HTML/PDF |
+| `jpnov.layout.fontFamily` | `""` | Body font as a CSS font-family list: blank uses the default Mincho stack; preview and built HTML |
 | `jpnov.layout.kinsoku` | `normal` | Line-breaking rules: `none` / `normal` / `strict` |
 | `jpnov.layout.autoTcy` | `punctuationPairs` | Auto-combine `!!` `!?` `?!` `??`; `none` to disable |
 | `jpnov.layout.preview.lineNumbers` | `true` | Line numbers in the preview, restarting per page break |
 | `jpnov.layout.preview.edgeLine` | `none` | Column rules in the preview: `none` / `text` / `red` |
-| `jpnov.layout.paper.size` | `a4` | Paper of built HTML/PDF pages: `a4` / `a6`; the grid scales to fill it, centred |
+| `jpnov.layout.paper.size` | `a4` | Paper size the built pages print at: `a4` / `a6`; the grid scales to fit it, centred |
 | `jpnov.layout.paper.orientation` | `auto` | Paper orientation: `auto` (follows the page grid) / `landscape` / `portrait` |
 | `jpnov.layout.paper.lineNumbers` | `false` | Line numbers in built pages, restarting per page |
 | `jpnov.layout.paper.edgeLine` | `none` | Column rules + page frame in built pages: `none` / `text` / `red` |
 | `jpnov.layout.txt.encoding` | `shiftJis` | Encoding of built `.txt`: `shiftJis` / `utf8` / `utf8Bom` |
 | `jpnov.layout.outDir` | `dist` | Output folder (per workspace folder), never scanned for books |
-| `jpnov.layout.browserPath` | `""` | Chromium-family executable for PDF export (per machine) |
 
 The running head and page number are **per-book** properties and live in each
 `.jpbook`'s front matter, not in settings — see
@@ -505,8 +504,8 @@ All under the **Japanese Novel** category.
 | Open Preview to the Side | Editor title bar on `.jpnov`, Command Palette |
 | Open Preview | Command Palette |
 | Create a Book… | Books view title bar (`+`), Command Palette |
-| Build to HTML / Build to PDF / Build to Text / Build to EPUB | Buttons at the bottom of the Books view |
-| Select All Books / Deselect All Books | Links at the bottom of the Books view |
+| Print / Save as PDF, Build to Text, Build to EPUB | Buttons at the bottom of the Books view |
+| Select All Books, Deselect All Books | Links at the bottom of the Books view |
 | Refresh Books | Books view title bar |
 | Open the Getting Started Guide | Command Palette |
 

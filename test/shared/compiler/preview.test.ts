@@ -66,6 +66,12 @@ test('renderPreview is continuous: no pagination (no .page / @page)', () => {
   assert.doesNotMatch(html, /data-page/);
 });
 
+test('renderPreview carries no 印刷 button (build-artifact exclusive)', () => {
+  const html = preview('本文');
+  assert.doesNotMatch(html, /window\.print/);
+  assert.doesNotMatch(html, /\.print\{/);
+});
+
 test('renderPreview shows ［＃改ページ］ as a labelled marker, not a real page break', () => {
   const html = preview('前\n［＃改ページ］\n後');
   // The marker sits BETWEEN the two segments (a direct .book child), never inside one.

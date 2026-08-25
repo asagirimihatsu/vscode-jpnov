@@ -14,7 +14,8 @@
  *
  * Mode and chrome conditionality is FRAGMENT INCLUSION — zero dead rules: a disabled
  * feature's selectors are entirely absent from the output:
- * - paginate=true (BUILD): buildBase (+anchor +ln +edge +header +folio) — the explicit
+ * - paginate=true (BUILD): buildBase + buildPrint (the always-on 印刷／PDF 保存 button)
+ *   (+anchor +ln +edge +header +folio) — the explicit
  *   `.book > .page > .line` skeleton the layout engine emits, one printed sheet per `.page`;
  * - paginate=false (PREVIEW): previewBase (+anchor +ln +edge) — a single continuous flow of
  *   the SAME `.line` columns grouped into per-break `.segment` blocks, fit-to-viewport, with
@@ -245,6 +246,7 @@ export function stylesheet(opts: StylesheetOptions): string {
     });
     return [
       S.buildBase,
+      S.buildPrint,
       anchor ? S.buildAnchor : '',
       chrome.lineNumbers ? S.buildLn : '',
       edge !== null ? S.buildEdge : '',

@@ -1,10 +1,10 @@
 /**
  * E2E over the BUNDLED server + a real Chromium print: builds a two-page book over LSP
- * stdio, prints the artifact with the SAME argv the extension uses (printToPdfArgs), and
- * asserts the PDF's physical structure — every /MediaBox equals the configured paper to
- * ±0.5mm (Chromium quantizes the page box by ~0.17mm internally) and the PDF page count
- * equals the rendered `.page` count, the long-term tripwire for the paper-fit slack that
- * keeps a border box from spilling onto a second sheet.
+ * stdio, prints the artifact the way a user's browser would, and asserts the PDF's physical
+ * structure — every /MediaBox equals the configured paper to ±0.5mm (Chromium quantizes the
+ * page box by ~0.17mm internally) and the PDF page count equals the rendered `.page` count,
+ * the long-term tripwire for the paper-fit slack that keeps a border box from spilling onto
+ * a second sheet (a printed `.print` button would trip it too).
  */
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,11 +17,11 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { printToPdfArgs, resolveBrowserExecutable } from '../../src/client/browser.ts';
 import type { PaperFit } from '../../src/shared/compiler/geometry.ts';
 import { HEADER_BAND, fitPaper } from '../../src/shared/compiler/geometry.ts';
 import type { BuildResult, HtmlSettings } from '../../src/shared/protocol.ts';
 
+import { printToPdfArgs, resolveBrowserExecutable } from './_browser.ts';
 import { LspClient } from './lsp.ts';
 
 const SERVER_MODULE = fileURLToPath(new URL('../../dist/server/server.js', import.meta.url));
@@ -105,9 +105,9 @@ async function buildHtml(settings: HtmlSettings): Promise<string> {
 }
 
 /**
- * Prints `html` with the extension's own argv (fresh profile per run). Readiness is the
- * OUTPUT FILE — non-empty and size-stable across one poll — never process exit: headless
- * Chromium lingers after writing (mirrors src/client/pdf.ts's waitForOutput).
+ * Prints `html` headlessly (fresh profile per run). Readiness is the OUTPUT FILE —
+ * non-empty and size-stable across one poll — never process exit: headless Chromium
+ * lingers after writing.
  */
 async function printPdf(browserPath: string, html: string, prefix: string): Promise<Buffer> {
   const dir = await mkdtemp(join(tmpdir(), `jpnov-e2e-${prefix}-`));
