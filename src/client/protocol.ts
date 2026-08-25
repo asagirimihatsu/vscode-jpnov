@@ -88,8 +88,8 @@ export interface CloseDetailMessage {
 /** Every message the host posts to the Books webview. */
 export type BooksInbound = StateMessage | DetailMessage | CloseDetailMessage;
 
-/** A build action fired from the footer (`pdf` is the client-only PDF post-process). */
-export type BuildAction = 'pdf' | 'txt' | 'html' | 'epub';
+/** A build action fired from the footer (`print` = build HTML, then open it in the browser). */
+export type BuildAction = 'print' | 'txt' | 'epub';
 
 /** An empty-state welcome-link action. */
 export type WelcomeAction = 'createBook' | 'openGuide' | 'openFolder';
@@ -130,9 +130,8 @@ export interface Labels {
   readonly selectAll: string;
   readonly deselectAll: string;
   readonly selectBook: string;
-  readonly buildPdf: string;
+  readonly print: string;
   readonly buildTxt: string;
-  readonly buildHtml: string;
   readonly buildEpub: string;
   readonly revealOutput: string;
   readonly back: string;

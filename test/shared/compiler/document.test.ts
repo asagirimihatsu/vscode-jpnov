@@ -38,8 +38,12 @@ const render = (
     chrome: { ...OFF, ...opts.chrome },
   });
 
-const bodyOf = (html: string): string =>
-  html.slice(html.indexOf('<body>') + '<body>'.length, html.indexOf('</body>'));
+/** Body content after the leading 印刷 button (the button itself has its own test below). */
+const bodyOf = (html: string): string => {
+  const body = html.slice(html.indexOf('<body>') + '<body>'.length, html.indexOf('</body>'));
+  assert.match(body, /^<button class="print" /);
+  return body.slice(body.indexOf('</button>') + '</button>'.length);
+};
 
 test('renderBook emits a paginated page/line skeleton document', () => {
   const html = render('本文');
@@ -51,11 +55,28 @@ test('renderBook emits a paginated page/line skeleton document', () => {
   );
 });
 
-test('a right-side 傍点 emits the --emr-shift probe script; otherwise no script at all', () => {
+test('every build document opens with exactly one print button, removed under @media print', () => {
+  const html = render('本文');
+  const button = '<button class="print" type="button" onclick="window.print()">印刷／PDF 保存</button>';
+  // First thing in <body> (the document's only tab stop), and exactly once.
+  assert.equal(html.indexOf(button), html.indexOf('<body>') + '<body>'.length);
+  assert.equal(html.lastIndexOf(button), html.indexOf(button));
+  // Never on the paper: the stylesheet must carry the print-media removal.
+  assert.match(html, /@media print\{\.print\{display:none;\}\}/);
+});
+
+test('the head carries the ?p=1 auto-print hook (reachable by browser-internal navigation only)', () => {
+  const html = render('本文');
+  const head = html.slice(0, html.indexOf('</head>'));
+  assert.match(head, /<script>if\(new URLSearchParams\(location\.search\)\.get\('p'\)==='1'\)/);
+  assert.match(head, /window\.print\(\)/);
+});
+
+test('a right-side 傍点 emits the --emr-shift probe script; otherwise no probe at all', () => {
   const emph = render('語［＃「語」に傍点］');
   assert.match(emph, /<script>[^]*--emr-shift[^]*<\/script><\/body>/);
-  assert.doesNotMatch(render('語［＃「語」の左に傍点］'), /<script/);
-  assert.doesNotMatch(render('語［＃「語」に傍線］'), /<script/);
+  assert.doesNotMatch(render('語［＃「語」の左に傍点］'), /--emr-shift/);
+  assert.doesNotMatch(render('語［＃「語」に傍線］'), /--emr-shift/);
 });
 
 test('renderBook joins files[] in order with one blank separator line', () => {

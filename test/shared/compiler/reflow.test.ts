@@ -125,6 +125,12 @@ test('reflowDocument is a namespaced XHTML shell with a stylesheet link', () => 
   assertWellFormedXml(doc);
 });
 
+test('the EPUB side carries no 印刷 button (reading systems own the UI)', () => {
+  const doc = reflowDocument('章', '<p>本文</p>', '../styles.css');
+  assert.doesNotMatch(doc, /window\.print/);
+  assert.doesNotMatch(reflowStylesheet('normal', []), /\.print\{/);
+});
+
 test('the kitchen sink emits well-formed XML end to end', () => {
   const src = [
     '序章［＃「序章」は大見出し］',

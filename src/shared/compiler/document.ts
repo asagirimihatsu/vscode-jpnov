@@ -132,6 +132,25 @@ export function chapterGlue(
   return '\n';
 }
 
+/**
+ * The 印刷／PDF 保存 button, baked into every BUILD artifact (never the preview or the
+ * EPUB): the file prints itself from whatever browser opens it — the extension's Print action
+ * only opens the file. Screen-only fixed UI; build.print.css owns the geometry and the
+ * @media print removal, so it cannot affect the paper. First in `<body>` = first (and only)
+ * tab stop.
+ */
+const PRINT_BUTTON = '<button class="print" type="button" onclick="window.print()">印刷／PDF 保存</button>';
+
+/**
+ * Head script: `?p=1` on the document URL opens the print dialog once the page loads. No
+ * shipped surface can send the query — OS browser hand-offs strip file:// queries and
+ * fragments (macOS LaunchServices; Windows ShellExecute and GNOME gio can even fail on
+ * them) — so this fires only on browser-internal navigations: an address-bar `?p=1`, a
+ * bookmark, a local link.
+ */
+const PRINT_AUTORUN =
+  '<script>if(new URLSearchParams(location.search).get(\'p\')===\'1\')addEventListener(\'load\',()=>{window.print();});</script>';
+
 /** One junction's glue as rows; srcLine −1 = synthetic (emitLine emits no data-line anchor). */
 function glueRows(glue: string, dash: DashMode): Row[] {
   return buildRows(tokenize(glue), { dash }).map((row) =>
@@ -238,7 +257,7 @@ export function renderBook(opts: {
     usedClasses: [...used].sort(),
   });
 
-  return `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><style>${css}</style></head><body>${body}${emrProbe(used)}</body></html>`;
+  return `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><style>${css}</style>${PRINT_AUTORUN}</head><body>${PRINT_BUTTON}${body}${emrProbe(used)}</body></html>`;
 }
 
 /**

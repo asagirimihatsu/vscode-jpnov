@@ -17,7 +17,6 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { resolveBrowserExecutable } from '../../src/client/browser.ts';
 import { HEADER_BAND, fitPaper } from '../../src/shared/compiler/geometry.ts';
 import { LINE_PITCHES } from '../../src/shared/config/types.ts';
 import type {
@@ -28,6 +27,7 @@ import type {
   RenderFileResult,
 } from '../../src/shared/protocol.ts';
 
+import { resolveBrowserExecutable } from './_browser.ts';
 import { LspClient } from './lsp.ts';
 
 const SERVER_MODULE = fileURLToPath(new URL('../../dist/server/server.js', import.meta.url));

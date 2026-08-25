@@ -181,7 +181,7 @@ function ensureStarted(): void {
   context.subscriptions.push(preview, booksView, registerRenameTracking());
 
   // Push jpnov.lint.* changes so the server re-lints open files live; re-render the preview
-  // when any jpnov.layout.* setting changes (the html/outDir/browserPath members only feed
+  // when any jpnov.layout.* setting changes (the txt/outDir members only feed
   // on-demand builds, but the extra refresh is idempotent and settings edits are rare);
   // re-enumerate books when the out dir moves. Gated on Running: a change during start/stop
   // is dropped (the next start re-seeds lint via initializationOptions; the preview/books
@@ -285,9 +285,8 @@ export function activate(context: vscode.ExtensionContext): void {
   // build entry — a build needs at least one discovered, selected book, so the palette is the
   // wrong home for it.
   const buildCommands = [
-    ['jpbook.buildHtml', 'html'],
+    ['jpbook.print', 'print'],
     ['jpbook.buildTxt', 'txt'],
-    ['jpbook.buildPdf', 'pdf'],
     ['jpbook.buildEpub', 'epub'],
   ] as const;
   context.subscriptions.push(

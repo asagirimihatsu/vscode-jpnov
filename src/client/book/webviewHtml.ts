@@ -15,8 +15,8 @@ import { BOOKS_CSS, BOOKS_JS } from './webviewBundle.generated.ts';
 
 /**
  * Localized UI strings baked into the `__INIT` bootstrap. Keys mirror the {@link Labels} contract
- * one-to-one. (buildHtml/buildEpub are the icon buttons' tooltip + accessible name — full
- * sentences; buildPdf/buildTxt stay button texts.)
+ * one-to-one. (buildEpub is the icon button's tooltip + accessible name — a full sentence;
+ * print/buildTxt stay button texts.)
  */
 function labels(): Labels {
   return {
@@ -24,9 +24,8 @@ function labels(): Labels {
     selectAll: vscode.l10n.t('Select all'),
     deselectAll: vscode.l10n.t('Deselect all'),
     selectBook: vscode.l10n.t('Include in build'),
-    buildPdf: vscode.l10n.t('Build to PDF'),
+    print: vscode.l10n.t('Print / Save as PDF'),
     buildTxt: vscode.l10n.t('TXT'),
-    buildHtml: vscode.l10n.t('Build to HTML'),
     buildEpub: vscode.l10n.t('Build to EPUB'),
     revealOutput: vscode.l10n.t('Open the output folder after building'),
     back: vscode.l10n.t('Back'),
