@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { BuildChrome } from '../../../src/shared/compiler/chrome.ts';
-import { chapterGlue, concatBookText, renderBook, type BookInput } from '../../../src/shared/compiler/document.ts';
+import { chapterGlue, concatBookText, MANUSCRIPT_SHEET, renderBook, type BookInput } from '../../../src/shared/compiler/document.ts';
 import { FOLIO_BAND, HEADER_BAND } from '../../../src/shared/compiler/geometry.ts';
+import { indentAnnotation } from '../../../src/shared/compiler/tokenizer.ts';
 
 // Band totals come from the tunable geometry constants — never write them out as literals.
 const HTOP_RE = new RegExp(String.raw`:root\{[^}]*--htop:` + String(HEADER_BAND) + '[;}]');
@@ -225,6 +226,14 @@ test('chapterGlue suppression at ［＃改ページ］ junctions keeps the blank
   assert.equal(chapterGlue('あ\n［＃改ページ］', 'か', '＊', 8), '\n'); // prev ends on a break
   assert.equal(chapterGlue('あ', '［＃改ページ］\nか', '＊', 8), '\n'); // next opens on a break
   assert.equal(chapterGlue('あ', 'か', '＊', 8), '\n［＃３字下げ］＊\n\n'); // no break → divider
+});
+
+test('chapterGlue: charsPerLine null = the bare mark at the line head; an author 字下げ stays', () => {
+  assert.equal(chapterGlue('前章', '次章', '＊', null), '\n＊\n\n');
+  assert.equal(chapterGlue('前章', '次章', '［＃２字下げ］＊', null), '\n［＃２字下げ］＊\n\n');
+  // The suppression rules read the sources alone, so they apply either way.
+  assert.equal(chapterGlue('前章', '第二章［＃「第二章」は大見出し］\n本文', '＊', null), '\n');
+  assert.equal(chapterGlue('前章', '次章', '', null), '\n');
 });
 
 test('concatBookText interleaves the divider; author edge blanks stack literally', () => {
@@ -645,4 +654,97 @@ test('cover: the folio side follows the BODY page, whatever the cover count', ()
     assert.match(sheets[count] ?? '', /<div class="pn r">1 \/ 2<\/div>/, `${String(count)} covers: body page 1 stays right`);
     assert.match(sheets[count + 1] ?? '', /<div class="pn l">2 \/ 2<\/div>/, `${String(count)} covers: body page 2 stays left`);
   }
+});
+
+// --- 原稿用紙換算枚数 (400字詰め sheet count) -----------------------------------------
+
+const SHEETS_SRC = '［＃ここに「原稿用紙換算枚数」の値を表示］枚';
+/** Both counts on one cover: line 0 = 総ページ数, line 1 = 原稿用紙換算枚数. */
+const COUNTS_SRC = `［＃ここに「総ページ数」の値を表示］ページ\n${SHEETS_SRC}`;
+
+/** `n` lines of `text`, newline-joined. */
+const repeat = (n: number, text: string): string => Array.from({ length: n }, () => text).join('\n');
+
+/** A book with the COUNTS_SRC cover in front of `files`. */
+const counted = (files: readonly { name: string; src: string }[], divider?: string): BookInput => ({
+  files,
+  divider,
+  cover: { files: [{ name: 'c.jpnov', src: COUNTS_SRC }], title: '題', author: '著' },
+});
+
+/** The two substituted counts on the COUNTS_SRC cover, plus the output's body page count. */
+const countsOf = (books: readonly BookInput[]): { pages: string; sheets: string; bodyPages: number } => {
+  const body = bodyOf(renderBooks(books));
+  const pages = /<div class="line" data-line="0">(\d+)ページ<\/div>/.exec(body)?.[1];
+  const sheets = /<div class="line" data-line="1">(\d+)枚<\/div>/.exec(body)?.[1];
+  assert.ok(pages !== undefined && sheets !== undefined, body);
+  return { pages, sheets, bodyPages: (body.match(/<div class="page" data-page=/g) ?? []).length };
+};
+
+test('cover: 原稿用紙換算枚数 re-flows the body on MANUSCRIPT_SHEET, so pages and sheets differ', () => {
+  // 45 one-char lines: 2 pages on the 34-line grid, ceil(45 / 20) = 3 sheets.
+  const n = MANUSCRIPT_SHEET.linesPerPage * 2 + 5;
+  const { pages, sheets, bodyPages } = countsOf([counted([{ name: 'a.jpnov', src: repeat(n, 'あ') }])]);
+  assert.equal(bodyPages, 2);
+  assert.equal(pages, String(bodyPages));
+  assert.equal(sheets, String(Math.ceil(n / MANUSCRIPT_SHEET.linesPerPage)));
+  assert.notEqual(sheets, pages);
+});
+
+test('cover: the sheet count wraps columns at MANUSCRIPT_SHEET.charsPerLine', () => {
+  // 21 lines of 21 chars: one column each at cpl 40 (1 page), two each on the sheet → 42 → 3.
+  const width = MANUSCRIPT_SHEET.charsPerLine + 1;
+  const n = MANUSCRIPT_SHEET.linesPerPage + 1;
+  const { pages, sheets } = countsOf([counted([{ name: 'a.jpnov', src: repeat(n, 'あ'.repeat(width)) }])]);
+  assert.equal(pages, '1');
+  assert.equal(sheets, String(Math.ceil((n * 2) / MANUSCRIPT_SHEET.linesPerPage)));
+});
+
+test('cover: a 天地中央揃え divider counts from the line head; an author 字下げ passes through', () => {
+  // 16 lines + glue (blank, mark, blank) + 1 line = 20 → one sheet. The grid's own centring
+  // (indent-17 at cpl 40) would leave the sheet a budget of 1: 5 columns for the mark → 2 sheets.
+  const n = MANUSCRIPT_SHEET.linesPerPage - 4;
+  const chapters = (divider: string): BookInput =>
+    counted([{ name: 'a.jpnov', src: repeat(n, 'あ') }, { name: 'b.jpnov', src: 'か' }], divider);
+  assert.equal(countsOf([chapters('＊　＊　＊')]).sheets, '1');
+  assert.match(bodyOf(renderBooks([chapters('＊　＊　＊')])), /<div class="line indent-17">＊　＊　＊<\/div>/);
+  // ［＃１９字下げ］＊＊ is the author's own position: budget 1 on the sheet → 2 columns → 21 → 2.
+  const indented = chapters(`${indentAnnotation(MANUSCRIPT_SHEET.charsPerLine - 1)}＊＊`);
+  assert.equal(countsOf([indented]).sheets, '2');
+});
+
+test('cover: ［＃改ページ］ starts a new sheet, and the count sums every book in the run', () => {
+  assert.equal(countsOf([counted([{ name: 'a.jpnov', src: 'あ\n［＃改ページ］\nい' }])]).sheets, '2');
+  const body = bodyOf(renderBooks([
+    counted([{ name: 'a.jpnov', src: 'あ' }]),
+    counted([{ name: 'b.jpnov', src: 'い' }]),
+  ]));
+  // Two one-line bodies: two sheets, reported on both covers (like 総ページ数 and the folio).
+  assert.equal((body.match(/<div class="line" data-line="1">2枚<\/div>/g) ?? []).length, 2);
+});
+
+test('cover: 原稿用紙換算枚数 in a BODY chapter keeps the bookless placeholder', () => {
+  const body = bodyOf(renderBooks([counted([{ name: 'a.jpnov', src: SHEETS_SRC }])]));
+  assert.match(body, /<div class="line" data-line="0">NaN枚<\/div>/);
+});
+
+test('cover: the sheet count runs only when a cover asks for it, once per render', () => {
+  // renderBook reads `file.src` once per row build: the configured grid always, the
+  // MANUSCRIPT_SHEET re-flow only for a cover naming 原稿用紙換算枚数 — and once for all covers.
+  const readsFor = (covers: readonly string[]): number => {
+    let reads = 0;
+    const chapter = {
+      name: 'a.jpnov',
+      get src(): string {
+        reads += 1;
+        return 'あ';
+      },
+    };
+    renderBooks([withCover(covers.map((src, i) => ({ name: `c${String(i)}.jpnov`, src })), [chapter])]);
+    return reads;
+  };
+  assert.equal(readsFor(['表紙']), 1);
+  assert.equal(readsFor([COVER_SRC]), 1); // 総ページ数 rides the configured pagination
+  assert.equal(readsFor([SHEETS_SRC]), 2);
+  assert.equal(readsFor([SHEETS_SRC, COUNTS_SRC]), 2);
 });

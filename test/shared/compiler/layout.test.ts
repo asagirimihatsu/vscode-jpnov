@@ -1001,12 +1001,14 @@ const REAL: Readonly<Record<ValueField, string>> = {
   title: '作品名',
   author: '著者名',
   totalPages: '215',
+  sheets: '58',
 };
 
 test('値の表示: a bookless compile substitutes the fixed placeholders', () => {
   assert.equal(unitText('［＃ここに「題名」の値を表示］'), VALUE_FIELD_PLACEHOLDERS.title);
   assert.equal(unitText('［＃ここに「著者」の値を表示］'), VALUE_FIELD_PLACEHOLDERS.author);
   assert.equal(unitText('［＃ここに「総ページ数」の値を表示］'), VALUE_FIELD_PLACEHOLDERS.totalPages);
+  assert.equal(unitText('［＃ここに「原稿用紙換算枚数」の値を表示］'), VALUE_FIELD_PLACEHOLDERS.sheets);
 });
 
 test('値の表示: opts.values substitutes the real values, an empty one emitting nothing', () => {
