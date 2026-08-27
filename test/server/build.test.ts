@@ -18,6 +18,7 @@ import {
 import type { ServerContext } from '../../src/server/context.ts';
 import { BUILD_CHROME_DEFAULT, BUILD_PAPER_DEFAULT } from '../../src/shared/config/settings.ts';
 import { LAYOUT_DEFAULT } from '../../src/shared/config/types.ts';
+import { MANUSCRIPT_SHEET } from '../../src/shared/compiler/document.ts';
 import type {
   BuildResult,
   HtmlSettings,
@@ -765,7 +766,7 @@ test('results never carry a legacy epubs key; epub rides the collision check too
 
 // --- cover pages -------------------------------------------------------------
 
-/** A book with a two-entry cover list, a template cover, and a two-page body. */
+/** A book with a two-entry cover list, a template cover, and a two-page (three-sheet) body. */
 async function writeCoverFixture(dir: string): Promise<void> {
   await writeUnder(dir, 'vol1.jpbook', [
     '---',
@@ -782,9 +783,12 @@ async function writeCoverFixture(dir: string): Promise<void> {
     '［＃ここに「題名」の値を表示］',
     '［＃ここに「著者」の値を表示］',
     '全［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］ページ',
+    '４００字詰め原稿用紙換算［＃縦中横］［＃ここに「原稿用紙換算枚数」の値を表示］［＃縦中横終わり］枚',
   ].join('\n'));
   await writeUnder(dir, 'src/arasuji.jpnov', 'あらすじ本文。');
-  await writeUnder(dir, 'src/a.jpnov', '本文。\n［＃改ページ］\n続き。');
+  // Two pages on the 40×34 SETTINGS grid; three sheets (the lines after the break spill one).
+  const after = Array.from({ length: MANUSCRIPT_SHEET.linesPerPage + 1 }, () => '続き。').join('\n');
+  await writeUnder(dir, 'src/a.jpnov', `本文。\n［＃改ページ］\n${after}`);
 }
 
 test('build: covers render as unnumbered front pages carrying the book values (html only)', async () => {
@@ -805,10 +809,11 @@ test('build: covers render as unnumbered front pages carrying the book values (h
   assert.equal(sheets.length, 4); // 2 covers + 2 body pages
   assert.ok(sheets[0]?.startsWith('<div class="page cover" data-page="0">'));
   assert.ok(sheets[1]?.startsWith('<div class="page cover" data-page="1">'));
-  // The book's own values land on the cover; the count is the BODY count.
+  // The book's own values land on the cover; both counts are the BODY's, each on its own grid.
   assert.ok(sheets[0]?.includes('作品名'));
   assert.ok(sheets[0]?.includes('著者名'));
-  assert.ok(sheets[0]?.includes('<span class="tcy">2</span>'));
+  assert.ok(sheets[0]?.includes('全<span class="tcy">2</span>ページ'));
+  assert.ok(sheets[0]?.includes('換算<span class="tcy">3</span>枚'));
   // Neither cover carries the book's header or a folio; the body starts at page 1.
   for (const cover of [sheets[0], sheets[1]]) {
     assert.ok(cover !== undefined && !cover.includes('class="hd') && !cover.includes('class="pn'));

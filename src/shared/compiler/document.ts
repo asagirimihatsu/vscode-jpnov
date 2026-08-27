@@ -4,7 +4,11 @@ import type { BuildChrome } from './chrome.ts';
 import { emrProbe, stylesheet } from './css.ts';
 import type { PaperOrientation, PaperSize } from './geometry.ts';
 import { buildRows, paginate, pagesToHtml, type DisplayLine, type RenderPage, type Row } from './layout.ts';
-import { indentAnnotation, tokenize } from './tokenizer.ts';
+import { indentAnnotation, tokenize, VALUE_FIELD_PLACEHOLDERS, type ValueField } from './tokenizer.ts';
+
+/** 400字詰め原稿用紙 (20 字 × 20 行): the grid ［＃ここに「原稿用紙換算枚数」の値を表示］
+ *  re-flows the body on. Tests derive from this, never write 20. */
+export const MANUSCRIPT_SHEET = { charsPerLine: 20, linesPerPage: 20 } as const;
 
 export interface BookInput {
   readonly files: readonly { readonly name: string; readonly src: string }[];
@@ -17,7 +21,8 @@ export interface BookInput {
   /**
    * The `cover` sources, rendered by the html build as unnumbered front pages (txt and EPUB
    * never see them). `title`/`author` are the ［＃ここに「…」の値を表示］ substitutions,
-   * pre-resolved by the caller. Absent/empty = no cover pages.
+   * pre-resolved by the caller; the two counts (総ページ数, 原稿用紙換算枚数) derive from the
+   * body inside {@link renderBook}. Absent/empty = no cover pages.
    */
   readonly cover?: {
     readonly files: readonly { readonly name: string; readonly src: string }[];
@@ -77,11 +82,12 @@ function pageBreakAt(src: string, edge: 'first' | 'last'): boolean {
  * (a ruby/縦中横-bearing mark centres on its true advance); a value already carrying a
  * ［＃○字下げ］ prefix passes through verbatim, and N = 0 emits the bare mark — never a
  * ［＃０字下げ］. The annotation spelling keeps the offset out of the `.txt` prose while the
- * HTML side renders the same string through the indent machinery as padding.
+ * HTML side renders the same string through the indent machinery as padding. `charsPerLine`
+ * null = no centring, the bare mark as written.
  */
-function dividerLine(divider: string, charsPerLine: number): string {
+function dividerLine(divider: string, charsPerLine: number | null): string {
   const tokens = tokenize(divider);
-  if (tokens[0]?.kind === 'indent') {
+  if (charsPerLine === null || tokens[0]?.kind === 'indent') {
     return divider;
   }
   let cells = 0;
@@ -113,12 +119,15 @@ function dividerLine(divider: string, charsPerLine: number): string {
  * glue (the txt path's stripped previous source is equivalent — the strip only drops the
  * final-newline artifact). The glue is never autoTcy'd; known limitation: a divider that is
  * itself a bare `!?` pair combines only on a `.txt` re-render.
+ *
+ * `charsPerLine` is the width a bare divider centres on; null = no centring, the bare mark at
+ * the line head (the 原稿用紙換算枚数 count).
  */
 export function chapterGlue(
   prevSrc: string,
   nextSrc: string,
   divider: string,
-  charsPerLine: number,
+  charsPerLine: number | null,
 ): string {
   if (
     divider !== '' &&
@@ -164,8 +173,10 @@ function glueRows(glue: string, dash: DashMode): Row[] {
  * {@link chapterGlue} between chapters and starts on a fresh page. Cover files render BEFORE
  * the body as unnumbered, furniture-free pages and compile AFTER the bodies are paginated, so
  * ［＃ここに「総ページ数」の値を表示］ shows the body page count — the same count as the
- * folio's `{totalPage}`. All options are required and pre-resolved (the settings resolver is
- * the only default layer). Pure + vscode-free.
+ * folio's `{totalPage}` — and ［＃ここに「原稿用紙換算枚数」の値を表示］ the same bodies
+ * re-flowed on {@link MANUSCRIPT_SHEET}, computed only when a cover asks for it. All options
+ * are required and pre-resolved (the settings resolver is the only default layer). Pure +
+ * vscode-free.
  */
 export function renderBook(opts: {
   books: readonly BookInput[];
@@ -181,12 +192,12 @@ export function renderBook(opts: {
   fontFamily: string;
   chrome: BuildChrome;
 }): string {
-  const bodyRowsOf = (book: BookInput): Row[] => {
+  const bodyRowsOf = (book: BookInput, charsPerLine: number | null): Row[] => {
     const sources = book.files.map((file) => applyAutoTcy(file.src, opts.autoTcy));
     return sources.flatMap((src, fileIndex): Row[] => {
       const glue = fileIndex > 0
         ? glueRows(
-            chapterGlue(sources[fileIndex - 1] ?? '', src, book.divider ?? '', opts.charsPerLine),
+            chapterGlue(sources[fileIndex - 1] ?? '', src, book.divider ?? '', charsPerLine),
             opts.dash,
           )
         : [];
@@ -194,29 +205,49 @@ export function renderBook(opts: {
     });
   };
 
-  const coverPagesOf = (book: BookInput, totalBody: number): DisplayLine[][] => {
+  // Bodies paginate FIRST — covers need the count. Per book is output-identical to one run
+  // with a pagebreak row at each seam: paginate flushes only non-empty pages.
+  const bodies = opts.books.map((book) => ({
+    book,
+    pages: paginate(bodyRowsOf(book, opts.charsPerLine), opts.charsPerLine, opts.linesPerPage, opts.kinsoku),
+  }));
+  const totalBody = bodies.reduce((n, b) => n + b.pages.length, 0);
+
+  // 原稿用紙換算枚数: the bodies re-flowed on MANUSCRIPT_SHEET, the divider uncentred — computed
+  // on the first cover that asks, once per render.
+  let sheets: number | undefined;
+  const totalSheets = (): number => {
+    sheets ??= bodies.reduce((n, b) => {
+      const rows = bodyRowsOf(b.book, null);
+      return n + paginate(rows, MANUSCRIPT_SHEET.charsPerLine, MANUSCRIPT_SHEET.linesPerPage, opts.kinsoku).length;
+    }, 0);
+    return sheets;
+  };
+
+  const coverPagesOf = (book: BookInput): DisplayLine[][] => {
     const cover = book.cover;
     if (cover === undefined || cover.files.length === 0) {
       return [];
     }
-    const values = { title: cover.title, author: cover.author, totalPages: String(totalBody) };
-    const rows = cover.files.flatMap((file, i): Row[] => {
-      const r = buildRows(tokenize(applyAutoTcy(file.src, opts.autoTcy)), { dash: opts.dash, values });
+    const tokenLists = cover.files.map((file) => tokenize(applyAutoTcy(file.src, opts.autoTcy)));
+    const wantsSheets = tokenLists.some((tokens) =>
+      tokens.some((t) => t.kind === 'valueField' && t.field === 'sheets'),
+    );
+    const values: Readonly<Record<ValueField, string>> = {
+      title: cover.title,
+      author: cover.author,
+      totalPages: String(totalBody),
+      sheets: wantsSheets ? String(totalSheets()) : VALUE_FIELD_PLACEHOLDERS.sheets,
+    };
+    const rows = tokenLists.flatMap((tokens, i): Row[] => {
+      const r = buildRows(tokens, { dash: opts.dash, values });
       return i > 0 ? [{ kind: 'pagebreak' }, ...r] : r; // each cover file starts on a fresh page
     });
     return paginate(rows, opts.charsPerLine, opts.linesPerPage, opts.kinsoku);
   };
 
-  // Bodies paginate FIRST — covers need the count. Per book is output-identical to one run
-  // with a pagebreak row at each seam: paginate flushes only non-empty pages.
-  const bodies = opts.books.map((book) => ({
-    book,
-    pages: paginate(bodyRowsOf(book), opts.charsPerLine, opts.linesPerPage, opts.kinsoku),
-  }));
-  const totalBody = bodies.reduce((n, b) => n + b.pages.length, 0);
-
   const pages = bodies.flatMap(({ book, pages: bodyPages }): RenderPage[] => [
-    ...coverPagesOf(book, totalBody).map((lines): RenderPage => ({ lines, cover: true })),
+    ...coverPagesOf(book).map((lines): RenderPage => ({ lines, cover: true })),
     ...bodyPages.map((lines): RenderPage => ({ lines })),
   ]);
 

@@ -10,7 +10,8 @@ import { isAbsoluteLocation } from '../config/validate.ts';
  */
 export const COVER_TEMPLATE = '［＃５字下げ］［＃ここに「題名」の値を表示］\n' +
   '［＃７字下げ］［＃ここに「著者」の値を表示］\n' +
-  '［＃７字下げ］全［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］ページ\n';
+  '［＃７字下げ］全［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］ページ\n' +
+  '［＃７字下げ］４００字詰め原稿用紙換算［＃縦中横］［＃ここに「原稿用紙換算枚数」の値を表示］［＃縦中横終わり］枚\n';
 
 /** Why a typed path is unusable; the command maps each code to a localized message. */
 export type FileInputError = 'empty' | 'absolute' | 'escapes' | 'badName';

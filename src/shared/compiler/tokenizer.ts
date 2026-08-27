@@ -216,11 +216,11 @@ export interface IndentBlockEndToken extends TokenBase {
 }
 
 /**
- * Value display ［＃ここに「題名／著者／総ページ数」の値を表示］ — a standalone command that
- * renders as text: the html build substitutes the book's value on cover pages, every other
- * compile (preview, body chapters, EPUB, the issue scans) the fixed placeholder from
- * {@link VALUE_FIELD_PLACEHOLDERS} — a cover template serves many books, so the editor side
- * is bookless by design. The `.txt` build keeps the annotation verbatim like all others.
+ * Value display ［＃ここに「題名／著者／総ページ数／原稿用紙換算枚数」の値を表示］ — a standalone
+ * command that renders as text: the html build substitutes the book's value on cover pages,
+ * every other compile (preview, body chapters, EPUB, the issue scans) the fixed placeholder
+ * from {@link VALUE_FIELD_PLACEHOLDERS} — a cover template serves many books, so the editor
+ * side is bookless by design. The `.txt` build keeps the annotation verbatim like all others.
  */
 export interface ValueFieldToken extends TokenBase {
   readonly kind: 'valueField';
@@ -281,13 +281,14 @@ export type HeadingLevel = 1 | 2 | 3;
 /**
  * The value fields ［＃ここに「…」の値を表示］ accepts, as ONE source: `name` is what the
  * author writes, `field` is what the book supplies, `stand` is what a bookless compile
- * substitutes. A field's own name doubles as its stand-in, except the page count, which has
+ * substitutes. A field's own name doubles as its stand-in, except the two counts, which have
  * no text form. The two lookups below derive from this, so they cannot drift apart.
  */
 const VALUE_FIELDS = [
   { name: '題名', field: 'title', stand: '題名' },
   { name: '著者', field: 'author', stand: '著者' },
   { name: '総ページ数', field: 'totalPages', stand: 'NaN' },
+  { name: '原稿用紙換算枚数', field: 'sheets', stand: 'NaN' },
 ] as const;
 
 export type ValueField = (typeof VALUE_FIELDS)[number]['field'];
