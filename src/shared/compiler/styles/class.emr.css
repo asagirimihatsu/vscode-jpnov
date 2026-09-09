@@ -1,10 +1,12 @@
-/* Right-side 傍点 line compensation (emr = emphasis marks, right side). Chromium pushes the
-   whole line's baseline leftward by (mark font ascent+descent)·0.5em − the pitch half-leading
-   (when positive) to fit the text-emphasis band; no property on the emphasis span suppresses
-   it, and left-side marks never shift. The compensating translate is the exact inverse, so the
-   marks overdraw the inter-line gap instead, like a ruby reading (the LINE_PITCHES ladder in
-   config/types.ts). The mark font's a+d varies per machine (ヒラギノ/MS 明朝 = 1em exactly;
-   Noto CJK and Latin fallbacks run larger), so the emitted probe (css.ts emrProbe(); source
-   src/client/webview/probe/emr.ts) measures the real shift and pins --emr-shift; the var()
-   fallback is the a+d = 1em closed form for a document rendered with scripts off. */
+/* Right-side 傍点 line compensation (emr = emphasis marks, right side). Chromium up to 151
+   pushes the whole line's baseline leftward by (mark font ascent+descent)·0.5em − the pitch
+   half-leading (when positive) to fit the text-emphasis band; no property on the emphasis span
+   suppresses it, and left-side marks never shift. The compensating translate is the exact
+   inverse, so the marks overdraw the inter-line gap instead, like a ruby reading (the
+   LINE_PITCHES ladder in config/types.ts). The push varies per engine and font (Chromium 152
+   leaves only a sub-pixel rounding residue in normal flow; a+d is 1em for ヒラギノ/MS 明朝,
+   larger for Noto CJK and Latin fallbacks), so the emitted probe (css.ts emrProbe(); source
+   src/client/webview/probe/emr.ts) measures the real shift beside a real line and pins
+   --emr-shift; the var() fallback is the a+d = 1em closed form for a document rendered with
+   scripts off. */
 .emr{translate:var(--emr-shift,max(0em,(2 - var(--pitch))*0.5em)) 0}
