@@ -47,6 +47,7 @@ test('shipped defaults enable exactly the hygiene rules, ダッシュ, and the f
     'lint.common.noControlChar',
     'lint.common.noHankakuKana',
     'lint.common.noNfd',
+    'lint.common.noTrailingSpace',
     'lint.common.noUnmatchedPair',
     'lint.common.noZeroWidth',
     'lint.common.shiftJisSafe',

@@ -263,35 +263,60 @@ export function ellipsisRule(ctx: RuleContext): LineRule {
   };
 }
 
-/** 連続空行: a run of blank(-looking) lines longer than `max` is reported as one span.
- *  A directive-only line is content — it breaks the run. */
+/** 行末スペース: the space run (either width, or a tab) right before the line break; the fix
+ *  deletes exactly that. A line ending in markup has no trailing prose, so a bare ［＃字下げ］
+ *  line is never flagged. */
+export function trailingSpaceRule(ctx: RuleContext): LineRule {
+  return {
+    line(line: LintLine): void {
+      const piece = line.pieces[line.pieces.length - 1];
+      if (piece === undefined || piece.srcStart + piece.text.length !== line.srcEnd) {
+        return;
+      }
+      let k = piece.text.length;
+      while (k > 0 && isSpace(piece.text.charAt(k - 1))) {
+        k -= 1;
+      }
+      if (k === piece.text.length) {
+        return;
+      }
+      ctx.report(
+        { start: piece.srcStart + k, end: line.srcEnd },
+        { fix: { replace: { piece, start: k, end: piece.text.length }, text: '' } },
+      );
+    },
+  };
+}
+
+/** 連続空行: more than `max` blank lines in a row are one finding, and the fix erases the first
+ *  `count − max` (whole lines, terminators included). Any line with a token ends the run. A blank
+ *  last line is the EOF tail, not a blank line: it bounds the run and is never erased. */
 export function blankRunRule(ctx: RuleContext): LineRule {
   const max = maxOf(ctx);
-  let runStart = -1;
-  let runEnd = -1;
-  let count = 0;
-  const flush = (): void => {
-    if (count > max && runStart >= 0) {
-      ctx.report({ start: runStart, end: runEnd });
+  const starts: number[] = [];
+  const flush = (after: number): void => {
+    const first = starts[0];
+    const excess = starts.length - max;
+    if (first !== undefined && excess > 0) {
+      const span = { start: first, end: starts[excess] ?? after };
+      ctx.report(span, { fix: { erase: span } });
     }
-    count = 0;
-    runStart = -1;
+    starts.length = 0;
   };
   return {
     line(line: LintLine): void {
-      const blankish =
-        line.blank || (line.pieces.length > 0 && line.pieces.every((p) => /^[ \t　]*$/.test(p.text)));
-      if (!blankish) {
-        flush();
-        return;
+      if (line.blank) {
+        starts.push(line.srcStart);
+      } else {
+        flush(line.srcStart);
       }
-      if (count === 0) {
-        runStart = line.srcStart;
-      }
-      runEnd = line.srcEnd;
-      count += 1;
     },
-    end: flush,
+    end(): void {
+      const tail = starts.pop();
+      if (tail !== undefined) {
+        flush(tail);
+      }
+    },
   };
 }
 

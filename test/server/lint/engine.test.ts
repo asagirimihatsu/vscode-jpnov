@@ -396,18 +396,109 @@ test('arabicDigits flags a digit run over the limit (either width), without a fi
   ]);
 });
 
-const BLANKS: RawLintConfigWire = { 'jpnov.lint.common.blankRun': 2 };
+/** `blankRun` at N: more than N blank lines in a row are flagged. */
+function blanks(max: number): RawLintConfigWire {
+  return { 'jpnov.lint.common.blankRun': max };
+}
 
-test('blankRun reports a run of blank lines over the limit as one finding', () => {
-  // The span runs from the first blank line's start to the last one's end — for empty lines
-  // that is the two terminators BETWEEN the three blank lines (rendered as lines 1-3 selected).
-  assert.deepEqual(lint('あ。\n\n\n\nい。', BLANKS), [
-    { code: 'lint.common.blankRun', text: '\n\n' },
+test('blankRun reports a run over the limit as one finding and erases the extra lines', () => {
+  // Span = fix = the first `count − max` blank lines with their terminators (line 1 start to
+  // line 3 start); the kept lines are untouched.
+  assert.deepEqual(lintAll('あ。\n\n\n\nい。', blanks(1)), [
+    { code: 'lint.common.blankRun', text: '\n\n', fix: { text: '\n\n', newText: '' } },
   ]);
-  assert.deepEqual(lint('あ。\n\n\nい。', BLANKS), []);
-  // EOF flush: the line after the final \n is a real (blank) line too, so this run is FOUR lines.
-  assert.deepEqual(lint('あ。\n\n\n\n', BLANKS), [{ code: 'lint.common.blankRun', text: '\n\n\n' }]);
-  assert.deepEqual(lint('あ。\n\n［＃改ページ］\n\nい。', BLANKS), []); // a directive line breaks the run
+  assert.equal(applied('あ。\n\n\n\nい。', blanks(1)), 'あ。\n\nい。');
+  assert.equal(applied('あ。\n\n\n\nい。', blanks(2)), 'あ。\n\n\nい。');
+  assert.deepEqual(lint('あ。\n\n\n\nい。', blanks(3)), []);
+  assert.deepEqual(lint('あ。\n\nい。', blanks(1)), []); // one blank line is the paragraph gap
+  assert.equal(applied('あ。\r\n\r\n\r\nい。', blanks(1)), 'あ。\r\n\r\nい。'); // a CRLF goes whole
+  assert.deepEqual(lint('あ。\n\n［＃改ページ］\n\nい。', blanks(1)), []); // a directive line breaks the run
+});
+
+test('blankRun at 0 forbids blank lines: a run of any length is erased whole', () => {
+  assert.deepEqual(lintAll('あ。\n\nい。', blanks(0)), [
+    { code: 'lint.common.blankRun', text: '\n', fix: { text: '\n', newText: '' } },
+  ]);
+  assert.equal(applied('あ。\n\n\n\nい。', blanks(0)), 'あ。\nい。');
+  assert.equal(applied('\n\nあ。', blanks(0)), 'あ。');
+});
+
+test('blankRun: the empty line after the final line break is the file end, not a blank line', () => {
+  // The line after the final line break is never counted or erased, at 0 included.
+  assert.deepEqual(lint('あ。\n', blanks(0)), []);
+  assert.deepEqual(lint('', blanks(0)), []);
+  assert.equal(applied('あ。\n\n', blanks(0)), 'あ。\n');
+  assert.deepEqual(lint('あ。\n\n', blanks(1)), []);
+  assert.equal(applied('あ。\n\n\n', blanks(1)), 'あ。\n\n');
+  assert.equal(applied('\n\n', blanks(0)), '');
+});
+
+test('blankRun: one fix round leaves exactly the allowed run, at every length and limit', () => {
+  for (let max = 0; max <= 3; max += 1) {
+    for (let count = 0; count <= 6; count += 1) {
+      const src = `あ。\n${'\n'.repeat(count)}い。\n`;
+      const fixed = applied(src, blanks(max));
+      const label = `${String(count)} blank lines at ${String(max)}`;
+      assert.equal(fixed, `あ。\n${'\n'.repeat(Math.min(count, max))}い。\n`, label);
+      assert.deepEqual(lint(fixed, blanks(max)), [], label);
+    }
+  }
+});
+
+test('blankRun counts token-less lines only — a space-only line is noTrailingSpace\'s finding', () => {
+  // The two rules stay orthogonal, so their fixes never overlap inside one fix-all.
+  const both = { ...blanks(1), 'jpnov.lint.common.noTrailingSpace': true };
+  assert.deepEqual(lint('あ。\n\n　\n\nい。', both), [
+    { code: 'lint.common.noTrailingSpace', text: '　' },
+  ]);
+});
+
+const TRAILING: RawLintConfigWire = { 'jpnov.lint.common.noTrailingSpace': true };
+
+test('noTrailingSpace flags the spaces before a line break and deletes exactly those', () => {
+  assert.deepEqual(lintAll('好き　', TRAILING), [
+    { code: 'lint.common.noTrailingSpace', text: '　', fix: { text: '　', newText: '' } },
+  ]);
+  assert.equal(applied('好き 　\t\nおわり。 \n', TRAILING), '好き\nおわり。\n');
+  assert.deepEqual(lint('好き　だ。', TRAILING), []); // an inner space is prose
+});
+
+test('noTrailingSpace: a line of nothing but spaces is the whole-line case', () => {
+  assert.deepEqual(lintAll('　　', TRAILING), [
+    { code: 'lint.common.noTrailingSpace', text: '　　', fix: { text: '　　', newText: '' } },
+  ]);
+  assert.equal(applied('あ。\n　　\nい。', TRAILING), 'あ。\n\nい。');
+  assert.deepEqual(lint('「あの\n　\nね」', TRAILING), [
+    { code: 'lint.common.noTrailingSpace', text: '　' },
+  ]);
+});
+
+test('noTrailingSpace leaves blank lines, prose, and lines ending in markup alone', () => {
+  // The line end is literal: an annotation there ends the line, so the space before it is not
+  // trailing.
+  const clean = [
+    'あ。\n\nい。',
+    '　地の文。',
+    '「台詞」',
+    '［＃３字下げ］',
+    '　［＃３字下げ］',
+    '好き　［＃「好き」に傍点］',
+    '漢字《かんじ》',
+  ];
+  for (const src of clean) {
+    assert.deepEqual(lint(src, TRAILING), [], JSON.stringify(src));
+  }
+});
+
+test('noTrailingSpace: spaces after a bare ［＃字下げ］ are flagged; the fix leaves the annotation', () => {
+  assert.deepEqual(lintAll('［＃３字下げ］　', TRAILING), [
+    { code: 'lint.common.noTrailingSpace', text: '　', fix: { text: '　', newText: '' } },
+  ]);
+  assert.equal(applied('［＃３字下げ］　\n', TRAILING), '［＃３字下げ］\n');
+});
+
+test('noTrailingSpace: only the spaces after the last markup are trailing', () => {
+  assert.equal(applied('　［＃「z」に傍点］　', TRAILING), '　［＃「z」に傍点］');
 });
 
 const NO_INDENT: RawLintConfigWire = { 'jpnov.lint.dialogue.noIndent': true };

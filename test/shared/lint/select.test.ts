@@ -22,6 +22,13 @@ test('a threshold rule clamps to its catalog bounds', () => {
   ]);
 });
 
+test('a threshold rule enables at 0 when its floor is 0; null stays off', () => {
+  assert.deepEqual(selectRules({ 'jpnov.lint.common.blankRun': 0 }), [
+    { id: 'blankRun', options: { max: 0 }, code: 'lint.common.blankRun' },
+  ]);
+  assert.ok(isSelectionEmpty(selectRules({ 'jpnov.lint.common.blankRun': null })));
+});
+
 test('a boolean rule enables only on exactly true', () => {
   assert.ok(isSelectionEmpty(selectRules({ 'jpnov.lint.common.noUnmatchedPair': false })));
   assert.ok(isSelectionEmpty(selectRules({ 'jpnov.lint.common.noUnmatchedPair': 1 })));

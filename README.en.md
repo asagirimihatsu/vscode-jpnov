@@ -411,10 +411,10 @@ and a kanji run split by an annotation (`聴覚視覚［＃太字］区分装置
 counts as one run — the checks see the text the way a reader will.
 
 - **Hygiene checks are on by default** — half-width kana, decomposed (NFD)
-  characters, zero-width spaces, and invalid control
-  characters — so a stray malformed or invisible character never slips into a
-  manuscript. The dash check (`common.dash`) is on too, keeping one dash
-  character throughout.
+  characters, zero-width spaces, invalid control characters, and trailing
+  spaces (`common.noTrailingSpace`) — so a stray malformed or invisible
+  character never slips into a manuscript. The dash check (`common.dash`) is
+  on too, keeping one dash character throughout.
 - **Manuscript-convention checks are on by default too**, each with its own
   switch and message: paragraph indent (`narration.indent`), narration lines
   ending with `。` (`narration.endPeriod` — a trailing `……` or dash still
@@ -425,8 +425,8 @@ counts as one run — the checks see the text the way a reader will.
   (`noUnmatchedPair`). All but the bracket matcher auto-fixable; a
   symbol-only scene-break line (`＊`) is exempt from the paragraph rules.
 - **Stricter checks are opt-in.** Length/run limits (`sentenceLength`,
-  `maxTen`, `maxKanjiRun`, `arabicDigits`, `blankRun`), the `！？`-pair
-  style, and the ruby-kana rule.
+  `maxTen`, `maxKanjiRun`, `arabicDigits`), blank lines in a row
+  (`blankRun`, auto-fixable), the `！？`-pair style, and the ruby-kana rule.
 
 Syntax problems (an unclosed `［＃` annotation, a dangling block end) are
 always reported, independent of lint settings.
@@ -473,6 +473,7 @@ form, and `ruby.kana` to ruby readings.
 | `jpnov.lint.common.noNfd` | `true` | Decomposed (NFD) characters (auto-fix) |
 | `jpnov.lint.common.noZeroWidth` | `true` | Zero-width spaces (U+200B) (auto-fix) |
 | `jpnov.lint.common.noControlChar` | `true` | Invalid control characters (auto-fix) |
+| `jpnov.lint.common.noTrailingSpace` | `true` | Trailing spaces, space-only lines included (auto-fix) |
 | `jpnov.lint.common.shiftJisSafe` | `true` | Characters Shift JIS lacks, written as 〓 in a Shift JIS `.txt` build |
 | `jpnov.lint.common.dash` | `horizontalBar` | One dash character throughout, always in pairs (auto-fix) |
 | `jpnov.lint.common.ellipsis` | `true` | Even-count `…` runs; `。。`/`、、`/`・・` stand-ins (auto-fix) |
@@ -486,7 +487,7 @@ form, and `ruby.kana` to ruby readings.
 | `jpnov.lint.common.maxTen` | `null` | Commas (、) per sentence (suggested 3) |
 | `jpnov.lint.common.maxKanjiRun` | `null` | Consecutive kanji, counted across annotations (suggested 6) |
 | `jpnov.lint.common.arabicDigits` | `null` | Digits per Arabic-numeral run (suggested 2) |
-| `jpnov.lint.common.blankRun` | `null` | Consecutive blank lines (suggested 2) |
+| `jpnov.lint.common.blankRun` | `null` | Blank lines in a row, `0` to forbid them (suggested 1, auto-fix) |
 | `jpnov.lint.common.noUnmatchedPair` | `true` | Unmatched brackets / quotes |
 | `jpnov.lint.common.jaNoSpaceBetweenFullWidth` | `false` | Space between full-width characters (auto-fix) |
 | `jpnov.lint.common.jaUnnaturalAlphabet` | `false` | Lone letter between Japanese characters (IME slip) |

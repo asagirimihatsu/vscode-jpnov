@@ -428,93 +428,99 @@
             "order": 8,
             "markdownDescription": "%jpnov.lint.common.arabicDigits.description%"
           },
+          "jpnov.lint.common.noTrailingSpace": {
+            "type": "boolean",
+            "default": true,
+            "order": 9,
+            "markdownDescription": "%jpnov.lint.common.noTrailingSpace.description%"
+          },
           "jpnov.lint.common.blankRun": {
             "type": [
               "integer",
               "null"
             ],
             "default": null,
-            "minimum": 1,
+            "minimum": 0,
             "maximum": 20,
-            "order": 9,
+            "order": 10,
             "markdownDescription": "%jpnov.lint.common.blankRun.description%"
           },
           "jpnov.lint.common.noUnmatchedPair": {
             "type": "boolean",
             "default": true,
-            "order": 10,
+            "order": 11,
             "markdownDescription": "%jpnov.lint.common.noUnmatchedPair.description%"
           },
           "jpnov.lint.common.noHankakuKana": {
             "type": "boolean",
             "default": true,
-            "order": 11,
+            "order": 12,
             "markdownDescription": "%jpnov.lint.common.noHankakuKana.description%"
           },
           "jpnov.lint.common.noNfd": {
             "type": "boolean",
             "default": true,
-            "order": 12,
+            "order": 13,
             "markdownDescription": "%jpnov.lint.common.noNfd.description%"
           },
           "jpnov.lint.common.noZeroWidth": {
             "type": "boolean",
             "default": true,
-            "order": 13,
+            "order": 14,
             "markdownDescription": "%jpnov.lint.common.noZeroWidth.description%"
           },
           "jpnov.lint.common.noControlChar": {
             "type": "boolean",
             "default": true,
-            "order": 14,
+            "order": 15,
             "markdownDescription": "%jpnov.lint.common.noControlChar.description%"
           },
           "jpnov.lint.common.shiftJisSafe": {
             "type": "boolean",
             "default": true,
-            "order": 15,
+            "order": 16,
             "markdownDescription": "%jpnov.lint.common.shiftJisSafe.description%"
           },
           "jpnov.lint.common.jaNoSpaceBetweenFullWidth": {
             "type": "boolean",
             "default": false,
-            "order": 16,
+            "order": 17,
             "markdownDescription": "%jpnov.lint.common.jaNoSpaceBetweenFullWidth.description%"
           },
           "jpnov.lint.common.jaUnnaturalAlphabet": {
             "type": "boolean",
             "default": false,
-            "order": 17,
+            "order": 18,
             "markdownDescription": "%jpnov.lint.common.jaUnnaturalAlphabet.description%"
           },
           "jpnov.lint.common.minusPosition": {
             "type": "boolean",
             "default": false,
-            "order": 18,
+            "order": 19,
             "markdownDescription": "%jpnov.lint.common.minusPosition.description%"
           },
           "jpnov.lint.narration.indent": {
             "type": "boolean",
             "default": true,
-            "order": 19,
+            "order": 20,
             "markdownDescription": "%jpnov.lint.narration.indent.description%"
           },
           "jpnov.lint.narration.endPeriod": {
             "type": "boolean",
             "default": true,
-            "order": 20,
+            "order": 21,
             "markdownDescription": "%jpnov.lint.narration.endPeriod.description%"
           },
           "jpnov.lint.dialogue.closingPunct": {
             "type": "boolean",
             "default": true,
-            "order": 21,
+            "order": 22,
             "markdownDescription": "%jpnov.lint.dialogue.closingPunct.description%"
           },
           "jpnov.lint.dialogue.noIndent": {
             "type": "boolean",
             "default": true,
-            "order": 22,
+            "order": 23,
             "markdownDescription": "%jpnov.lint.dialogue.noIndent.description%"
           },
           "jpnov.lint.ruby.kana": {
@@ -535,7 +541,7 @@
               "%jpnov.lint.ruby.kana.hiragana.description%",
               "%jpnov.lint.ruby.kana.katakana.description%"
             ],
-            "order": 23,
+            "order": 24,
             "markdownDescription": "%jpnov.lint.ruby.kana.description%"
           }
         }

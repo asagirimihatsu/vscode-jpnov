@@ -15,8 +15,9 @@
  * FIX SAFETY (a silent-data-loss class of bug — a fix once deleted the markup between two clean
  * characters): a replacement {@link FixSpec} can only name ONE {@link Piece}, and a piece is by
  * construction a contiguous source slice, so a replacement spanning elided markup is impossible to
- * express. Inserts name an explicit source offset and are zero-width. The only runtime check left
- * is the view-scan adapter's same-piece test (rules/adapt.ts).
+ * express. Inserts name an explicit source offset and are zero-width. An erase names whole blank
+ * lines, and the engine verifies its span holds nothing but line terminators. The only other
+ * runtime check is the view-scan adapter's same-piece test (rules/adapt.ts).
  *
  * Relative imports only (native test loader); vscode-free.
  */
@@ -96,8 +97,9 @@ export interface SrcSpan {
 }
 
 /**
- * An auto-fix, in the only two safe shapes: replace a range INSIDE one piece (cannot span elided
- * markup by construction), or insert at an explicit source offset (zero-width, overwrites nothing).
+ * An auto-fix, in the only three safe shapes: replace a range INSIDE one piece (cannot span elided
+ * markup by construction), insert at an explicit source offset (zero-width), or erase whole blank
+ * lines (a span the engine checks holds nothing but line terminators).
  */
 export type FixSpec =
   | {
@@ -109,7 +111,8 @@ export type FixSpec =
     };
     readonly text: string;
   }
-  | { readonly insertAt: number; readonly text: string };
+  | { readonly insertAt: number; readonly text: string }
+  | { readonly erase: SrcSpan };
 
 /** What a rule instance is handed: its resolved options and the report sink. `message` overrides
  *  the default `{ code: rule.code }` (sub-codes like `lint.common.dash.parity`). */

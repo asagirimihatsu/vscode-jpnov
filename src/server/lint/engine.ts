@@ -11,7 +11,8 @@
  * Fix materialization is the only place a {@link FixSpec} becomes an LSP range: a `replace` names
  * one PIECE (contiguous source by construction — a fix can never overwrite elided markup), an
  * `insertAt` is a zero-width source offset (an inserted 。/　 lands before its neighbour and never
- * eats a newline). Out-of-piece arithmetic is a programming error and throws.
+ * eats a newline), and an `erase` covers whole blank lines and is checked to hold nothing but line
+ * terminators. Out-of-piece arithmetic or an erase over content is a programming error and throws.
  *
  * A `raw` rule can restate a prose rule's finding over the same characters (an unencodable
  * character that is ALSO decomposed, invisible, …). The prose rule is the more specific one and
@@ -64,6 +65,13 @@ function materializeFix(spec: FixSpec, doc: TextDocument): LintFix {
   if ('insertAt' in spec) {
     const pos = doc.positionAt(spec.insertAt);
     return { range: { start: pos, end: pos }, newText: spec.text };
+  }
+  if ('erase' in spec) {
+    const range = { start: doc.positionAt(spec.erase.start), end: doc.positionAt(spec.erase.end) };
+    if (!/^[\r\n]*$/.test(doc.getText(range))) {
+      throw new Error(`lint fix erases content: [${String(spec.erase.start)}, ${String(spec.erase.end)})`);
+    }
+    return { range, newText: '' };
   }
   const { piece, start, end } = spec.replace;
   if (start < 0 || end < start || end > piece.text.length) {

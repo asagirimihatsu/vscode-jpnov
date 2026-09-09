@@ -103,8 +103,10 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return 'use the full-width mark for a single ！ or ？';
     case 'lint.common.arabicDigits':
       return 'too many digits in an Arabic numeral';
+    case 'lint.common.noTrailingSpace':
+      return 'spaces at the end of the line';
     case 'lint.common.blankRun':
-      return 'too many consecutive blank lines';
+      return 'more blank lines than the setting allows';
     case 'lint.common.noUnmatchedPair':
       return 'unmatched bracket or quote';
     case 'lint.common.noHankakuKana':

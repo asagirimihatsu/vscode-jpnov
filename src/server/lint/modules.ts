@@ -31,6 +31,7 @@ import {
   exclamationSpaceRule,
   indentRule,
   noIndentRule,
+  trailingSpaceRule,
 } from './rules/format.ts';
 import {
   arabicDigitsRule,
@@ -69,6 +70,7 @@ export const RULE_IMPL: Record<CatalogId, RuleImpl> = {
   exclamationSpace: line(exclamationSpaceRule),
   exclamationRun: line(exclamationRunRule),
   arabicDigits: line(arabicDigitsRule),
+  noTrailingSpace: line(trailingSpaceRule),
   blankRun: line(blankRunRule),
   noUnmatchedPair: line(noUnmatchedPairRule),
   noHankakuKana: line(hankakuKanaRule),
