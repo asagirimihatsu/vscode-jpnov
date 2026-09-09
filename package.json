@@ -75,6 +75,7 @@
     ],
     "configurationDefaults": {
       "[jpnov]": {
+        "editor.copyWithSyntaxHighlighting": false,
         "editor.wordBasedSuggestions": "off",
         "editor.semanticHighlighting.enabled": true,
         "editor.unicodeHighlight.nonBasicASCII": false,
@@ -100,6 +101,7 @@
         }
       },
       "[jpbook]": {
+        "editor.copyWithSyntaxHighlighting": false,
         "editor.wordBasedSuggestions": "off",
         "editor.unicodeHighlight.nonBasicASCII": false,
         "editor.unicodeHighlight.allowedCharacters": {
