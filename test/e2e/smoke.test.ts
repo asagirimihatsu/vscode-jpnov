@@ -414,9 +414,10 @@ test('the built page follows every 行送り tier (column width and fitted font 
       `@${String(linePitch)}: a line column must be exactly one 行送り wide (${String(m.linePitchPx)}px vs ${String(linePitch * m.rootFontSize)}px)`,
     );
     // The .emr counter-shift must hold a 傍点 line on the glyph lattice at every tier ON ANY
-    // FONT: the emitted probe measures the machine's real mark-band metrics (the CSS closed
-    // form alone is exact only for a+d = 1em fonts — CI's fallback serif is not one).
-    // Uncompensated, the 1.5 tier is off by ≈0.25em+ here.
+    // ENGINE AND FONT: the emitted probe measures the real push beside a real line (the CSS
+    // closed form alone is exact only for a+d = 1em fonts on Chromium ≤151 — CI's fallback
+    // serif is not one — and Chromium 152 leaves a sub-pixel residue that a detached or
+    // scaled probe misses).
     assert.ok(
       m.emphDev !== null && Math.abs(m.emphDev) < 0.75,
       `@${String(linePitch)}: a 傍点 line must stay on the glyph lattice (dev ${String(m.emphDev)}px)`,

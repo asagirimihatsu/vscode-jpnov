@@ -114,8 +114,10 @@ export function renderMessage(msg: LocalizableMessage): string {
       return vscode.l10n.t('use the full-width mark for a single ！ or ？');
     case 'lint.common.arabicDigits':
       return vscode.l10n.t('too many digits in an Arabic numeral');
+    case 'lint.common.noTrailingSpace':
+      return vscode.l10n.t('spaces at the end of the line');
     case 'lint.common.blankRun':
-      return vscode.l10n.t('too many consecutive blank lines');
+      return vscode.l10n.t('more blank lines than the setting allows');
     case 'lint.common.noUnmatchedPair':
       return vscode.l10n.t('unmatched bracket or quote');
     case 'lint.common.noHankakuKana':

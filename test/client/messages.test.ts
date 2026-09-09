@@ -66,6 +66,7 @@ const ARGS: Record<MsgCode, readonly (string | number)[]> = {
   'lint.common.exclamationRun.long': [],
   'lint.common.exclamationRun.single': [],
   'lint.common.arabicDigits': [],
+  'lint.common.noTrailingSpace': [],
   'lint.common.blankRun': [],
   'lint.common.noUnmatchedPair': [],
   'lint.common.noHankakuKana': [],
