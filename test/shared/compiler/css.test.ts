@@ -205,7 +205,7 @@ test('--font-family: blank setting falls back to the built-in 明朝 stack in bo
   assert.match(preview(), /html\{[^}]*font-family:var\(--font-family\)/);
   assert.match(build(), /html\{font-family:var\(--font-family\);\}/);
   // EPUB is reader-controlled: the reflow sheet never carries the variable.
-  assert.doesNotMatch(reflowStylesheet('normal', []), /--font-family/);
+  assert.doesNotMatch(reflowStylesheet('relaxed', []), /--font-family/);
 });
 
 test('--font-family: a custom stack passes through; breakout tokens are stripped', () => {
@@ -346,7 +346,7 @@ test('傍点 .emr counter-shift is on-demand, probe-driven with a closed-form fa
 });
 
 test('reflow ruby.ru rule is native ruby-position (under + nested-over reset), on demand', () => {
-  const css = reflowStylesheet('normal', ['ru']);
+  const css = reflowStylesheet('relaxed', ['ru']);
   assert.match(
     css,
     /ruby\.ru\{-epub-ruby-position:under;-webkit-ruby-position:after;ruby-position:under\}/,
@@ -355,7 +355,7 @@ test('reflow ruby.ru rule is native ruby-position (under + nested-over reset), o
     css,
     /ruby\.ru>ruby\{-epub-ruby-position:over;-webkit-ruby-position:before;ruby-position:over\}/,
   );
-  assert.doesNotMatch(reflowStylesheet('normal', []), /ruby\.ru/);
+  assert.doesNotMatch(reflowStylesheet('relaxed', []), /ruby\.ru/);
 });
 
 test('.indent-N rules generate on demand; malformed suffixes are ignored', () => {
@@ -639,7 +639,7 @@ test('edgeLine none draws no frame in either medium (preview/build cohesion)', (
 });
 
 test('reflow stylesheet has no geometry, no chrome, no @page — the reading system owns those', () => {
-  const css = reflowStylesheet('normal', []);
+  const css = reflowStylesheet('relaxed', []);
   assert.match(css, /html\{[^}]*writing-mode:vertical-rl\}/);
   assert.ok(css.includes('-epub-writing-mode:vertical-rl'), 'legacy spelling for older readers');
   assert.doesNotMatch(css, /--cpl|--lpp|--pitch|--htop|--edge/);
@@ -647,12 +647,14 @@ test('reflow stylesheet has no geometry, no chrome, no @page — the reading sys
   assert.doesNotMatch(css, /white-space:pre/); // the reader wraps; pre would defeat it
 });
 
-test('reflow kinsoku maps onto the reader line breaker: none→loose, normal/strict pass through', () => {
+test('reflow kinsoku maps onto the reader line breaker: none→loose, relaxed→normal, strict→strict', () => {
   assert.ok(reflowStylesheet('none', []).includes('body{line-break:loose}'));
-  assert.ok(reflowStylesheet('normal', []).includes('body{line-break:normal;hanging-punctuation:allow-end}'));
+  assert.ok(reflowStylesheet('relaxed', []).includes('body{line-break:normal;hanging-punctuation:allow-end}'));
   assert.ok(reflowStylesheet('strict', []).includes('body{line-break:strict;hanging-punctuation:allow-end}'));
-  // ぶら下げ mirrors the engine: canHang is active for normal+strict, never for none.
+  // ぶら下げ mirrors the engine: canHang is active for relaxed+strict, never for none.
   assert.ok(!reflowStylesheet('none', []).includes('hanging-punctuation'));
+  // relaxed is no CSS keyword: the map, not the enum value, reaches the sheet.
+  assert.doesNotMatch(reflowStylesheet('relaxed', []), /line-break:relaxed/);
 });
 
 test('reflow used-class tail rides the same on-demand pipe (insep/tcy/indent/emphasis)', () => {

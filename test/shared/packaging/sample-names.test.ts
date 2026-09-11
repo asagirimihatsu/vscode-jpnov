@@ -1,6 +1,6 @@
 /**
  * No specific work titles, author names, cast names, or cover/synopsis prose anywhere in the
- * repository text — every sample uses the placeholders in CLAUDE.md (作品名 / 著者名 / 山田　太郎 /
+ * repository text — every sample uses the placeholders in CLAUDE.md (作品名 / ペンネーム / 山田　太郎 /
  * John Smith / 王都 …). A novelist who meets a made-up title or a real pen name in the extension
  * asks whose manuscript it ships with; that question must never come up. Two checks: the names
  * that slipped in before stay out, and every docs front-matter sample carries a placeholder value.
@@ -59,7 +59,7 @@ test('no previously caught name appears anywhere in the repository text', () => 
 /** Docs whose fenced `.jpbook` samples readers copy. */
 const DOC_SAMPLES = ['README.md', 'README.en.md', 'docs/SCREENSHOTS.md', 'media/walkthrough/build.md'];
 /** A sample title / author / header: a placeholder word, optionally with a volume suffix (第一巻 / 一 / その一). */
-const PLACEHOLDER_VALUE = /^(作品名|著者名|作品集|My 作品集|みんな)(　.+)?$/u;
+const PLACEHOLDER_VALUE = /^(作品名|ペンネーム|作品集|My 作品集|みんな)(　.+)?$/u;
 
 test('docs front-matter samples carry placeholder titles, authors and headers only', () => {
   const offenders: string[] = [];

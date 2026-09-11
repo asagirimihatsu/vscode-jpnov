@@ -701,21 +701,24 @@ export function findPostfixTargetIssues(src: string): PostfixTargetIssue[] {
  */
 const KINSOKU_OPEN = new Set('「『（〔［｛〈《【〘〖｟〝');
 /**
- * Chars forbidden at line START (pull the preceding char down) — 行頭禁則, the normal tier:
- * 終わり括弧・句読点・区切り約物・長音・小書き仮名 (cl-02/04/06/07/10/11) plus the everyday
- * 々 (https://www.w3.org/TR/jlreq/#character_classes).
+ * Chars forbidden at line START (pull the preceding char down) — 行頭禁則, the relaxed tier:
+ * 終わり括弧・句読点・区切り約物・中点類・繰り返し記号 (cl-02/04/05/06/07/09,
+ * https://www.w3.org/TR/jlreq/#character_classes) = Word 標準 / CSS `line-break: normal`.
  */
 const KINSOKU_CLOSE = new Set(
   '」』）〕］｝〉》】〙〗｠〟' + // 終わり括弧
     '、。，．' + // 句読点
     '！？!?‼⁇⁈⁉' + // 区切り約物 (full-width, half-width, single-codepoint)
-    'ー' + // 長音
+    '・：；' + // 中点類
+    '々〻ゝゞヽヾ', // 繰り返し記号
+);
+/** The strict tier adds 長音 (cl-10) and 小書き仮名 (cl-11) = Word 高レベル / CSS `strict`. */
+const KINSOKU_CLOSE_STRICT = new Set(
+  'ー' + // 長音
     'ぁぃぅぇぉっゃゅょゎゕゖ' + // 小書き平仮名
     'ァィゥェォッャュョヮヵヶ' + // 小書き片仮名
-    '々', // 繰り返し (常用)
+    [...KINSOKU_CLOSE].join(''),
 );
-/** The strict tier layers 中点類 (cl-05) and the remaining 繰り返し記号 (cl-09) on top. */
-const KINSOKU_CLOSE_STRICT = new Set('・：；〻ゝゞヽヾ' + [...KINSOKU_CLOSE].join(''));
 
 /** The 行頭禁則 set for a tier. */
 function closeFor(mode: KinsokuMode): Set<string> {
@@ -848,7 +851,7 @@ function mergeRun(units: readonly Unit[], head: Unit, start: number, end: number
 /**
  * Binds 分離禁止 runs into atomic multi-cell units BEFORE wrapping, so {@link wrapRow} needs no
  * keep-together logic — atomicity rides the existing unit paths (an over-budget run overflows on
- * its own line, like an over-wide ruby). `normal` pairs a run from the left (an odd tail stays a
+ * its own line, like an over-wide ruby). `relaxed` pairs a run from the left (an odd tail stays a
  * free single); `strict` binds the whole run. Returns `units` itself when nothing binds.
  */
 function separate(units: readonly Unit[], mode: KinsokuMode): readonly Unit[] {

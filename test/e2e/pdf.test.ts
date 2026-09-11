@@ -31,7 +31,7 @@ const BASE_SETTINGS: HtmlSettings = {
   linesPerPage: 34,
   linePitch: 2,
   fontFamily: '',
-  kinsoku: 'normal',
+  kinsoku: 'strict',
   autoTcy: 'punctuationPairs',
   dash: 'horizontalBar',
   lineNumbers: false,

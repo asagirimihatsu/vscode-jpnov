@@ -22,7 +22,7 @@ function preview(
   o: Partial<{
     charsPerLine: number;
     linesPerPage: number;
-    kinsoku: 'none' | 'normal' | 'strict';
+    kinsoku: 'none' | 'relaxed' | 'strict';
     autoTcy: 'none' | 'punctuationPairs';
     chrome: PreviewChrome;
   }> = {},
@@ -128,15 +128,15 @@ test('renderPreview hard-wraps at charsPerLine; data-line is first-only on a wra
 test('renderPreview honors the kinsoku mode (禁則) — the same engine as the build', () => {
   // cpl 2: naive ああ|」 would leave 」 at a line start; 追い出し pulls あ down → あ|あ」.
   assert.match(
-    preview('ああ」', { charsPerLine: 2, kinsoku: 'normal' }),
+    preview('ああ」', { charsPerLine: 2, kinsoku: 'relaxed' }),
     /<div class="line" data-line="0">あ<\/div><div class="line">あ」<\/div>/,
   );
   // A trailing 。 hangs (ぶら下げ): the .hang span and its on-demand rule ride together,
   // and neither appears when nothing hangs.
-  const hung = preview('文だ。', { charsPerLine: 2, kinsoku: 'normal' });
+  const hung = preview('文だ。', { charsPerLine: 2, kinsoku: 'relaxed' });
   assert.match(hung, /<div class="line" data-line="0">文だ<span class="hang">。<\/span><\/div>/);
   assert.match(hung, /\.hang\{letter-spacing:-1em\}/);
-  assert.doesNotMatch(preview('文だ', { charsPerLine: 2, kinsoku: 'normal' }), /\.hang/);
+  assert.doesNotMatch(preview('文だ', { charsPerLine: 2, kinsoku: 'relaxed' }), /\.hang/);
   // With 禁則 off, the naive wrap returns (」 leads the second column).
   assert.match(
     preview('ああ」', { charsPerLine: 2 }),
@@ -235,7 +235,7 @@ test('renderPreview all-off chrome emits neither number spans nor edge rules', (
 });
 
 test('renderPreview: value annotations show the bookless placeholders (a template serves many books)', () => {
-  const out = preview('［＃ここに「題名」の値を表示］\n［＃ここに「著者」の値を表示］\n全［＃ここに「総ページ数」の値を表示］ページ');
+  const out = preview('［＃ここに「タイトル」の値を表示］\n［＃ここに「ペンネーム」の値を表示］\n全［＃ここに「総ページ数」の値を表示］ページ');
   assert.match(out, new RegExp(`<div class="line" data-line="0">${VALUE_FIELD_PLACEHOLDERS.title}</div>`));
   assert.match(out, new RegExp(`<div class="line" data-line="1">${VALUE_FIELD_PLACEHOLDERS.author}</div>`));
   assert.match(out, new RegExp(`全${VALUE_FIELD_PLACEHOLDERS.totalPages}ページ`));

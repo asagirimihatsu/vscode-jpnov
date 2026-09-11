@@ -435,8 +435,8 @@ test('値の表示 tokenizes each field name; an unknown name greys out like any
     assert.deepEqual(tokenize(raw), [{ kind: 'valueField', raw, field }]);
   }
   assert.deepEqual(kinds(tokenize('［＃ここに「発行日」の値を表示］')), ['comment']);
-  assert.deepEqual(kinds(tokenize('［＃ここに「題名」の値］')), ['comment']); // truncated tail
-  assert.deepEqual(kinds(tokenize('［＃ここに題名の値を表示］')), ['comment']); // no corner quotes
+  assert.deepEqual(kinds(tokenize('［＃ここに「タイトル」の値］')), ['comment']); // truncated tail
+  assert.deepEqual(kinds(tokenize('［＃ここにタイトルの値を表示］')), ['comment']); // no corner quotes
 });
 
 test('値の表示: an Object.prototype name is just an unknown name, never a field', () => {
@@ -467,7 +467,7 @@ test('findTcyIssues counts a value field at its BOOKLESS placeholder length', ()
   }
   // Two fields in one span accumulate, exactly as two typed runs would.
   assert.deepEqual(
-    findTcyIssues(spanned('［＃ここに「題名」の値を表示］［＃ここに「著者」の値を表示］')).map((i) => i.kind),
+    findTcyIssues(spanned('［＃ここに「タイトル」の値を表示］［＃ここに「ペンネーム」の値を表示］')).map((i) => i.kind),
     findTcyIssues(spanned(VALUE_FIELD_PLACEHOLDERS.title + VALUE_FIELD_PLACEHOLDERS.author)).map((i) => i.kind),
   );
 });

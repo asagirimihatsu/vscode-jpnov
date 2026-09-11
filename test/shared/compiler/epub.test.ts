@@ -12,7 +12,7 @@ import { VALUE_FIELD_PLACEHOLDERS } from '../../../src/shared/compiler/tokenizer
 const MODIFIED = '2026-08-04T00:00:00Z';
 
 function members(book: BookInput, meta: JpbookMeta = {}, outRel = 'vol1'): ReturnType<typeof epubMembers> {
-  return epubMembers({ book, meta, outRel, kinsoku: 'normal', autoTcy: 'punctuationPairs', dash: 'horizontalBar', modified: MODIFIED });
+  return epubMembers({ book, meta, outRel, kinsoku: 'relaxed', autoTcy: 'punctuationPairs', dash: 'horizontalBar', modified: MODIFIED });
 }
 
 const TWO_CHAPTERS: BookInput = {
@@ -42,13 +42,13 @@ test('container.xml points at the package document', () => {
 });
 
 test('the opf carries the required metadata and an rtl spine in reading order', () => {
-  const opf = members(TWO_CHAPTERS, { title: '試験 & 本', author: '著者名' }).find(
+  const opf = members(TWO_CHAPTERS, { title: '試験 & 本', author: 'ペンネーム' }).find(
     (m) => m.name === 'OEBPS/package.opf',
   )?.content ?? '';
   assert.match(opf, /<dc:identifier id="pub-id">urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}<\/dc:identifier>/);
   assert.ok(opf.includes('<dc:title>試験 &amp; 本</dc:title>'));
   assert.ok(opf.includes('<dc:language>ja</dc:language>'));
-  assert.ok(opf.includes('<dc:creator>著者名</dc:creator>'));
+  assert.ok(opf.includes('<dc:creator>ペンネーム</dc:creator>'));
   assert.ok(opf.includes(`<meta property="dcterms:modified">${MODIFIED}</meta>`));
   assert.ok(opf.includes('<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>'));
   assert.ok(opf.includes(

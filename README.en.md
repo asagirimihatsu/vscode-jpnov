@@ -98,14 +98,14 @@ but not Japanese typesetting:
   `?!` `??` are combined automatically by default
   (`jpnov.layout.autoTcy`); anything else takes an explicit annotation.
 - **Kinsoku (禁則処理)** — Japanese line-breaking prohibitions, applied at every
-  wrap in preview and builds alike (`jpnov.layout.kinsoku`, default `normal`):
-  opening brackets never end a line; closing punctuation, small kana, `ー` and
-  `々` never start one; `――` and `……` pairs never split; and a trailing `、`/`。`
-  hangs into the margin (ぶら下げ) instead of pushing text down. `strict` adds
-  the middle-dot and repetition-mark (ゝゞヽヾ〻) classes and keeps symbol runs unbroken;
-  `none` is a bare wrap at the column width.
+  wrap in preview and builds alike (`jpnov.layout.kinsoku`, default `strict`):
+  opening brackets never end a line; closing punctuation, middle dots, repetition
+  marks, small kana and `ー` never start one; `――` and `……` runs never split; and a
+  trailing `、`/`。` hangs into the margin (ぶら下げ) instead of pushing text down.
+  `relaxed` lets small kana and `ー` start a line and may break a long symbol run
+  between pairs (Word's standard level); `none` is a bare wrap at the column width.
 
-  | kinsoku `none` | kinsoku `normal` (default) |
+  | kinsoku `none` | kinsoku `strict` (default) |
   | :---: | :---: |
   | <img src="docs/images/kinsoku-off.png" width="180" alt="Without kinsoku: a full stop opens a line and an opening bracket ends one"> | <img src="docs/images/kinsoku-on.png" width="180" alt="With kinsoku: the full stop hangs at the end of the previous line and the bracket moves inline"> |
 
@@ -322,7 +322,7 @@ pages, in order:
 ```text
 ---
 title: 作品名
-author: 著者名
+author: ペンネーム
 cover:
   - cover.jpnov
   - synopsis.jpnov
@@ -341,22 +341,22 @@ A cover file can pull in the book's own metadata:
 
 | Book value | Annotation |
 | --- | --- |
-| Title | `［＃ここに「題名」の値を表示］` |
-| Author | `［＃ここに「著者」の値を表示］` |
+| Title | `［＃ここに「タイトル」の値を表示］` |
+| Author | `［＃ここに「ペンネーム」の値を表示］` |
 | Total pages | `［＃ここに「総ページ数」の値を表示］` |
 | Manuscript sheets (the body reflowed onto 400-character 原稿用紙, 20 × 20) | `［＃ここに「原稿用紙換算枚数」の値を表示］` |
 
 ```text
-［＃５字下げ］［＃ここに「題名」の値を表示］
-［＃７字下げ］［＃ここに「著者」の値を表示］
+［＃５字下げ］［＃ここに「タイトル」の値を表示］
+［＃７字下げ］［＃ここに「ペンネーム」の値を表示］
 ［＃７字下げ］全［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］ページ
 ［＃７字下げ］４００字詰め原稿用紙換算［＃縦中横］［＃ここに「原稿用紙換算枚数」の値を表示］［＃縦中横終わり］枚
 ```
 
-A build fills in that book's values. The preview shows stand-ins — 題名, 著者, and
+A build fills in that book's values. The preview shows stand-ins — タイトル, ペンネーム, and
 NaN — so one cover file serves any number of books. To decorate a substituted value,
 wrap it in the start/end form
-(`［＃大見出し］［＃ここに「題名」の値を表示］［＃大見出し終わり］`).
+(`［＃大見出し］［＃ここに「タイトル」の値を表示］［＃大見出し終わり］`).
 
 The manuscript-sheet count is the number of vertical 20 × 20 manuscript sheets
 (400字詰め原稿用紙) the body fills, the unit Japanese literary contests state length in.
@@ -446,7 +446,7 @@ highlighting lists are per workspace folder.
 | `jpnov.layout.linesPerPage` | `34` | Lines per page in builds (16–64) |
 | `jpnov.layout.linePitch` | `1.5` | Line pitch as a multiple of the character size: `1.5` / `1.75` / `2` / `2.25`; preview and built pages |
 | `jpnov.layout.fontFamily` | `""` | Body font as a CSS font-family list: blank uses the default Mincho stack; preview and built HTML |
-| `jpnov.layout.kinsoku` | `normal` | Line-breaking rules: `none` / `normal` / `strict` |
+| `jpnov.layout.kinsoku` | `strict` | Line-breaking rules: `none` / `relaxed` / `strict` |
 | `jpnov.layout.autoTcy` | `punctuationPairs` | Auto-combine `!!` `!?` `?!` `??`; `none` to disable |
 | `jpnov.layout.preview.lineNumbers` | `true` | Line numbers in the preview, restarting per page break |
 | `jpnov.layout.preview.edgeLine` | `none` | Column rules in the preview: `none` / `text` / `red` |

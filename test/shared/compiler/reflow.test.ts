@@ -128,7 +128,7 @@ test('reflowDocument is a namespaced XHTML shell with a stylesheet link', () => 
 test('the EPUB side carries no 印刷 button (reading systems own the UI)', () => {
   const doc = reflowDocument('章', '<p>本文</p>', '../styles.css');
   assert.doesNotMatch(doc, /window\.print/);
-  assert.doesNotMatch(reflowStylesheet('normal', []), /\.print\{/);
+  assert.doesNotMatch(reflowStylesheet('relaxed', []), /\.print\{/);
 });
 
 test('the kitchen sink emits well-formed XML end to end', () => {
@@ -150,7 +150,7 @@ test('the kitchen sink emits well-formed XML end to end', () => {
     assertWellFormedXml(doc);
   }
   // The used sink feeds the same on-demand CSS pipe the other outputs use.
-  const css = reflowStylesheet('normal', [...used].sort());
+  const css = reflowStylesheet('relaxed', [...used].sort());
   assert.ok(css.includes('.insep{white-space:nowrap}'));
   assert.ok(css.includes('.indent-2{padding-inline-start:2em}'));
 });

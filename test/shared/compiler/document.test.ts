@@ -405,8 +405,8 @@ test('line numbers and edge lines never change the body DOM (pure CSS features)'
 
 // --- cover pages (応募用表紙・扉) ---------------------------------------------------
 
-const COVER_SRC = '［＃５字下げ］［＃ここに「題名」の値を表示］\n' +
-  '［＃７字下げ］［＃ここに「著者」の値を表示］\n' +
+const COVER_SRC = '［＃５字下げ］［＃ここに「タイトル」の値を表示］\n' +
+  '［＃７字下げ］［＃ここに「ペンネーム」の値を表示］\n' +
   '［＃７字下げ］全［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］ページ';
 
 /** Render `books` with the shared option baseline; `chrome` overrides ride on top. */
@@ -478,7 +478,7 @@ test('cover: the template annotations substitute the book values; 総ページ�
         withCover(
           [{ name: 'c.jpnov', src: COVER_SRC }],
           [{ name: 'a.jpnov', src: '一\n二\n三' }],
-          { title: '作品名', author: '著者名' },
+          { title: '作品名', author: 'ペンネーム' },
         ),
       ],
       { linesPerPage: 1, chrome: { pageNumber: 'right' } },
@@ -487,7 +487,7 @@ test('cover: the template annotations substitute the book values; 総ページ�
   const bodyPages = (body.match(/<div class="page" data-page=/g) ?? []).length;
   assert.equal(bodyPages, 3);
   assert.match(body, /<div class="line indent-5" data-line="0">作品名<\/div>/);
-  assert.match(body, /<div class="line indent-7" data-line="1">著者名<\/div>/);
+  assert.match(body, /<div class="line indent-7" data-line="1">ペンネーム<\/div>/);
   // The count is derived, never pinned: it must equal the number of BODY sheets…
   assert.match(
     body,
@@ -502,13 +502,13 @@ test('cover: a value annotation in the BODY keeps the bookless placeholders', ()
     renderBooks([
       withCover(
         [{ name: 'c.jpnov', src: '表紙' }],
-        [{ name: 'a.jpnov', src: '［＃ここに「題名」の値を表示］' }],
-        { title: '実際の題名' },
+        [{ name: 'a.jpnov', src: '［＃ここに「タイトル」の値を表示］' }],
+        { title: '実際のタイトル' },
       ),
     ]),
   );
-  assert.match(body, /<div class="line" data-line="0">題名<\/div>/);
-  assert.doesNotMatch(body, /実際の題名/);
+  assert.match(body, /<div class="line" data-line="0">タイトル<\/div>/);
+  assert.doesNotMatch(body, /実際のタイトル/);
 });
 
 test('cover: covers interleave per book and the folio numbers the bodies continuously', () => {

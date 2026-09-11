@@ -13,11 +13,12 @@ export const AUTO_TCY_MODES = ['none', 'punctuationPairs'] as const;
 export type AutoTcyMode = (typeof AUTO_TCY_MODES)[number];
 
 /**
- * `jpnov.layout.kinsoku` members: `none` = bare hard wrap, `normal` = the 文庫-grade 禁則処理
- * (行頭・行末禁則 + 分離禁止 + ぶら下げ), `strict` = normal plus the 中点/繰り返し classes.
+ * `jpnov.layout.kinsoku` members: `none` = bare hard wrap; `relaxed` = 禁則処理 (行頭・行末禁則 +
+ * 分離禁止 + ぶら下げ) with 小書き仮名 and ー allowed at a line head (Word 標準 / CSS
+ * `line-break: normal`); `strict` = relaxed plus those two classes (Word 高レベル / CSS `strict`).
  * The character classes live next to the wrap engine in compiler/layout.ts.
  */
-export const KINSOKU_MODES = ['none', 'normal', 'strict'] as const;
+export const KINSOKU_MODES = ['none', 'relaxed', 'strict'] as const;
 export type KinsokuMode = (typeof KINSOKU_MODES)[number];
 
 /**
@@ -62,7 +63,7 @@ export interface LayoutSettings {
 
 /**
  * `jpnov.layout.*` defaults (投稿書式 40×34, 行送り 1.5 — the pitch print books and e-book readers
- * settle on, 禁則 normal, 自動縦中横 punctuationPairs, ダッシュ ―) — the single source for the
+ * settle on, 禁則 strict, 自動縦中横 punctuationPairs, ダッシュ ―) — the single source for the
  * schema defaults and the settings resolver's fallbacks; the config-codegen test locks
  * package.json to these values (`dash` is owned by the lint catalog; catalog.test.ts locks the
  * two defaults together).
@@ -72,7 +73,7 @@ export const LAYOUT_DEFAULT: LayoutSettings = {
   linesPerPage: 34,
   linePitch: 1.5,
   fontFamily: '',
-  kinsoku: 'normal',
+  kinsoku: 'strict',
   autoTcy: 'punctuationPairs',
   dash: 'horizontalBar',
 };

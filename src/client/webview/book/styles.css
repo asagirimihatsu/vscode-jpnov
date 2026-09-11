@@ -123,12 +123,12 @@ button:focus-visible, input:focus-visible {
   color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
 }
 .btn:hover { background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-secondaryBackground)); }
-/* The primary is an icon + text button: the HTML brand mark beside the print label. */
+/* The primary is an icon + text button: the printer glyph beside the print label. */
 .btn.primary {
   background: var(--vscode-button-background); color: var(--vscode-button-foreground);
   display: flex; align-items: center; justify-content: center; gap: 6px;
 }
-/* Brand marks in the build buttons: one size, never shrunk by the primary's flex row. */
+/* SVG glyphs in the build buttons: one size, never shrunk by the primary's flex row. */
 .btn svg { width: 15px; height: 15px; flex: 0 0 auto; }
 .btn.primary:hover { background: var(--vscode-button-hoverBackground, var(--vscode-button-background)); }
 .btn:disabled { opacity: .5; cursor: default; }

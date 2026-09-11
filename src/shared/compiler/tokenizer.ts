@@ -216,7 +216,7 @@ export interface IndentBlockEndToken extends TokenBase {
 }
 
 /**
- * Value display ［＃ここに「題名／著者／総ページ数／原稿用紙換算枚数」の値を表示］ — a standalone
+ * Value display ［＃ここに「タイトル／ペンネーム／総ページ数／原稿用紙換算枚数」の値を表示］ — a standalone
  * command that renders as text: the html build substitutes the book's value on cover pages,
  * every other compile (preview, body chapters, EPUB, the issue scans) the fixed placeholder
  * from {@link VALUE_FIELD_PLACEHOLDERS} — a cover template serves many books, so the editor
@@ -285,8 +285,8 @@ export type HeadingLevel = 1 | 2 | 3;
  * no text form. The two lookups below derive from this, so they cannot drift apart.
  */
 const VALUE_FIELDS = [
-  { name: '題名', field: 'title', stand: '題名' },
-  { name: '著者', field: 'author', stand: '著者' },
+  { name: 'タイトル', field: 'title', stand: 'タイトル' },
+  { name: 'ペンネーム', field: 'author', stand: 'ペンネーム' },
   { name: '総ページ数', field: 'totalPages', stand: 'NaN' },
   { name: '原稿用紙換算枚数', field: 'sheets', stand: 'NaN' },
 ] as const;
@@ -378,7 +378,7 @@ function classifyAnnotation(inner: string, raw: string, atLineStart: boolean): T
     return { kind: 'pageBreak', raw };
   }
 
-  // Value display ［＃ここに「題名」の値を表示］ — a closed name set; an unknown name greys
+  // Value display ［＃ここに「タイトル」の値を表示］ — a closed name set; an unknown name greys
   // out like any mistyped annotation. ここに… collides with no other branch's literals.
   if (inner.startsWith(VALUE_OPEN) && inner.endsWith(VALUE_CLOSE)) {
     const field = VALUE_FIELD_BY_NAME.get(inner.slice(VALUE_OPEN.length, inner.length - VALUE_CLOSE.length));
