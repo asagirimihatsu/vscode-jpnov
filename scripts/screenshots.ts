@@ -41,7 +41,7 @@ const NOTATION = `　物語《ものがたり》が始まる。
 
 // 禁則見本（自作）: charsPerLine=20 で
 //   kinsoku none   → 2 行目が「。」で始まり「「」で終わる
-//   kinsoku normal → 「。」は 1 行目末尾にぶら下げ、「「」は行中に収まる
+//   kinsoku strict → 「。」は 1 行目末尾にぶら下げ、「「」は行中に収まる
 const KINSOKU = `　長い夜がようやく終わりを告げていくのだ。そのときに、彼はしずかにこう呟いた。「まだ続きがある」と彼は思った。
 `;
 
@@ -57,7 +57,7 @@ const bookOpts = {
   linesPerPage: 34,
   linePitch: 1.5, // 既定値のまま撮る
   fontFamily: '',
-  kinsoku: 'normal',
+  kinsoku: 'strict',
   autoTcy: 'punctuationPairs',
   dash: 'horizontalBar',
   paperSize: 'a4',
@@ -76,7 +76,7 @@ const previewOpts = (overrides: Partial<PreviewOpts> = {}): PreviewOpts => ({
   linesPerPage: 34,
   linePitch: 1.5,
   fontFamily: '',
-  kinsoku: 'normal',
+  kinsoku: 'strict',
   autoTcy: 'punctuationPairs',
   dash: 'horizontalBar',
   chrome: { lineNumbers: false, edgeLine: 'none' },

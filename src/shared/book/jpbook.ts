@@ -161,7 +161,7 @@ export function entryPathOf(pl: ParsedLine): { readonly value: string; readonly 
  */
 export interface JpbookMeta {
   readonly title?: string;
-  /** 著者 — display metadata (the EPUB package's dc:creator); never affects the output path. */
+  /** ペンネーム — display metadata (the EPUB package's dc:creator); never affects the output path. */
   readonly author?: string;
   readonly header?: string;
   readonly pageNumber?: PageNumberPosition;

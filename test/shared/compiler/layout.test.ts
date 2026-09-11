@@ -36,9 +36,9 @@ const flow = (src: string, charsPerLine = 40, kinsoku: KinsokuMode = 'none'): st
 
 const pages = (src: string, charsPerLine = 40, linesPerPage = 34) =>
   paginate(buildRows(tokenize(src)), charsPerLine, linesPerPage, 'none');
-// With 禁則処理 on, return each display line as its concatenated unit text (one page only);
-// a hung 句読点 shows as ⟪x⟫ after the column's cells.
-const klines = (src: string, charsPerLine: number, kinsoku: KinsokuMode = 'normal'): string[] =>
+// With 禁則処理 on (strict, the shipped tier, unless passed), return each display line as its
+// concatenated unit text (one page only); a hung 句読点 shows as ⟪x⟫ after the column's cells.
+const klines = (src: string, charsPerLine: number, kinsoku: KinsokuMode = 'strict'): string[] =>
   paginate(buildRows(tokenize(src)), charsPerLine, 34, kinsoku)
     .flat()
     .map(
@@ -174,28 +174,24 @@ test('禁則 cascade: forbidden chars reflow and no line overflows cpl', () => {
   assert.equal(out.join(''), '「あ「い」」'); // no units lost or reordered
 });
 
-test('禁則 standard set: small kana / prolonged-sound marks are 行頭禁則 too', () => {
-  // っ (small tsu) must not start a line: cpl 2, naive いあ | っ → pull あ down: い | あっ.
-  assert.deepEqual(klines('いあっ', 2), ['い', 'あっ']);
-  // ー (prolonged sound) must not start a line: naive いあ | ー → pull あ down: い | あー.
-  assert.deepEqual(klines('いあー', 2), ['い', 'あー']);
-});
-
 test('禁則 exception: a lone forbidden char as the whole row is left as-is', () => {
   // The source row is a single 。 — the > start guard refuses to empty the line.
   assert.deepEqual(klines('。', 1), ['。']);
   assert.deepEqual(klines('「', 1), ['「']);
 });
 
-test('禁則 tiers: ・：； and ゝゞヽヾ〻 are 行頭禁則 only in strict', () => {
-  assert.deepEqual(klines('いあ・', 2), ['いあ', '・']);
-  assert.deepEqual(klines('いあ・', 2, 'strict'), ['い', 'あ・']);
-  assert.deepEqual(klines('いあゝ', 2), ['いあ', 'ゝ']);
-  assert.deepEqual(klines('いあゝ', 2, 'strict'), ['い', 'あゝ']);
+test('禁則 tiers: small kana / ー are 行頭禁則 in strict (the default), free in relaxed', () => {
+  // cpl 2, naive いあ | っ: strict pulls あ down; relaxed (Word 標準 / CSS normal) leaves っ at the head.
+  assert.deepEqual(klines('いあっ', 2), ['い', 'あっ']);
+  assert.deepEqual(klines('いあっ', 2, 'relaxed'), ['いあ', 'っ']);
+  assert.deepEqual(klines('いあー', 2), ['い', 'あー']);
+  assert.deepEqual(klines('いあー', 2, 'relaxed'), ['いあ', 'ー']);
 });
 
-test('禁則 tiers: 々 is 行頭禁則 already in normal', () => {
-  assert.deepEqual(klines('いあ々', 2), ['い', 'あ々']);
+test('禁則 tiers: ・：；, 々 and ゝゞヽヾ〻 are 行頭禁則 already in relaxed', () => {
+  assert.deepEqual(klines('いあ・', 2, 'relaxed'), ['い', 'あ・']);
+  assert.deepEqual(klines('いあ々', 2, 'relaxed'), ['い', 'あ々']);
+  assert.deepEqual(klines('いあゝ', 2, 'relaxed'), ['い', 'あゝ']);
 });
 
 test('禁則 predicate: half-width !? and single-codepoint ‼⁇⁈⁉ are 行頭禁則', () => {
@@ -235,10 +231,10 @@ test('約物対: half-width !! / full-width ！！ / tcy stay whole and off the 
   assert.deepEqual(klines('ああ!!［＃「!!」は縦中横］', 3), ['ああ!!']); // tcy: 1 cell, fits
 });
 
-test('分離禁止 normal vs strict: a long run pairs from the left / binds whole', () => {
-  // 4 leaders = two pairs: normal may break BETWEEN pairs; an odd tail stays a free single.
-  assert.deepEqual(klines('あい…………うえ', 4), ['あい……', '……うえ']);
-  assert.deepEqual(klines('あい………', 4), ['あい……', '…']);
+test('分離禁止 relaxed vs strict: a long run pairs from the left / binds whole', () => {
+  // 4 leaders = two pairs: relaxed may break BETWEEN pairs; an odd tail stays a free single.
+  assert.deepEqual(klines('あい…………うえ', 4, 'relaxed'), ['あい……', '……うえ']);
+  assert.deepEqual(klines('あい………', 4, 'relaxed'), ['あい……', '…']);
   // strict binds the whole run — it moves down atomically, and an over-budget run
   // overflows on its own line (same degrade as an over-wide ruby).
   assert.deepEqual(klines('あい…………うえ', 4, 'strict'), ['あい', '…………', 'うえ']);
@@ -264,7 +260,7 @@ test('ぶら下げ: a trailing 句読点 hangs as a zero cell instead of 追い�
 });
 
 test('ぶら下げ: the hung unit is zero cells and the column stays at budget', () => {
-  const line = paginate(buildRows(tokenize('文だ。')), 2, 34, 'normal')[0]?.[0];
+  const line = paginate(buildRows(tokenize('文だ。')), 2, 34, 'strict')[0]?.[0];
   assert.ok(line);
   assert.ok(line.hang);
   assert.equal(line.hang.text, '。');
@@ -313,7 +309,7 @@ test('ぶら下げ: trailing zero-width units ride the hung column (no orphan em
 
 test('ぶら下げ: a decorated hung 句読点 keeps its channel span around the .hang span', () => {
   const out = pagesToHtml(
-    sheets(paginate(buildRows(tokenize('文だ。［＃「文だ。」に傍点］')), 2, 34, 'normal')),
+    sheets(paginate(buildRows(tokenize('文だ。［＃「文だ。」に傍点］')), 2, 34, 'strict')),
     undefined,
     OFF,
   );
@@ -443,7 +439,7 @@ test('ダッシュ: 分離禁止 still binds the run; the merged unit carries th
 test('flowToHtml: honors the kinsoku mode (禁則) — the SAME engine as the build', () => {
   // cpl 2: naive ああ | 」 leaves 」 at line start; 追い出し pulls あ down → あ | あ」.
   assert.equal(
-    flow('ああ」', 2, 'normal'),
+    flow('ああ」', 2, 'relaxed'),
     '<div class="book"><div class="segment">' +
       '<div class="line" data-line="0">あ</div><div class="line">あ」</div></div></div>',
   );
@@ -999,26 +995,26 @@ const unitText = (src: string, values?: Readonly<Record<ValueField, string>>): s
 
 const REAL: Readonly<Record<ValueField, string>> = {
   title: '作品名',
-  author: '著者名',
+  author: 'ペンネーム',
   totalPages: '215',
   sheets: '58',
 };
 
 test('値の表示: a bookless compile substitutes the fixed placeholders', () => {
-  assert.equal(unitText('［＃ここに「題名」の値を表示］'), VALUE_FIELD_PLACEHOLDERS.title);
-  assert.equal(unitText('［＃ここに「著者」の値を表示］'), VALUE_FIELD_PLACEHOLDERS.author);
+  assert.equal(unitText('［＃ここに「タイトル」の値を表示］'), VALUE_FIELD_PLACEHOLDERS.title);
+  assert.equal(unitText('［＃ここに「ペンネーム」の値を表示］'), VALUE_FIELD_PLACEHOLDERS.author);
   assert.equal(unitText('［＃ここに「総ページ数」の値を表示］'), VALUE_FIELD_PLACEHOLDERS.totalPages);
   assert.equal(unitText('［＃ここに「原稿用紙換算枚数」の値を表示］'), VALUE_FIELD_PLACEHOLDERS.sheets);
 });
 
 test('値の表示: opts.values substitutes the real values, an empty one emitting nothing', () => {
-  assert.equal(unitText('［＃ここに「題名」の値を表示］', REAL), REAL.title);
+  assert.equal(unitText('［＃ここに「タイトル」の値を表示］', REAL), REAL.title);
   assert.equal(unitText('全［＃ここに「総ページ数」の値を表示］ページ', REAL), `全${REAL.totalPages}ページ`);
-  assert.equal(unitText('［＃ここに「著者」の値を表示］', { ...REAL, author: '' }), '');
+  assert.equal(unitText('［＃ここに「ペンネーム」の値を表示］', { ...REAL, author: '' }), '');
 });
 
 test('値の表示: substituted text is per-char units — it measures and wraps like prose', () => {
-  const rows = buildRows(tokenize('［＃ここに「題名」の値を表示］'), { values: REAL });
+  const rows = buildRows(tokenize('［＃ここに「タイトル」の値を表示］'), { values: REAL });
   const units = rows.flatMap((row) => (row.kind === 'line' ? row.units : []));
   assert.equal(units.length, Array.from(REAL.title).length);
   assert.ok(units.every((u) => u.cells === 1));
@@ -1030,7 +1026,7 @@ test('値の表示: substituted text is per-char units — it measures and wraps
 });
 
 test('値の表示: the configured dash inside a value translates like typed prose', () => {
-  const rows = buildRows(tokenize('［＃ここに「題名」の値を表示］'), {
+  const rows = buildRows(tokenize('［＃ここに「タイトル」の値を表示］'), {
     values: { ...REAL, title: '光―闇' },
     dash: 'horizontalBar',
   });
@@ -1110,9 +1106,9 @@ test('cover pages: a cover-less document emits exactly what it always did', () =
 test('値の表示: a postfix after a value field is left unjudged (the scan is bookless)', () => {
   const targets = (src: string): string[] => findPostfixTargetIssues(src).map((i) => i.target);
   // Targeting the REAL value builds correctly, so a warning here would flag working markup.
-  assert.deepEqual(targets('［＃ここに「題名」の値を表示］［＃「作品名」は大見出し］'), []);
+  assert.deepEqual(targets('［＃ここに「タイトル」の値を表示］［＃「作品名」は大見出し］'), []);
   // …scoped: a value field excuses neither an earlier postfix nor a later line.
-  assert.deepEqual(targets('です［＃「ですす」に傍点］［＃ここに「題名」の値を表示］'), ['ですす']);
-  assert.deepEqual(targets('［＃ここに「題名」の値を表示］\nです［＃「ですす」に傍点］'), ['ですす']);
+  assert.deepEqual(targets('です［＃「ですす」に傍点］［＃ここに「タイトル」の値を表示］'), ['ですす']);
+  assert.deepEqual(targets('［＃ここに「タイトル」の値を表示］\nです［＃「ですす」に傍点］'), ['ですす']);
   assert.deepEqual(targets('です［＃「ですす」に傍点］'), ['ですす']);
 });

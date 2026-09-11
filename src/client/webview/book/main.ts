@@ -132,33 +132,32 @@ function icon(name: IconName, extraCls?: string): HTMLSpanElement {
   return h('span', { class: cls, 'aria-hidden': true });
 }
 /**
- * Inline-SVG brand marks for the build buttons (the HTML mark sits on the primary print
- * button, the EPUB mark on its icon button) — the webview CSP loads no external images,
- * and currentColor keeps them right in every theme. Mark-only cuts of the official logos
- * (both usage guides allow the bare mark): the EPUB "e" (https://www.w3.org/publishing/groups/epub-wg/)
- * and the HTML5 shield (https://www.w3.org/html/logo/, CC BY 3.0); viewBoxes are the marks'
- * measured bounds.
+ * Inline-SVG glyphs for the build buttons (a printer on the primary print button, the EPUB
+ * mark on its icon button) — the webview CSP loads no external images, and currentColor
+ * keeps them right in every theme. `print` is Fluent UI System Icons' ic_fluent_print_16_regular
+ * (MIT, https://github.com/microsoft/fluentui-system-icons; codicons have no printer). `epub` is
+ * the mark-only cut of the official logo (https://www.w3.org/publishing/groups/epub-wg/, whose
+ * usage guide allows the bare mark), its viewBox the mark's measured bounds.
  */
-const BRAND = {
+const GLYPH = {
+  print: {
+    viewBox: '0 0 16 16',
+    d: [
+      'M4 3.5C4 2.67157 4.67157 2 5.5 2H10.5C11.3284 2 12 2.67157 12 3.5V4H13C14.1046 4 15 4.89543 15 6V10.5C15 11.3284 14.3284 12 13.5 12H12V12.5C12 13.3284 11.3284 14 10.5 14H5.5C4.67157 14 4 13.3284 4 12.5V12H2.5C1.67157 12 1 11.3284 1 10.5V6C1 4.89543 1.89543 4 3 4H4V3.5ZM4 11V10.5C4 9.67157 4.67157 9 5.5 9H10.5C11.3284 9 12 9.67157 12 10.5V11H13.5C13.7761 11 14 10.7761 14 10.5V6C14 5.44772 13.5523 5 13 5H3C2.44772 5 2 5.44772 2 6V10.5C2 10.7761 2.22386 11 2.5 11H4ZM5 4H11V3.5C11 3.22386 10.7761 3 10.5 3H5.5C5.22386 3 5 3.22386 5 3.5V4ZM5 10.5V12.5C5 12.7761 5.22386 13 5.5 13H10.5C10.7761 13 11 12.7761 11 12.5V10.5C11 10.2239 10.7761 10 10.5 10H5.5C5.22386 10 5 10.2239 5 10.5Z',
+    ],
+  },
   epub: {
     viewBox: '97.1 135.5 401.2 401.2',
     d: [
       'M297.63,462.07,171.58,336l126-126,42,42-84.05,84,42,42L423.69,252,313.88,142.17a23,23,0,0,0-32.48,0L103.79,319.78a23,23,0,0,0,0,32.48L281.4,529.86a23,23,0,0,0,32.48,0l177.61-177.6a23,23,0,0,0,0-32.48L465.7,294Z',
     ],
   },
-  html: {
-    viewBox: '88.7 112 334.6 379.7',
-    d: [
-      'M200.662,266.676H256v-42.92h-59.169L200.662,266.676z M88.686,111.982l30.47,341.74l136.762,37.966 l136.891-37.948l30.507-341.758H88.686z M366.694,431.981L256,462.668v-43.494l-0.067,0.02l-85.858-23.835l-6.004-67.298h42.075 l3.116,34.914l46.68,12.607l0.059-0.019V308.59h-93.669l-11.306-126.749H256v-41.914h136.766L366.694,431.981z',
-      'M307.592,308.59H256v66.974l46.728-12.613L307.592,308.59z M256,139.927v41.914h104.975 l-3.754,41.915H256v42.92h97.406l-11.499,128.683L256,419.174v43.494l110.694-30.687l26.071-292.055H256z',
-    ],
-  },
 } as const;
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-/** An h()-composable brand mark; SVG needs createElementNS, which h() (HTML-only) cannot do. */
-function brandIcon(name: keyof typeof BRAND): SVGSVGElement {
-  const mark = BRAND[name];
+/** An h()-composable SVG glyph; SVG needs createElementNS, which h() (HTML-only) cannot do. */
+function glyph(name: keyof typeof GLYPH): SVGSVGElement {
+  const mark = GLYPH[name];
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('viewBox', mark.viewBox);
   svg.setAttribute('fill', 'currentColor');
@@ -388,9 +387,9 @@ function footer(buildUri?: string): HTMLElement {
       h('div', { class: 'selrow' },
         h('button', { class: 'link', 'data-fk': 'deselall', onClick: poster({ type: 'deselectAll' }) }, L.deselectAll),
         h('button', { class: 'link', 'data-fk': 'selall', onClick: poster({ type: 'selectAll' }) }, L.selectAll)),
-    // Icon + text primary: the HTML brand mark rides the print button (print IS the HTML build).
+    // Icon + text primary: a printer glyph rides the print button.
     h('button', { class: 'btn primary', 'data-fk': 'bprint', onClick: poster(build('print')) },
-      brandIcon('html'), L.print),
+      glyph('print'), L.print),
     // The text button keeps the row's growing flex; EPUB is an icon button whose
     // accessible name doubles as the hover tooltip.
     h('div', { class: 'btnrow' },
@@ -398,7 +397,7 @@ function footer(buildUri?: string): HTMLElement {
       h('button', {
         class: 'btn icon', 'data-fk': 'bepub', title: L.buildEpub, 'aria-label': L.buildEpub,
         onClick: poster(build('epub')),
-      }, brandIcon('epub'))),
+      }, glyph('epub'))),
     revealRow(),
   );
 }

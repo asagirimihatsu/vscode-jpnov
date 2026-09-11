@@ -267,17 +267,24 @@ export function stylesheet(opts: StylesheetOptions): string {
 }
 
 /**
+ * `line-break` per 禁則 tier (https://drafts.csswg.org/css-text/#line-break-property):
+ * relaxed/strict = the CSS normal/strict sets (layout.ts); none→`loose`, the least restrictive
+ * JAPANESE-aware value (`anywhere` would also break Latin words).
+ */
+const LINE_BREAK: Readonly<Record<KinsokuMode, string>> = {
+  none: 'loose',
+  relaxed: 'normal',
+  strict: 'strict',
+};
+
+/**
  * Renders the stylesheet for the REFLOW (EPUB) output: no geometry variables, no chrome
  * fragments, no `@page` — the reading system owns line breaking, pagination and page
- * furniture. 禁則 maps onto the reader's own JIS line breaking via `line-break`
- * (https://drafts.csswg.org/css-text/#line-break-property): none→`loose`, the least
- * restrictive JAPANESE-aware value (`anywhere` would also break Latin words); normal/strict
- * pass through. ぶら下げ rides along as hanging-punctuation while kinsoku is active
- * (WebKit-only; other engines ignore it).
+ * furniture. 禁則 maps onto the reader's own JIS line breaking via {@link LINE_BREAK};
+ * ぶら下げ rides along as hanging-punctuation while kinsoku is active (WebKit-only; other
+ * engines ignore it).
  */
 export function reflowStylesheet(kinsoku: KinsokuMode, usedClasses: readonly string[]): string {
-  const kinsokuRule = kinsoku === 'none'
-    ? 'body{line-break:loose}'
-    : `body{line-break:${kinsoku};hanging-punctuation:allow-end}`;
-  return [S.reflowBase, kinsokuRule, ...usedClasses.map(classRule)].join('');
+  const hang = kinsoku === 'none' ? '' : ';hanging-punctuation:allow-end';
+  return [S.reflowBase, `body{line-break:${LINE_BREAK[kinsoku]}${hang}}`, ...usedClasses.map(classRule)].join('');
 }

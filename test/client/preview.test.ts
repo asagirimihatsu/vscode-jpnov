@@ -483,7 +483,7 @@ test('renderDocument ships the settings snapshot on the renderFile request', asy
     linesPerPage: 34,
     linePitch: 1.5,
     fontFamily: '',
-    kinsoku: 'normal',
+    kinsoku: 'strict',
     autoTcy: 'punctuationPairs',
     dash: 'horizontalBar',
     lineNumbers: true,

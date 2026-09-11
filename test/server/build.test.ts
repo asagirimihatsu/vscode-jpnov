@@ -375,7 +375,7 @@ test('build honors the kinsoku mode from the settings snapshot (禁則)', async 
 
   const result = await handleBuild(ctx, {
     format: 'html',
-    settings: { ...SETTINGS, charsPerLine: 16, kinsoku: 'normal' },
+    settings: { ...SETTINGS, charsPerLine: 16, kinsoku: 'relaxed' },
     projectDirs: projectsFor(ws.uri),
   });
   const html = result.artifacts.find((a) => a.kind === 'html')?.content ?? '';
@@ -771,7 +771,7 @@ async function writeCoverFixture(dir: string): Promise<void> {
   await writeUnder(dir, 'vol1.jpbook', [
     '---',
     'title: 作品名',
-    'author: 著者名',
+    'author: ペンネーム',
     'header: 柱',
     'cover:',
     '  - src/cover.jpnov',
@@ -780,8 +780,8 @@ async function writeCoverFixture(dir: string): Promise<void> {
     'src/a.jpnov',
   ].join('\n'));
   await writeUnder(dir, 'src/cover.jpnov', [
-    '［＃ここに「題名」の値を表示］',
-    '［＃ここに「著者」の値を表示］',
+    '［＃ここに「タイトル」の値を表示］',
+    '［＃ここに「ペンネーム」の値を表示］',
     '全［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］ページ',
     '４００字詰め原稿用紙換算［＃縦中横］［＃ここに「原稿用紙換算枚数」の値を表示］［＃縦中横終わり］枚',
   ].join('\n'));
@@ -811,7 +811,7 @@ test('build: covers render as unnumbered front pages carrying the book values (h
   assert.ok(sheets[1]?.startsWith('<div class="page cover" data-page="1">'));
   // The book's own values land on the cover; both counts are the BODY's, each on its own grid.
   assert.ok(sheets[0]?.includes('作品名'));
-  assert.ok(sheets[0]?.includes('著者名'));
+  assert.ok(sheets[0]?.includes('ペンネーム'));
   assert.ok(sheets[0]?.includes('全<span class="tcy">2</span>ページ'));
   assert.ok(sheets[0]?.includes('換算<span class="tcy">3</span>枚'));
   // Neither cover carries the book's header or a folio; the body starts at page 1.
@@ -826,7 +826,7 @@ test('build: a title-less book falls back to the outRel STEM, exactly like the E
   const { ctx } = boot();
   // Nested on purpose: outRel is `part1/vol2` but its stem is `vol2`, so the two differ.
   await writeUnder(ws.dir, 'part1/vol2.jpbook', '---\ncover:\n- c.jpnov\n---\na.jpnov');
-  await writeUnder(ws.dir, 'c.jpnov', '［＃ここに「題名」の値を表示］／［＃ここに「著者」の値を表示］');
+  await writeUnder(ws.dir, 'c.jpnov', '［＃ここに「タイトル」の値を表示］／［＃ここに「ペンネーム」の値を表示］');
   await writeUnder(ws.dir, 'a.jpnov', '本文。');
 
   const html = (await handleBuild(ctx, {
@@ -852,7 +852,7 @@ test('build: a title-less book falls back to the outRel STEM, exactly like the E
 
 test('build: txt and epub ignore the cover key entirely (byte-identical either way)', async () => {
   await using ws = await makeTmpWorkspace();
-  await writeUnder(ws.dir, 'src/cover.jpnov', '［＃ここに「題名」の値を表示］');
+  await writeUnder(ws.dir, 'src/cover.jpnov', '［＃ここに「タイトル」の値を表示］');
   await writeUnder(ws.dir, 'src/a.jpnov', '本文。');
   // One workspace, so paths match too; the EPUB's wall-clock dcterms:modified is normalized.
   const build = async (jpbook: string, format: 'txt' | 'epub'): Promise<string> => {
