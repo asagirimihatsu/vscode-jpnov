@@ -82,7 +82,7 @@ export function nodesIn(ast: Ast): SyntaxNode[] {
 }
 
 const isPaired = (node: SyntaxNode): node is PairedNode => /^(indentBlock|emphasisSpan|headingSpan|tcySpan)(Start|End)$/.test(node.kind);
-const isPostfix = (node: SyntaxNode): node is PostfixNode => node.kind.endsWith('Postfix');
+export const isPostfix = (node: SyntaxNode): node is PostfixNode => node.kind.endsWith('Postfix');
 
 /** Each span start and end of `src` with the span of the node it pairs with; null when none. */
 export function pairsOf(src: string): [text: string, pair: Span | null][] {

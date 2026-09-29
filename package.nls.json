@@ -79,7 +79,7 @@
   "jpnov.layout.kinsoku.relaxed.description": "Closing brackets, punctuation, middle dots (・：；) and repetition marks (々ゝゞヽヾ〻) never start a line; small kana and ー may. Same as Word's standard level.",
   "jpnov.layout.kinsoku.strict.label": "Strict",
   "jpnov.layout.kinsoku.strict.description": "Everything in Relaxed, plus small kana and ー never start a line, and a run of ―― or …… stays together as one unit. Same as Word's high level.",
-  "jpnov.layout.autoTcy.description": "Automatically set half-width punctuation pairs upright in one square (tate-chū-yoko / 縦中横). Manual ［＃縦中横］…［＃縦中横終わり］ always applies. Reflected in the preview and every built book; the text build writes explicit markers. Use full-width marks where a pair should stay as typed.",
+  "jpnov.layout.autoTcy.description": "Automatically set half-width punctuation pairs upright in one square (tate-chū-yoko / 縦中横). Manual ［＃縦中横］…［＃縦中横終わり］ always applies. Reflected in the preview and every built book; the text build writes explicit markers. A pair inside a ruby base or inside 《…》 is never combined. An annotation whose target takes only one mark of a pair has no effect. Use full-width marks where a pair should stay as typed.",
   "jpnov.layout.autoTcy.none.label": "Off",
   "jpnov.layout.autoTcy.none.description": "Half-width pairs stay as typed, lying on their side.",
   "jpnov.layout.autoTcy.punctuationPairs.label": "Half-width !! !? ?! ??",

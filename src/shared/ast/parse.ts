@@ -18,5 +18,6 @@ export interface ParseOptions {
 
 export function parse(src: string, opts?: ParseOptions): Ast {
   const syntax = scan(src);
-  return resolve(opts?.autoTcy === 'punctuationPairs' ? autoTcy(syntax) : syntax, opts?.values);
+  const values = opts?.values;
+  return resolve(opts?.autoTcy === 'punctuationPairs' ? autoTcy(syntax, values) : syntax, values);
 }

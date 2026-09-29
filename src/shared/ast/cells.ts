@@ -13,7 +13,7 @@ import type { Channel } from './notation.ts';
 interface Source {
   /** Source offset of the text the characters were composed from. */
   readonly start: number;
-  /** A substituted value or an inserted node: every piece maps to this one span. */
+  /** A substituted value: every piece maps to this one span. */
   readonly fixed: Span | null;
   /** The display characters with their source ranges, when composing changed the text. */
   readonly chars: readonly ComposedChar[] | null;
@@ -32,21 +32,13 @@ export interface CharsCell {
 
 export type Cell = CharsCell | Ruby | Tcy | CommentInline;
 
-/**
- * The cell of `raw` as `node` shows it, kana composed; null when it shows nothing. `fixed` names
- * the span every character maps to, for text that is not a slice of the source.
- */
-export function charsCell(
-  node: SyntaxNode,
-  raw: string,
-  origin: CharsOrigin,
-  marks: Marks,
-  fixed: Span | null,
-): CharsCell | null {
+/** The cell of `raw` as `node` shows it, kana composed; null when it shows nothing. */
+export function charsCell(node: SyntaxNode, raw: string, origin: CharsOrigin, marks: Marks): CharsCell | null {
   const text = composeKana(raw);
   if (text === '') {
     return null;
   }
+  const fixed = origin === 'value' ? node.span : null;
   const chars = fixed !== null || text === raw ? null : composedChars(raw);
   return { kind: 'chars', source: { start: node.span.start, fixed, chars }, origin, text, from: 0, marks };
 }
