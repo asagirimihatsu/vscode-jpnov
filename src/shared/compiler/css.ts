@@ -144,9 +144,9 @@ function edgeRules(selector: string, linesPerPage: number, unit: 'em' | 'rem'): 
 }
 
 /**
- * The 傍点 probe (source: src/client/webview/probe/emr.ts), inlined by both paginated
- * emitters iff a right-side 傍点 line put `emr` in the used sink. Mechanism and geometry:
- * class.emr.css.
+ * The 傍点 probe (source: src/client/webview/probe/emr.ts), inlined by `renderBook` and
+ * `renderPreview` iff a right-side 傍点 line put `emr` in the used sink. Mechanism and
+ * geometry: class.emr.css.
  */
 export function emrProbe(used: ReadonlySet<string>): string {
   return used.has('emr') ? `<script>${EMR_PROBE_JS}</script>` : '';

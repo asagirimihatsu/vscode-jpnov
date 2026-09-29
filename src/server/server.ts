@@ -1,15 +1,15 @@
 /**
  * Japanese Novel language server (forked Node process, IPC). MUST stay vscode-free — there is
- * no `vscode` module in the forked process; a value-import would crash it. Only
- * `import type` of vscode is permitted (and eslint enforces this for src/server/**).
+ * no `vscode` module in the forked process; a value-import would crash it. eslint forbids
+ * every import of it in src/server/**, `import type` included.
  *
  * Responsibilities wired here:
  * - `initialize`: seed the lint selection + per-root vocabulary from
  *   `initializationOptions`, reply the negotiated capabilities.
  * - `jpnov/build`, `jpnov/listBooks`, `jpnov/renderFile` request handlers (per-root state
  *   rides each request's `projectDirs`; the vocabulary rides `jpnov/highlightChanged`).
- * - `jpnov/readText` (server -> client): the only request this side sends; manuscript and
- *   manifest text comes back decoded by the client.
+ * - `jpnov/readText` (server -> client): the only custom request this side sends; manuscript
+ *   and manifest text comes back decoded by the client.
  */
 import {
   CodeActionKind,

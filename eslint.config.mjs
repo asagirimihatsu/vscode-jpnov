@@ -13,7 +13,7 @@ export default tseslint.config(
   {
     // A leaked value-import of `vscode` crashes the forked Node language server
     // (there is no `vscode` module outside the extension host). Only src/client/**
-    // may value-import it; shared + server stay vscode-free. `import type` is fine.
+    // may import it; shared + server import nothing from it, `import type` included.
     // The AST is read through its front doors; what it is built with stays inside it.
     files: ['src/server/**/*.ts', 'src/shared/**/*.ts'],
     rules: {
@@ -23,8 +23,7 @@ export default tseslint.config(
           paths: [
             {
               name: 'vscode',
-              message:
-                'vscode must not be value-imported in shared/server (type-only import type is fine)',
+              message: 'vscode must not be imported in shared/server, `import type` included',
             },
           ],
           patterns: [

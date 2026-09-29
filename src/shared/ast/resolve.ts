@@ -183,7 +183,7 @@ class LineResolver {
     switch (node.kind) {
       case 'text':
         if (node.rubyBase !== true) {
-          this.chars(node, node.text, 'prose', node.synthetic === true ? node.span : null);
+          this.chars(node, node.text, 'prose');
         }
         break;
       case 'rubyMark':
@@ -233,10 +233,10 @@ class LineResolver {
         this.cells.push({ kind: 'comment', inner: node.inner.text, span: node.span });
         break;
       case 'brokenAnnotation':
-        this.chars(node, node.text, 'broken', null);
+        this.chars(node, node.text, 'broken');
         break;
       case 'valueField':
-        this.chars(node, this.value(node), 'value', node.span);
+        this.chars(node, this.value(node), 'value');
         break;
       default: {
         const exhaustive: never = node;
@@ -245,8 +245,8 @@ class LineResolver {
     }
   }
 
-  private chars(node: SyntaxNode, raw: string, origin: CharsOrigin, fixed: Span | null): void {
-    const cell = charsCell(node, raw, origin, this.flow.marks, fixed);
+  private chars(node: SyntaxNode, raw: string, origin: CharsOrigin): void {
+    const cell = charsCell(node, raw, origin, this.flow.marks);
     if (cell !== null) {
       this.cells.push(cell);
     }
@@ -277,8 +277,8 @@ class LineResolver {
     const base = composeKana(inside.map(textOf).join(''));
     if (base === '') {
       // Nothing visible (an empty value): the markup prints as typed.
-      this.chars(open.mark, open.mark.text, 'markup', null);
-      this.chars(node, node.text, 'markup', null);
+      this.chars(open.mark, open.mark.text, 'markup');
+      this.chars(node, node.text, 'markup');
     } else {
       this.cells.push({
         kind: 'ruby',
@@ -448,4 +448,12 @@ export function resolve(doc: Syntax, values?: ValueLookup): Ast {
   }
 
   return { lines, issues: ledger.issues.sort(bySource), openAtEnd, pairs: ledger.pairs, bound: ledger.bound, held: ledger.held };
+}
+
+/**
+ * What each corner-target postfix of `line` binds to. A postfix looks no further than its own
+ * line, so the line is resolved alone.
+ */
+export function bindingsOf(line: SyntaxLine, values?: ValueLookup): ReadonlyMap<PostfixNode, Span> {
+  return resolve({ lines: [line], issues: [] }, values).bound;
 }

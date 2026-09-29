@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { BuildChrome } from '../../../src/shared/compiler/chrome.ts';
+import { AUTO_TCY_MODES, type AutoTcyMode } from '../../../src/shared/config/types.ts';
 import { chapterGlue, concatBookText, MANUSCRIPT_SHEET, renderBook, type BookInput } from '../../../src/shared/compiler/document.ts';
 import { FOOTER_BAND, HEADER_BAND, SIDE_PAD } from '../../../src/shared/compiler/geometry.ts';
 import { VALUE_DEFAULTS, indentAnnotation } from '../../../src/shared/ast/notation.ts';
@@ -53,6 +54,9 @@ const bodyOf = (html: string): string => {
   assert.match(body, /^<button class="print" /);
   return body.slice(body.indexOf('</button>') + '</button>'.length);
 };
+
+/** {@link bodyOf} without its data-line anchors: a file numbers its own lines from 0. */
+const strip = (html: string): string => bodyOf(html).replace(/ data-line="\d+"/g, '');
 
 test('renderBook emits a paginated page/line skeleton document', () => {
   const html = render('本文');
@@ -367,7 +371,6 @@ test('dual invariant: per-file render + glue == rendering the concatenated .txt'
     two('あ\r\n\r\nい\r\n', 'か\r\n', '＊'), // CRLF chapters
     ...SEAM_CASES.map(([b]) => b), // spans left open at a seam (closed by concatBookText)
   ];
-  const strip = (h: string): string => bodyOf(h).replace(/ data-line="\d+"/g, '');
   for (const b of matrix) {
     const perFile = renderBook({ books: [b], ...opts });
     const combined = renderBook({
@@ -377,6 +380,19 @@ test('dual invariant: per-file render + glue == rendering the concatenated .txt'
     // data-line is the only legitimate delta: per-file numbering restarts (and glue rows have
     // no anchor at all) while the combined source numbers continuously.
     assert.equal(strip(perFile), strip(combined));
+  }
+});
+
+test('concatBookText writes no 縦中横 annotation where a pair stays as typed, and the text renders as the book', () => {
+  const b = two('なに!?［＃「なに!?」の左に「ナニ」のルビ］と叫んだ!?\n', '《!?》と叫んだ。\n');
+  const txt = concatBookText(b, 'punctuationPairs', 40);
+  assert.equal(txt, 'なに!?［＃「なに!?」の左に「ナニ」のルビ］と叫んだ!?［＃「!?」は縦中横］\n\n《!?》と叫んだ。');
+
+  const again = book({ files: [{ name: 'all.jpnov', src: txt }] });
+  const perFile = strip(renderBooks([b], { autoTcy: 'punctuationPairs' }));
+  for (const autoTcy of AUTO_TCY_MODES) {
+    assert.equal(concatBookText(again, autoTcy, 40), txt);
+    assert.equal(strip(renderBooks([again], { autoTcy })), perFile);
   }
 });
 
@@ -516,7 +532,7 @@ const COVER_SRC = '［＃５字下げ］［＃ここに「タイトル」の値�
 /** Render `books` with the shared option baseline; `chrome` overrides ride on top. */
 const renderBooks = (
   books: readonly BookInput[],
-  opts: { linesPerPage?: number; chrome?: Partial<BuildChrome> } = {},
+  opts: { linesPerPage?: number; autoTcy?: AutoTcyMode; chrome?: Partial<BuildChrome> } = {},
 ): string =>
   renderBook({
     books,
@@ -524,7 +540,7 @@ const renderBooks = (
     linesPerPage: opts.linesPerPage ?? 34,
     linePitch: 2,
     kinsoku: 'none',
-    autoTcy: 'none',
+    autoTcy: opts.autoTcy ?? 'none',
     dash: 'horizontalBar',
     paperSize: 'a4',
     paperOrientation: 'auto',

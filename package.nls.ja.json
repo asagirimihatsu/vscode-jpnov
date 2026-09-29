@@ -79,7 +79,7 @@
   "jpnov.layout.kinsoku.relaxed.description": "閉じ括弧・句読点・中点類（・：；）・繰り返し記号（々ゝゞヽヾ〻）を行頭に置きません。小書きの仮名（っ・ゃ など）と長音記号（ー）は行頭に来てもかまいません。Word の「標準」に相当します。",
   "jpnov.layout.kinsoku.strict.label": "厳格",
   "jpnov.layout.kinsoku.strict.description": "緩めに加えて、小書きの仮名と長音記号（ー）も行頭に置きません。――や……の連続はひとまとまりとして扱います。Word の「高レベル」に相当します。",
-  "jpnov.layout.autoTcy.description": "半角約物の 2 連を自動で縦中横（1 マスに直立）にします。手動の ［＃縦中横］…［＃縦中横終わり］ はこの設定にかかわらず常に有効です。プレビューと出力の両方に反映され、テキスト出力には注記が書き出されます。該当する 2 連はすべて対象です。個別に避けたい場合は全角を使ってください。",
+  "jpnov.layout.autoTcy.description": "半角約物の 2 連を自動で縦中横（1 マスに直立）にします。手動の ［＃縦中横］…［＃縦中横終わり］ はこの設定にかかわらず常に有効です。プレビューと出力の両方に反映され、テキスト出力には注記が書き出されます。ルビのかかる文字と 《…》 の中を除き、該当する 2 連はすべて対象です。2 連の片方だけを対象文字列に含む注記は効きません。個別に避けたい場合は全角を使ってください。",
   "jpnov.layout.autoTcy.none.label": "なし",
   "jpnov.layout.autoTcy.none.description": "半角のまま横倒しで組まれます。",
   "jpnov.layout.autoTcy.punctuationPairs.label": "半角の !! !? ?! ??",

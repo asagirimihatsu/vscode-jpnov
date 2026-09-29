@@ -277,6 +277,8 @@ export type Inline = Chars | Ruby | Tcy | CommentInline;
 /** What the scan alone can tell. */
 export type ScanIssue =
   | { readonly kind: 'unclosedAnnotation'; readonly span: Span }
+  // `span`: the 《…》 left as text, from its ｜ when one opened it; 自動縦中横 leaves the pairs
+  // inside it as typed.
   | { readonly kind: 'rubyBaseMissing'; readonly span: Span; readonly reading: string }
   | { readonly kind: 'rubyReadingEmpty'; readonly span: Span };
 

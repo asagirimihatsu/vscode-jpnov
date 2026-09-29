@@ -188,8 +188,11 @@ square — keep it to 3 characters or fewer (a longer run is squeezed to fit
 and raises a Warning). **自動縦中横**
 (`jpnov.layout.autoTcy`, default `punctuationPairs`) auto-combines the
 half-width pairs `!!` `!?` `?!` `??` with no markup — runs of three or more are
-never touched — and the text build writes the explicit markers out, so the
-`.txt` round-trips; set it to `none` to turn it off.
+never touched, and a pair inside a ruby (its base, its reading, the base of a
+left ruby) or inside a `《…》` that made no ruby stays as typed — and the text
+build writes the explicit markers out, so the `.txt` round-trips; set it to
+`none` to turn it off. A combined pair is one character: an annotation whose
+target takes only one of its marks has no effect.
 
 ## Auto indent
 
@@ -569,6 +572,9 @@ settings.
 
 ## Development
 
+For design rationale and architecture, see
+[Architecture](docs/architecture.md).
+
 ```sh
 npm install
 ```
@@ -581,7 +587,7 @@ Other commands:
 ```sh
 npm run lint        # typescript-eslint (type-aware)
 npm run type-check  # tsc --noEmit
-npm test            # node --test — shared + highlight unit tests
+npm test            # node --test — the unit suites
 npm run build:dev   # bundle to dist/ (ESM)
 ```
 

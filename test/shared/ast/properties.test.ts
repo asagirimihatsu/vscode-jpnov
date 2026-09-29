@@ -8,14 +8,15 @@ import assert from 'node:assert/strict';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { autoTcy } from '../../../src/shared/ast/autoTcy.ts';
-import type { PairedNode } from '../../../src/shared/ast/nodes.ts';
+import type { Issue, PairedNode } from '../../../src/shared/ast/nodes.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
 import { printLine, printSource } from '../../../src/shared/ast/print.ts';
+import { bindingsOf, resolve } from '../../../src/shared/ast/resolve.ts';
 import { scan } from '../../../src/shared/ast/scan.ts';
 import { composeKana } from '../../../src/shared/chars.ts';
 
 import { manuscripts, withEol } from './_fuzz.ts';
-import { nodesIn } from './_shape.ts';
+import { isPostfix, nodesIn } from './_shape.ts';
 
 const CORPUS = manuscripts();
 /** The same manuscripts with a lone CR for every terminator — the third line ending. */
@@ -158,12 +159,45 @@ test('自動縦中横 only inserts: without its nodes the source is back, and pr
     const wrapped = autoTcy(scan(src));
     const typed = { lines: wrapped.lines.map((line) => ({ ...line, syntax: line.syntax.filter((node) => node.synthetic !== true) })) };
     assert.equal(printSource(typed), src, JSON.stringify(src));
-    // A pair inside a 《…》 that made no ruby is wrapped again on every pass: the one input
-    // the second printing still changes.
-    if (scan(src).issues.every((issue) => issue.kind !== 'rubyBaseMissing')) {
-      const once = printSource(wrapped);
-      assert.equal(printSource(autoTcy(scan(once))), once, JSON.stringify(src));
+    const once = printSource(wrapped);
+    assert.equal(printSource(autoTcy(scan(once))), once, JSON.stringify(src));
+  }
+});
+
+test('a postfix binds within its line: a line resolved alone binds as it does in its manuscript', () => {
+  for (const src of ALL) {
+    const ast = parse(src);
+    for (const line of ast.lines) {
+      const alone = bindingsOf(line);
+      for (const node of line.syntax.filter(isPostfix)) {
+        assert.deepEqual(alone.get(node), ast.bound.get(node), JSON.stringify(src));
+      }
     }
+  }
+});
+
+test('自動縦中横 leaves every annotation as it was, on a line where none cuts into a wrapped pair', () => {
+  for (const src of ALL) {
+    const syntax = scan(src);
+    const typed = resolve(syntax);
+    const wrapped = resolve(autoTcy(syntax));
+    typed.lines.forEach((line, index) => {
+      // A wrapped pair ends where its postfix was inserted: this is the offset between its marks.
+      const inside = new Set(wrapped.lines[index]?.syntax.flatMap((node) => (node.synthetic === true ? [node.span.start - 1] : [])));
+      const postfixes = line.syntax.filter(isPostfix);
+      const cut = postfixes.some((node) => {
+        const to = typed.bound.get(node);
+        return to !== undefined && (inside.has(to.start) || inside.has(to.end));
+      });
+      if (cut) {
+        return; // that annotation takes no effect, and what follows it reads without it
+      }
+      for (const node of postfixes) {
+        assert.deepEqual(wrapped.bound.get(node), typed.bound.get(node), JSON.stringify(printLine(line)));
+      }
+      const onLine = (issue: Issue): boolean => issue.span.start >= line.span.start && issue.span.end <= line.span.end;
+      assert.deepEqual(wrapped.issues.filter(onLine), typed.issues.filter(onLine), JSON.stringify(printLine(line)));
+    });
   }
 });
 
@@ -174,6 +208,9 @@ test('a line of any length scans, wraps and resolves', () => {
   assert.equal(scan(`｜${memos}`).lines[0]?.syntax.length, many + 1); // a ｜ that gets no reading
   assert.equal(scan(`｜語${memos}《よみ》`).lines[0]?.syntax.length, many + 3);
   assert.equal(autoTcy(scan('あ!?'.repeat(many))).lines[0]?.syntax.length, many * 2);
+  // The pair a left ruby holds stays in its text, before the annotation.
+  const held = `${'あ!?'.repeat(many)}なに!?［＃「なに!?」の左に「ナニ」のルビ］`;
+  assert.equal(autoTcy(scan(held)).lines[0]?.syntax.length, many * 2 + 2);
   for (const src of [`語${memos}彙［＃「語彙」は縦中横］`, `語${memos}彙［＃「語彙」の左に「ごい」のルビ］`, `｜語${memos}彙《ごい》`]) {
     const ast = parse(src);
     assert.deepEqual([ast.lines[0]?.content.length, ast.issues], [many + 1, []], src.slice(-20));

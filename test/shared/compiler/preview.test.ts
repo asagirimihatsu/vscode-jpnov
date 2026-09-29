@@ -48,6 +48,16 @@ test('renderPreview: autoTcy=punctuationPairs combines pairs exactly like the bu
   assert.doesNotMatch(off, /tcy/); // none: the pair stays plain rotated text, zero dead rules
 });
 
+test('renderPreview: a pair inside a left ruby base or a 《…》 that made no ruby stays as typed', () => {
+  const held = 'なに!?［＃「なに!?」の左に「ナニ」のルビ］';
+  assert.match(preview(held), /<ruby class="lr">.*<rt class="rt-l">/);
+  for (const src of [held, '《!?》と叫んだ。']) {
+    assert.equal(preview(src, { autoTcy: 'punctuationPairs' }), preview(src), src);
+  }
+  const on = preview(`${held}と叫んだ!?`, { autoTcy: 'punctuationPairs' });
+  assert.match(on, /<rt class="rt-l">.*<\/ruby>と叫んだ<span class="tcy">!\?<\/span>/);
+});
+
 test('renderPreview wraps the body in a standalone HTML document', () => {
   const html = preview('本文です。');
   assert.match(html, /^<!DOCTYPE html><html lang="ja"><head>/);
