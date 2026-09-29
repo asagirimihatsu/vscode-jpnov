@@ -1,0 +1,56 @@
+name: 公式サイトのバグ報告
+description: jpnov.com の表示が崩れる・動きがおかしい・リンクが開けない
+labels: ['website:bug']
+body:
+  - type: markdown
+    attributes:
+      value: わかる範囲で構いません。
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 起きたこと
+      description: ページのどのあたりで何が起きたか、本来はどうなるはずだったかを書いてください。スクリーンショットも、ここに貼り付けられます。
+    validations:
+      required: true
+
+  - type: dropdown
+    id: browser
+    attributes:
+      label: ブラウザー
+      options:
+        - Chrome
+        - Edge
+        - Safari
+        - Firefox
+        - その他・わからない
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: ブラウザーのバージョン
+      description: ブラウザーのメニューの「ヘルプ」や「設定」にある「Google Chrome について」などを開くと表示されます。Mac では、画面の左上にある「Safari」など、ブラウザーの名前のメニューにあります。iPhone と iPad では、iOS や iPadOS のバージョンを書いてください。「設定」の「一般」→「情報」に表示されます。
+      placeholder: 154.0.8037.58
+
+  - type: dropdown
+    id: device
+    attributes:
+      label: 端末
+      options:
+        - Windows のパソコン
+        - Mac
+        - iPhone
+        - iPad
+        - Android のスマートフォン
+        - Android のタブレット
+        - その他・わからない
+    validations:
+      required: true
+
+  - type: textarea
+    id: state
+    attributes:
+      label: ブラウザーの状態
+      description: ウィンドウの幅を狭めている、ページを拡大している、ブラウザーに広告ブロックなどの拡張機能を入れている、といったことがあれば書いてください。

@@ -1,6 +1,6 @@
-name: バグ報告
+name: 拡張機能のバグ報告
 description: 表示が崩れる・警告がおかしい・出力に失敗する
-labels: [bug]
+labels: ['jpnov:bug']
 body:
   - type: markdown
     attributes:

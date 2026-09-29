@@ -1,6 +1,6 @@
-name: 機能の要望
+name: 拡張機能への要望
 description: こんなことができたら・この注記にも対応してほしい
-labels: [enhancement]
+labels: ['jpnov:enhancement']
 body:
   - type: textarea
     id: what
