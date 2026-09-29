@@ -94,9 +94,9 @@ but not Japanese typesetting:
   beside every emphasised character. Nine dot shapes plus five side-line styles
   (傍線) are part of the Aozora vocabulary, and all are supported.
 - **Tate-chū-yoko (縦中横)** — a short horizontal run ("42", "!?") stood upright
-  in a single character cell within vertical text. Half-width pairs `!!` `!?`
-  `?!` `??` are combined automatically by default
-  (`jpnov.layout.autoTcy`); anything else takes an explicit annotation.
+  in a single character cell within vertical text. The run is marked with an
+  annotation written after it. A lint rule flags a half-width pair (`!!` `!?`
+  `?!` `??`) that has no such annotation, and its quick fix writes one.
 - **Kinsoku (禁則処理)** — Japanese line-breaking prohibitions, applied at every
   wrap in preview and builds alike (`jpnov.layout.kinsoku`, default `strict`):
   opening brackets never end a line; closing punctuation, middle dots, repetition
@@ -161,7 +161,7 @@ paste it into a `.jpnov` to try:
 　運命［＃「運命」に波線］が動く。
 　英雄《えいゆう》［＃「英雄」の左に「ヒーロー」のルビ］の登場。
 　第42［＃「42」は縦中横］話、太字［＃「太字」は太字］で。
-「何だと!?」
+「何だと!?［＃「!?」は縦中横］」
 ```
 
 Notes: 傍点/傍線 take a left-side variant spelled differently in each form — the
@@ -185,14 +185,15 @@ Latin. Left ruby needs room to the left of the line — set
 `jpnov.layout.linePitch` to `2` or wider. At tighter pitches the reading
 overlaps the neighbouring line. **縦中横** stands a short run upright in one
 square — keep it to 3 characters or fewer (a longer run is squeezed to fit
-and raises a Warning). **自動縦中横**
-(`jpnov.layout.autoTcy`, default `punctuationPairs`) auto-combines the
-half-width pairs `!!` `!?` `?!` `??` with no markup — runs of three or more are
-never touched, and a pair inside a ruby (its base, its reading, the base of a
-left ruby) or inside a `《…》` that made no ruby stays as typed — and the text
-build writes the explicit markers out, so the `.txt` round-trips; set it to
-`none` to turn it off. A combined pair is one character: an annotation whose
-target takes only one of its marks has no effect.
+and raises a Warning). A half-width pair (`!!` `!?` `?!` `??`) takes the same
+annotation (`!?［＃「!?」は縦中横］`); without it the pair lies on its side, two
+squares long. A lint rule flags a pair that lacks it, and its quick fix writes
+the annotation (`jpnov.lint.common.exclamationTcy`, on by default). The rule
+skips a run of three or more marks, and a pair inside a ruby (its base, its
+reading, the base of a left ruby) or inside a `《…》` that made no ruby. Where
+another annotation's target takes only one mark of a pair, the rule flags the
+pair and offers no fix: once annotated, the pair is one character, and that
+annotation would have no effect.
 
 ## Auto indent
 
@@ -240,10 +241,9 @@ is an icon button):
   and leave its headers and footers off. The `.html` itself lands in the output
   folder: one standalone, paginated vertical file per book (inline CSS, no
   external assets) that prints the same way whenever you reopen it.
-- **Build to Text** — the chapters concatenated as Aozora-format `.txt`
-  (auto-tate-chū-yoko is materialised as explicit annotations, so the text
-  round-trips; an annotation still open at a chapter's end is closed at the seam,
-  so the chapters render exactly as in the HTML build).
+- **Build to Text** — the chapters concatenated as Aozora-format `.txt` (an
+  annotation still open at a chapter's end is closed at the seam, so the
+  chapters render exactly as in the HTML build).
 - **Build to EPUB** — a reflowable EPUB 3 per book: vertical writing and
   right-to-left page turning carry over into the reader, while font size and
   line wrapping follow the reading device. One spine file per chapter, split again
@@ -458,6 +458,7 @@ counts as one run — the checks see the text the way a reader will.
   wants its `。`), no punctuation right before a closing bracket
   (`dialogue.closingPunct`), no leading space on a dialogue line
   (`dialogue.noIndent`), a space after `！`/`？` (`common.exclamationSpace`),
+  the 縦中横 annotation on a half-width `!?` pair (`common.exclamationTcy`),
   even-count ellipses (`common.ellipsis`), and bracket pairing
   (`noUnmatchedPair`). All but the bracket matcher auto-fixable; a
   symbol-only scene-break line (`＊`) is exempt from the paragraph rules.
@@ -484,7 +485,6 @@ highlighting lists are per workspace folder.
 | `jpnov.layout.linePitch` | `1.5` | Line pitch as a multiple of the character size: `1.5` / `1.75` / `2` / `2.25`; preview and built pages |
 | `jpnov.layout.fontFamily` | `""` | Body font as a CSS font-family list: blank uses the default Mincho stack; preview and built HTML |
 | `jpnov.layout.kinsoku` | `strict` | Line-breaking rules: `none` / `relaxed` / `strict` |
-| `jpnov.layout.autoTcy` | `punctuationPairs` | Auto-combine `!!` `!?` `?!` `??`; `none` to disable |
 | `jpnov.layout.preview.lineNumbers` | `true` | Line numbers in the preview, restarting per page break |
 | `jpnov.layout.preview.edgeLine` | `none` | Column rules in the preview: `none` / `text` / `red` |
 | `jpnov.layout.paper.size` | `a4` | Paper size the built pages print at: `a4` / `a6`; the grid scales to fit it, centred |
@@ -515,6 +515,7 @@ form, and `ruby.kana` to ruby readings.
 | `jpnov.lint.common.dash` | `horizontalBar` | One dash character throughout, always in pairs (auto-fix) |
 | `jpnov.lint.common.ellipsis` | `true` | Even-count `…` runs; `。。`/`、、`/`・・` stand-ins (auto-fix) |
 | `jpnov.lint.common.exclamationSpace` | `true` | A full-width space after `！`/`？` when text continues (auto-fix) |
+| `jpnov.lint.common.exclamationTcy` | `true` | The 縦中横 annotation on half-width pairs `!!` `!?` `?!` `??` (auto-fix) |
 | `jpnov.lint.narration.indent` | `true` | Narration lines start with `　` or an opening bracket (auto-fix) |
 | `jpnov.lint.narration.endPeriod` | `true` | Narration lines end with `。` (auto-fix) |
 | `jpnov.lint.dialogue.closingPunct` | `true` | No `。`/`、` right before a closing `」` (auto-fix) |

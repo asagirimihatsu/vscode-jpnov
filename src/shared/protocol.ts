@@ -91,6 +91,7 @@ export type MsgCode =
   | 'lint.common.ellipsis.parity' // args: [] — the `ellipsis` rule's second fault: real …, odd count
   | 'lint.common.exclamationRun.long' // args: [] — the `exclamationRun` rule's second fault: 3+ marks
   | 'lint.common.exclamationRun.single' // args: [] — its third fault: a lone half-width ! or ?
+  | 'lint.common.exclamationTcy.cut' // args: [target, pair] — the `exclamationTcy` rule's second fault: the annotation naming `target` takes one mark of `pair`
   | 'server.unexpected'; // args: [detail]  (detail = raw unexpected server error, untranslatable)
 
 /** A server-produced message: a code plus the positional args its template substitutes. */
@@ -169,10 +170,10 @@ export interface PreviewSettings extends LayoutSettings, PreviewChrome {}
 
 /**
  * The layout-core / `jpnov.layout.paper.*` snapshot the client ships on every `jpnov/build`
- * request. Every artifact reads its slice (`.txt`: autoTcy + charsPerLine; `.epub`: kinsoku,
- * autoTcy, dash); the paper and chrome fields are `.html`-only. The `.txt` encoding is a
- * client-side setting, never part of this snapshot. Page furniture (ヘッダー/ページ番号) is
- * ABSENT: it is book identity, carried by each `.jpbook`'s own front matter (`composeBookChrome`).
+ * request. Every artifact reads its slice (`.txt`: charsPerLine; `.epub`: kinsoku, dash); the
+ * paper and chrome fields are `.html`-only. The `.txt` encoding is a client-side setting, never
+ * part of this snapshot. Page furniture (ヘッダー/ページ番号) is ABSENT: it is book identity,
+ * carried by each `.jpbook`'s own front matter (`composeBookChrome`).
  */
 export interface HtmlSettings extends LayoutSettings {
   /** Line-head numbers on built pages (proofing chrome — workspace preference, not book identity). */

@@ -123,6 +123,7 @@ export function computeLintFindings(doc: TextDocument, ast: Ast, selection: Rule
     instances.push(
       impl.create({
         options: rule.options,
+        ast,
         report(span: Span, extra?: { message?: LocalizableMessage; fix?: FixSpec }): void {
           const range = { start: doc.positionAt(span.start), end: doc.positionAt(span.end) };
           const message = extra?.message ?? { code: rule.code };

@@ -12,7 +12,7 @@ import { at, boundOf, contentOf } from './_shape.ts';
 import { D } from '../_kana.ts';
 
 /** The content of a one-line source. */
-const content = (src: string, values?: ReadonlyMap<string, string>): string[] => contentOf(src, { values })[0] ?? [];
+const content = (src: string, values?: ReadonlyMap<string, string>): string[] => contentOf(src, values)[0] ?? [];
 
 // --------------------------------------------------------------- content
 
@@ -180,7 +180,7 @@ test('a run maps back to the source it came from', () => {
     ['く', at(src, 'く')],
   ]);
   const field = valueAnnotation(VALUE_NAMES.title);
-  assert.deepEqual(parse(`前${field}`, { values: REAL }).lines[0]?.content.map((item) => item.span), [
+  assert.deepEqual(parse(`前${field}`, REAL).lines[0]?.content.map((item) => item.span), [
     at(`前${field}`, '前'),
     at(`前${field}`, field), // a value stands where its annotation is
   ]);

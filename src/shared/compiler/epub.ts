@@ -13,10 +13,9 @@
 import { createHash } from 'node:crypto';
 
 import { parse } from '../ast/parse.ts';
-import type { JpbookMeta } from '../book/jpbook.ts';
-import type { AutoTcyMode, DashMode, KinsokuMode } from '../config/types.ts';
+import type { DashMode, KinsokuMode } from '../config/types.ts';
 import { reflowStylesheet } from './css.ts';
-import type { BookInput } from './document.ts';
+import type { TitledBook } from './document.ts';
 import { escapeHtml } from './escape.ts';
 import { buildRows } from './layout.ts';
 import { reflowDocument, reflowSegments } from './reflow.ts';
@@ -65,23 +64,22 @@ interface SpineDoc {
 }
 
 export function epubMembers(opts: {
-  readonly book: BookInput;
-  readonly meta: JpbookMeta;
-  /** The book's output stem (`jpbookOutRel`) — identity for dc:identifier and the title fallback. */
+  /** Its `title` and `author` are the package's dc:title and dc:creator. */
+  readonly book: TitledBook;
+  /** The book's output stem (`jpbookOutRel`) — identity for dc:identifier. */
   readonly outRel: string;
   readonly kinsoku: KinsokuMode;
-  readonly autoTcy: AutoTcyMode;
   readonly dash: DashMode;
   /** Build timestamp for `dcterms:modified`, CCYY-MM-DDThh:mm:ssZ — injected (the determinism seam). */
   readonly modified: string;
 }): EpubMember[] {
-  const title = opts.meta.title ?? chapterStem(opts.outRel);
+  const { title } = opts.book;
   const used = new Set<string>();
   // One entry per non-empty chapter: its spine docs plus its one nav row (an empty chapter
   // source contributes neither). reflowSegments feeds the shared `used` class sink, so
   // chapters must be processed in file order.
   const chapters = opts.book.files.flatMap((file, index) => {
-    const rows = buildRows(parse(file.src, { autoTcy: opts.autoTcy }), { dash: opts.dash });
+    const rows = buildRows(parse(file.src), { dash: opts.dash });
     const segments = reflowSegments(rows, used, opts.dash);
     if (segments.length === 0) {
       return [];
@@ -103,9 +101,8 @@ export function epubMembers(opts: {
       }];
   const docs = effective.flatMap((c) => c.docs);
 
-  const creator = opts.meta.author === undefined
-    ? ''
-    : `<dc:creator>${escapeHtml(opts.meta.author)}</dc:creator>`;
+  const author = opts.book.author ?? '';
+  const creator = author === '' ? '' : `<dc:creator>${escapeHtml(author)}</dc:creator>`;
   const manifest = [
     '<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>',
     '<item id="css" href="styles.css" media-type="text/css"/>',

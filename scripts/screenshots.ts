@@ -43,7 +43,6 @@ const bookOpts = {
   linePitch: 1.5, // 既定値のまま撮る
   fontFamily: '',
   kinsoku: 'strict',
-  autoTcy: 'punctuationPairs',
   dash: 'horizontalBar',
   paperSize: 'a4',
   paperOrientation: 'auto',
@@ -62,7 +61,6 @@ const previewOpts = (overrides: Partial<PreviewOpts> = {}): PreviewOpts => ({
   linePitch: 1.5,
   fontFamily: '',
   kinsoku: 'strict',
-  autoTcy: 'punctuationPairs',
   dash: 'horizontalBar',
   chrome: { lineNumbers: false, edgeLine: 'none' },
   ...overrides,

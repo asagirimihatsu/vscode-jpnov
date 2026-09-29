@@ -23,7 +23,7 @@ export interface Span {
   readonly end: number;
 }
 
-/** A verbatim source slice and where it sits; on a synthetic node the span is empty. */
+/** A verbatim source slice and where it sits. */
 export interface Part {
   readonly span: Span;
   readonly text: string;
@@ -72,8 +72,6 @@ interface NodeBase {
   readonly span: Span;
   /** The source slice, verbatim — never normalized. */
   readonly text: string;
-  /** Inserted by a transform (自動縦中横), not typed by the author; its span is empty. */
-  readonly synthetic?: true;
 }
 
 interface AnnotationBase extends NodeBase {
@@ -277,8 +275,7 @@ export type Inline = Chars | Ruby | Tcy | CommentInline;
 /** What the scan alone can tell. */
 export type ScanIssue =
   | { readonly kind: 'unclosedAnnotation'; readonly span: Span }
-  // `span`: the 《…》 left as text, from its ｜ when one opened it; 自動縦中横 leaves the pairs
-  // inside it as typed.
+  // `span`: the 《…》 left as text, from its ｜ when one opened it.
   | { readonly kind: 'rubyBaseMissing'; readonly span: Span; readonly reading: string }
   | { readonly kind: 'rubyReadingEmpty'; readonly span: Span };
 

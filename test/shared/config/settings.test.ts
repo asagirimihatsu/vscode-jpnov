@@ -103,20 +103,6 @@ test('kinsoku rides both snapshots: kept when a known member, defaulted otherwis
   assert.equal(resolveHtmlSettings(badHtml({ kinsoku: true })).kinsoku, LAYOUT_DEFAULT.kinsoku);
 });
 
-test('autoTcy rides both snapshots: kept when a known member, defaulted otherwise', () => {
-  assert.equal(
-    resolveHtmlSettings({ ...HTML_BASE, autoTcy: 'punctuationPairs' }).autoTcy,
-    'punctuationPairs',
-  );
-  assert.equal(
-    resolvePreviewSettings({ ...PREVIEW_BASE, autoTcy: 'punctuationPairs' }).autoTcy,
-    'punctuationPairs',
-  );
-  assert.equal(resolveHtmlSettings(badHtml({ autoTcy: 'always' })).autoTcy, LAYOUT_DEFAULT.autoTcy);
-  assert.equal(resolveHtmlSettings(badHtml({ autoTcy: true })).autoTcy, LAYOUT_DEFAULT.autoTcy);
-  assert.equal(LAYOUT_DEFAULT.autoTcy, 'punctuationPairs'); // 自動縦中横 ships ON (auto-combines half-width !! !? ?! ??)
-});
-
 test('dash rides both snapshots: kept when known, defaulted otherwise — retired "off" included', () => {
   assert.equal(resolveHtmlSettings({ ...HTML_BASE, dash: 'emDash' }).dash, 'emDash');
   assert.equal(resolvePreviewSettings({ ...PREVIEW_BASE, dash: 'boxDrawing' }).dash, 'boxDrawing');
@@ -160,7 +146,7 @@ test('paper size/orientation ride the html snapshot: kept when known, defaulted 
 test('the wire settings carry NO page furniture — that is jpbook front-matter territory', () => {
   // Junk furniture fields on the payload must be dropped, not forwarded: the resolver's
   // output is EXACTLY the wire fields of each shape, whatever a stale or hostile sender ships.
-  const PREVIEW_WIRE_KEYS = ['autoTcy', 'charsPerLine', 'dash', 'edgeLine', 'fontFamily', 'kinsoku', 'lineNumbers', 'linePitch', 'linesPerPage'];
+  const PREVIEW_WIRE_KEYS = ['charsPerLine', 'dash', 'edgeLine', 'fontFamily', 'kinsoku', 'lineNumbers', 'linePitch', 'linesPerPage'];
   const HTML_WIRE_KEYS = [...PREVIEW_WIRE_KEYS, 'paperOrientation', 'paperSize'].sort();
   const resolved = resolveHtmlSettings(badHtml({ header: '柱', footerAlign: 'none' }));
   assert.deepEqual(Object.keys(resolved).sort(), HTML_WIRE_KEYS);

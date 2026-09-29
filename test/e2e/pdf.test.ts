@@ -32,7 +32,6 @@ const BASE_SETTINGS: HtmlSettings = {
   linePitch: 2,
   fontFamily: '',
   kinsoku: 'strict',
-  autoTcy: 'punctuationPairs',
   dash: 'horizontalBar',
   lineNumbers: false,
   edgeLine: 'none',

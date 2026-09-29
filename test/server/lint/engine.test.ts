@@ -15,7 +15,7 @@ import { parse } from '../../../src/shared/ast/parse.ts';
 import { RULES, settingKey } from '../../../src/shared/lint/catalog.ts';
 import { selectRules } from '../../../src/shared/lint/select.ts';
 import type { RawLintConfigWire } from '../../../src/shared/protocol.ts';
-import { applyLintFixes } from '../helpers.ts';
+import { applyLintFixes, lintFindings } from '../helpers.ts';
 
 interface Hit {
   readonly code: string;
@@ -25,8 +25,7 @@ interface Hit {
 
 /** Run the engine and project each finding to { code, flagged source text, optional fix }. */
 function lintAll(src: string, raw: RawLintConfigWire): Hit[] {
-  const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, src);
-  const findings = computeLintFindings(doc, parse(src), selectRules(raw));
+  const { doc, findings } = lintFindings(src, raw);
   const slice = (r: { start: { line: number; character: number }; end: { line: number; character: number } }): string =>
     src.slice(doc.offsetAt(r.start), doc.offsetAt(r.end));
   return findings.map((f) => ({
@@ -338,7 +337,7 @@ test('exclamationSpace lets a trailing …/dash run follow ！ solid, as set in 
 
 const EXCL_RUN: RawLintConfigWire = { 'jpnov.lint.common.exclamationRun': true };
 
-test('exclamationRun: a full-width double becomes the half-width pair (縦中横 via autoTcy)', () => {
+test('exclamationRun: a full-width double becomes the half-width pair', () => {
   assert.deepEqual(lintAll('「なに！？」', EXCL_RUN), [
     { code: 'lint.common.exclamationRun', text: '！？', fix: { text: '！？', newText: '!?' } },
   ]);

@@ -6,6 +6,10 @@
  * are compared modulo {@link composeKana}. A corpus whose composition changes what the markup
  * MEANS (a decomposed keyword becoming a real annotation) belongs in engine.test.ts, not here.
  *
+ * A fix may WRITE markup of its own (exclamationTcy writes the 縦中横 annotation): what it wrote
+ * is set aside by where it landed, must read back as the markup it is, and counts as an insert
+ * where it sits in the edit.
+ *
  * `FIX_CORPUS` is a `Record<CatalogId, …>`, so adding a catalog rule without deciding its entry is
  * a COMPILE error: list at least one corpus that produces a fix, or declare `null` (rule has no
  * fix). For every corpus the guard (a) asserts the plain text yields ≥ 1 fix (a dead corpus would
@@ -16,12 +20,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { scan } from '../../../src/shared/ast/scan.ts';
+import type { Span } from '../../../src/shared/ast/nodes.ts';
 import { composeKana } from '../../../src/shared/chars.ts';
 import { RULES, settingKey } from '../../../src/shared/lint/catalog.ts';
 import type { CatalogId } from '../../../src/shared/lint/catalog.ts';
 import type { RawLintConfigWire } from '../../../src/shared/protocol.ts';
+import { nodesOf } from '../../shared/ast/_shape.ts';
 import { applyLintFixes } from '../helpers.ts';
+import type { LintEdit } from '../helpers.ts';
 
 /** Fix-producing corpora per rule; `null` = the rule never emits a fix. */
 const FIX_CORPUS: Record<CatalogId, readonly string[] | null> = {
@@ -32,6 +38,7 @@ const FIX_CORPUS: Record<CatalogId, readonly string[] | null> = {
   ellipsis: ['　沈黙…だ。', '　沈黙。。。だ。', '　えっ、、だ。', '　中黒・・・だ。', '　二点‥だ。'],
   exclamationSpace: ['　驚いた！そのまま。', '「なに？と続く」'],
   exclamationRun: ['　なに！？だ。', '「うそ！！」', '　だめだ!と。'],
+  exclamationTcy: ['　えっ!?次の文。', '「何だと!?」', '　彼は叫んだ!!'],
   arabicDigits: null,
   noTrailingSpace: ['好き　', '　　'],
   blankRun: ['あ。\n\n\nい。'],
@@ -72,19 +79,40 @@ function enable(id: CatalogId): RawLintConfigWire {
   return { [settingKey(rule)]: value };
 }
 
+/** A markup node: what it is, and where it sits. */
+interface Markup {
+  readonly label: string;
+  readonly span: Span;
+}
+
 /** The markup of `src`: every node but the text, by kind and source text — modulo kana
  *  composition, the one edit a fix makes inside markup. A ruby's base is text (a fix may
  *  legitimately rewrite its characters); what kind of ruby its reading closes is markup. */
+function markup(src: string): Markup[] {
+  return nodesOf(src).flatMap((node) => {
+    if (node.kind === 'text') {
+      return [];
+    }
+    const kind = node.kind === 'rubyReading' && node.implicit ? 'rubyReading(implicit)' : node.kind;
+    return [{ label: `${kind}:${composeKana(node.text)}`, span: node.span }];
+  });
+}
+
 function shape(src: string): string[] {
-  return scan(src).lines.flatMap((line) =>
-    line.syntax.flatMap((node) => {
-      if (node.kind === 'text') {
-        return [];
-      }
-      const kind = node.kind === 'rubyReading' && node.implicit ? 'rubyReading(implicit)' : node.kind;
-      return [`${kind}:${composeKana(node.text)}`];
-    }),
-  );
+  return markup(src).map((node) => node.label);
+}
+
+/** The edits in the order of the result, each with where its text sits there, as
+ *  {@link applyLintFixes} applies them: at one offset the insert lands before the wider edit. */
+function landings(edits: readonly LintEdit[]): { edit: LintEdit; span: Span }[] {
+  let shift = 0;
+  return edits
+    .toSorted((a, b) => a.s - b.s || a.e - b.e)
+    .map((edit) => {
+      const start = edit.s + shift;
+      shift += edit.t.length - (edit.e - edit.s);
+      return { edit, span: { start, end: start + edit.t.length } };
+    });
 }
 
 /** A wedge: markup `open`…`close` around `wraps` characters of the corpus (0 = slipped between
@@ -139,10 +167,26 @@ for (const rule of RULES) {
         for (const { variant, start, end } of variants(corpus, wedge)) {
           const { out, edits } = applyLintFixes(variant, raw);
           const label = `${rule.id}: ${variant}`;
-          assert.deepEqual(shape(out), shape(variant), `${label} — markup changed`);
+          const landed = landings(edits);
+          const written = ({ span }: Markup): boolean =>
+            landed.some((at) => at.span.start <= span.start && span.end <= at.span.end);
+          const after = markup(out);
+          assert.deepEqual(
+            after.filter((node) => !written(node)).map((node) => node.label),
+            shape(variant),
+            `${label} — markup changed`,
+          );
+          assert.deepEqual(
+            after.filter(written).map((node) => node.label),
+            landed.flatMap(({ edit }) => shape(edit.t)),
+            `${label} — what a fix wrote does not read back as the markup it is`,
+          );
           for (const ed of edits) {
-            if (ed.s === ed.e) {
-              assert.ok(ed.s <= start || ed.s >= end, `${label} — insert at ${String(ed.s)} lands inside the wedge`);
+            // What an edit adds, in source offsets: an insert at its own, written markup where it
+            // sits in the edit.
+            const adds = ed.s === ed.e ? [ed.s] : markup(ed.t).map(({ span }) => ed.s + Math.min(span.start, ed.e - ed.s));
+            for (const at of adds) {
+              assert.ok(at <= start || at >= end, `${label} — insert at ${String(at)} lands inside the wedge`);
             }
           }
         }

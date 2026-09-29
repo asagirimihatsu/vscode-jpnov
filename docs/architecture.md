@@ -71,8 +71,7 @@ The text build prints the nodes.
 | **AST** | Per line, the content in paint order with its decoration marks, and the line's state (字下げ, 見出し, 改ページ). Beside the lines: which span start pairs with which end, what each annotation bound to, and every structural finding. | Total: it always yields a result. Content strings are display strings (kana composed, values substituted); the nodes stay verbatim. |
 | **Output** | Rows of units, a unit being one glyph group with its advance in cells. From the rows: the preview, the paginated HTML, the EPUB. | The only stage that takes layout settings. |
 
-`parse` is `scan` followed by `resolve`, with one step between them that is due
-to move (see [Open](#open)).
+`parse` is `scan` followed by `resolve`.
 
 The editor side of the server keeps one scan and one resolve per document
 version (`src/server/parsed.ts`). The highlighter reads the nodes; the syntax
@@ -102,9 +101,15 @@ Decide the stage first. The rules:
    about the guess.
 
 2. **Layout settings enter at `buildRows` or later, never above it.** The Scanner
-   and the AST take no setting. The values of ［＃ここに「…」の値を表示］ are data
-   of the document, not settings. Then the editor and every output read the same
+   and the AST take no setting. So the editor and every output read the same
    AST, and a diagnostic the editor shows holds for every output.
+
+   The values of ［＃ここに「…」の値を表示］ are data of the book, not settings:
+   the title and the pen name come from its `.jpbook`, the page count and the
+   sheet count from laying out its chapters. They reach only the AST of a cover
+   page, and a cover page is resolved after the chapters are laid out. The editor
+   resolves without them, so it does not report an annotation that fails to bind
+   after a value: the real value is unknown.
 
 3. **A character class lives with the rule that uses it.** Which characters form
    a ruby base is a rule of the notation: the Scanner. Which characters may not
@@ -131,6 +136,7 @@ Where things live today:
 | Composing a decomposed kana for display | AST | content is what is shown |
 | The ダッシュ glyph, 禁則, 分離禁止, ぶら下げ, ruby overhang, wrapping, pagination | Output | typesetting, driven by layout settings |
 | A 縦中横 too long to fit its cell | editor | a threshold, judged on what the AST holds |
+| A half-width pair (`!?`) with no 縦中横 annotation | editor | a manuscript convention, judged on what the AST holds; the fix writes the annotation |
 
 ## The full pipeline, and why ours is shorter
 
@@ -162,7 +168,13 @@ belongs to the IR must not reach the stages above it.
 - **Import rules** (`eslint.config.mjs`): `src/shared/` and `src/server/` may not
   import `vscode`; `src/shared/ast/` may import only its own modules and
   `src/shared/chars.ts`; `chars.ts` imports nothing. The AST cannot see the
-  settings types, so it cannot take a setting by accident.
+  settings types, so it cannot take a setting by accident. In `src/server/`,
+  only the preview (`server.ts`) and the builds (`build.ts`) may import
+  `src/shared/compiler/`: the editor side reads the nodes and the AST.
+  `src/shared/compiler/` may not import the manifest (`src/shared/book/`), the
+  wire shapes (`protocol.ts`) or a program (`src/server/`, `src/client/`). A
+  webview may import only its own folder and the types of
+  `src/client/protocol.ts`.
 - **Properties** (`test/shared/ast/properties.test.ts`), checked over generated
   manuscripts: the nodes print back the source, they tile their line, the
   relations name nodes of the lines, and a line resolved alone binds as it does
@@ -172,27 +184,3 @@ belongs to the IR must not reach the stages above it.
   gave.
 - **End to end** (`test/e2e/`): the bundled server over LSP, and the pages it
   renders in a headless browser.
-
-## Open
-
-`jpnov.layout.autoTcy` breaks rule 2. 自動縦中横 runs between `scan` and `resolve`
-(`src/shared/ast/autoTcy.ts`) and inserts an annotation after each half-width
-pair it combines. The pair is then one cell to every annotation that follows,
-and the AST an output reads differs from the one the editor reads.
-
-What that costs shows in the module itself. It has to know what the Resolver
-will decide before the Resolver runs:
-
-- A pair inside the base of a left ruby must stay as typed, or the ruby finds a
-  cell where it needs characters and takes no effect. So the module resolves the
-  line on its own, to learn where each left ruby binds.
-- A combined pair can stop an annotation that bound without it, and that one can
-  free or stop the next. So the module resolves the line again with the pairs
-  combined, and keeps a pair as typed only under a left ruby that still binds.
-- A pair inside a `《…》` that made no ruby must stay as typed, or the text build
-  writes an annotation into characters and reads it back as more characters.
-
-The same decision made in Output needs none of this: the bindings are settled by
-then. Moving it there is
-[#144](https://github.com/japanese-novel/vscode-jpnov/issues/144). Until then
-自動縦中横 is the one exception: add no second.

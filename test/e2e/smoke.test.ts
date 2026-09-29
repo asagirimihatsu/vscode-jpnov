@@ -14,6 +14,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import type { CodeAction } from 'vscode-languageserver/node';
+
 import { HEADER_BAND, fitPaper } from '../../src/shared/compiler/geometry.ts';
 import { LINE_PITCHES } from '../../src/shared/config/types.ts';
 import type {
@@ -36,7 +38,6 @@ const PREVIEW_SETTINGS: PreviewSettings = {
   linePitch: 2,
   fontFamily: '',
   kinsoku: 'strict',
-  autoTcy: 'punctuationPairs',
   dash: 'horizontalBar',
   lineNumbers: true,
   edgeLine: 'none',
@@ -48,7 +49,6 @@ const HTML_SETTINGS: HtmlSettings = {
   linePitch: 2,
   fontFamily: '',
   kinsoku: 'strict',
-  autoTcy: 'punctuationPairs',
   dash: 'horizontalBar',
   lineNumbers: false,
   edgeLine: 'none',
@@ -56,11 +56,11 @@ const HTML_SETTINGS: HtmlSettings = {
   paperOrientation: 'auto',
 };
 
-/** Exercises ruby, explicit + automatic (half-width pair) 縦中横, and 改ページ in one pass. */
+/** Exercises ruby, 縦中横 in both forms, and 改ページ in one pass. */
 const CHAPTER_TEXT = [
   '｜夜霧《よぎり》の街を行く。',
   '［＃縦中横］12［＃縦中横終わり］時の鐘が鳴る。',
-  '走った!?',
+  '走った!?［＃「!?」は縦中横］',
   '［＃改ページ］',
   '二章の本文。',
   '',
@@ -126,10 +126,35 @@ test('jpnov/renderFile renders ruby, 縦中横, and the pagebreak marker over th
   );
   assert.ok(!html.includes('《'), 'the Aozora reading brackets must be consumed');
   assert.ok(html.includes('<span class="tcy">12</span>'), 'explicit 縦中横 span must combine');
-  assert.ok(html.includes('<span class="tcy">!?</span>'), 'autoTcy must combine the half-width !? pair');
+  assert.ok(html.includes('<span class="tcy">!?</span>'), 'the 縦中横 annotation must combine the half-width !? pair');
   assert.ok(html.includes('vertical-rl'), 'vertical flow CSS must be inlined');
   assert.ok(html.includes('text-combine-upright'), 'the on-demand tcy fragment must be gated in');
   assert.ok(html.includes('pagebreak'), '改ページ must surface as the preview pagebreak marker');
+});
+
+test('a half-width pair is flagged, fixed by the code action, and then set in one cell', async () => {
+  const uri = 'file:///e2e/pair.jpnov';
+  const text = '走った!?';
+  const render = async (src: string): Promise<string> =>
+    (await conn().request<RenderFileResult>('jpnov/renderFile', { uri, text: src, settings: PREVIEW_SETTINGS })).html;
+  assert.ok(!(await render(text)).includes('class="tcy"'), 'a pair with no annotation stays two characters');
+
+  conn().notify('jpnov/lintConfigChanged', { lintConfig: { 'jpnov.lint.common.exclamationTcy': true } });
+  conn().notify('textDocument/didOpen', { textDocument: { uri, languageId: 'jpnov', version: 1, text } });
+  const actions = await conn().request<CodeAction[]>('textDocument/codeAction', {
+    textDocument: { uri },
+    range: { start: { line: 0, character: 0 }, end: { line: 0, character: text.length } },
+    context: { diagnostics: [], only: ['source.fixAll'] },
+  });
+  conn().notify('textDocument/didClose', { textDocument: { uri } });
+  conn().notify('jpnov/lintConfigChanged', { lintConfig: {} });
+
+  const fixed = '走った!?［＃「!?」は縦中横］';
+  const pair = text.indexOf('!?');
+  assert.deepEqual(actions.flatMap((action) => action.edit?.changes?.[uri] ?? []), [
+    { range: { start: { line: 0, character: pair }, end: { line: 0, character: text.length } }, newText: fixed.slice(pair) },
+  ]);
+  assert.ok((await render(fixed)).includes('<span class="tcy">!?</span>'), 'the written annotation combines the pair');
 });
 
 test('jpnov/listBooks + jpnov/build round-trip a real workspace over the wire', async () => {
@@ -173,6 +198,7 @@ test('jpnov/listBooks + jpnov/build round-trip a real workspace over the wire', 
   // deepEqual over the REAL wire: locks outDirs arriving as a plain array (a Set would not survive).
   assert.deepEqual(txtResult.outDirs, [`${wsUri}/dist`]);
   assert.ok(txtArtifact.content.includes('夜霧'), 'the .txt artifact carries the raw Aozora source');
+  assert.ok(txtArtifact.content.includes('走った!?［＃「!?」は縦中横］'), 'the .txt artifact prints the 縦中横 annotation as typed');
 
   builtHtml = htmlArtifact.content;
 });

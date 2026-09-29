@@ -24,11 +24,10 @@ export function renderPreview(
   opts: LayoutSettings & { chrome: PreviewChrome },
 ): string {
   // Render the body first so the CSS includes ONLY the classes it used (the sort is
-  // lexicographic, deterministic). 自動縦中横 is applied inside the parse — the same front door
-  // as both build outputs, so the preview always agrees with them.
+  // lexicographic, deterministic).
   const used = new Set<string>();
   const body = flowToHtml(
-    buildRows(parse(src, { autoTcy: opts.autoTcy }), { dash: opts.dash }),
+    buildRows(parse(src), { dash: opts.dash }),
     opts.charsPerLine,
     opts.kinsoku,
     used,

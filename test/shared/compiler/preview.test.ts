@@ -23,7 +23,6 @@ function preview(
     charsPerLine: number;
     linesPerPage: number;
     kinsoku: 'none' | 'relaxed' | 'strict';
-    autoTcy: 'none' | 'punctuationPairs';
     chrome: PreviewChrome;
   }> = {},
 ): string {
@@ -33,29 +32,18 @@ function preview(
     linePitch: 2,
     fontFamily: '',
     kinsoku: 'none',
-    autoTcy: 'none',
     dash: 'horizontalBar',
     chrome: { lineNumbers: false, edgeLine: 'none' },
     ...o,
   });
 }
 
-test('renderPreview: autoTcy=punctuationPairs combines pairs exactly like the build', () => {
-  const on = preview('えっ!?', { autoTcy: 'punctuationPairs' });
+test('renderPreview: a half-width pair is one cell under its 縦中横 annotation, two characters without', () => {
+  const on = preview('えっ!?［＃「!?」は縦中横］');
   assert.match(on, /<span class="tcy">!\?<\/span>/);
   assert.match(on, /\.tcy\{[^}]*text-combine-upright:all\}/); // the on-demand rule rides along
   const off = preview('えっ!?');
-  assert.doesNotMatch(off, /tcy/); // none: the pair stays plain rotated text, zero dead rules
-});
-
-test('renderPreview: a pair inside a left ruby base or a 《…》 that made no ruby stays as typed', () => {
-  const held = 'なに!?［＃「なに!?」の左に「ナニ」のルビ］';
-  assert.match(preview(held), /<ruby class="lr">.*<rt class="rt-l">/);
-  for (const src of [held, '《!?》と叫んだ。']) {
-    assert.equal(preview(src, { autoTcy: 'punctuationPairs' }), preview(src), src);
-  }
-  const on = preview(`${held}と叫んだ!?`, { autoTcy: 'punctuationPairs' });
-  assert.match(on, /<rt class="rt-l">.*<\/ruby>と叫んだ<span class="tcy">!\?<\/span>/);
+  assert.doesNotMatch(off, /tcy/); // the pair stays plain rotated text, zero dead rules
 });
 
 test('renderPreview wraps the body in a standalone HTML document', () => {

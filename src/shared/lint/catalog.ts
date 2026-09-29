@@ -78,6 +78,7 @@ export const RULES = [
   { id: 'ellipsis', scope: 'common', kind: 'boolean', default: true },
   { id: 'exclamationSpace', scope: 'common', kind: 'boolean', default: true },
   { id: 'exclamationRun', scope: 'common', kind: 'boolean' },
+  { id: 'exclamationTcy', scope: 'common', kind: 'boolean', default: true },
   { id: 'arabicDigits', scope: 'common', kind: 'threshold', min: 1, max: 10, suggested: 2 },
   { id: 'noTrailingSpace', scope: 'common', kind: 'boolean', default: true },
   { id: 'blankRun', scope: 'common', kind: 'threshold', min: 0, max: 20, suggested: 1 },

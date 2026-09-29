@@ -166,13 +166,19 @@ export function valueOf(name: string, values: ValueLookup | undefined): string {
 }
 
 /** `inner` wrapped as a ［＃…］ annotation. */
-export function annotation(inner: string): string {
+function annotation(inner: string): string {
   return `${ANNOTATION_OPEN}${inner}${ANNOTATION_CLOSE}`;
 }
 
 /** The value display annotation for `name`. */
 export function valueAnnotation(name: string): string {
   return annotation(`${VALUE_HERE}${CORNER_OPEN}${name}${CORNER_CLOSE}${VALUE_SHOW}`);
+}
+
+/** The 縦中横 annotation naming `target`, written after it
+ *  (https://www.aozora.gr.jp/annotation/etc.html#tatechu_yoko). */
+export function tcyAnnotation(target: string): string {
+  return annotation(`${CORNER_OPEN}${target}${CORNER_CLOSE}${CONNECTOR_HA}${TCY}`);
 }
 
 /** ［＃N字下げ］, its digits full-width: the only form that is read. */

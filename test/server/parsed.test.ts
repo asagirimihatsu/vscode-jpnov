@@ -12,7 +12,6 @@ import { parse } from '../../src/shared/ast/parse.ts';
 import { scan } from '../../src/shared/ast/scan.ts';
 
 const URI = 'file:///a.jpnov';
-// The !? pair stays as typed: the editor's parse inserts nothing.
 const SRC = '　山田《やまだ》は語［＃「無」に傍点］と言った!?\n［＃こわれ';
 const doc = (src: string, version = 1, uri = URI): TextDocument => TextDocument.create(uri, 'jpnov', version, src);
 

@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { BuildChrome } from '../../../src/shared/compiler/chrome.ts';
-import { AUTO_TCY_MODES, type AutoTcyMode } from '../../../src/shared/config/types.ts';
 import { chapterGlue, concatBookText, MANUSCRIPT_SHEET, renderBook, type BookInput } from '../../../src/shared/compiler/document.ts';
 import { FOOTER_BAND, HEADER_BAND, SIDE_PAD } from '../../../src/shared/compiler/geometry.ts';
 import { VALUE_DEFAULTS, indentAnnotation } from '../../../src/shared/ast/notation.ts';
@@ -40,7 +39,6 @@ const render = (
     linesPerPage: opts.linesPerPage ?? 34,
     linePitch: 2,
     kinsoku: 'none',
-    autoTcy: 'none',
     dash: 'horizontalBar',
     paperSize: 'a4',
     paperOrientation: 'auto',
@@ -106,7 +104,6 @@ test('renderBook joins files[] in order with one blank separator line', () => {
     linesPerPage: 34,
     linePitch: 2,
     kinsoku: 'none',
-    autoTcy: 'none',
     dash: 'horizontalBar',
     paperSize: 'a4',
     paperOrientation: 'auto',
@@ -170,40 +167,40 @@ test('renderBook renders ruby + emphasis inside the page lines', () => {
 test('concatBookText strips one trailing newline per file and joins with one blank line', () => {
   // no trailing newline: exactly one blank separator line between files
   assert.equal(
-    concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あいう' }, { name: 'b.jpnov', src: 'かきく' }] }), 'none', 40),
+    concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あいう' }, { name: 'b.jpnov', src: 'かきく' }] }), 40),
     'あいう\n\nかきく',
   );
   // one trailing newline per file: the artifact is stripped, never doubling the seam
   assert.equal(
-    concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あ\n' }, { name: 'b.jpnov', src: 'か\n' }] }), 'none', 40),
+    concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あ\n' }, { name: 'b.jpnov', src: 'か\n' }] }), 40),
     'あ\n\nか',
   );
   // a genuine author blank line (\n\n) is preserved LITERALLY and stacks with the glue
   assert.equal(
-    concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あ\n\n' }, { name: 'b.jpnov', src: 'か' }] }), 'none', 40),
+    concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あ\n\n' }, { name: 'b.jpnov', src: 'か' }] }), 40),
     'あ\n\n\nか',
   );
   // CRLF trailing is stripped as one EOL too
-  assert.equal(concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あ\r\n' }] }), 'none', 40), 'あ');
+  assert.equal(concatBookText(book({ files: [{ name: 'a.jpnov', src: 'あ\r\n' }] }), 40), 'あ');
   // empty book -> ""
-  assert.equal(concatBookText(book({ files: [] }), 'none', 40), '');
+  assert.equal(concatBookText(book({ files: [] }), 40), '');
 });
 
 test('concatBookText follows the manuscript EOL: CRLF throughout when any chapter is CRLF', () => {
   const files = (a: string, b: string, divider?: string): BookInput =>
     book({ files: [{ name: 'a.jpnov', src: a }, { name: 'b.jpnov', src: b }], divider });
   // seam and divider line included
-  assert.equal(concatBookText(files('あいう\r\n', 'かきく\r\n'), 'none', 40), 'あいう\r\n\r\nかきく');
+  assert.equal(concatBookText(files('あいう\r\n', 'かきく\r\n'), 40), 'あいう\r\n\r\nかきく');
   assert.equal(
-    concatBookText(files('あ\r\n', 'か\r\n', '＊'), 'none', 8),
+    concatBookText(files('あ\r\n', 'か\r\n', '＊'), 8),
     'あ\r\n\r\n［＃３字下げ］＊\r\n\r\nか',
   );
   // any CRLF chapter decides; an all-LF book stays LF
-  assert.equal(concatBookText(files('あ\r\n', 'か\n'), 'none', 40), 'あ\r\n\r\nか');
+  assert.equal(concatBookText(files('あ\r\n', 'か\n'), 40), 'あ\r\n\r\nか');
   // A lone \r is no line ending of the output: it passes through as typed, in either mode.
-  assert.equal(concatBookText(files('あ\rい\n', 'か\n'), 'none', 40), 'あ\rい\n\nか');
-  assert.equal(concatBookText(files('あ\rい\r\n', 'か\n'), 'none', 40), 'あ\rい\r\n\r\nか');
-  assert.equal(concatBookText(files('あ\n', 'か\n'), 'none', 40), 'あ\n\nか');
+  assert.equal(concatBookText(files('あ\rい\n', 'か\n'), 40), 'あ\rい\n\nか');
+  assert.equal(concatBookText(files('あ\rい\r\n', 'か\n'), 40), 'あ\rい\r\n\r\nか');
+  assert.equal(concatBookText(files('あ\n', 'か\n'), 40), 'あ\n\nか');
 });
 
 test('renderBook: a CRLF chapter paginates exactly like its LF twin', () => {
@@ -271,13 +268,13 @@ test('chapterGlue: charsPerLine null = the bare mark at the line head; an author
 });
 
 test('concatBookText interleaves the divider; author edge blanks stack literally', () => {
-  assert.equal(concatBookText(two('あ', 'か', '＊'), 'none', 8), 'あ\n\n［＃３字下げ］＊\n\nか');
+  assert.equal(concatBookText(two('あ', 'か', '＊'), 8), 'あ\n\n［＃３字下げ］＊\n\nか');
   assert.equal(
-    concatBookText(two('あ\n\n', '\nか', '＊'), 'none', 8),
+    concatBookText(two('あ\n\n', '\nか', '＊'), 8),
     'あ\n\n\n［＃３字下げ］＊\n\n\nか', // one author blank each side, kept verbatim around the glue
   );
   assert.equal(
-    concatBookText(two('あ', '第二章［＃「第二章」は大見出し］\n本文', '＊'), 'none', 8),
+    concatBookText(two('あ', '第二章［＃「第二章」は大見出し］\n本文', '＊'), 8),
     'あ\n\n第二章［＃「第二章」は大見出し］\n本文',
   );
 });
@@ -318,7 +315,7 @@ const SEAM_CASES: readonly [book: BookInput, txt: string][] = [
 
 test('concatBookText closes the spans a chapter leaves open at the seam (txt follows HTML)', () => {
   for (const [b, txt] of SEAM_CASES) {
-    assert.equal(concatBookText(b, 'none', 8), txt);
+    assert.equal(concatBookText(b, 8), txt);
   }
 });
 
@@ -329,7 +326,6 @@ test('renderBook inserts the divider line + one blank as synthetic (anchor-less)
     linesPerPage: 34,
     linePitch: 2,
     kinsoku: 'none',
-    autoTcy: 'none',
     dash: 'horizontalBar',
     paperSize: 'a4',
     paperOrientation: 'auto',
@@ -349,13 +345,16 @@ test('renderBook inserts the divider line + one blank as synthetic (anchor-less)
   assert.match(html, /\.indent-1\{padding-inline-start:1em\}/); // its rule emits on demand
 });
 
+/** Pairs as the text build meets them: under a 縦中横 annotation, in what a left ruby takes as
+ *  its base, in a 《…》 that made no ruby, and bare. */
+const PAIRS = two('なに!?［＃「なに!?」の左に「ナニ」のルビ］と叫んだ!?［＃「!?」は縦中横］\n', '《!?》と叫んだ!?\n');
+
 test('dual invariant: per-file render + glue == rendering the concatenated .txt', () => {
   const opts = {
     charsPerLine: 8,
     linesPerPage: 5,
     linePitch: 2,
     kinsoku: 'none',
-    autoTcy: 'none',
     dash: 'horizontalBar',
     paperSize: 'a4',
     paperOrientation: 'auto',
@@ -369,12 +368,13 @@ test('dual invariant: per-file render + glue == rendering the concatenated .txt'
     two('あ', 'か'), // no divider configured
     two('あ', 'か', '［＃３字下げ］◇'), // indented divider
     two('あ\r\n\r\nい\r\n', 'か\r\n', '＊'), // CRLF chapters
+    PAIRS, // a pair with its 縦中横 annotation and without
     ...SEAM_CASES.map(([b]) => b), // spans left open at a seam (closed by concatBookText)
   ];
   for (const b of matrix) {
     const perFile = renderBook({ books: [b], ...opts });
     const combined = renderBook({
-      books: [book({ files: [{ name: 'all.jpnov', src: concatBookText(b, 'none', opts.charsPerLine) }] })],
+      books: [book({ files: [{ name: 'all.jpnov', src: concatBookText(b, opts.charsPerLine) }] })],
       ...opts,
     });
     // data-line is the only legitimate delta: per-file numbering restarts (and glue rows have
@@ -383,17 +383,11 @@ test('dual invariant: per-file render + glue == rendering the concatenated .txt'
   }
 });
 
-test('concatBookText writes no 縦中横 annotation where a pair stays as typed, and the text renders as the book', () => {
-  const b = two('なに!?［＃「なに!?」の左に「ナニ」のルビ］と叫んだ!?\n', '《!?》と叫んだ。\n');
-  const txt = concatBookText(b, 'punctuationPairs', 40);
-  assert.equal(txt, 'なに!?［＃「なに!?」の左に「ナニ」のルビ］と叫んだ!?［＃「!?」は縦中横］\n\n《!?》と叫んだ。');
-
-  const again = book({ files: [{ name: 'all.jpnov', src: txt }] });
-  const perFile = strip(renderBooks([b], { autoTcy: 'punctuationPairs' }));
-  for (const autoTcy of AUTO_TCY_MODES) {
-    assert.equal(concatBookText(again, autoTcy, 40), txt);
-    assert.equal(strip(renderBooks([again], { autoTcy })), perFile);
-  }
+test('concatBookText prints a pair and its 縦中横 annotation as typed', () => {
+  assert.equal(
+    concatBookText(PAIRS, 40),
+    'なに!?［＃「なに!?」の左に「ナニ」のルビ］と叫んだ!?［＃「!?」は縦中横］\n\n《!?》と叫んだ!?',
+  );
 });
 
 test('renderBook: a 太字 span emits <span class="b"> and the .b rule on demand', () => {
@@ -532,7 +526,7 @@ const COVER_SRC = '［＃５字下げ］［＃ここに「タイトル」の値�
 /** Render `books` with the shared option baseline; `chrome` overrides ride on top. */
 const renderBooks = (
   books: readonly BookInput[],
-  opts: { linesPerPage?: number; autoTcy?: AutoTcyMode; chrome?: Partial<BuildChrome> } = {},
+  opts: { linesPerPage?: number; chrome?: Partial<BuildChrome> } = {},
 ): string =>
   renderBook({
     books,
@@ -540,7 +534,6 @@ const renderBooks = (
     linesPerPage: opts.linesPerPage ?? 34,
     linePitch: 2,
     kinsoku: 'none',
-    autoTcy: opts.autoTcy ?? 'none',
     dash: 'horizontalBar',
     paperSize: 'a4',
     paperOrientation: 'auto',

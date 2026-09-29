@@ -15,7 +15,6 @@ import {
   PREVIEW_CHROME_DEFAULT,
 } from '../../../src/shared/config/settings.ts';
 import {
-  AUTO_TCY_MODES,
   CHARS_MAX,
   CHARS_MIN,
   KINSOKU_MODES,
@@ -141,22 +140,13 @@ function layoutSection(): unknown {
         order: 5,
         markdownDescription: '%jpnov.layout.kinsoku.description%',
       },
-      'jpnov.layout.autoTcy': {
-        type: 'string',
-        enum: [...AUTO_TCY_MODES],
-        default: LAYOUT_DEFAULT.autoTcy,
-        enumItemLabels: AUTO_TCY_MODES.map((v) => `%jpnov.layout.autoTcy.${v}.label%`),
-        enumDescriptions: AUTO_TCY_MODES.map((v) => `%jpnov.layout.autoTcy.${v}.description%`),
-        order: 6,
-        markdownDescription: '%jpnov.layout.autoTcy.description%',
-      },
       'jpnov.layout.preview.lineNumbers': {
         type: 'boolean',
         default: PREVIEW_CHROME_DEFAULT.lineNumbers,
-        order: 7,
+        order: 6,
         markdownDescription: '%jpnov.layout.preview.lineNumbers.description%',
       },
-      'jpnov.layout.preview.edgeLine': edgeLineProperty('jpnov.layout.preview.edgeLine', 8),
+      'jpnov.layout.preview.edgeLine': edgeLineProperty('jpnov.layout.preview.edgeLine', 7),
       // Page furniture (ヘッダー/ノンブル) is deliberately NOT here: it is book identity, carried
       // by each `.jpbook`'s front matter (parsed in shared/book/jpbook.ts), never a setting.
       // The `paper.*` slice governs the paper-format output (the built HTML, which prints at
@@ -167,7 +157,7 @@ function layoutSection(): unknown {
         default: BUILD_PAPER_DEFAULT.paperSize,
         enumItemLabels: PAPER_SIZES.map((v) => `%jpnov.layout.paper.size.${v}.label%`),
         enumDescriptions: PAPER_SIZES.map((v) => `%jpnov.layout.paper.size.${v}.description%`),
-        order: 9,
+        order: 8,
         markdownDescription: '%jpnov.layout.paper.size.description%',
       },
       'jpnov.layout.paper.orientation': {
@@ -176,16 +166,16 @@ function layoutSection(): unknown {
         default: BUILD_PAPER_DEFAULT.paperOrientation,
         enumItemLabels: PAPER_ORIENTATIONS.map((v) => `%jpnov.layout.paper.orientation.${v}.label%`),
         enumDescriptions: PAPER_ORIENTATIONS.map((v) => `%jpnov.layout.paper.orientation.${v}.description%`),
-        order: 10,
+        order: 9,
         markdownDescription: '%jpnov.layout.paper.orientation.description%',
       },
       'jpnov.layout.paper.lineNumbers': {
         type: 'boolean',
         default: BUILD_CHROME_DEFAULT.lineNumbers,
-        order: 11,
+        order: 10,
         markdownDescription: '%jpnov.layout.paper.lineNumbers.description%',
       },
-      'jpnov.layout.paper.edgeLine': edgeLineProperty('jpnov.layout.paper.edgeLine', 12),
+      'jpnov.layout.paper.edgeLine': edgeLineProperty('jpnov.layout.paper.edgeLine', 11),
       // The `.txt` slice: one setting, because the Aozora deliverable is plain text and only its
       // encoding is a choice. HTML carries no counterpart — the HTML standard fixes it to UTF-8.
       'jpnov.layout.txt.encoding': {
@@ -194,14 +184,14 @@ function layoutSection(): unknown {
         default: TXT_ENCODING_DEFAULT,
         enumItemLabels: TXT_ENCODINGS.map((v) => `%jpnov.layout.txt.encoding.${v}.label%`),
         enumDescriptions: TXT_ENCODINGS.map((v) => `%jpnov.layout.txt.encoding.${v}.description%`),
-        order: 13,
+        order: 12,
         markdownDescription: '%jpnov.layout.txt.encoding.description%',
       },
       'jpnov.layout.outDir': {
         type: 'string',
         default: PROJECT_DEFAULT.outDir,
         scope: 'resource',
-        order: 14,
+        order: 13,
         markdownDescription: '%jpnov.layout.outDir.description%',
       },
     },
@@ -291,8 +281,6 @@ function staticNlsKeys(): string[] {
     'jpnov.layout.fontFamily.description',
     'jpnov.layout.kinsoku.description',
     ...KINSOKU_MODES.flatMap((v) => enumChoiceKeys(`jpnov.layout.kinsoku.${v}`)),
-    'jpnov.layout.autoTcy.description',
-    ...AUTO_TCY_MODES.flatMap((v) => enumChoiceKeys(`jpnov.layout.autoTcy.${v}`)),
     'jpnov.layout.preview.lineNumbers.description',
     'jpnov.layout.preview.edgeLine.description',
     ...EDGE_LINE_STYLES.flatMap((v) => enumChoiceKeys(`jpnov.layout.preview.edgeLine.${v}`)),

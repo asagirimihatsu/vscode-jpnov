@@ -20,7 +20,7 @@ import { D } from '../_kana.ts';
 
 /** The rows of `src`: parsed (with the cover's `values`, when given), then laid out. */
 const rowsOf = (src: string, opts?: { dash?: DashMode; values?: ValueLookup | undefined }): Row[] =>
-  buildRows(parse(src, { values: opts?.values }), { dash: opts?.dash });
+  buildRows(parse(src, opts?.values), { dash: opts?.dash });
 
 /** The targets the postfixes of `src` could not bind. */
 const missedTargets = (src: string): string[] =>
@@ -255,7 +255,7 @@ test('分離禁止: leader pairs (…… / ‥‥) cross the wrap whole', () => 
 test('約物対: half-width !! / full-width ！！ / tcy stay whole and off the line head', () => {
   // Three shapes, one outcome: the pair never splits, and (being 行頭禁則) never heads a
   // line either — the cascade pulls the preceding char down with it.
-  assert.deepEqual(klines('ああ!!', 3), ['あ', 'あ!!']); // bound 2-cell pair (autoTcy off)
+  assert.deepEqual(klines('ああ!!', 3), ['あ', 'あ!!']); // bound 2-cell pair (no 縦中横 annotation)
   assert.deepEqual(klines('ああ！！', 3), ['あ', 'あ！！']); // full-width: two 1-cell units
   assert.deepEqual(klines('ああ!!［＃「!!」は縦中横］', 3), ['ああ!!']); // tcy: 1 cell, fits
 });

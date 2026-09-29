@@ -4,11 +4,10 @@
  */
 import assert from 'node:assert/strict';
 
-import type { Ast, Held, Inline, Issue, PairedNode, PostfixNode, Span, SyntaxNode } from '../../../src/shared/ast/nodes.ts';
+import type { Ast, Held, Inline, Issue, PairedNode, PostfixNode, Span, SyntaxNode, ValueLookup } from '../../../src/shared/ast/nodes.ts';
 import { EMPHASIS_VARIANTS } from '../../../src/shared/ast/notation.ts';
 import type { Channel } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
-import type { ParseOptions } from '../../../src/shared/ast/parse.ts';
 import { scan } from '../../../src/shared/ast/scan.ts';
 
 /** The variant names of the notation per channel, in table order. */
@@ -97,8 +96,8 @@ export function boundOf(src: string): (Span | null)[] {
 }
 
 /** What each ［＃縦中横］ of `src` holds, in source order; null for one that opened no span. */
-export function heldOf(src: string, opts?: ParseOptions): (Held | null)[] {
-  const ast = parse(src, opts);
+export function heldOf(src: string, values?: ValueLookup): (Held | null)[] {
+  const ast = parse(src, values);
   return nodesIn(ast).flatMap((node) => (node.kind === 'tcySpanStart' ? [ast.held.get(node) ?? null] : []));
 }
 
@@ -127,6 +126,6 @@ function inlineLabel(item: Inline): string {
  * The content of `src` per line: `chars text`, `ruby base《right》〈left〉`, `tcy text`,
  * `comment inner`, each followed by its marks as `channel=variant`.
  */
-export function contentOf(src: string, opts?: ParseOptions): string[][] {
-  return parse(src, opts).lines.map((line) => line.content.map(inlineLabel));
+export function contentOf(src: string, values?: ValueLookup): string[][] {
+  return parse(src, values).lines.map((line) => line.content.map(inlineLabel));
 }
