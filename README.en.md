@@ -572,6 +572,9 @@ settings.
 
 ## Development
 
+For design rationale and architecture, see
+[Architecture](docs/architecture.md).
+
 ```sh
 npm install
 ```
@@ -584,7 +587,7 @@ Other commands:
 ```sh
 npm run lint        # typescript-eslint (type-aware)
 npm run type-check  # tsc --noEmit
-npm test            # node --test — shared + highlight unit tests
+npm test            # node --test — the unit suites
 npm run build:dev   # bundle to dist/ (ESM)
 ```
 

@@ -1,7 +1,8 @@
 /**
  * Extension entry (host side) — the ONLY tree permitted to value-import `vscode`. It forks the
- * language server over IPC and owns the host-side UI (Books panel, live preview) plus every
- * filesystem read and write the server needs.
+ * language server over IPC and owns the host-side UI (Books panel, live preview), every file
+ * write, and every read of a file's contents: the server lists directories by itself and asks
+ * here for the text.
  *
  * Activation is two-phase because `onStartupFinished` activates this extension in EVERY window:
  *   Phase 1 `activate()`  — synchronous registrations only (commands, serializer, lazy-start
