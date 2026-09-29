@@ -5,7 +5,7 @@
  *
  * Relative imports only (native test loader); vscode-free.
  */
-import { DASH_CHARS } from '../../../shared/chars.ts';
+import { DASH_CHARS } from '../../../shared/dash.ts';
 
 import { CLOSERS } from '../sentences.ts';
 import type { LineRule, LintLine, ProseView, RuleContext } from '../types.ts';
@@ -291,14 +291,14 @@ export function trailingSpaceRule(ctx: RuleContext): LineRule {
       }
       ctx.report(
         { start: piece.srcStart + k, end: line.srcEnd },
-        { fix: { replace: { piece, start: k, end: piece.text.length }, text: '' } },
+        { fix: { replace: { slice: piece, start: k, end: piece.text.length }, text: '' } },
       );
     },
   };
 }
 
 /** 連続空行: more than `max` blank lines in a row are one finding, and the fix erases the first
- *  `count − max` (whole lines, terminators included). Any line with a token ends the run. A blank
+ *  `count − max` (whole lines, terminators included). Any line with a node ends the run. A blank
  *  last line is the EOF tail, not a blank line: it bounds the run and is never erased. */
 export function blankRunRule(ctx: RuleContext): LineRule {
   const max = maxOf(ctx);

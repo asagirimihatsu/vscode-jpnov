@@ -57,6 +57,7 @@ import { handleBuild, handleListBooks } from './build.ts';
 import { buildCodeActions } from './lint/codeActions.ts';
 import { computeLintFindings } from './lint/engine.ts';
 import type { LintFinding } from './lint/engine.ts';
+import { createParseCache } from './parsed.ts';
 import { reportError } from './report.ts';
 import { createWorkspaceRoots } from './roots.ts';
 import type { ServerContext } from './context.ts';
@@ -96,6 +97,9 @@ const context: ServerContext = {
 // Open-document tracker (so semantic-tokens requests have document text to highlight).
 const documents = new TextDocuments(TextDocument);
 documents.listen(connection);
+
+// One parse per open manuscript and version, shared by the three editor features below.
+const parsed = createParseCache();
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
   const options = params.initializationOptions as InitializationOptions | undefined;
@@ -215,7 +219,7 @@ connection.languages.semanticTokens.on((params) => {
   if (doc?.languageId !== 'jpnov') {
     return { data: [] };
   }
-  return buildSemanticTokens(doc, context.highlight.recognizerFor(params.textDocument.uri));
+  return buildSemanticTokens(parsed.syntaxOf(doc), context.highlight.recognizerFor(params.textDocument.uri));
 });
 
 /** Returns line `n`'s text (no terminator); `position.character` indexes into this. */
@@ -286,7 +290,7 @@ function scheduleJpbookDiagnostics(doc: TextDocument): void {
 }
 
 // Live prose-lint Warnings for an open .jpnov. The engine (lint/engine.ts) is fully synchronous
-// and O(n) in the document — one walker pass plus per-line scans — so a run always reflects the
+// and O(n) in the document — one parse, one walker pass plus per-line scans — so a run always reflects the
 // text it was scheduled for; only the debounce's own version guard is needed. The short debounce
 // keeps typing snappy on long chapters.
 const proseDebounce = new Map<string, ReturnType<typeof setTimeout>>();
@@ -303,7 +307,7 @@ function publishFindings(uri: string, version: number, findings: LintFinding[]):
   // document (same version as `findings` — the callers' version guards run synchronously before
   // this call) and kept OUT of findingsCache: they carry no fix, so code actions never see them.
   const doc = documents.get(uri);
-  const syntax = doc === undefined ? [] : annotationDiagnostics(doc);
+  const syntax = doc === undefined ? [] : annotationDiagnostics(doc, parsed.astOf(doc));
   void connection.sendDiagnostics({
     uri,
     diagnostics: [...syntax, ...findings.map((f) => f.diagnostic)],
@@ -326,7 +330,7 @@ function scheduleProseDiagnostics(doc: TextDocument): void {
         publishFindings(
           uri,
           scheduledVersion,
-          computeLintFindings(current.getText(), context.lintSelection, current),
+          computeLintFindings(current, parsed.astOf(current), context.lintSelection),
         );
       } catch (err) {
         reportError(context, err);
@@ -349,7 +353,7 @@ connection.onCodeAction((params: CodeActionParams): CodeAction[] => {
   if (cached?.version === version) {
     return buildCodeActions(uri, cached.findings, params.range, params.context.only);
   }
-  const findings = computeLintFindings(doc.getText(), context.lintSelection, doc);
+  const findings = computeLintFindings(doc, parsed.astOf(doc), context.lintSelection);
   findingsCache.set(uri, { version, findings });
   return buildCodeActions(uri, findings, params.range, params.context.only);
 });
@@ -379,6 +383,7 @@ documents.onDidClose((e) => {
   clearTimeout(proseDebounce.get(e.document.uri));
   proseDebounce.delete(e.document.uri);
   findingsCache.delete(e.document.uri);
+  parsed.drop(e.document.uri);
   if (e.document.languageId === 'jpbook' || e.document.languageId === 'jpnov') {
     void connection.sendDiagnostics({ uri: e.document.uri, diagnostics: [] });
   }

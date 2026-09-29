@@ -14,7 +14,7 @@ import type { EdgeLineStyle, FooterAlign } from '../compiler/chrome.ts';
 import { EDGE_LINE_STYLES } from '../compiler/chrome.ts';
 import type { PaperOrientation, PaperSize } from '../compiler/geometry.ts';
 import { PAPER_ORIENTATIONS, PAPER_SIZES } from '../compiler/geometry.ts';
-import { VALUE_NAMES, valueAnnotation } from '../compiler/tokenizer.ts';
+import { VALUE_NAMES, valueAnnotation } from '../ast/notation.ts';
 import type { HtmlSettings, PreviewSettings } from '../protocol.ts';
 import type { LayoutSettings } from './types.ts';
 import { AUTO_TCY_MODES, CHARS_MAX, CHARS_MIN, DASH_MODES, KINSOKU_MODES, LAYOUT_DEFAULT, LINE_PITCHES } from './types.ts';

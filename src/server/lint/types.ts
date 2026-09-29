@@ -14,31 +14,35 @@
  *
  * FIX SAFETY (a silent-data-loss class of bug — a fix once deleted the markup between two clean
  * characters, and an insert once landed inside a ruby): a replacement {@link FixSpec} names ONE
- * {@link Piece}, a contiguous source slice by construction, so it cannot span elided markup; an
- * insert names a prose UNIT and a side, and the engine resolves the offset through the piece's
- * outer extents, past the markup wrapping that unit; an erase names whole blank lines, which the
- * engine verifies hold nothing but line terminators; a compose names the offset of one combining
- * mark, and the engine itself composes it with the unit before it, so markup anywhere is safe.
- * The view-scan adapter adds the same-piece test and refuses to delete a whole ruby base
- * (rules/adapt.ts).
+ * {@link SourceSlice}, a contiguous source slice by construction, so it cannot span elided
+ * markup; an insert names a prose UNIT and a side, and the engine resolves the offset through
+ * the piece's outer extents, past the markup wrapping that unit; an erase names whole blank
+ * lines, which the engine verifies hold nothing but line terminators. The view-scan adapter adds
+ * the same-piece test and refuses to delete a whole ruby base (rules/adapt.ts).
  *
  * Relative imports only (native test loader); vscode-free.
  */
-import type { HeadingLevel } from '../../shared/compiler/tokenizer.ts';
+import type { HeadingLevel, Span } from '../../shared/ast/nodes.ts';
 import type { ActiveRule } from '../../shared/lint/select.ts';
 import type { LocalizableMessage } from '../../shared/protocol.ts';
 
 /**
- * A maximal run of prose that is CONTIGUOUS in the source and constant in dialogue depth.
- * `text.charAt(k)` came from source offset `srcStart + k` (UTF-16 units, matching
- * `TextDocument.positionAt`; astral characters occupy two consecutive units). Piece boundaries
- * fall at elided markup (annotations, ruby readings, the ｜ base marker), at line breaks, and at
- * every depth change (an utterance corner).
+ * A slice of the source, verbatim and contiguous: `text.charAt(k)` came from source offset
+ * `srcStart + k` (UTF-16 units, matching `TextDocument.positionAt`; astral characters occupy two
+ * consecutive units).
  */
-export interface Piece {
+export interface SourceSlice {
   readonly text: string;
   /** Absolute source UTF-16 offset of `text.charAt(0)`. */
   readonly srcStart: number;
+}
+
+/**
+ * A maximal run of prose that is CONTIGUOUS in the source and constant in dialogue depth. Piece
+ * boundaries fall at elided markup (annotations, ruby readings, the ｜ base marker), at line
+ * breaks, and at every depth change (an utterance corner).
+ */
+export interface Piece extends SourceSlice {
   /** Utterance nesting depth: 0 = 地の文 (top-level 「」『』 corners included), ≥1 = inside. */
   readonly depth: number;
   /** Where an insert BEFORE `text.charAt(0)` goes: before the ｜ of an explicit ruby and any
@@ -52,12 +56,6 @@ export interface Piece {
   /** True when a ruby reading follows the piece (its tail is the base), so deleting the whole
    *  piece would strand the 《reading》 as literal text. */
   readonly rubyBase: boolean;
-}
-
-/** One ruby reading (the 《…》 interior) on its line; `srcStart` is the reading's first unit. */
-export interface RubyReading {
-  readonly text: string;
-  readonly srcStart: number;
 }
 
 /** One view character: its source offset and owning piece. `piece` is null for a synthetic unit
@@ -77,22 +75,22 @@ export interface ProseView {
 }
 
 /**
- * One source line, fully contextualized. `indent` and `heading` are in lockstep with the rendered
- * `Row` of layout.ts `buildRows` (twin-machine guard in walker.test.ts); `directiveOnly` marks a
- * line whose tokens produce no prose (a ここから/ここで own-line directive, 改ページ, a bare
- * comment); `blank` marks a line with no tokens at all. `openDepthAtEnd` > 0 means the line ends
- * inside an utterance (a multi-line 台詞).
+ * One source line, fully contextualized. `indent` and `heading` are the AST's; `directiveOnly`
+ * marks a line whose nodes produce no prose (a ここから/ここで own-line directive, 改ページ, a
+ * bare comment); `blank` marks a line with no nodes at all. `openDepthAtEnd` > 0 means the line
+ * ends inside an utterance (a multi-line 台詞).
  */
 export interface LintLine {
-  /** 0-based source line ('\n'-counted, CRLF-aware — matches LSP line numbering). */
+  /** 0-based source line, as LSP counts lines. */
   readonly srcLine: number;
   /** Source offset of the line's first unit. */
   readonly srcStart: number;
   /** Source offset just past the line's last content unit (the terminator, or EOF). */
   readonly srcEnd: number;
-  /** The line's source text, terminator excluded: what a rule scans when it must see the markup
-   *  interiors (a ruby reading, an annotation's target) that every view elides. */
-  readonly raw: string;
+  /** The whole line as slices, in source order: one per markup node (a ruby's ｜, a 《reading》,
+   *  an annotation), one per run of text between them — what a rule scans when it must see the
+   *  markup interiors every view elides. */
+  readonly source: readonly SourceSlice[];
   /** Rendered 字下げ of this line (line-head ［＃N字下げ］ override, else the open block's N). */
   readonly indent: number;
   /** The line's 見出し level, when a heading postfix/span/block covers it. */
@@ -101,50 +99,39 @@ export interface LintLine {
   readonly blank: boolean;
   readonly openDepthAtEnd: number;
   readonly pieces: readonly Piece[];
-  readonly rubies: readonly RubyReading[];
+  /** The readings of the line's rubies (the 《…》 interiors). */
+  readonly rubies: readonly SourceSlice[];
   prose(): ProseView;
   narration(): ProseView;
   dialogue(): ProseView;
 }
 
-/** A half-open absolute source span `[start, end)` — the shape every report names. */
-export interface SrcSpan {
-  readonly start: number;
-  readonly end: number;
-}
-
 /**
- * An auto-fix, in the only four safe shapes: replace a range INSIDE one piece (cannot span elided
- * markup by construction), compose one kana + combining-mark pair anywhere (the engine composes it
- * from the document), insert before or after one prose UNIT (zero-width; the engine resolves the
- * offset past the markup wrapping the unit, so it can never land inside a ruby or a span), or
- * erase whole blank lines (a span the engine checks holds nothing but line terminators). A
- * synthetic unit (`piece: null`) can never anchor an insert.
+ * An auto-fix, in the only three safe shapes: replace a range INSIDE one slice (cannot span
+ * elided markup by construction), insert before or after one prose UNIT (zero-width; the engine
+ * resolves the offset past the markup wrapping the unit, so it can never land inside a ruby or a
+ * span), or erase whole blank lines (a span the engine checks holds nothing but line
+ * terminators). A synthetic unit (`piece: null`) can never anchor an insert.
  */
 export type FixSpec =
   | {
     readonly replace: {
-      readonly piece: Piece;
-      /** Half-open `[start, end)` UTF-16 range into `piece.text`. */
+      readonly slice: SourceSlice;
+      /** Half-open `[start, end)` UTF-16 range into `slice.text`. */
       readonly start: number;
       readonly end: number;
     };
     readonly text: string;
   }
-  | {
-    /** Source offset of a combining 濁点/半濁点: the two units `[compose - 1, compose + 1)` become
-     *  their NFC composition, computed by the engine from the document itself. */
-    readonly compose: number;
-  }
   | { readonly insert: ProseUnit; readonly side: 'before' | 'after'; readonly text: string }
-  | { readonly erase: SrcSpan };
+  | { readonly erase: Span };
 
 /** What a rule instance is handed: its resolved options and the report sink. `message` overrides
  *  the default `{ code: rule.code }` (sub-codes like `lint.common.dash.parity`). */
 export interface RuleContext {
   readonly options: ActiveRule['options'];
   report(
-    span: SrcSpan,
+    span: Span,
     extra?: { readonly message?: LocalizableMessage; readonly fix?: FixSpec },
   ): void;
 }

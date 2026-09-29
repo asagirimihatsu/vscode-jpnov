@@ -8,9 +8,10 @@ import assert from 'node:assert/strict';
 import { splitSentences } from '../../../src/server/lint/sentences.ts';
 import { walkLines } from '../../../src/server/lint/walker.ts';
 import type { ProseView } from '../../../src/server/lint/types.ts';
+import { parse } from '../../../src/shared/ast/parse.ts';
 
 function narrationOf(src: string): ProseView {
-  const [line] = [...walkLines(src)];
+  const [line] = [...walkLines(parse(src))];
   if (line === undefined) {
     throw new Error('no line');
   }
@@ -45,7 +46,7 @@ test('… and dashes do not terminate', () => {
 });
 
 test("the dialogue view's separator is a hard boundary", () => {
-  const [line] = [...walkLines('「先」「後」')];
+  const [line] = [...walkLines(parse('「先」「後」'))];
   const view = line?.dialogue();
   assert.ok(view);
   assert.deepEqual(splitSentences(view).map((s) => view.text.slice(s.start, s.end)), ['先', '後']);

@@ -1,5 +1,5 @@
 /**
- * Build-time pagination engine: flows a book's token stream into an explicit
+ * Build-time pagination engine: flows a manuscript's content into an explicit
  * page → line DOM skeleton (`<div class="page"><div class="grid"><div class="line">…`). Unlike the
  * continuous preview, the build output is paginated IN the compiler so printed pages are
  * WYSIWYG and the page furniture (page numbers, line numbers, 原稿用紙 grid) has real
@@ -12,19 +12,24 @@
  * by the `kinsoku` mode (`none` = bare wrap) and lives in {@link wrapRow}: 分離禁止 binding,
  * ぶら下げ of a trailing 句読点, then the leftward 追い出し nudge of the break point.
  * ［＃改ページ］ forces a new page.
+ *
+ * What the notation MEANS is the AST's call (ast/resolve.ts): this module reads a line's content
+ * and state and decides only how they are set on the page.
  */
-import { composeKana, DASH_BY_MODE, DASH_CHARS, DASH_GLYPH } from '../chars.ts';
+import type { Ast, HeadingLevel, Inline, Line, Mark, Marks, ValueLookup } from '../ast/nodes.ts';
 import type { DashMode, KinsokuMode } from '../config/types.ts';
-import type { BuildChrome, FooterAlign } from './chrome.ts';
-import { resolveStyle } from './emphasis.ts';
+import { DASH_BY_MODE, DASH_CHARS, DASH_GLYPH } from '../dash.ts';
+import type { BuildChrome } from './chrome.ts';
+import { markClass } from './emphasis.ts';
 import { escapeComment, escapeHtml } from './escape.ts';
-import { splitLines, tokenize, VALUE_NAMES, type HeadingLevel, type Token } from './tokenizer.ts';
+import { cutFurniture, pageFurniture } from './furniture.ts';
 
-/** The corner-target postfixes: ［＃「対象」…］ forms bound to the units before them. */
-type PostfixToken = Extract<
-  Token,
-  { kind: 'rubyLeftPostfix' | 'emphasisPostfix' | 'tcyPostfix' | 'headingPostfix' }
->;
+/** The strings of a ruby unit: its base and the reading on either side. */
+export interface RubyText {
+  base: string;
+  right?: string | undefined;
+  left?: string | undefined;
+}
 
 /**
  * One laid-out glyph group: a char (1 cell), a ruby unit (base char count, atomic), or a
@@ -33,10 +38,7 @@ type PostfixToken = Extract<
 export interface Unit {
   cells: number;
   html: string;
-  /**
-   * Plain text for postfix-emphasis matching; '' for zero-width units (comments). Kana are
-   * composed ({@link composeKana}): the displayed form, never a source slice.
-   */
+  /** The displayed text the 禁則 classes read; '' for zero-width units (comments). */
   text: string;
   /**
    * Space-separated on-demand stylesheet classes baked inside `html` (tcy / rr / lr / br /
@@ -45,14 +47,13 @@ export interface Unit {
    */
   cssClass?: string | undefined;
   /**
-   * Structured readings for a ruby unit — `html` is regenerated from this when a 左ルビ later
-   * attaches a left reading, so the pre-baked html never needs re-parsing. Base and readings are
-   * composed like `text`.
+   * Structured readings for a ruby unit — the settle pass and the reflow emitter regenerate
+   * `html` from this, so the pre-baked html never needs re-parsing.
    */
-  ruby?: { base: string; right?: string | undefined; left?: string | undefined } | undefined;
-  // Four INDEPENDENT presentation channels. Field name == emphasis.ts Channel, so a resolved
-  // style is applied by `unit[style.channel] = style.className`. undefined = that channel off
-  // (explicit `| undefined` so snapshots may write the off state under exactOptionalPropertyTypes).
+  ruby?: RubyText | undefined;
+  // Four INDEPENDENT presentation channels, named as the AST's Channel; the value is the CSS
+  // class of the mark in effect. undefined = that channel off (explicit `| undefined` so
+  // snapshots may write the off state under exactOptionalPropertyTypes).
   /** 傍点: `emph-<slug>` / `-l`. */
   emph?: string | undefined;
   /** 傍線: `dec-<slug>` / `-l`. */
@@ -85,43 +86,9 @@ export interface DisplayLine {
   readonly hang?: Unit;
 }
 
-/**
- * The LAST occurrence of `target` in the units' concatenated text, required to cover WHOLE
- * units — only a match cutting into an atomic ruby/tcy unit is rejected (plain text is
- * per-char), and only the lastIndexOf hit is tested (the spec's forward references sit
- * adjacent to their target). Shared by every corner-target postfix so binding semantics never
- * diverge; returns the inclusive unit-index range, or null (absent / unaligned).
- */
-function matchTarget(
-  units: readonly Unit[],
-  target: string,
-): { first: number; last: number } | null {
-  let text = '';
-  const bounds: { start: number; end: number; index: number }[] = [];
-  for (let i = 0; i < units.length; i += 1) {
-    const u = units[i];
-    if (u === undefined || u.text === '') {
-      continue;
-    }
-    bounds.push({ start: text.length, end: text.length + u.text.length, index: i });
-    text += u.text;
-  }
-  const pos = text.lastIndexOf(target);
-  if (pos === -1) {
-    return null;
-  }
-  const matchEnd = pos + target.length;
-  const first = bounds.find((b) => b.start === pos);
-  const last = bounds.find((b) => b.end === matchEnd);
-  if (first === undefined || last === undefined) {
-    return null; // the match cuts into an atomic unit — not aligned
-  }
-  return { first: first.index, last: last.index };
-}
-
-/** The annotation-degrade comment unit (verbatim inner), shared by every postfix applier. */
-function commentUnit(raw: string): Unit {
-  return { cells: 0, html: `<!--${escapeComment(raw.slice(2, -1))}-->`, text: '' };
+/** An annotation that took no effect: a zero-width HTML comment of its inner text, verbatim. */
+function commentUnit(inner: string): Unit {
+  return { cells: 0, html: `<!--${escapeComment(inner)}-->`, text: '' };
 }
 
 /**
@@ -164,10 +131,7 @@ function readingUnits(reading: string): string[] {
  * over-counted), minus an optional ルビ掛け `overhang` allowance per reading. Cells, `rh-N`
  * and the lane distribution all derive from this ONE number, so grid and paint never disagree.
  */
-function rubyCells(
-  r: { base: string; right?: string | undefined; left?: string | undefined },
-  overhang = 0,
-): number {
+function rubyCells(r: RubyText, overhang = 0): number {
   const advance = (s: string | undefined): number => {
     let quarters = 0;
     for (const u of readingUnits(s ?? '')) {
@@ -193,10 +157,7 @@ function readingSpans(reading: string): string {
  * Base and readings are {@link readingSpans} units; a reading longer than the base adds the
  * on-demand `rh-N` stretch class.
  */
-function rubyHtml(
-  r: { base: string; right?: string | undefined; left?: string | undefined },
-  cells: number,
-): string {
+function rubyHtml(r: RubyText, cells: number): string {
   const right = r.right === undefined ? '' : `<rt><span>${readingSpans(r.right)}</span></rt>`;
   const left = r.left === undefined ? '' : `<rt class="rt-l"><span>${readingSpans(r.left)}</span></rt>`;
   return `<ruby class="${rubyLane(r, cells)}">${readingSpans(r.base)}${right}${left}</ruby>`;
@@ -204,13 +165,10 @@ function rubyHtml(
 
 /**
  * The stylesheet class of a ruby at the DECIDED advance: its side class (rr/lr/br) plus `rh-N`
- * when the box outgrows the base. Shared by {@link rubyHtml}, buildRows and
- * {@link applyLeftRuby} so class attribute, used-sink and cell accounting never drift apart.
+ * when the box outgrows the base. Shared by {@link rubyHtml}, {@link unitsOf} and the settle
+ * pass so class attribute, used-sink and cell accounting never drift apart.
  */
-function rubyLane(
-  r: { base: string; right?: string | undefined; left?: string | undefined },
-  cells: number,
-): string {
+function rubyLane(r: RubyText, cells: number): string {
   const stretch = cells > Array.from(r.base).length ? ` rh-${String(cells)}` : '';
   const side = r.left === undefined ? 'rr' : r.right === undefined ? 'lr' : 'br';
   return side + stretch;
@@ -223,9 +181,7 @@ function rubyLane(
  * pattern. The paginated lanes cannot serve here: Apple Books neutralizes position:absolute in
  * reflowable EPUB, dropping the absolutely positioned readings into the text flow.
  */
-export function reflowRubyHtml(
-  r: { base: string; right?: string | undefined; left?: string | undefined },
-): string {
+export function reflowRubyHtml(r: RubyText): string {
   if (r.left === undefined) {
     return `<ruby>${escapeHtml(r.base)}<rt>${escapeHtml(r.right ?? '')}</rt></ruby>`;
   }
@@ -236,544 +192,133 @@ export function reflowRubyHtml(
   return `<ruby class="ru"><ruby>${escapeHtml(r.base)}<rt>${escapeHtml(r.right)}</rt></ruby>${left}</ruby>`;
 }
 
-/**
- * Attaches a LEFT reading to the boundary-aligned last occurrence of `target`: exactly one
- * ruby unit whose base matches → 両側 (the left reading joins it); plain text units only →
- * merged into one left-ruby unit. Anything mixed would silently destroy an inner reading/cell,
- * so it degrades + warns; reading lengths follow the same {@link rubyCells} accounting.
- */
-function applyLeftRuby(
-  units: Unit[],
-  target: string,
-  reading: string,
-  raw: string,
-  miss?: () => void,
-): void {
-  if (target !== '' && reading !== '') {
-    const m = matchTarget(units, target);
-    if (m !== null) {
-      const real = units.slice(m.first, m.last + 1).filter((u) => u.text !== '');
-      const single = real.length === 1 ? real[0] : undefined;
-      // `target` is a non-empty string, so a matching chain proves single AND its ruby exist.
-      if (single?.ruby?.base === target) {
-        single.ruby = { ...single.ruby, left: reading };
-        const cells = rubyCells(single.ruby); // safe; the settle pass may tighten at line end
-        single.cells = cells; // a long reading stretches the box — the grid follows
-        single.html = rubyHtml(single.ruby, cells);
-        single.cssClass = rubyLane(single.ruby, cells);
-        return;
-      }
-      if (real.every((u) => u.ruby === undefined && u.cssClass === undefined)) {
-        const first = units[m.first];
-        const ruby = { base: target, left: reading };
-        const cells = rubyCells(ruby);
-        const merged: Unit = {
-          cells,
-          html: rubyHtml(ruby, cells),
-          text: target,
-          emph: first?.emph,
-          line: first?.line,
-          weight: first?.weight,
-          style: first?.style,
-          cssClass: rubyLane(ruby, cells),
-          ruby,
-        };
-        const kept = units.slice(m.first, m.last + 1).filter((u) => u.text === '');
-        units.splice(m.first, m.last - m.first + 1, merged, ...kept);
-        return;
-      }
-    }
-    miss?.();
-  }
-  units.push(commentUnit(raw));
+/** The CSS class of a channel's mark; undefined = that channel is off. */
+function classOf(mark: Mark | undefined): string | undefined {
+  return mark === undefined ? undefined : markClass(mark);
 }
 
-/**
- * Merges the boundary-aligned last occurrence of `target` into ONE combined upright cell
- * (縦中横): cells is always 1, `text` keeps the run so later postfixes still match, channels
- * are inherited from the first replaced unit, zero-width units re-insert after the cell.
- * Whole-unit coverage of a ruby REPLACES it (手動縦中横 > ルビ); an unresolved target degrades
- * + reports like applyPostfix.
- */
-function applyTcyPostfix(units: Unit[], target: string, raw: string, miss?: () => void): void {
-  if (target !== '') {
-    const m = matchTarget(units, target);
-    if (m !== null) {
-      const first = units[m.first];
-      const merged: Unit = {
-        cells: 1,
-        html: `<span class="tcy">${escapeHtml(target)}</span>`,
-        text: target,
-        emph: first?.emph,
-        line: first?.line,
-        weight: first?.weight,
-        style: first?.style,
-        cssClass: 'tcy',
-      };
-      const kept = units.slice(m.first, m.last + 1).filter((u) => u.text === '');
-      units.splice(m.first, m.last - m.first + 1, merged, ...kept);
-      return;
-    }
-    miss?.();
-  }
-  units.push(commentUnit(raw));
-}
-
-/**
- * Marks the units covering the LAST occurrence of `target` with `variant`'s style class. The
- * match must ALIGN to unit boundaries ({@link matchTarget}); an unresolved target (absent from
- * the line, or cutting into an atomic ruby/tcy unit) applies nothing, degrades the annotation to
- * a comment and reports through `miss` — the editor's `syntax.postfixTargetMissing` Warning.
- */
-function applyPostfix(
-  units: Unit[],
-  target: string,
-  variant: string,
-  raw: string,
-  miss?: () => void,
-): void {
-  const style = resolveStyle(variant, 'postfix');
-  if (style !== null && target !== '') {
-    const m = matchTarget(units, target);
-    if (m !== null) {
-      for (let i = m.first; i <= m.last; i += 1) {
-        const u = units[i];
-        if (u !== undefined && u.text !== '') {
-          // Same-channel OVERWRITE (an atomic remove+add); other channels stack alongside.
-          u[style.channel] = style.className;
-        }
-      }
-      return;
-    }
-    miss?.();
-  }
-  // Target unresolved (or unknown variant) => degrade to a comment (verbatim inner).
-  units.push(commentUnit(raw));
-}
-
-/**
- * Builds the rows (lines + page breaks) for ONE file's token stream. `opts.dash` names the
- * configured dash mode; that glyph is emitted as {@link DASH_GLYPH} while `Unit.text` keeps the
- * source character — omitted = no translation (structural probes, the issue scan). The optional
- * `opts.issues` sink collects the token indices of unresolved corner-target postfixes — the
- * render's own failure list, mapped back to source spans by {@link findPostfixTargetIssues} so
- * the Warnings can never disagree with what was applied. `opts.values` supplies the
- * ［＃ここに「…」の値を表示］ substitutions by name (the html build's cover compile); a name it
- * lacks, or an omitted map, renders the name itself ({@link valueOf}) — so `Unit.text`
- * carries the SUBSTITUTED characters for these units. Every unit's text (prose, ruby base and
- * readings, 縦中横 content, postfix targets) is composed by {@link composeKana} HERE, so an NFD
- * kana takes one cell; the tokens stay verbatim for the offset-accumulating consumers.
- */
-export function buildRows(
-  tokens: readonly Token[],
-  opts?: {
-    readonly issues?: number[];
-    readonly dash?: DashMode;
-    readonly values?: ReadonlyMap<string, string>;
-  },
-): Row[] {
-  const issues = opts?.issues;
-  const want = opts?.dash === undefined ? undefined : DASH_BY_MODE[opts.dash];
-  const rows: Row[] = [];
-  let cur: Unit[] = [];
-  let srcLine = 0;
-  let isPageBreak = false;
-  // Four independent decoration channels. Keys == emphasis.ts Channel.
-  const active: {
-    emph?: string | undefined;
-    line?: string | undefined;
-    weight?: string | undefined;
-    style?: string | undefined;
-  } = {};
-  // Mirrored by the lint line walker (server/lint/walker.ts); lockstep guarded by walker.test.ts.
-  let activeIndent = 0; // block 字下げ in effect, carried ACROSS lines
-  let curIndent = 0; // indent for the line under construction (line start = activeIndent)
-  let activeHeading: HeadingLevel | undefined; // 見出し span/block in effect, carried ACROSS lines
-  let curHeading: HeadingLevel | undefined; // 見出し of the line under construction (line start = activeHeading)
-  let lineSuppressed = false; // a block directive token appeared on THIS line
-
-  // Snapshot the four active channels onto a new unit — one stable hidden class for all real units.
-  const mk = (cells: number, html: string, text: string): Unit => ({
+/** A unit carrying the four channels of `marks` — one stable hidden class for all real units. */
+function mk(cells: number, html: string, text: string, marks: Marks): Unit {
+  return {
     cells,
     html,
     text,
-    emph: active.emph,
-    line: active.line,
-    weight: active.weight,
-    style: active.style,
-  });
-
-  // One plain text character: the configured dash is emitted as DASH_GLYPH while `text` keeps the
-  // source character, so postfix targets, 分離禁止 and the lint scanner still match it.
-  const textUnit = (ch: string): Unit => mk(1, ch === want ? DASH_GLYPH : escapeHtml(ch), ch);
-
-  // One ruby unit: `base` under `right`. The channels are the state at the 《 (the latest opener
-  // wins, as everywhere), filled in from the base units for a span closed inside the base — the
-  // unit is atomic, so a span touching any of the base marks the whole ruby.
-  const rubyUnit = (base: string, right: string, baseUnits: readonly Unit[]): Unit => {
-    const ruby = { base: composeKana(base), right: composeKana(right) };
-    const cells = rubyCells(ruby); // safe whole-cell advance; the settle pass may tighten
-    const u = mk(cells, '', ruby.base);
-    for (const b of baseUnits) {
-      u.emph ??= b.emph;
-      u.line ??= b.line;
-      u.weight ??= b.weight;
-      u.style ??= b.style;
-    }
-    u.ruby = ruby;
-    u.cssClass = rubyLane(ruby, cells); // rr (+ rh-N); 左ルビ may upgrade to br
-    u.html = rubyHtml(ruby, cells);
-    return u;
+    emph: classOf(marks.emph),
+    line: classOf(marks.line),
+    weight: classOf(marks.weight),
+    style: classOf(marks.style),
   };
+}
 
-  // Binds a corner-target postfix to the units built so far; a miss degrades the annotation to a
-  // comment and reports its token index through the `issues` sink.
-  const bindPostfix = (token: PostfixToken, ti: number): void => {
-    const miss =
-      issues === undefined
-        ? undefined
-        : (): void => {
-            issues.push(ti);
-          };
-    const target = composeKana(token.target); // match in the units' composed form
-    switch (token.kind) {
-      case 'rubyLeftPostfix':
-        applyLeftRuby(cur, target, composeKana(token.reading), token.raw, miss);
-        break;
-      case 'emphasisPostfix':
-        applyPostfix(cur, target, token.variant, token.raw, miss);
-        break;
-      case 'tcyPostfix':
-        applyTcyPostfix(cur, target, token.raw, miss);
-        break;
-      case 'headingPostfix':
-        // Line-level effect: a resolved target marks THIS logical line as a heading. Binding
-        // shares {@link matchTarget} so postfix semantics/diagnostics never diverge; a miss
-        // degrades + reports exactly like the unit-level appliers.
-        if (matchTarget(cur, target) !== null) {
-          curHeading = token.level;
-        } else {
-          miss?.();
-          cur.push(commentUnit(token.raw));
-        }
-        break;
+/**
+ * The units of one content inline. `want` is the configured dash glyph: it is emitted as
+ * {@link DASH_GLYPH} while `Unit.text` keeps the source character, so 分離禁止 still classes it
+ * — except inside an unclosed ［＃, which prints exactly as typed. 縦中横 and ルビ cells build
+ * their own html: a dash inside one stays the source glyph.
+ */
+function unitsOf(item: Inline, want: string | undefined): Unit[] {
+  switch (item.kind) {
+    case 'chars': {
+      const translate = item.origin !== 'broken';
+      const units: Unit[] = [];
+      for (const ch of item.text) {
+        units.push(mk(1, translate && ch === want ? DASH_GLYPH : escapeHtml(ch), ch, item.marks));
+      }
+      return units;
     }
-  };
-
-  // The explicit ｜ base under construction (LINE-local): where its units start in `cur`, the ｜
-  // itself, and the corner-target postfixes met inside it. Those bind only once the base is one
-  // ruby unit — exactly as if written after the 《reading》, so a partial target misses like on
-  // any atomic unit and a 縦中横 replaces the ruby as it does there.
-  let openBase: {
-    readonly start: number;
-    readonly raw: string;
-    readonly postfixes: { ti: number; token: PostfixToken }[];
-  } | null = null;
-
-  // 縦中横 span accumulator (LINE-local): body text goes into the buffer and flushes as ONE
-  // 1-cell combined unit. No nesting — a ruby token contributes its raw literally, other
-  // annotations keep their normal handling.
-  let tcyBuf: string | null = null;
-  const flushTcy = (): void => {
-    if (tcyBuf !== null) {
-      if (tcyBuf !== '') {
-        const text = composeKana(tcyBuf); // the whole buffer: a pair split by a comment composes too
-        const u = mk(1, `<span class="tcy">${escapeHtml(text)}</span>`, text);
-        u.cssClass = 'tcy';
-        cur.push(u);
-      }
-      tcyBuf = null;
+    case 'ruby': {
+      const ruby: RubyText = {
+        base: item.base,
+        ...(item.right === undefined ? {} : { right: item.right }),
+        ...(item.left === undefined ? {} : { left: item.left }),
+      };
+      const cells = rubyCells(ruby); // safe whole-cell advance; the settle pass may tighten
+      return [{ ...mk(cells, rubyHtml(ruby, cells), item.base, item.marks), ruby, cssClass: rubyLane(ruby, cells) }];
     }
-  };
-
-  // JIS ルビ掛け settle pass (row complete): tighten each ruby back toward its on-grid base
-  // width when both flow neighbours tolerate the ≤0.25em/side hang — no ruby/傍点/傍線 of
-  // their own (shared lanes); a row edge tolerates it too. The centre-anchored lanes render
-  // the hang by themselves, so only cells/class/html need re-deriving.
-  const settleRubyOverhang = (): void => {
-    const tolerant = (from: number, step: number): boolean => {
-      for (let k = from + step; k >= 0 && k < cur.length; k += step) {
-        const n = cur[k];
-        if (n === undefined || n.text === '') {
-          continue; // zero-width (comments): look past them
-        }
-        return n.ruby === undefined && n.emph === undefined && n.line === undefined;
-      }
-      return true; // row edge
-    };
-    for (let i = 0; i < cur.length; i += 1) {
-      const u = cur[i];
-      if (u?.ruby === undefined) {
-        continue;
-      }
-      const tight = rubyCells(u.ruby, RUBY_OVERHANG_QUARTERS);
-      if (tight < u.cells && tolerant(i, -1) && tolerant(i, 1)) {
-        u.cells = tight;
-        u.cssClass = rubyLane(u.ruby, tight);
-        u.html = rubyHtml(u.ruby, tight);
-      }
+    case 'tcy':
+      return [{ ...mk(1, `<span class="tcy">${escapeHtml(item.text)}</span>`, item.text, item.marks), cssClass: 'tcy' }];
+    case 'comment':
+      return [commentUnit(item.inner)];
+    default: {
+      const exhaustive: never = item;
+      throw new Error(`unitsOf: unhandled inline ${JSON.stringify(exhaustive)}`);
     }
-  };
+  }
+}
 
-  const endLine = (isFlush: boolean): void => {
-    settleRubyOverhang();
-    const hasReal = cur.some((u) => u.cells > 0);
-    // `heading` is CONDITIONAL: row snapshots deepEqual whole objects, so an absent heading
-    // must be an absent KEY, never an explicit undefined.
-    const line = (): Row =>
-      curHeading === undefined
-        ? { kind: 'line', srcLine, units: cur, indent: curIndent }
-        : { kind: 'line', srcLine, units: cur, indent: curIndent, heading: curHeading };
-    if (isPageBreak) {
-      if (cur.length > 0) {
-        rows.push(line());
+/**
+ * JIS ルビ掛け settle pass (row complete): tighten each ruby back toward its on-grid base
+ * width when both flow neighbours tolerate the ≤0.25em/side hang — no ruby/傍点/傍線 of
+ * their own (shared lanes); a row edge tolerates it too. The centre-anchored lanes render
+ * the hang by themselves, so only cells/class/html need re-deriving.
+ */
+function settleRubyOverhang(units: Unit[]): void {
+  const tolerant = (from: number, step: number): boolean => {
+    for (let k = from + step; k >= 0 && k < units.length; k += step) {
+      const n = units[k];
+      if (n === undefined || n.text === '') {
+        continue; // zero-width (comments): look past them
       }
+      return n.ruby === undefined && n.emph === undefined && n.line === undefined;
+    }
+    return true; // row edge
+  };
+  for (let i = 0; i < units.length; i += 1) {
+    const u = units[i];
+    if (u?.ruby === undefined) {
+      continue;
+    }
+    const tight = rubyCells(u.ruby, RUBY_OVERHANG_QUARTERS);
+    if (tight < u.cells && tolerant(i, -1) && tolerant(i, 1)) {
+      u.cells = tight;
+      u.cssClass = rubyLane(u.ruby, tight);
+      u.html = rubyHtml(u.ruby, tight);
+    }
+  }
+}
+
+/**
+ * What a line puts into the flow: its column, a page break after it, both, or nothing. A
+ * block-directive line holding no text paints no column; an empty line is a blank column,
+ * except the `last`, which is only what follows the final newline.
+ */
+export function rowShape(line: Line, last: boolean): { readonly line: boolean; readonly pagebreak: boolean } {
+  const any = line.content.length > 0;
+  if (line.pageBreak) {
+    return { line: any, pagebreak: true };
+  }
+  if (line.blockDirective && line.content.every((item) => item.kind === 'comment')) {
+    return { line: false, pagebreak: false };
+  }
+  return { line: any || !last, pagebreak: false };
+}
+
+/**
+ * The rows (lines + page breaks) of ONE file. `opts.dash` names the configured dash mode;
+ * omitted = no translation (structural probes).
+ */
+export function buildRows(ast: Ast, opts?: { readonly dash?: DashMode | undefined }): Row[] {
+  const want = opts?.dash === undefined ? undefined : DASH_BY_MODE[opts.dash];
+  const rows: Row[] = [];
+  const end = ast.lines.length - 1;
+  ast.lines.forEach((line, at) => {
+    const shape = rowShape(line, at === end);
+    if (shape.line) {
+      const units = line.content.flatMap((item) => unitsOf(item, want));
+      settleRubyOverhang(units);
+      // `heading` is CONDITIONAL: row snapshots deepEqual whole objects, so an absent heading
+      // must be an absent KEY, never an explicit undefined.
+      rows.push(
+        line.heading === undefined
+          ? { kind: 'line', srcLine: line.index, units, indent: line.indent }
+          : { kind: 'line', srcLine: line.index, units, indent: line.indent, heading: line.heading },
+      );
+    }
+    if (shape.pagebreak) {
       rows.push({ kind: 'pagebreak' });
-    } else if (lineSuppressed && !hasReal) {
-      // A block-directive-only line (no real text) paints NO column. A plain comment-only line
-      // never sets lineSuppressed, so it still falls through and keeps its blank column.
-    } else if (cur.length > 0 || !isFlush) {
-      // On a real '\n' an empty line is a genuine blank column (kept); at end-of-input
-      // a trailing empty line is just the final newline artifact (dropped).
-      rows.push(line());
     }
-    cur = [];
-    openBase = null; // a ｜ base is line-local
-    isPageBreak = false;
-    lineSuppressed = false;
-    curIndent = activeIndent; // next line inherits the block indent (0 if none)
-    curHeading = activeHeading; // next line inherits an open 見出し span/block (postfix stays line-local)
-  };
-
-  for (let ti = 0; ti < tokens.length; ti += 1) {
-    const token = tokens[ti];
-    if (token === undefined) {
-      continue;
-    }
-    if (
-      tcyBuf !== null &&
-      (token.kind === 'rubyImplicit' ||
-        token.kind === 'rubyStart' ||
-        token.kind === 'rubyEnd' ||
-        token.kind === 'brokenAnnotation')
-    ) {
-      tcyBuf += token.raw; // no nesting inside 縦中横: ruby markup and a broken ［＃ join the cell literally
-      continue;
-    }
-    switch (token.kind) {
-      case 'text': {
-        const parts = splitLines(token.text);
-        for (let idx = 0; idx < parts.length; idx += 1) {
-          if (idx > 0) {
-            flushTcy(); // an open ［＃縦中横］ auto-closes at its line end (line-local)
-            endLine(false);
-            srcLine += 1;
-          }
-          const part = parts[idx] ?? '';
-          if (tcyBuf !== null) {
-            tcyBuf += part;
-          } else {
-            for (const ch of composeKana(part)) {
-              // 縦中横 and ルビ cells build their own html — a dash inside one stays the source glyph.
-              cur.push(textUnit(ch));
-            }
-          }
-        }
-        break;
-      }
-      case 'rubyImplicit':
-        cur.push(rubyUnit(token.base, token.reading, []));
-        break;
-      case 'rubyStart':
-        openBase = { start: cur.length, raw: token.raw, postfixes: [] };
-        break;
-      case 'rubyEnd': {
-        if (openBase === null) {
-          throw new Error('buildRows: rubyEnd without its rubyStart'); // the tokenizer pairs them on one line
-        }
-        const { start, raw, postfixes } = openBase;
-        openBase = null;
-        const baseUnits = cur.splice(start);
-        const base = baseUnits.map((b) => b.text).join('');
-        if (base === '') {
-          for (const ch of composeKana(raw + token.raw)) {
-            cur.push(textUnit(ch)); // nothing visible (an empty value): the markup prints as typed
-          }
-        } else {
-          cur.push(rubyUnit(base, token.reading, baseUnits));
-        }
-        cur.push(...baseUnits.filter((b) => b.text === '')); // zero-width units (comments) survive
-        for (const p of postfixes) {
-          bindPostfix(p.token, p.ti);
-        }
-        break;
-      }
-      case 'rubyLeftPostfix':
-      case 'emphasisPostfix':
-      case 'tcyPostfix':
-      case 'headingPostfix':
-        if (openBase !== null) {
-          openBase.postfixes.push({ ti, token }); // binds once the base is one unit (see rubyEnd)
-        } else {
-          bindPostfix(token, ti);
-        }
-        break;
-      case 'headingSpanStart':
-        // The three levels share ONE slot (they cannot compose on a line): a re-open is a level
-        // change. Inline ［＃大見出し］ marks THIS line too; the block form affects SUBSEQUENT
-        // lines only (same-line text keeps its pre-block state, like the indent block).
-        activeHeading = token.level;
-        if (token.block === true) {
-          lineSuppressed = true;
-        } else {
-          curHeading = token.level;
-        }
-        break;
-      case 'headingSpanEnd':
-        // Closes whatever heading is open regardless of the level literal (one slot; dangling is
-        // a no-op: already undefined). The line carrying the end stays a heading (curHeading keeps).
-        activeHeading = undefined;
-        if (token.block === true) {
-          lineSuppressed = true;
-        }
-        break;
-      case 'tcySpanStart':
-        // A redundant start inside an open span is a no-op (already combining).
-        tcyBuf ??= '';
-        break;
-      case 'tcySpanEnd':
-        flushTcy(); // dangling (no open span) is a render no-op; the diagnostics warn
-        break;
-      case 'emphasisSpanStart': {
-        const d = resolveStyle(token.variant, 'span');
-        if (d !== null) {
-          active[d.channel] = d.className; // same-channel overwrite; other channels untouched
-        }
-        if (token.block === true) {
-          lineSuppressed = true; // ［＃ここから太字/斜体］ own-line directive
-        }
-        break;
-      }
-      case 'emphasisSpanEnd': {
-        const d = resolveStyle(token.variant, 'span');
-        if (d !== null) {
-          active[d.channel] = undefined; // clear ONLY this channel (lenient within a channel)
-        }
-        if (token.block === true) {
-          lineSuppressed = true;
-        }
-        break;
-      }
-      case 'indent':
-        // Tokenizer guarantees line-head; applies to THIS logical line only.
-        curIndent = token.amount;
-        break;
-      case 'indentBlockStart':
-        // Affects SUBSEQUENT lines; a same-line text keeps the pre-block indent.
-        activeIndent = token.amount;
-        lineSuppressed = true;
-        break;
-      case 'indentBlockEnd':
-        activeIndent = 0; // dangling end (no open block) is a no-op: already 0
-        lineSuppressed = true;
-        break;
-      case 'comment':
-        cur.push(commentUnit(token.raw));
-        break;
-      case 'brokenAnnotation': {
-        // Unclosed ［＃… (swallowed to its line end): visible literal text, so the preview/build
-        // never silently drop prose — the editor diagnostic is the error surface. raw never
-        // contains a line break, so no endLine handling is needed here.
-        for (const ch of composeKana(token.raw)) {
-          cur.push(mk(1, escapeHtml(ch), ch));
-        }
-        break;
-      }
-      case 'pageBreak':
-        isPageBreak = true;
-        break;
-      case 'valueField': {
-        // Per-char units, so 禁則/分離禁止/dash translation apply as to typed text. Values are
-        // never re-tokenized (a 《 or ［＃ in a title stays literal) and carry no line break.
-        const substituted = valueOf(token.name, opts?.values);
-        if (tcyBuf !== null) {
-          tcyBuf += substituted;
-          break;
-        }
-        for (const ch of composeKana(substituted)) {
-          cur.push(textUnit(ch));
-        }
-        break;
-      }
-      default: {
-        const exhaustive: never = token;
-        throw new Error(`buildRows: unhandled token ${JSON.stringify(exhaustive)}`);
-      }
-    }
-  }
-  flushTcy(); // an open ［＃縦中横］ at end of input closes with its line
-  endLine(true);
+  });
   return rows;
-}
-
-/**
- * The text ［＃ここに「name」の値を表示］ renders: the compile's value for `name`, else the name
- * itself. A Map, never an object: the name comes from the DOCUMENT, where `toString` would
- * hit Object.prototype.
- */
-export function valueOf(name: string, values: ReadonlyMap<string, string> | undefined): string {
-  return values?.get(name) ?? name;
-}
-
-/** An unresolved corner-target postfix as absolute source offsets, with its target text. */
-export interface PostfixTargetIssue {
-  readonly start: number;
-  readonly end: number;
-  readonly target: string;
-}
-
-/**
- * Source spans of every corner-target postfix whose target could not be resolved (absent, or
- * not unit-aligned) — derived by RUNNING {@link buildRows} itself, offsets recovered by
- * accumulating `raw.length` like findBrokenAnnotations.
- *
- * A postfix following a ［＃ここに「…」の値を表示］ on its line is skipped: this scan is
- * bookless, so whether the target resolves is unknowable here. One LATER on the line cannot
- * affect an earlier postfix (targets bind to units already built), so those still report.
- */
-export function findPostfixTargetIssues(src: string): PostfixTargetIssue[] {
-  const tokens = tokenize(src);
-  const misses: number[] = [];
-  buildRows(tokens, { issues: misses });
-  if (misses.length === 0) {
-    return [];
-  }
-  const failed = new Set(misses);
-  const out: PostfixTargetIssue[] = [];
-  let offset = 0;
-  let valueSeen = false; // a value field earlier on THIS line
-  for (let i = 0; i < tokens.length; i += 1) {
-    const t = tokens[i];
-    if (t !== undefined) {
-      if (
-        failed.has(i) &&
-        !valueSeen &&
-        (t.kind === 'emphasisPostfix' ||
-          t.kind === 'tcyPostfix' ||
-          t.kind === 'rubyLeftPostfix' ||
-          t.kind === 'headingPostfix')
-      ) {
-        out.push({ start: offset, end: offset + t.raw.length, target: t.target });
-      }
-      if (t.kind === 'valueField') {
-        valueSeen = true;
-      } else if (t.kind === 'text' && t.text.includes('\n')) {
-        valueSeen = false; // next line starts knowable again
-      }
-      offset += t.raw.length;
-    }
-  }
-  return out;
 }
 
 /**
@@ -1216,55 +761,6 @@ function emitLine(line: DisplayLine, used?: Set<string>, anchor = true, head = '
   return `<div class="line${indentClass}${headingClass}${emrClass}"${dataLine}>${head}${html}</div>`;
 }
 
-/** The footer's physical side on page `pi` (0-based), or null for no footer. */
-function footerSide(pos: FooterAlign, pi: number): 'r' | 'l' | null {
-  if (pos === 'none') {
-    return null;
-  }
-  const odd = pi % 2 === 0; // display page = pi + 1, so an even index is an odd page
-  switch (pos) {
-    case 'rightLeft':
-      return odd ? 'r' : 'l';
-    case 'leftRight':
-      return odd ? 'l' : 'r';
-    case 'right':
-      return 'r';
-    case 'left':
-      return 'l';
-  }
-}
-
-/**
- * A header or footer line as HTML. Only ［＃ここに「…」の値を表示］ is interpreted ({@link valueOf});
- * every other token — prose, ruby, any other annotation — prints as its source characters:
- * the furniture is a horizontal line outside the vertical engine, so none of its units apply.
- */
-function furnitureHtml(text: string, values: ReadonlyMap<string, string>): string {
-  return tokenize(text)
-    .map((t) => escapeHtml(t.kind === 'valueField' ? valueOf(t.name, values) : t.raw))
-    .join('');
-}
-
-/**
- * One page's absolutely-positioned furniture (header + footer), emitted after its lines. The
- * page's own numbers join the book values under {@link VALUE_NAMES}. A blank footer never
- * reaches here (renderBook normalizes it to footerAlign 'none').
- */
-function pageFurniture(chrome: BuildChrome, page: RenderPage, pi: number, totalPage: number): string {
-  const values = new Map(page.values);
-  values.set(VALUE_NAMES.page, String(pi + 1));
-  values.set(VALUE_NAMES.totalPages, String(totalPage));
-  let out = '';
-  if (chrome.header !== '') {
-    out += `<div class="hd">${furnitureHtml(chrome.header, values)}</div>`;
-  }
-  const side = footerSide(chrome.footerAlign, pi);
-  if (side !== null) {
-    out += `<div class="ft ${side}">${furnitureHtml(chrome.footer, values)}</div>`;
-  }
-  return out;
-}
-
 /**
  * One output sheet. `cover: true` marks an unnumbered front page: no header, footer or line
  * numbers, and outside the footer's ページ番号／総ページ数 counts. The grid and its reserved
@@ -1275,7 +771,7 @@ function pageFurniture(chrome: BuildChrome, page: RenderPage, pi: number, totalP
 export interface RenderPage {
   readonly lines: readonly DisplayLine[];
   readonly cover?: true;
-  readonly values?: ReadonlyMap<string, string>;
+  readonly values?: ValueLookup;
 }
 
 /**
@@ -1285,7 +781,7 @@ export interface RenderPage {
  * vertical-rl box (build.base.css). When a `used` sink is passed, every emphasis
  * class emitted is recorded into it so the caller can emit only those rules (on-demand CSS)
  * — the structural `cover` class stays out of the sink. `data-page` is the sequential DOM
- * ordinal over ALL pages; the footer's page number and its {@link footerSide} parity count BODY pages
+ * ordinal over ALL pages; the footer's page number and the parity of its side count BODY pages
  * only, so cover sheets never shift where body page 1 lands.
  */
 export function pagesToHtml(
@@ -1294,11 +790,12 @@ export function pagesToHtml(
   chrome: BuildChrome,
 ): string {
   const totalPage = pages.reduce((n, page) => n + (page.cover === true ? 0 : 1), 0);
+  const cut = cutFurniture(chrome);
   let bodyPi = 0;
   const body = pages
     .map((page, di) => {
       const lines = page.lines.map((line) => emitLine(line, used)).join('');
-      const furniture = page.cover === true ? '' : pageFurniture(chrome, page, bodyPi++, totalPage);
+      const furniture = page.cover === true ? '' : pageFurniture(chrome, cut, page.values, bodyPi++, totalPage);
       const cls = page.cover === true ? 'page cover' : 'page';
       return `<div class="${cls}" data-page="${String(di)}"><div class="grid">${lines}</div>${furniture}</div>`;
     })

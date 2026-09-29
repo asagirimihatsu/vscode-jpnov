@@ -4,18 +4,17 @@
  *
  * ONE synchronous pass: instantiate every enabled `line` rule, feed each {@link LintLine} from the
  * single-walk {@link walkLines} to every instance, flush with `end()`, then run the `raw` rules
- * over the source. Everything here is O(n) in the document — the walker is one tokenize pass and
- * no rule does super-linear work per line (the invariant that lets this stay synchronous; the
- * per-line loop is the natural seam should a yield ever need to come back).
+ * over the source. Everything here is O(n) in the document — the walker is one pass over the
+ * parsed manuscript and no rule does super-linear work per line (the invariant that lets this
+ * stay synchronous; the per-line loop is the natural seam should a yield ever need to come back).
  *
  * Fix materialization is the only place a {@link FixSpec} becomes an LSP range. A `replace` names
- * one PIECE (contiguous source by construction, so a fix can never overwrite elided markup). A
- * `compose` names the offset of one combining 濁点/半濁点; the engine reads the pair from the
- * document and composes it. An insert names a prose UNIT and a side (zero-width; the offset is
- * resolved through the piece's outer extents, past a ruby's reading or a closing annotation, and
- * never eats a newline). An `erase` covers whole blank lines and is checked to hold nothing but
- * line terminators. Out-of-piece arithmetic, a compose that composes nothing, an insert on a
- * synthetic unit, or an erase over content is a programming error and throws.
+ * one SLICE (contiguous source by construction, so a fix can never overwrite elided markup). An
+ * insert names a prose UNIT and a side (zero-width; the offset is resolved through the piece's
+ * outer extents, past a ruby's reading or a closing annotation, and never eats a newline). An
+ * `erase` covers whole blank lines and is checked to hold nothing but line terminators.
+ * Out-of-slice arithmetic, an insert on a synthetic unit, or an erase over content is a
+ * programming error and throws.
  *
  * A `raw` rule can restate a prose rule's finding over the same characters (an unencodable
  * character that is ALSO decomposed, invisible, …). The prose rule is the more specific one and
@@ -28,7 +27,7 @@ import { DiagnosticSeverity } from 'vscode-languageserver/node';
 import type { Diagnostic, Range } from 'vscode-languageserver/node';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 
-import { composeKana } from '../../shared/chars.ts';
+import type { Ast, Span } from '../../shared/ast/nodes.ts';
 import { isSelectionEmpty } from '../../shared/lint/select.ts';
 import type { ActiveRule, RuleSelection } from '../../shared/lint/select.ts';
 import type { LocalizableMessage } from '../../shared/protocol.ts';
@@ -36,7 +35,7 @@ import type { LocalizableMessage } from '../../shared/protocol.ts';
 import { diagnostic } from '../diagnostics.ts';
 import { RULE_IMPL } from './modules.ts';
 import type { PreScan } from './prescan.ts';
-import type { FixSpec, LineRule, ProseUnit, SrcSpan } from './types.ts';
+import type { FixSpec, LineRule, ProseUnit } from './types.ts';
 import { walkLines } from './walker.ts';
 
 /** A single auto-fix edit, already mapped to SOURCE coordinates. */
@@ -76,8 +75,8 @@ function insertOffset(unit: ProseUnit, side: 'before' | 'after'): number {
   return unit.indexInPiece + 1 < piece.text.length ? unit.src + 1 : piece.outerEnd;
 }
 
-/** Materializes a {@link FixSpec} into source coordinates (see the module header for why the four
- *  shapes are the only safe ones). */
+/** Materializes a {@link FixSpec} into source coordinates (see the module header for why the
+ *  three shapes are the only safe ones). */
 function materializeFix(spec: FixSpec, doc: TextDocument): LintFix {
   if ('insert' in spec) {
     const pos = doc.positionAt(insertOffset(spec.insert, spec.side));
@@ -90,44 +89,28 @@ function materializeFix(spec: FixSpec, doc: TextDocument): LintFix {
     }
     return { range, newText: '' };
   }
-  if ('compose' in spec) {
-    const at = spec.compose;
-    if (at < 1) {
-      throw new Error(`lint fix composes nothing at ${String(at)}`);
-    }
-    const range = { start: doc.positionAt(at - 1), end: doc.positionAt(at + 1) };
-    const pair = doc.getText(range);
-    const composed = composeKana(pair);
-    if (pair.length !== 2 || composed.length !== 1) {
-      throw new Error(`lint fix composes nothing at ${String(at)}`);
-    }
-    return { range, newText: composed };
-  }
-  const { piece, start, end } = spec.replace;
-  if (start < 0 || end < start || end > piece.text.length) {
-    throw new Error(`lint fix out of piece bounds: [${String(start)}, ${String(end)})`);
+  const { slice, start, end } = spec.replace;
+  if (start < 0 || end < start || end > slice.text.length) {
+    throw new Error(`lint fix out of slice bounds: [${String(start)}, ${String(end)})`);
   }
   return {
     range: {
-      start: doc.positionAt(piece.srcStart + start),
-      end: doc.positionAt(piece.srcStart + end),
+      start: doc.positionAt(slice.srcStart + start),
+      end: doc.positionAt(slice.srcStart + end),
     },
     newText: spec.text,
   };
 }
 
 /**
- * Computes prose-lint findings for `text` under `selection` — synchronously; the all-off default
- * costs nothing (no walk, no scans).
+ * Computes the prose-lint findings of `doc` under `selection` — synchronously; the all-off
+ * default costs nothing (no walk, no scans). `ast` is the editor's parse of its text.
  */
-export function computeLintFindings(
-  text: string,
-  selection: RuleSelection,
-  doc: TextDocument,
-): LintFinding[] {
+export function computeLintFindings(doc: TextDocument, ast: Ast, selection: RuleSelection): LintFinding[] {
   if (isSelectionEmpty(selection)) {
     return [];
   }
+  const text = doc.getText();
   const prose: LintFinding[] = [];
   const instances: LineRule[] = [];
   const rawRules: { readonly rule: ActiveRule; readonly scan: PreScan }[] = [];
@@ -140,7 +123,7 @@ export function computeLintFindings(
     instances.push(
       impl.create({
         options: rule.options,
-        report(span: SrcSpan, extra?: { message?: LocalizableMessage; fix?: FixSpec }): void {
+        report(span: Span, extra?: { message?: LocalizableMessage; fix?: FixSpec }): void {
           const range = { start: doc.positionAt(span.start), end: doc.positionAt(span.end) };
           const message = extra?.message ?? { code: rule.code };
           const fix = extra?.fix === undefined ? undefined : materializeFix(extra.fix, doc);
@@ -151,7 +134,7 @@ export function computeLintFindings(
   }
 
   if (instances.length > 0) {
-    for (const line of walkLines(text)) {
+    for (const line of walkLines(ast)) {
       for (const instance of instances) {
         instance.line(line);
       }

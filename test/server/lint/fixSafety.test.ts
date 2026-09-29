@@ -2,22 +2,22 @@
  * The exhaustive fix-safety guard: NO auto-fix may overwrite the markup between two clean
  * characters (a fix once silently deleted an annotation — a data-loss bug class), and NO insert
  * may land inside a ruby or an annotation span (an inserted 。 once split 山田《やまだ》 — #72). The
- * `compose` fix is the one edit allowed inside markup, and only as kana composition: the markup
- * token stream is compared modulo {@link composeKana}. A corpus whose composition changes what the
- * markup MEANS (a decomposed keyword becoming a real annotation) belongs in engine.test.ts, not here.
+ * noNfd fix is the one edit allowed inside markup, and only as kana composition: the markup nodes
+ * are compared modulo {@link composeKana}. A corpus whose composition changes what the markup
+ * MEANS (a decomposed keyword becoming a real annotation) belongs in engine.test.ts, not here.
  *
  * `FIX_CORPUS` is a `Record<CatalogId, …>`, so adding a catalog rule without deciding its entry is
  * a COMPILE error: list at least one corpus that produces a fix, or declare `null` (rule has no
  * fix). For every corpus the guard (a) asserts the plain text yields ≥ 1 fix (a dead corpus would
  * guard nothing), then (b) slips a stand-alone annotation between EVERY adjacent character pair,
  * line ends included, and (c) wraps EVERY single character in a ruby / a span; after every fix is
- * applied, each variant must keep its markup token stream and every insert outside the wedge.
+ * applied, each variant must keep its markup nodes and every insert outside the wedge.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { scan } from '../../../src/shared/ast/scan.ts';
 import { composeKana } from '../../../src/shared/chars.ts';
-import { tokenize } from '../../../src/shared/compiler/tokenizer.ts';
 import { RULES, settingKey } from '../../../src/shared/lint/catalog.ts';
 import type { CatalogId } from '../../../src/shared/lint/catalog.ts';
 import type { RawLintConfigWire } from '../../../src/shared/protocol.ts';
@@ -72,17 +72,19 @@ function enable(id: CatalogId): RawLintConfigWire {
   return { [settingKey(rule)]: value };
 }
 
-/** The markup token stream: every non-text token by kind and raw text, a ruby by kind and reading
- *  (a fix may legitimately rewrite characters of its base) — both modulo kana composition, the one
- *  edit a `compose` fix makes inside markup. */
+/** The markup of `src`: every node but the text, by kind and source text — modulo kana
+ *  composition, the one edit a fix makes inside markup. A ruby's base is text (a fix may
+ *  legitimately rewrite its characters); what kind of ruby its reading closes is markup. */
 function shape(src: string): string[] {
-  return tokenize(src).flatMap((t) => {
-    if (t.kind === 'text') {
-      return [];
-    }
-    const inner = t.kind === 'rubyImplicit' ? t.reading : t.raw;
-    return [`${t.kind}:${composeKana(inner)}`];
-  });
+  return scan(src).lines.flatMap((line) =>
+    line.syntax.flatMap((node) => {
+      if (node.kind === 'text') {
+        return [];
+      }
+      const kind = node.kind === 'rubyReading' && node.implicit ? 'rubyReading(implicit)' : node.kind;
+      return [`${kind}:${composeKana(node.text)}`];
+    }),
+  );
 }
 
 /** A wedge: markup `open`…`close` around `wraps` characters of the corpus (0 = slipped between
@@ -137,7 +139,7 @@ for (const rule of RULES) {
         for (const { variant, start, end } of variants(corpus, wedge)) {
           const { out, edits } = applyLintFixes(variant, raw);
           const label = `${rule.id}: ${variant}`;
-          assert.deepEqual(shape(out), shape(variant), `${label} — markup tokens changed`);
+          assert.deepEqual(shape(out), shape(variant), `${label} — markup changed`);
           for (const ed of edits) {
             if (ed.s === ed.e) {
               assert.ok(ed.s <= start || ed.s >= end, `${label} — insert at ${String(ed.s)} lands inside the wedge`);

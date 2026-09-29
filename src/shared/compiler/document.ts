@@ -1,18 +1,12 @@
+import type { Ast, Line, SpanChannel, ValueLookup } from '../ast/nodes.ts';
+import { VALUE_NAMES, closingAnnotations, indentAnnotation, spanChannel } from '../ast/notation.ts';
+import { parse } from '../ast/parse.ts';
+import { printLine } from '../ast/print.ts';
 import type { AutoTcyMode, DashMode, KinsokuMode, LinePitch } from '../config/types.ts';
-import { applyAutoTcy } from './autoTcy.ts';
 import type { BuildChrome } from './chrome.ts';
 import { emrProbe, stylesheet } from './css.ts';
 import type { PaperOrientation, PaperSize } from './geometry.ts';
-import { buildRows, paginate, pagesToHtml, type DisplayLine, type RenderPage, type Row } from './layout.ts';
-import {
-  closingAnnotation,
-  indentAnnotation,
-  splitLines,
-  tokenize,
-  unterminatedOpeners,
-  VALUE_NAMES,
-  type Token,
-} from './tokenizer.ts';
+import { buildRows, paginate, pagesToHtml, rowShape, type DisplayLine, type RenderPage, type Row } from './layout.ts';
 
 /** 400字詰め原稿用紙 (20 字 × 20 行): the grid ［＃ここに「原稿用紙換算枚数」の値を表示］
  *  re-flows the body on. Tests derive from this, never write 20. */
@@ -42,48 +36,35 @@ export interface BookInput {
   } | undefined;
 }
 
-/** The first (or last) non-blank line of a chapter source (no terminator); null when none. */
-function boundaryLine(src: string, edge: 'first' | 'last'): string | null {
-  const lines = splitLines(src);
-  const ordered = edge === 'first' ? lines : lines.reverse();
-  for (const line of ordered) {
-    if (line.trim() !== '') {
-      return line;
-    }
-  }
-  return null;
+/** The first (or last) line of a chapter holding anything but white space; null when none. */
+function boundaryLine(ast: Ast, edge: 'first' | 'last'): Line | null {
+  const lines = edge === 'first' ? ast.lines : ast.lines.toReversed();
+  return lines.find((line) => line.syntax.some((node) => node.kind !== 'text' || node.text.trim() !== '')) ?? null;
 }
 
 /**
- * True iff the chapter OPENS with a 見出し: its first non-blank line resolves to a heading
- * row — match-validated by the layout itself, so a broken-target 見出し (which renders as
- * plain text) never suppresses the divider. One line suffices: postfix targets bind
- * same-line only, and a span/block opener on that line makes the first PAINTED line a
- * heading — when the line itself paints nothing (a suppressed ここから directive, or a lone
- * inline opener dropped as the end-of-input artifact), the opener token decides.
+ * True iff the chapter opens with a 見出し: its first non-blank line is a heading, or paints
+ * nothing and opens one.
  */
-function opensWithHeading(src: string): boolean {
-  const line = boundaryLine(src, 'first');
+function opensWithHeading(ast: Ast): boolean {
+  const line = boundaryLine(ast, 'first');
   if (line === null) {
     return false;
   }
-  const tokens = tokenize(line);
-  const first = buildRows(tokens)[0];
-  if (first !== undefined) {
-    return first.kind === 'line' && first.heading !== undefined;
+  const shape = rowShape(line, true);
+  if (shape.line) {
+    return line.heading !== undefined;
   }
-  return tokens.some((t) => t.kind === 'headingSpanStart');
+  return !shape.pagebreak && line.syntax.some((node) => node.kind === 'headingSpanStart');
 }
 
-/** True iff `src`'s junction side reaches a ［＃改ページ］ before (first) / after (last) content. */
-function pageBreakAt(src: string, edge: 'first' | 'last'): boolean {
-  const line = boundaryLine(src, edge);
+/** True iff the chapter's junction side reaches a ［＃改ページ］ before (first) / after (last) content. */
+function pageBreakAt(ast: Ast, edge: 'first' | 'last'): boolean {
+  const line = boundaryLine(ast, edge);
   if (line === null) {
     return false;
   }
-  const rows = buildRows(tokenize(line));
-  const row = edge === 'first' ? rows[0] : rows[rows.length - 1];
-  return row?.kind === 'pagebreak';
+  return edge === 'first' ? !rowShape(line, true).line && line.pageBreak : line.pageBreak;
 }
 
 /**
@@ -96,12 +77,12 @@ function pageBreakAt(src: string, edge: 'first' | 'last'): boolean {
  * null = no centring, the bare mark as written.
  */
 function dividerLine(divider: string, charsPerLine: number | null): string {
-  const tokens = tokenize(divider);
-  if (charsPerLine === null || tokens[0]?.kind === 'indent') {
+  const ast = parse(divider);
+  if (charsPerLine === null || ast.lines[0]?.syntax[0]?.kind === 'indent') {
     return divider;
   }
   let cells = 0;
-  for (const row of buildRows(tokens)) {
+  for (const row of buildRows(ast)) {
     if (row.kind === 'line') {
       for (const u of row.units) {
         cells += u.cells;
@@ -115,8 +96,8 @@ function dividerLine(divider: string, charsPerLine: number | null): string {
 /**
  * The junction "glue" between two adjacent chapters, as ONE shared string: the `.txt` build
  * joins newline-stripped chapter sources with `'\n' + seamClosers(prev) + glue`, and the HTML
- * build inserts `buildRows(tokenize(glue))` between the files' row batches — the leading `'\n'`
- * (it terminates the previous chapter's last line, which the HTML side has already emitted) and
+ * build inserts the glue's rows between the files' row batches — the leading `'\n'` (it
+ * terminates the previous chapter's last line, which the HTML side has already emitted) and
  * the closers belong to the txt seam only, so the two outputs stay faithful duals.
  *
  * One blank line ALWAYS separates chapters. The divider line plus one more blank follows
@@ -126,41 +107,45 @@ function dividerLine(divider: string, charsPerLine: number | null): string {
  * divider dangling at a page seam serves nothing — the blank line still applies).
  *
  * Chapter edges are read LITERALLY: author blank lines are preserved and stack with the
- * glue (the txt path's stripped previous source is equivalent — the strip only drops the
- * final-newline artifact). The glue is never autoTcy'd; known limitation: a divider that is
- * itself a bare `!?` pair combines only on a `.txt` re-render.
+ * glue. The glue is never autoTcy'd; known limitation: a divider that is itself a bare `!?`
+ * pair combines only on a `.txt` re-render.
  *
  * `charsPerLine` is the width a bare divider centres on; null = no centring, the bare mark at
  * the line head (the 原稿用紙換算枚数 count).
  */
-export function chapterGlue(
-  prevSrc: string,
-  nextSrc: string,
-  divider: string,
-  charsPerLine: number | null,
-): string {
+export function chapterGlue(prev: Ast, next: Ast, divider: string, charsPerLine: number | null): string {
   if (
     divider !== '' &&
-    !opensWithHeading(nextSrc) &&
-    !pageBreakAt(prevSrc, 'last') &&
-    !pageBreakAt(nextSrc, 'first')
+    !opensWithHeading(next) &&
+    !pageBreakAt(prev, 'last') &&
+    !pageBreakAt(next, 'first')
   ) {
     return `\n${dividerLine(divider, charsPerLine)}\n\n`;
   }
   return '\n';
 }
 
+/** The order a seam writes its closers in: the channels with a ここで form first. */
+const SEAM_ORDER: readonly SpanChannel[] = ['indent', 'weight', 'style', 'heading', 'emph', 'line'];
+
 /**
- * The closers a `.txt` seam appends for the spans the previous chapter `src` leaves open — the
- * per-file state reset the HTML build gets from buildRows, spelled out. Row-neutral by placement:
- * the ここで-form closers share one line of their own (a block-directive-only line paints no
- * column); the inline 傍点/傍線 closers head the seam's blank line the glue supplies (zero-width
- * annotations keep it blank, and the ここで line has already cleared the 字下げ/見出し it would
- * inherit). Not the previous line's end, where an open ［＃縦中横］ would flush unstyled and a
- * broken ［＃… would swallow them. '' when nothing is open; the last chapter takes none.
+ * The closers a `.txt` seam appends for the spans the previous chapter leaves open — the
+ * per-file state reset the HTML build gets from parsing each file on its own, spelled out.
+ * A span closes in the ここで form wherever its channel has one, whichever form opened it.
+ * Row-neutral by placement: the ここで-form closers share one line of their own (a
+ * block-directive-only line paints no column); the inline 傍点/傍線 closers head the seam's blank
+ * line the glue supplies (zero-width annotations keep it blank, and the ここで line has already
+ * cleared the 字下げ/見出し it would inherit). Not the previous line's end, where an open
+ * ［＃縦中横］ would flush unstyled and a broken ［＃… would swallow them. '' when nothing is
+ * open; the last chapter takes none.
  */
-function seamClosers(src: string): string {
-  const closers = unterminatedOpeners(src).map(closingAnnotation);
+function seamClosers(ast: Ast): string {
+  const closers = ast.openAtEnd
+    .toSorted((a, b) => SEAM_ORDER.indexOf(spanChannel(a)) - SEAM_ORDER.indexOf(spanChannel(b)))
+    .map((opener) => {
+      const forms = closingAnnotations(opener);
+      return forms.block === undefined ? { text: forms.inline, block: false } : { text: forms.block, block: true };
+    });
   const line = (block: boolean): string =>
     closers.filter((c) => c.block === block).map((c) => c.text).join('');
   const blockLine = line(true);
@@ -188,7 +173,7 @@ const PRINT_AUTORUN =
 
 /** One junction's glue as rows; srcLine −1 = synthetic (emitLine emits no data-line anchor). */
 function glueRows(glue: string, dash: DashMode): Row[] {
-  return buildRows(tokenize(glue), { dash }).map((row) =>
+  return buildRows(parse(glue), { dash }).map((row) =>
     row.kind === 'line' ? { ...row, srcLine: -1 } : row,
   );
 }
@@ -220,24 +205,30 @@ export function renderBook(opts: {
   fontFamily: string;
   chrome: BuildChrome;
 }): string {
-  const bodyRowsOf = (book: BookInput, charsPerLine: number | null): Row[] => {
-    const sources = book.files.map((file) => applyAutoTcy(file.src, opts.autoTcy));
-    return sources.flatMap((src, fileIndex): Row[] => {
-      const glue = fileIndex > 0
-        ? glueRows(
-            chapterGlue(sources[fileIndex - 1] ?? '', src, book.divider ?? '', charsPerLine),
-            opts.dash,
-          )
-        : [];
-      return [...glue, ...buildRows(tokenize(src), { dash: opts.dash })];
+  // Every chapter is parsed and laid into rows ONCE; a flow differs only in the glue, whose
+  // divider centres on the flow's own line width.
+  const chapters = opts.books.map((book) =>
+    book.files.map((file) => {
+      const ast = parse(file.src, { autoTcy: opts.autoTcy });
+      return { ast, rows: buildRows(ast, { dash: opts.dash }) };
+    }),
+  );
+  const bodyRowsOf = (bi: number, charsPerLine: number | null): Row[] => {
+    const divider = opts.books[bi]?.divider ?? '';
+    return (chapters[bi] ?? []).flatMap(({ ast, rows }, ci, all): Row[] => {
+      const prev = all[ci - 1];
+      const glue = prev === undefined
+        ? []
+        : glueRows(chapterGlue(prev.ast, ast, divider, charsPerLine), opts.dash);
+      return [...glue, ...rows];
     });
   };
 
   // Bodies paginate FIRST — covers need the count. Per book is output-identical to one run
   // with a pagebreak row at each seam: paginate flushes only non-empty pages.
-  const bodies = opts.books.map((book) => ({
+  const bodies = opts.books.map((book, bi) => ({
     book,
-    pages: paginate(bodyRowsOf(book, opts.charsPerLine), opts.charsPerLine, opts.linesPerPage, opts.kinsoku),
+    pages: paginate(bodyRowsOf(bi, opts.charsPerLine), opts.charsPerLine, opts.linesPerPage, opts.kinsoku),
   }));
   const totalBody = bodies.reduce((n, b) => n + b.pages.length, 0);
 
@@ -245,43 +236,37 @@ export function renderBook(opts: {
   // on the first cover (or the furniture) that asks, once per render.
   let sheets: number | undefined;
   const totalSheets = (): number => {
-    sheets ??= bodies.reduce((n, b) => {
-      const rows = bodyRowsOf(b.book, null);
+    sheets ??= opts.books.reduce((n, _book, bi) => {
+      const rows = bodyRowsOf(bi, null);
       return n + paginate(rows, MANUSCRIPT_SHEET.charsPerLine, MANUSCRIPT_SHEET.linesPerPage, opts.kinsoku).length;
     }, 0);
     return sheets;
   };
-  const asksSheets = (tokens: readonly Token[]): boolean =>
-    tokens.some((t) => t.kind === 'valueField' && t.name === VALUE_NAMES.sheets);
-  const furnitureAsksSheets = asksSheets(tokenize(opts.chrome.header)) || asksSheets(tokenize(opts.chrome.footer));
 
-  // One book's ［＃ここに「…」の値を表示］ substitutions — the cover compile's, and the furniture's
-  // base (pagesToHtml adds the page's own numbers).
-  const valuesOf = (book: BookInput, wantsSheets: boolean): ReadonlyMap<string, string> => {
-    const values = new Map<string, string>([
+  // One book's ［＃ここに「…」の値を表示］ substitutions, four of the five VALUE_NAMES: a cover's
+  // values, and the base of the furniture's (which adds the page's own numbers).
+  const valuesOf = (book: BookInput): ValueLookup => {
+    const fixed = new Map<string, string>([
       [VALUE_NAMES.title, book.title ?? ''],
       [VALUE_NAMES.author, book.author ?? ''],
       [VALUE_NAMES.totalPages, String(totalBody)],
     ]);
-    if (wantsSheets) {
-      values.set(VALUE_NAMES.sheets, String(totalSheets()));
-    }
-    return values;
+    return { get: (name) => (name === VALUE_NAMES.sheets ? String(totalSheets()) : fixed.get(name)) };
   };
 
-  const coverPagesOf = (tokenLists: readonly (readonly Token[])[], values: ReadonlyMap<string, string>): DisplayLine[][] => {
-    const rows = tokenLists.flatMap((tokens, i): Row[] => {
-      const r = buildRows(tokens, { dash: opts.dash, values });
+  const coverPagesOf = (book: BookInput, values: ValueLookup): DisplayLine[][] => {
+    const rows = (book.cover?.files ?? []).flatMap((file, i): Row[] => {
+      const ast = parse(file.src, { autoTcy: opts.autoTcy, values });
+      const r = buildRows(ast, { dash: opts.dash });
       return i > 0 ? [{ kind: 'pagebreak' }, ...r] : r; // each cover file starts on a fresh page
     });
     return paginate(rows, opts.charsPerLine, opts.linesPerPage, opts.kinsoku);
   };
 
   const pages = bodies.flatMap(({ book, pages: bodyPages }): RenderPage[] => {
-    const coverTokens = (book.cover?.files ?? []).map((file) => tokenize(applyAutoTcy(file.src, opts.autoTcy)));
-    const values = valuesOf(book, furnitureAsksSheets || coverTokens.some(asksSheets));
+    const values = valuesOf(book);
     return [
-      ...coverPagesOf(coverTokens, values).map((lines): RenderPage => ({ lines, cover: true })),
+      ...coverPagesOf(book, values).map((lines): RenderPage => ({ lines, cover: true })),
       ...bodyPages.map((lines): RenderPage => ({ lines, values })),
     ];
   });
@@ -315,13 +300,24 @@ export function renderBook(opts: {
 }
 
 /**
+ * A chapter as the `.txt` takes it, before the book's line ending is chosen: its lines printed
+ * back from the AST and ended by '\n' (a lone '\r' stays as typed), less the final newline.
+ */
+function chapterText(ast: Ast): string {
+  return ast.lines
+    .map((line) => printLine(line) + (line.eol === '\r\n' ? '\n' : line.eol))
+    .join('')
+    .replace(/\n$/, '');
+}
+
+/**
  * Concatenates a book's `files[]` into ONE plain-text document, the dual of {@link renderBook}:
- * each file loses its single trailing newline, then files join with
- * `'\n' + seamClosers(prev) + chapterGlue(...)` (the `'\n'` ends the previous chapter's last line;
- * the closers end the spans it left open; the glue re-tokenizes into exactly the rows the HTML
+ * each file is printed back from its AST and loses its single trailing newline, then files join
+ * with `'\n' + seamClosers(prev) + chapterGlue(...)` (the `'\n'` ends the previous chapter's last
+ * line; the closers end the spans it left open; the glue parses into exactly the rows the HTML
  * build inserts at that seam). The output takes the manuscript's line endings: CRLF throughout
- * when any chapter file is CRLF, else LF; a lone `\r` passes through. `autoTcy` materializes the
- * 自動縦中横 rewrite per file so the `.txt` round-trips idempotently. An empty book -> "" (a
+ * when any chapter file is CRLF, else LF; a lone `\r` passes through. `autoTcy` prints the
+ * 自動縦中横 annotations per file so the `.txt` round-trips idempotently. An empty book -> "" (a
  * wholly-empty middle file adds one extra blank line — benign); a divider that itself opens a span
  * (`［＃太字］＊`) leaks into the next chapter. Pure + vscode-free.
  */
@@ -330,16 +326,17 @@ export function concatBookText(
   autoTcy: AutoTcyMode,
   charsPerLine: number,
 ): string {
-  const eol = book.files.some((file) => file.src.includes('\r\n')) ? '\r\n' : '\n';
-  const sources = book.files.map((file) =>
-    applyAutoTcy(file.src.replace(/\r\n/g, '\n'), autoTcy).replace(/\n$/, ''),
-  );
-  const joined = sources.reduce((acc, src, i) => {
-    if (i === 0) {
-      return src;
+  const chapters = book.files.map((file) => {
+    const ast = parse(file.src, { autoTcy });
+    return { ast, text: chapterText(ast) };
+  });
+  const eol = chapters.some(({ ast }) => ast.lines.some((line) => line.eol === '\r\n')) ? '\r\n' : '\n';
+  const joined = chapters.reduce((acc, { ast, text }, i) => {
+    const prev = chapters[i - 1];
+    if (prev === undefined) {
+      return text;
     }
-    const prev = sources[i - 1] ?? '';
-    return `${acc}\n${seamClosers(prev)}${chapterGlue(prev, src, book.divider ?? '', charsPerLine)}${src}`;
+    return `${acc}\n${seamClosers(prev.ast)}${chapterGlue(prev.ast, ast, book.divider ?? '', charsPerLine)}${text}`;
   }, '');
   return eol === '\n' ? joined : joined.replace(/\n/g, eol);
 }

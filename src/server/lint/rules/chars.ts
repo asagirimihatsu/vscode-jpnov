@@ -1,12 +1,13 @@
 /**
  * Character-hygiene rules and the ruby-reading kana rule. The hygiene scans run on the prose view
  * (地の文 and セリフ alike; annotation interiors stay the raw shiftJisSafe rule's job), except
- * noNfd, which scans the raw line so a ruby reading or an annotation target is composed too.
- * Every fix is a context-free character substitution, safe to apply verbatim anywhere.
+ * noNfd, which scans every source slice of the line so a ruby reading or an annotation target is
+ * composed too. Every fix is a context-free character substitution, safe to apply verbatim
+ * anywhere.
  *
  * Relative imports only (native test loader); vscode-free.
  */
-import { composeKana, isCjkIdeograph } from '../../../shared/chars.ts';
+import { composeKana, isCjkIdeograph, isCombiningKanaMark } from '../../../shared/chars.ts';
 
 import { rubyKanaScan } from '../prescan.ts';
 import type { PreScan } from '../prescan.ts';
@@ -34,25 +35,26 @@ const hankakuKanaScan: PreScan = (text) => {
   return out;
 };
 
-/** Decomposed (NFD) kana anywhere on the RAW line — prose, ruby readings, annotation targets and
+/** Decomposed (NFD) kana anywhere on the line — prose, ruby readings, annotation targets and
  *  keywords alike. The REPORT covers the combining 濁点/半濁点 mark alone (so the raw shiftJisSafe
- *  finding over the same mark de-duplicates against it); the FIX is the engine's `compose` of the
- *  mark with the unit before it, through the same {@link composeKana} the `.txt` codec runs. A
- *  mark that composes with nothing is flagged without a fix. */
+ *  finding over the same mark de-duplicates against it); the FIX replaces the kana and its mark
+ *  by their composition, through the same {@link composeKana} the `.txt` codec runs. A mark that
+ *  composes with nothing is flagged without a fix. */
 export function nfdRule(ctx: RuleContext): LineRule {
   return {
     line(line: LintLine): void {
-      const { raw, srcStart } = line;
-      for (let i = 0; i < raw.length; i += 1) {
-        const cp = raw.charCodeAt(i);
-        if (cp !== 0x3099 && cp !== 0x309a) {
-          continue;
+      for (const slice of line.source) {
+        const { text, srcStart } = slice;
+        for (let i = 0; i < text.length; i += 1) {
+          if (!isCombiningKanaMark(text.charCodeAt(i))) {
+            continue;
+          }
+          const composed = i > 0 ? composeKana(text.slice(i - 1, i + 1)) : '';
+          ctx.report(
+            { start: srcStart + i, end: srcStart + i + 1 },
+            composed.length === 1 ? { fix: { replace: { slice, start: i - 1, end: i + 1 }, text: composed } } : undefined,
+          );
         }
-        const composes = i > 0 && composeKana(raw.slice(i - 1, i + 1)).length === 1;
-        ctx.report(
-          { start: srcStart + i, end: srcStart + i + 1 },
-          composes ? { fix: { compose: srcStart + i } } : undefined,
-        );
       }
     },
   };

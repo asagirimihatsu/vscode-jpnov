@@ -3,8 +3,6 @@
  * `data-drop` markers (stage/typedLine.ts wrote them): one zero-duration set per keystroke, so
  * scrubbing backwards is exact. The caret is `.jp-ch::after`, driven by the `--c` custom property.
  */
-import type { gsap } from 'gsap';
-
 import type { TypingRun } from './typedLine.ts';
 
 export interface Keystroke {

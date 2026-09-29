@@ -1,7 +1,7 @@
 {
   "name": "Japanese Novel",
   "scopeName": "text.jpnov",
-  "comment": "Instant (pre-activation) colorization for .jpnov. Scope families are chosen so VS Code's DEFAULT semantic-type→scope fallback lands on the SAME colors the LSP semantic layer later emits (comment→comment, keyword→keyword — see src/server/semanticTokens.ts HIGHLIGHTS): when the server's tokens arrive they refine invisibly instead of repainting. Every pattern is a single-line `match` (never begin/end), and the tokenizer bounds delimiter pairing to the line too, so both layers agree: an unclosed ［＃ is DELIBERATELY greyed to its line end (the semantic layer marks the same span as `marker` and the server flags it as an Error), while a lone 《 or a stray ］/》 stays default text. The 傍点/傍線/太字/斜体 variant alternations and the single-line ［＃○字下げ］ line-head (^) anchor are checked against src/shared/compiler/emphasis.ts by test/shared/compiler/grammar-sync.test.ts (canonical length-desc order) — regenerate an alternation from that test's failure output, never by hand. ［＃○字下げ］ takes full-width digits only ([０-９]+, per the locked spec); a mid-line one is inert and deliberately falls through to the generic comment rule (the server tokenizer degrades it to a comment too, so both layers grey it).",
+  "comment": "Instant (pre-activation) colorization for .jpnov. Scope families are chosen so VS Code's DEFAULT semantic-type→scope fallback lands on the SAME colors the LSP semantic layer later emits (comment→comment, keyword→keyword — see src/server/semanticTokens.ts HIGHLIGHTS): when the server's tokens arrive they refine invisibly instead of repainting. Every pattern is a single-line `match` (never begin/end), and the scanner bounds delimiter pairing to the line too, so both layers agree: an unclosed ［＃ is DELIBERATELY greyed to its line end (the semantic layer marks the same span as `marker` and the server flags it as an Error), while a lone 《 or a stray ］/》 stays default text. The 傍点/傍線/太字/斜体 variant alternations and the single-line ［＃○字下げ］ line-head (^) anchor are checked against the variant table of src/shared/ast/notation.ts by test/shared/compiler/grammar-sync.test.ts (canonical length-desc order) — regenerate an alternation from that test's failure output, never by hand. ［＃○字下げ］ takes full-width digits only ([０-９]+, per the locked spec); a mid-line one is inert and deliberately falls through to the generic comment rule (the scanner degrades it to a comment too, so both layers grey it).",
   "patterns": [
     { "include": "#annotation" },
     { "include": "#ruby" },
@@ -20,7 +20,7 @@
           }
         },
         {
-          "comment": "Value display ［＃ここに「名前」の値を表示］ — only the name is a directive; the structural ここに「 and 」の値を表示 demote to comment (mirrors the semantic layer emitting `marker` over each). Any non-empty name up to the first ］ matches — the tokenizer's rule exactly (an unknown name renders as itself); an empty pair falls through to the generic comment rule. grammar-sync pins this rule.",
+          "comment": "Value display ［＃ここに「名前」の値を表示］ — only the name is a directive; the structural ここに「 and 」の値を表示 demote to comment (mirrors the semantic layer emitting `marker` over each). Any non-empty name up to the first ］ matches — the scanner's rule exactly (an unknown name renders as itself); an empty pair falls through to the generic comment rule. grammar-sync pins this rule.",
           "match": "(［＃)(ここに「)([^］]+)(」の値を表示)(］)",
           "captures": {
             "1": { "name": "comment.block.annotation.jpnov" },
@@ -31,7 +31,7 @@
           }
         },
         {
-          "comment": "Block END ［＃ここで(字下げ|太字|斜体)終わり］ — only the style keyword (字下げ/太字/斜体) is a directive; the structural ここで and 終わり are demoted to comment (mirrors the semantic layer, which emits `marker` over each — like the connector に). BEFORE block START (終わり suffix) and BEFORE the span rules. ここで傍点終わり etc. is NOT here (傍点/傍線 have no block form) and falls through to the generic comment rule, exactly like the tokenizer.",
+          "comment": "Block END ［＃ここで(字下げ|太字|斜体)終わり］ — only the style keyword (字下げ/太字/斜体) is a directive; the structural ここで and 終わり are demoted to comment (mirrors the semantic layer, which emits `marker` over each — like the connector に). BEFORE block START (終わり suffix) and BEFORE the span rules. ここで傍点終わり etc. is NOT here (傍点/傍線 have no block form) and falls through to the generic comment rule, exactly like the scanner.",
           "match": "(［＃)(ここで)(字下げ|太字|斜体)(終わり)(］)",
           "captures": {
             "1": { "name": "comment.block.annotation.jpnov" },
@@ -42,7 +42,7 @@
           }
         },
         {
-          "comment": "Block START ［＃ここから(○字下げ|太字|斜体)］ (○ = full-width digits ONLY, kept INSIDE the keyword). Only the style keyword (○字下げ/太字/斜体) is a directive; the structural ここから is demoted to comment (mirrors the semantic layer, which emits `marker` over it — like the connector に). The hanging-indent 折り返して form has extra text before ］ so it falls through to the generic comment rule, exactly like the tokenizer.",
+          "comment": "Block START ［＃ここから(○字下げ|太字|斜体)］ (○ = full-width digits ONLY, kept INSIDE the keyword). Only the style keyword (○字下げ/太字/斜体) is a directive; the structural ここから is demoted to comment (mirrors the semantic layer, which emits `marker` over it — like the connector に). The hanging-indent 折り返して form has extra text before ］ so it falls through to the generic comment rule, exactly like the scanner.",
           "match": "(［＃)(ここから)([０-９]+字下げ|太字|斜体)(］)",
           "captures": {
             "1": { "name": "comment.block.annotation.jpnov" },
@@ -52,7 +52,7 @@
           }
         },
         {
-          "comment": "Single-line ［＃○字下げ］ — LINE-HEAD ONLY (^). A mid-line one is inert (the server tokenizer degrades it to a comment) → it must fall through to the generic comment rule and stay grey in BOTH layers. Full-width digits only.",
+          "comment": "Single-line ［＃○字下げ］ — LINE-HEAD ONLY (^). A mid-line one is inert (the scanner degrades it to a comment) → it must fall through to the generic comment rule and stay grey in BOTH layers. Full-width digits only.",
           "match": "^(［＃)([０-９]+字下げ)(］)",
           "captures": {
             "1": { "name": "comment.block.annotation.jpnov" },
@@ -61,7 +61,7 @@
           }
         },
         {
-          "comment": "傍点/傍線 span END ［＃(左に)?<dot|line>終わり］ — only the variant is a directive; the structural 終わり is demoted to comment (mirrors the semantic layer emitting `marker` over it). Must be tried BEFORE span start (終わり suffix). The span form's left prefix is bare 左に ONLY (the postfix form uses の左に — form-bound per the Aozora spec); a の左に span falls through to the generic comment rule, exactly like the tokenizer.",
+          "comment": "傍点/傍線 span END ［＃(左に)?<dot|line>終わり］ — only the variant is a directive; the structural 終わり is demoted to comment (mirrors the semantic layer emitting `marker` over it). Must be tried BEFORE span start (終わり suffix). The span form's left prefix is bare 左に ONLY (the postfix form uses の左に — form-bound per the Aozora spec); a の左に span falls through to the generic comment rule, exactly like the scanner.",
           "match": "(［＃)(左に)?(二重丸傍点|白ゴマ傍点|白三角傍点|蛇の目傍点|黒三角傍点|ばつ傍点|二重傍線|白丸傍点|×傍点|丸傍点|傍点|傍線|波線|破線|鎖線)(終わり)(］)",
           "captures": {
             "1": { "name": "comment.block.annotation.jpnov" },
@@ -101,7 +101,7 @@
           }
         },
         {
-          "comment": "傍点/傍線 postfix ［＃「対象」(に|の左に)?<dot|line>］ — a SINGLE alternation: the connector に and the postfix-form direction prefix の左に are mutually exclusive (the spec never combines them; にの左に degrades to a comment in both layers), and bare 左に is the SPAN spelling, never valid here (form-bound per the Aozora spec — exactly like the tokenizer's form-aware resolveStyle). の alone is NOT a connector, so a lone の+variant falls through to the generic comment rule. The target (group 3) is deliberately UNSCOPED so it keeps the default foreground, exactly like the semantic layer. The target must be NON-empty ([^」]+): the tokenizer rejects an empty target (comment fallback), so an empty one must fall through to the generic annotation rule below.",
+          "comment": "傍点/傍線 postfix ［＃「対象」(に|の左に)?<dot|line>］ — a SINGLE alternation: the connector に and the postfix-form direction prefix の左に are mutually exclusive (the spec never combines them; にの左に degrades to a comment in both layers), and bare 左に is the SPAN spelling, never valid here (form-bound per the Aozora spec — exactly like the scanner's form-bound variant lookup). の alone is NOT a connector, so a lone の+variant falls through to the generic comment rule. The target (group 3) is deliberately UNSCOPED so it keeps the default foreground, exactly like the semantic layer. The target must be NON-empty ([^」]+): the scanner rejects an empty target (comment fallback), so an empty one must fall through to the generic annotation rule below.",
           "match": "(［＃)(「)([^」]+)(」)(に|の左に)?(二重丸傍点|白ゴマ傍点|白三角傍点|蛇の目傍点|黒三角傍点|ばつ傍点|二重傍線|白丸傍点|×傍点|丸傍点|傍点|傍線|波線|破線|鎖線)(］)",
           "captures": {
             "1": { "name": "comment.block.annotation.jpnov" },
@@ -113,7 +113,7 @@
           }
         },
         {
-          "comment": "太字/斜体 postfix ［＃「対象」は(太字|斜体)］ — connector は is REQUIRED (not に), no direction. A mis-paired connector (は+傍点, に+太字) matches neither postfix rule and falls through to the generic comment rule, exactly like the tokenizer's connector matrix.",
+          "comment": "太字/斜体 postfix ［＃「対象」は(太字|斜体)］ — connector は is REQUIRED (not に), no direction. A mis-paired connector (は+傍点, に+太字) matches neither postfix rule and falls through to the generic comment rule, exactly like the scanner's connector matrix.",
           "match": "(［＃)(「)([^」]+)(」)(は)(太字|斜体)(］)",
           "captures": {
             "1": { "name": "comment.block.annotation.jpnov" },
@@ -144,7 +144,7 @@
           }
         },
         {
-          "comment": "縦中横 postfix ［＃「対象」は縦中横］ — the connector は is REQUIRED (like 太字/斜体; a bare or に-paired 縦中横 falls through to the generic comment rule, exactly like the tokenizer). The target (group 3) is deliberately UNSCOPED so it keeps the default foreground.",
+          "comment": "縦中横 postfix ［＃「対象」は縦中横］ — the connector は is REQUIRED (like 太字/斜体; a bare or に-paired 縦中横 falls through to the generic comment rule, exactly like the scanner). The target (group 3) is deliberately UNSCOPED so it keeps the default foreground.",
           "match": "(［＃)(「)([^」]+)(」)(は)(縦中横)(］)",
           "captures": {
             "1": { "name": "comment.block.annotation.jpnov" },
@@ -156,7 +156,7 @@
           }
         },
         {
-          "comment": "左ルビ postfix ［＃「対象」の左に「よみ」のルビ］ — の左に is the postfix-form direction prefix (never bare 左に here), the reading 「よみ」 greys whole like a 《》 reading, のルビ is the directive; the target (group 3) keeps the default foreground. The reading must be NON-empty ([^」]+): the tokenizer degrades an empty one to a comment, so it must fall through to the generic rule. The sibling …の注記 tail (ママ — out of scope) matches nothing here and falls through too.",
+          "comment": "左ルビ postfix ［＃「対象」の左に「よみ」のルビ］ — の左に is the postfix-form direction prefix (never bare 左に here), the reading 「よみ」 greys whole like a 《》 reading, のルビ is the directive; the target (group 3) keeps the default foreground. The reading must be NON-empty ([^」]+): the scanner degrades an empty one to a comment, so it must fall through to the generic rule. The sibling …の注記 tail (ママ — out of scope) matches nothing here and falls through too.",
           "match": "(［＃)(「)([^」]+)(」)(の左に)(「)([^」]+)(」)(のルビ)(］)",
           "captures": {
             "1": { "name": "comment.block.annotation.jpnov" },
@@ -171,7 +171,7 @@
           }
         },
         {
-          "comment": "見出し postfix ［＃「対象」は(大|中|小)見出し］ — the connector は is REQUIRED (like 縦中横; a bare or に-paired 見出し falls through to the generic comment rule, exactly like the tokenizer). The target (group 3) is deliberately UNSCOPED so it keeps the default foreground.",
+          "comment": "見出し postfix ［＃「対象」は(大|中|小)見出し］ — the connector は is REQUIRED (like 縦中横; a bare or に-paired 見出し falls through to the generic comment rule, exactly like the scanner). The target (group 3) is deliberately UNSCOPED so it keeps the default foreground.",
           "match": "(［＃)(「)([^」]+)(」)(は)(中見出し|大見出し|小見出し)(］)",
           "captures": {
             "1": { "name": "comment.block.annotation.jpnov" },
@@ -228,7 +228,7 @@
           "name": "comment.block.annotation.jpnov"
         },
         {
-          "comment": "Unterminated ［＃… with no ］ before the line end — greyed exactly like a closed annotation (the tokenizer swallows the same span as a `brokenAnnotation` and the semantic layer marks it `marker`; the server adds the Error squiggle). $ bounds it to the line; LAST so every closed rule above wins first ([^］]*$ never matches once a closing ］ follows the opener on the line).",
+          "comment": "Unterminated ［＃… with no ］ before the line end — greyed exactly like a closed annotation (the scanner swallows the same span as a `brokenAnnotation` and the semantic layer marks it `marker`; the server adds the Error squiggle). $ bounds it to the line; LAST so every closed rule above wins first ([^］]*$ never matches once a closing ］ follows the opener on the line).",
           "match": "(［＃)([^］]*)$",
           "name": "comment.block.annotation.jpnov"
         }
@@ -237,7 +237,7 @@
     "ruby": {
       "patterns": [
         {
-          "comment": "Ruby reading 《…》 incl. both brackets — greyed like the semantic marker; the base (親文字) before it keeps the default foreground. Empty 《》 / a lone 《 are left default (the tokenizer treats them literally). A reading with no base before it is literal in the tokenizer too but stays greyed by this context-free rule; the server's syntax Warnings mark it and the empty 《》 (syntax.rubyBaseMissing, syntax.rubyReadingEmpty).",
+          "comment": "Ruby reading 《…》 incl. both brackets — greyed like the semantic marker; the base (親文字) before it keeps the default foreground. Empty 《》 / a lone 《 are left default (the scanner treats them literally). A reading with no base before it is literal in the scanner too but stays greyed by this context-free rule; the server's syntax Warnings mark it and the empty 《》 (syntax.rubyBaseMissing, syntax.rubyReadingEmpty).",
           "match": "《[^》]+》",
           "name": "comment.other.ruby.jpnov"
         },

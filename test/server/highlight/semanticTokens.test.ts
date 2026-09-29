@@ -11,12 +11,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { createRecognizer } from '../../../src/server/highlight/recognizer.ts';
-import {
-  buildSemanticTokens,
-  tokenTypeIndex,
-} from '../../../src/server/semanticTokens.ts';
-import { VALUE_NAMES, valueAnnotation } from '../../../src/shared/compiler/tokenizer.ts';
-import { at, covers, decode, doc } from './tokens.ts';
+import { tokenTypeIndex } from '../../../src/server/semanticTokens.ts';
+import { VALUE_NAMES, valueAnnotation } from '../../../src/shared/ast/notation.ts';
+import { at, buildSemanticTokens, covers, decode, doc } from './tokens.ts';
 
 // A small project: 山田 太郎 as cast, 聖剣 as a coined keyword.
 const rec = createRecognizer(['山田　太郎'], ['聖剣']);

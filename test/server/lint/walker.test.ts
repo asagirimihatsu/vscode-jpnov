@@ -1,7 +1,7 @@
 /**
- * Walker tests: the per-line model (pieces, views, flags) and every semantic inherited from the
- * retired stream extractor — the Aozora trap, astral per-unit offsets, the 字下げ/見出し state
- * machines (twin-lockstep against layout.ts `buildRows`), zero-prose broken markup.
+ * Walker tests: the per-line model (pieces, views, flags) — the Aozora trap, astral per-unit
+ * offsets, the 字下げ/見出し line state (the AST's: what it is for each form is
+ * test/shared/ast/resolve.test.ts's subject), zero-prose broken markup.
  * Pure + import-light, so they run on Node's native test loader.
  */
 import { test } from 'node:test';
@@ -9,11 +9,11 @@ import assert from 'node:assert/strict';
 
 import { walkLines } from '../../../src/server/lint/walker.ts';
 import type { LintLine, ProseView } from '../../../src/server/lint/types.ts';
-import { buildRows } from '../../../src/shared/compiler/layout.ts';
-import { tokenize } from '../../../src/shared/compiler/tokenizer.ts';
+import { parse } from '../../../src/shared/ast/parse.ts';
+import { D } from '../../shared/_kana.ts';
 
 function lines(src: string): LintLine[] {
-  return [...walkLines(src)];
+  return [...walkLines(parse(src))];
 }
 
 /** The source text a view span `[a, b)` covers (start unit to last-included unit, inclusive). */
@@ -197,49 +197,9 @@ test('blank vs directive-only: a token-less line is blank, a ここから/改ペ
   ]);
 });
 
-// --- 字下げ state (lockstep semantics inherited from streams.ts/buildRows) ---
+// --- the line state is the AST's ---
 
-test('a line-head ［＃N字下げ］ sets line.indent for its own line only', () => {
-  const ls = lines('［＃３字下げ］本文の行。\n次の行。');
-  assert.equal(ls[0]?.indent, 3);
-  assert.equal(ls[1]?.indent, 0);
-});
-
-test('［＃０字下げ］ is an explicit zero', () => {
-  assert.equal(lines('［＃０字下げ］本文。')[0]?.indent, 0);
-});
-
-test('a ここから block covers FOLLOWING lines; the directive line keeps its head snapshot', () => {
-  const ls = lines('［＃ここから２字下げ］同じ行。\n中の行。\n［＃ここで字下げ終わり］終端行。\n外の行。');
-  assert.deepEqual(ls.map((l) => l.indent), [0, 2, 2, 0]);
-});
-
-test('an inline ［＃０字下げ］ cancels the block for its line; last-wins reopen switches depth', () => {
-  const ls = lines('［＃ここから２字下げ］\nあ。\n［＃０字下げ］ゼロ行。\n［＃ここから４字下げ］\n四の行。');
-  assert.deepEqual(ls.map((l) => l.indent), [0, 2, 0, 2, 4]);
-});
-
-// --- 見出し state ---
-
-test('a heading postfix marks its own line', () => {
-  const ls = lines('序章［＃「序章」は大見出し］\n本文。');
-  assert.equal(ls[0]?.heading, 1);
-  assert.equal(ls[1]?.heading, undefined);
-});
-
-test('an inline heading span marks its line and following lines until the end token', () => {
-  const ls = lines('［＃中見出し］題\nまだ題\n［＃中見出し終わり］終端行\nあと');
-  assert.deepEqual(ls.map((l) => l.heading), [2, 2, 2, undefined]); // the end line stays a heading
-});
-
-test('the block heading form marks FOLLOWING lines only', () => {
-  const ls = lines('［＃ここから小見出し］\n題の行\n［＃ここで小見出し終わり］\nあと');
-  assert.deepEqual(ls.map((l) => l.heading), [undefined, 3, 3, undefined]);
-});
-
-// --- twin lockstep: walker line state vs rendered rows ---
-
-test('indent and heading stay in lockstep with buildRows per source line', () => {
+test('indent and heading are the AST line\'s, handed through line by line', () => {
   const src = [
     '＊冒頭は字下げなし。',
     '　字面の空白で始まる行。',
@@ -261,21 +221,17 @@ test('indent and heading stay in lockstep with buildRows per source line', () =>
     '見出しの外。',
     '最後の行。',
   ].join('\n');
+  const ast = parse(src);
+  assert.deepEqual(
+    [...walkLines(ast)].map((l) => [l.srcLine, l.indent, l.heading]),
+    ast.lines.map((l) => [l.index, l.indent, l.heading]),
+  );
+});
 
-  const rendered = new Map<number, { indent: number; heading: number | undefined }>();
-  for (const row of buildRows(tokenize(src))) {
-    if (row.kind === 'line' && !rendered.has(row.srcLine)) {
-      rendered.set(row.srcLine, { indent: row.indent ?? 0, heading: row.heading });
-    }
-  }
-  for (const line of walkLines(src)) {
-    const row = rendered.get(line.srcLine);
-    if (row === undefined) {
-      continue; // a directive-only line paints no row — nothing to compare
-    }
-    assert.equal(line.indent, row.indent, `indent of line ${String(line.srcLine)}`);
-    assert.equal(line.heading, row.heading, `heading of line ${String(line.srcLine)}`);
-  }
+test('a heading postfix whose target is missing leaves its line plain prose', () => {
+  const ls = lines('序章［＃「別文」は大見出し］\n本文。');
+  assert.deepEqual(ls.map((l) => l.heading), [undefined, undefined]);
+  assert.equal(ls[0]?.directiveOnly, false); // the format rules read it
 });
 
 // --- outer extents: where an insert before/after a piece lands (#72) ---
@@ -331,9 +287,30 @@ test('spans pair per channel: another channel in between neither seals a piece n
     ['そして', '［＃太字］［＃傍点終わり］そして［＃太字終わり］'],
   ]);
   assert.deepEqual(outer('［＃傍点］［＃太字終わり］本文'), [['本文', '［＃傍点］［＃太字終わり］本文']]);
-  assert.deepEqual(outer('［＃傍点］［＃丸傍点終わり］本文'), [['本文', '［＃傍点］［＃丸傍点終わり］本文']]); // a variant is its own channel
+  assert.deepEqual(outer('［＃傍点］［＃丸傍点終わり］本文'), [['本文', '本文']]); // the 傍点 variants share one channel
   assert.deepEqual(outer('［＃大見出し］［＃中見出し終わり］題'), [['題', '題']]); // the heading levels share one slot
   assert.deepEqual(outer('全［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］頁'), [['全', '全'], ['頁', '頁']]);
+});
+
+test('a start on a channel already open wraps nothing new: the end after it closes what wraps the piece', () => {
+  const variant = '彼は［＃傍点］行く［＃丸傍点］［＃傍点終わり］';
+  assert.deepEqual(outer(variant), [['彼は', '彼は'], ['行く', '［＃傍点］行く［＃丸傍点］［＃傍点終わり］']]);
+  const same = '彼は［＃太字］行く［＃太字］［＃太字終わり］';
+  assert.deepEqual(outer(same), [['彼は', '彼は'], ['行く', '［＃太字］行く［＃太字］［＃太字終わり］']]);
+  assert.deepEqual(outer('［＃縦中横］12［＃縦中横］［＃縦中横終わり］'), [['12', '［＃縦中横］12［＃縦中横］［＃縦中横終わり］']]);
+  assert.deepEqual(outer('［＃大見出し］題［＃中見出し］［＃大見出し終わり］'), [['題', '［＃大見出し］題［＃中見出し］［＃大見出し終わり］']]);
+  // The channel may have opened on an earlier line, in either form.
+  assert.deepEqual(outer('［＃傍点］\n彼は行く［＃丸傍点］［＃傍点終わり］', 1), [['彼は行く', '彼は行く［＃丸傍点］［＃傍点終わり］']]);
+  assert.deepEqual(outer('［＃ここから太字］\n行く［＃太字］［＃太字終わり］', 1), [['行く', '行く［＃太字］［＃太字終わり］']]);
+  // …but not a 縦中横: it closed with its line.
+  assert.deepEqual(outer('［＃縦中横］12\n34［＃縦中横］［＃縦中横終わり］', 1), [['34', '34']]);
+  // An end closes its channel: the next start on it opens afresh.
+  assert.deepEqual(outer('［＃傍点］あ［＃傍点終わり］行く［＃傍点］［＃傍点終わり］'), [
+    ['あ', '［＃傍点］あ［＃傍点終わり］'],
+    ['行く', '行く'],
+  ]);
+  // A start that opened after the piece still wraps nothing, whatever follows it.
+  assert.deepEqual(outer('山田［＃傍点］［＃太字］［＃傍点終わり］'), [['山田', '山田']]);
 });
 
 test('neutral markup binds nothing: a line-head 字下げ stays at the head, a comment is transparent', () => {
@@ -393,17 +370,36 @@ test('a ｜ base of no prose passes nothing on; an opener inside the base belong
   ]);
 });
 
-test('raw is the line without its terminator, for every terminator and the final line', () => {
+test('source covers the line without its terminator, for every terminator and the final line', () => {
   const src = 'あ\r\nい\rう\nえ';
   const all = lines(src);
-  assert.deepEqual(all.map((l) => l.raw), ['あ', 'い', 'う', 'え']);
+  assert.deepEqual(all.map((l) => l.source.map((s) => s.text).join('')), ['あ', 'い', 'う', 'え']);
   for (const l of all) {
-    assert.equal(src.slice(l.srcStart, l.srcEnd), l.raw);
+    assert.equal(src.slice(l.srcStart, l.srcEnd), l.source.map((s) => s.text).join(''));
   }
 });
 
-test('NFD: an implicit ruby over a decomposed kana keeps its source offsets (the tokenizer never composes)', () => {
-  const D = '\u3099';
+test('source cuts the line at its markup: each markup node alone, the text between joined', () => {
+  const src = '前置き山田《やまだ》は｜王都《おうと》［＃「王都」に傍点］へ［＃こわれ';
+  const [l] = lines(src);
+  assert.ok(l);
+  assert.deepEqual(l.source.map((s) => s.text), [
+    '前置き山田', // the implicit base stays with the text before it
+    '《やまだ》',
+    'は',
+    '｜',
+    '王都',
+    '《おうと》',
+    '［＃「王都」に傍点］',
+    'へ',
+    '［＃こわれ',
+  ]);
+  for (const s of l.source) {
+    assert.equal(src.slice(s.srcStart, s.srcStart + s.text.length), s.text);
+  }
+});
+
+test('NFD: an implicit ruby over a decomposed kana keeps its source offsets (the syntax layer never composes)', () => {
   const src = `カ${D}ラス《か${D}らす》`;
   const [l] = lines(src);
   assert.ok(l);
