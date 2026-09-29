@@ -1,0 +1,17 @@
+name: 公式サイトへの要望
+description: jpnov.com に載せてほしいこと・わかりにくかったところ
+labels: ['website:enhancement']
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: 要望
+      description: サイトのどこを、どう変えてほしいかを書いてください。わかりにくかったところや、知りたかったのに載っていなかったことも、ここにどうぞ。
+    validations:
+      required: true
+
+  - type: textarea
+    id: refs
+    attributes:
+      label: 参考
+      description: わかりやすいと感じた、ほかのサイトのページなど。
