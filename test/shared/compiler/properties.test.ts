@@ -30,8 +30,8 @@ test('a row shows the state of its line', () => {
 
 test('the three line endings lay out alike', () => {
   for (const src of CORPUS.slice(0, 150)) {
-    const lf = buildRows(parse(withEol(src, '\n'), { autoTcy: 'punctuationPairs' }), { dash: 'horizontalBar' });
-    assert.deepEqual(buildRows(parse(withEol(src, '\r\n'), { autoTcy: 'punctuationPairs' }), { dash: 'horizontalBar' }), lf, JSON.stringify(src));
-    assert.deepEqual(buildRows(parse(withEol(src, '\r'), { autoTcy: 'punctuationPairs' }), { dash: 'horizontalBar' }), lf, JSON.stringify(src));
+    const lf = buildRows(parse(withEol(src, '\n')), { dash: 'horizontalBar' });
+    assert.deepEqual(buildRows(parse(withEol(src, '\r\n')), { dash: 'horizontalBar' }), lf, JSON.stringify(src));
+    assert.deepEqual(buildRows(parse(withEol(src, '\r')), { dash: 'horizontalBar' }), lf, JSON.stringify(src));
   }
 });

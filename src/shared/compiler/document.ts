@@ -2,7 +2,7 @@ import type { Ast, Line, SpanChannel, ValueLookup } from '../ast/nodes.ts';
 import { VALUE_NAMES, closingAnnotations, indentAnnotation, spanChannel } from '../ast/notation.ts';
 import { parse } from '../ast/parse.ts';
 import { printLine } from '../ast/print.ts';
-import type { AutoTcyMode, DashMode, KinsokuMode, LinePitch } from '../config/types.ts';
+import type { DashMode, KinsokuMode, LinePitch } from '../config/types.ts';
 import type { BuildChrome } from './chrome.ts';
 import { emrProbe, stylesheet } from './css.ts';
 import type { PaperOrientation, PaperSize } from './geometry.ts';
@@ -22,7 +22,8 @@ export interface BookInput {
   readonly divider?: string | undefined;
   /**
    * タイトル／ペンネーム for ［＃ここに「…」の値を表示］ on cover pages and in the page furniture,
-   * pre-resolved by the caller (the title fallback is the EPUB dc:title rule); absent = ''.
+   * decided by the caller (the build gives a book without a title the stem of its output
+   * name); absent = ''.
    * The counts (総ページ数, 原稿用紙換算枚数, ページ番号) derive from the render itself.
    */
   readonly title?: string | undefined;
@@ -35,6 +36,9 @@ export interface BookInput {
     readonly files: readonly { readonly name: string; readonly src: string }[];
   } | undefined;
 }
+
+/** A book with its title decided: an EPUB must carry one (dc:title). */
+export type TitledBook = BookInput & { readonly title: string };
 
 /** The first (or last) line of a chapter holding anything but white space; null when none. */
 function boundaryLine(ast: Ast, edge: 'first' | 'last'): Line | null {
@@ -107,8 +111,7 @@ function dividerLine(divider: string, charsPerLine: number | null): string {
  * divider dangling at a page seam serves nothing — the blank line still applies).
  *
  * Chapter edges are read LITERALLY: author blank lines are preserved and stack with the
- * glue. The glue is never autoTcy'd; known limitation: a divider that is itself a bare `!?`
- * pair combines only on a `.txt` re-render.
+ * glue.
  *
  * `charsPerLine` is the width a bare divider centres on; null = no centring, the bare mark at
  * the line head (the 原稿用紙換算枚数 count).
@@ -197,7 +200,6 @@ export function renderBook(opts: {
   linesPerPage: number;
   linePitch: LinePitch;
   kinsoku: KinsokuMode;
-  autoTcy: AutoTcyMode;
   dash: DashMode;
   paperSize: PaperSize;
   paperOrientation: PaperOrientation;
@@ -209,7 +211,7 @@ export function renderBook(opts: {
   // divider centres on the flow's own line width.
   const chapters = opts.books.map((book) =>
     book.files.map((file) => {
-      const ast = parse(file.src, { autoTcy: opts.autoTcy });
+      const ast = parse(file.src);
       return { ast, rows: buildRows(ast, { dash: opts.dash }) };
     }),
   );
@@ -256,7 +258,7 @@ export function renderBook(opts: {
 
   const coverPagesOf = (book: BookInput, values: ValueLookup): DisplayLine[][] => {
     const rows = (book.cover?.files ?? []).flatMap((file, i): Row[] => {
-      const ast = parse(file.src, { autoTcy: opts.autoTcy, values });
+      const ast = parse(file.src, values);
       const r = buildRows(ast, { dash: opts.dash });
       return i > 0 ? [{ kind: 'pagebreak' }, ...r] : r; // each cover file starts on a fresh page
     });
@@ -316,18 +318,13 @@ function chapterText(ast: Ast): string {
  * with `'\n' + seamClosers(prev) + chapterGlue(...)` (the `'\n'` ends the previous chapter's last
  * line; the closers end the spans it left open; the glue parses into exactly the rows the HTML
  * build inserts at that seam). The output takes the manuscript's line endings: CRLF throughout
- * when any chapter file is CRLF, else LF; a lone `\r` passes through. `autoTcy` prints the
- * 自動縦中横 annotations per file so the `.txt` round-trips idempotently. An empty book -> "" (a
+ * when any chapter file is CRLF, else LF; a lone `\r` passes through. An empty book -> "" (a
  * wholly-empty middle file adds one extra blank line — benign); a divider that itself opens a span
  * (`［＃太字］＊`) leaks into the next chapter. Pure + vscode-free.
  */
-export function concatBookText(
-  book: BookInput,
-  autoTcy: AutoTcyMode,
-  charsPerLine: number,
-): string {
+export function concatBookText(book: BookInput, charsPerLine: number): string {
   const chapters = book.files.map((file) => {
-    const ast = parse(file.src, { autoTcy });
+    const ast = parse(file.src);
     return { ast, text: chapterText(ast) };
   });
   const eol = chapters.some(({ ast }) => ast.lines.some((line) => line.eol === '\r\n')) ? '\r\n' : '\n';

@@ -22,7 +22,7 @@
  *
  * Relative imports only (native test loader); vscode-free.
  */
-import type { HeadingLevel, Span } from '../../shared/ast/nodes.ts';
+import type { Ast, HeadingLevel, Span } from '../../shared/ast/nodes.ts';
 import type { ActiveRule } from '../../shared/lint/select.ts';
 import type { LocalizableMessage } from '../../shared/protocol.ts';
 
@@ -126,10 +126,12 @@ export type FixSpec =
   | { readonly insert: ProseUnit; readonly side: 'before' | 'after'; readonly text: string }
   | { readonly erase: Span };
 
-/** What a rule instance is handed: its resolved options and the report sink. `message` overrides
- *  the default `{ code: rule.code }` (sub-codes like `lint.common.dash.parity`). */
+/** What a rule instance is handed: its resolved options, the document's parse and the report sink.
+ *  `message` overrides the default `{ code: rule.code }` (sub-codes like `lint.common.dash.parity`). */
 export interface RuleContext {
   readonly options: ActiveRule['options'];
+  /** What the resolver decided — a binding, a cell, a finding. A fix still names a piece of the line. */
+  readonly ast: Ast;
   report(
     span: Span,
     extra?: { readonly message?: LocalizableMessage; readonly fix?: FixSpec },

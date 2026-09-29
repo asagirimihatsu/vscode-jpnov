@@ -15,6 +15,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parse } from '../../src/shared/ast/parse.ts';
 import { selectRules } from '../../src/shared/lint/select.ts';
 import { computeLintFindings } from '../../src/server/lint/engine.ts';
+import type { LintFinding } from '../../src/server/lint/engine.ts';
 import type { RawLintConfigWire } from '../../src/shared/protocol.ts';
 import { createHighlightStore } from '../../src/server/highlight/vocabulary.ts';
 import type { ReadText, ServerContext } from '../../src/server/context.ts';
@@ -132,11 +133,16 @@ export interface LintEdit {
   readonly t: string;
 }
 
+/** `src` as an open document, and its lint findings under `raw`. */
+export function lintFindings(src: string, raw: RawLintConfigWire): { doc: TextDocument; findings: LintFinding[] } {
+  const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, src);
+  return { doc, findings: computeLintFindings(doc, parse(src), selectRules(raw)) };
+}
+
 /** Lints `src` under `raw` and applies every fix right-to-left (at one offset the wider edit first,
  *  so an insert there survives as under LSP `applyEdits`), returning the result and its edits. */
 export function applyLintFixes(src: string, raw: RawLintConfigWire): { out: string; edits: LintEdit[] } {
-  const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, src);
-  const findings = computeLintFindings(doc, parse(src), selectRules(raw));
+  const { doc, findings } = lintFindings(src, raw);
   const edits = findings
     .flatMap((f) =>
       f.fix ? [{ s: doc.offsetAt(f.fix.range.start), e: doc.offsetAt(f.fix.range.end), t: f.fix.newText }] : [],

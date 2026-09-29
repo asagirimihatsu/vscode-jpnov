@@ -1,6 +1,6 @@
 /**
- * Prints the syntax layer back to source text. The nodes tile their lines, so an untouched
- * document prints as it was read; a node a transform inserted prints where it was inserted.
+ * Prints the syntax layer back to source text. The nodes tile their lines, so a document
+ * prints as it was read.
  *
  * Pure + vscode-free.
  */

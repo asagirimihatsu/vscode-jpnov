@@ -122,6 +122,10 @@ export function renderMessage(msg: LocalizableMessage): string {
       return vscode.l10n.t('too many ！ or ？ in a row');
     case 'lint.common.exclamationRun.single':
       return vscode.l10n.t('use the full-width mark for a single ！ or ？');
+    case 'lint.common.exclamationTcy':
+      return vscode.l10n.t('add the 縦中横 annotation so {0} sits in one square', s(0));
+    case 'lint.common.exclamationTcy.cut':
+      return vscode.l10n.t('annotation target "{0}" takes only one mark of "{1}" (the pair stays on its side)', s(0), s(1));
     case 'lint.common.arabicDigits':
       return vscode.l10n.t('too many digits in an Arabic numeral');
     case 'lint.common.noTrailingSpace':

@@ -5,6 +5,8 @@
  *
  * Relative imports only (native test loader); vscode-free.
  */
+import type { Span } from '../../../shared/ast/nodes.ts';
+import { tcyAnnotation } from '../../../shared/ast/notation.ts';
 import { DASH_CHARS } from '../../../shared/dash.ts';
 
 import { CLOSERS } from '../sentences.ts';
@@ -198,8 +200,9 @@ export function exclamationSpaceRule(ctx: RuleContext): LineRule {
 }
 
 /** ！？の幅と連続: one mark is full-width; a double with a full-width mark should be the
- *  half-width pair (縦中横 via autoTcy); three or more is its own finding (`.long` — no pair can
- *  set that in one cell). A lone half-width mark lies on its side in vertical text (`.single`). */
+ *  half-width pair (the one exclamationTcy sets in one cell); three or more is its own finding
+ *  (`.long` — no pair can set that in one cell). A lone half-width mark lies on its side in
+ *  vertical text (`.single`). */
 export function exclamationRunRule(ctx: RuleContext): LineRule {
   return {
     line(line: LintLine): void {
@@ -225,6 +228,73 @@ export function exclamationRunRule(ctx: RuleContext): LineRule {
           });
         }
       });
+    },
+  };
+}
+
+/** A run of exactly two half-width ! / ?, as the half-width characters beside it bound it. */
+const HALF_PAIR = /(?<![!?])[!?]{2}(?![!?])/g;
+
+/** Which of `items` holds a position: the items in source order, the positions asked growing.
+ *  Two items may overlap (every piece of a value sits where its field does). */
+function holderAt<T extends { readonly span: Span }>(items: readonly T[]): (pos: number) => T | undefined {
+  let next = 0; // items[next..] end after the position asked last
+  return (pos) => {
+    while ((items[next]?.span.end ?? Infinity) <= pos) {
+      next += 1;
+    }
+    const item = items[next];
+    return item !== undefined && item.span.start <= pos ? item : undefined;
+  };
+}
+
+/**
+ * 半角のペアの縦中横: a half-width pair with no 縦中横 annotation lies on its side, two cells long.
+ * The fix writes the annotation after it (https://www.aozora.gr.jp/annotation/etc.html#tatechu_yoko).
+ * A pair is read inside its piece, so markup between two marks ends the run: `!［＃太字］!?`
+ * holds the pair `!?`.
+ *
+ * Nothing is reported where a 縦中横 holds the pair whole, where a ruby does (an annotation
+ * written there leaves the pair on its side, or stops a left ruby), nor inside a 《…》 that made
+ * no ruby (an annotation there prints as characters). A pair that an annotation takes one mark
+ * of is reported without a fix (`.cut`): the fix would stop that annotation.
+ */
+export function exclamationTcyRule(ctx: RuleContext): LineRule {
+  const { ast } = ctx;
+  const baselessAt = holderAt(ast.issues.filter((issue) => issue.kind === 'rubyBaseMissing'));
+  /** Where a bound range starts or ends -> the 対象文字列 of the annotation bound to it. */
+  const edges = new Map<number, string>();
+  for (const [node, span] of ast.bound) {
+    edges.set(span.start, node.target.text);
+    edges.set(span.end, node.target.text);
+  }
+  return {
+    line(line: LintLine): void {
+      const at = holderAt((ast.lines[line.srcLine]?.content ?? []).filter((item) => item.kind !== 'comment'));
+      for (const piece of line.pieces) {
+        HALF_PAIR.lastIndex = 0;
+        for (let m = HALF_PAIR.exec(piece.text); m !== null; m = HALF_PAIR.exec(piece.text)) {
+          const start = piece.srcStart + m.index;
+          if (baselessAt(start) !== undefined) {
+            continue; // a 《…》 that made no ruby holds the pair
+          }
+          const first = at(start);
+          const second = at(start + 1);
+          if (first === second && first?.kind !== 'chars') {
+            continue; // a ruby or a 縦中横 holds the pair
+          }
+          const span = { start, end: start + m[0].length };
+          const cutBy = edges.get(start + 1);
+          if (cutBy !== undefined) {
+            ctx.report(span, { message: { code: 'lint.common.exclamationTcy.cut', args: [cutBy, m[0]] } });
+          } else if (first === second) { // what splits a pair is a bound range: the case above
+            ctx.report(span, {
+              message: { code: 'lint.common.exclamationTcy', args: [m[0]] },
+              fix: { replace: { slice: piece, start: m.index, end: m.index + m[0].length }, text: m[0] + tcyAnnotation(m[0]) },
+            });
+          }
+        }
+      }
     },
   };
 }

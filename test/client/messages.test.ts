@@ -70,6 +70,8 @@ const ARGS: Record<MsgCode, readonly (string | number)[]> = {
   'lint.common.exclamationRun': [],
   'lint.common.exclamationRun.long': [],
   'lint.common.exclamationRun.single': [],
+  'lint.common.exclamationTcy': ['!?'],
+  'lint.common.exclamationTcy.cut': ['に!', '!?'],
   'lint.common.arabicDigits': [],
   'lint.common.noTrailingSpace': [],
   'lint.common.blankRun': [],

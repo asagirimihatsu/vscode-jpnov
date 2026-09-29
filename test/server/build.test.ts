@@ -962,7 +962,7 @@ test('build: the header and footer take the value annotations, filled per page',
   assert.match(html.content, /<div class="hd">作品名<\/div><div class="ft r">ペンネーム　1<\/div>/);
 });
 
-test('build: a title-less book falls back to the outRel STEM, exactly like the EPUB title', async () => {
+test('build: a title-less book takes the STEM of its outRel as its title, in every format that shows one', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
   // Nested on purpose: outRel is `part1/vol2` but its stem is `vol2`, so the two differ.
@@ -980,7 +980,7 @@ test('build: a title-less book falls back to the outRel STEM, exactly like the E
   assert.match(html.content, /<div class="line" data-line="0">vol2／<\/div>/);
   assert.doesNotMatch(html.content, /part1\/vol2/);
 
-  // …and the EPUB's dc:title agrees, which is why the two share one expression.
+  // …and the EPUB's dc:title agrees: both read the title the build decided.
   const epub = (await handleBuild(ctx, {
     format: 'epub',
     settings: SETTINGS,

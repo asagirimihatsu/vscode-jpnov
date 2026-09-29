@@ -643,7 +643,6 @@ test('renderDocument ships the settings snapshot on the renderFile request', asy
     linePitch: 1.5,
     fontFamily: '',
     kinsoku: 'strict',
-    autoTcy: 'punctuationPairs',
     dash: 'horizontalBar',
     lineNumbers: true,
     edgeLine: 'red',

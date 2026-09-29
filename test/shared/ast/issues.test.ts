@@ -94,7 +94,7 @@ const tcy = (src: string): Issue[] => issuesOf(src, 'unterminatedTcy', 'dangling
 
 const spanned = (content: string): string => `［＃縦中横］${content}［＃縦中横終わり］`;
 
-const held = (src: string, values?: ReadonlyMap<string, string>): (Held | null)[] => heldOf(src, { values });
+const held = (src: string, values?: ReadonlyMap<string, string>): (Held | null)[] => heldOf(src, values);
 
 test('縦中横: a span with no 終わり before its line end is reported over its start', () => {
   assert.deepEqual(tcy('序［＃縦中横］12\n次'), [{ kind: 'unterminatedTcy', span: { start: 1, end: 7 } }]);
@@ -245,7 +245,7 @@ test('a miss after a value field is left unreported in a compile without values'
   // …and judged when the postfix is met, even if it binds later: inside a ｜ base.
   assert.deepEqual(targets(`｜山田［＃「無」に傍点］${field}《よみ》`), ['無']);
   // With the values in hand, a miss is a miss.
-  const valued = parse(`${field}［＃「無」に傍点］`, { values: new Map([[VALUE_NAMES.title, '作品名']]) });
+  const valued = parse(`${field}［＃「無」に傍点］`, new Map([[VALUE_NAMES.title, '作品名']]));
   assert.deepEqual(valued.issues.map((i) => i.kind), ['postfixTargetMissing']);
 });
 

@@ -15,6 +15,7 @@ import {
   headingLevelOf,
   headingLiteralOf,
   indentAnnotation,
+  tcyAnnotation,
   valueAnnotation,
   valueOf,
   variantStyle,
@@ -60,6 +61,11 @@ test('valueOf: the supplied value, else the default; an empty value is a value',
 test('valueAnnotation reads back as the value field of its name', () => {
   assert.equal(valueAnnotation('タイトル'), '［＃ここに「タイトル」の値を表示］');
   assert.equal(nodeOf(valueAnnotation('発行日'), 'valueField').name.text, '発行日');
+});
+
+test('tcyAnnotation reads back as the 縦中横 of its target', () => {
+  assert.equal(tcyAnnotation('!?'), '［＃「!?」は縦中横］');
+  assert.equal(nodeOf(tcyAnnotation('12'), 'tcyPostfix').target.text, '12');
 });
 
 test('the heading literals and their levels are inverses', () => {

@@ -17,7 +17,7 @@ import { PAPER_ORIENTATIONS, PAPER_SIZES } from '../compiler/geometry.ts';
 import { VALUE_NAMES, valueAnnotation } from '../ast/notation.ts';
 import type { HtmlSettings, PreviewSettings } from '../protocol.ts';
 import type { LayoutSettings } from './types.ts';
-import { AUTO_TCY_MODES, CHARS_MAX, CHARS_MIN, DASH_MODES, KINSOKU_MODES, LAYOUT_DEFAULT, LINE_PITCHES } from './types.ts';
+import { CHARS_MAX, CHARS_MIN, DASH_MODES, KINSOKU_MODES, LAYOUT_DEFAULT, LINE_PITCHES } from './types.ts';
 
 export const PREVIEW_CHROME_DEFAULT = {
   lineNumbers: true,
@@ -86,7 +86,6 @@ function resolveLayout(s: LayoutSettings): LayoutSettings {
     linePitch: enumOr(s.linePitch, LINE_PITCHES, LAYOUT_DEFAULT.linePitch),
     fontFamily: stringOr(s.fontFamily, LAYOUT_DEFAULT.fontFamily),
     kinsoku: enumOr(s.kinsoku, KINSOKU_MODES, LAYOUT_DEFAULT.kinsoku),
-    autoTcy: enumOr(s.autoTcy, AUTO_TCY_MODES, LAYOUT_DEFAULT.autoTcy),
     dash: enumOr(s.dash, DASH_MODES, LAYOUT_DEFAULT.dash),
   };
 }

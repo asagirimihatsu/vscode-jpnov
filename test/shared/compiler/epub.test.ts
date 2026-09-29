@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { strFromU8, unzipSync } from 'fflate';
 
-import type { JpbookMeta } from '../../../src/shared/book/jpbook.ts';
 import type { BookInput } from '../../../src/shared/compiler/document.ts';
 import { epubMembers } from '../../../src/shared/compiler/epub.ts';
 import { ocfZip } from '../../../src/shared/compiler/ocf.ts';
@@ -11,8 +10,15 @@ import { VALUE_DEFAULTS } from '../../../src/shared/ast/notation.ts';
 
 const MODIFIED = '2026-08-04T00:00:00Z';
 
-function members(book: BookInput, meta: JpbookMeta = {}, outRel = 'vol1'): ReturnType<typeof epubMembers> {
-  return epubMembers({ book, meta, outRel, kinsoku: 'relaxed', autoTcy: 'punctuationPairs', dash: 'horizontalBar', modified: MODIFIED });
+/** The members of `book`, under the title the build would have decided for it. */
+function members(book: BookInput, outRel = 'vol1'): ReturnType<typeof epubMembers> {
+  return epubMembers({
+    book: { ...book, title: book.title ?? '作品名' },
+    outRel,
+    kinsoku: 'relaxed',
+    dash: 'horizontalBar',
+    modified: MODIFIED,
+  });
 }
 
 const TWO_CHAPTERS: BookInput = {
@@ -42,7 +48,7 @@ test('container.xml points at the package document', () => {
 });
 
 test('the opf carries the required metadata and an rtl spine in reading order', () => {
-  const opf = members(TWO_CHAPTERS, { title: '試験 & 本', author: 'ペンネーム' }).find(
+  const opf = members({ ...TWO_CHAPTERS, title: '試験 & 本', author: 'ペンネーム' }).find(
     (m) => m.name === 'OEBPS/package.opf',
   )?.content ?? '';
   assert.match(opf, /<dc:identifier id="pub-id">urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}<\/dc:identifier>/);
@@ -60,16 +66,17 @@ test('the opf carries the required metadata and an rtl spine in reading order', 
 test('the identifier is stable across builds and books keep distinct identities', () => {
   const id = (outRel: string): string =>
     /urn:uuid:[0-9a-f-]{36}/.exec(
-      members(TWO_CHAPTERS, {}, outRel).find((m) => m.name === 'OEBPS/package.opf')?.content ?? '',
+      members(TWO_CHAPTERS, outRel).find((m) => m.name === 'OEBPS/package.opf')?.content ?? '',
     )?.[0] ?? '';
   assert.equal(id('vol1'), id('vol1'));
   assert.notEqual(id('vol1'), id('vol2'));
 });
 
-test('dc:creator appears only when the book has an author; title falls back to the outRel stem', () => {
-  const opf = members(TWO_CHAPTERS, {}, 'part1/vol2').find((m) => m.name === 'OEBPS/package.opf')?.content ?? '';
-  assert.ok(!opf.includes('<dc:creator>'));
-  assert.ok(opf.includes('<dc:title>vol2</dc:title>'));
+test('dc:creator appears only when the book has an author', () => {
+  const opfOf = (book: BookInput): string => members(book).find((m) => m.name === 'OEBPS/package.opf')?.content ?? '';
+  assert.ok(!opfOf(TWO_CHAPTERS).includes('<dc:creator>'));
+  // The build hands a book without an author the empty string.
+  assert.ok(!opfOf({ ...TWO_CHAPTERS, author: '' }).includes('<dc:creator>'));
 });
 
 test('nav lists one entry per CHAPTER (not per split), labeled by first 見出し or file stem', () => {
@@ -114,7 +121,7 @@ test('an empty chapter source contributes nothing; an all-empty book still gets 
     'OEBPS/text/ch002.xhtml',
   ]);
 
-  const empty = members({ files: [{ name: 'a.jpnov', src: '' }] }, { title: '空' });
+  const empty = members({ files: [{ name: 'a.jpnov', src: '' }], title: '空' });
   const doc = empty.find((m) => m.name === 'OEBPS/text/ch001.xhtml');
   assert.ok(doc, 'a synthesized blank chapter keeps the spine non-empty');
   assert.ok(doc.content.includes('<p><br/></p>'));

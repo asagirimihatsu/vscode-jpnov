@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { VALUE_NAMES } from '../../../src/shared/ast/notation.ts';
 import { COVER_TEMPLATE, normalizeFileInput } from '../../../src/shared/book/create.ts';
+import { nodesOf } from '../ast/_shape.ts';
 import { readRepoFile } from '../repo.ts';
 
 test('normalizeFileInput appends the suffix and normalizes separators', () => {
@@ -61,4 +63,10 @@ test('COVER_TEMPLATE is the README sample, verbatim, in both languages', () => {
   for (const file of ['README.md', 'README.en.md']) {
     assert.ok(readRepoFile(file).includes(COVER_TEMPLATE.trimEnd()), file);
   }
+});
+
+test('COVER_TEMPLATE shows values the notation names', () => {
+  // Any other name prints as itself and raises no diagnostic: only this catches a renamed value.
+  const shown = nodesOf(COVER_TEMPLATE).flatMap((node) => (node.kind === 'valueField' ? [node.name.text] : []));
+  assert.deepEqual(shown, [VALUE_NAMES.title, VALUE_NAMES.author, VALUE_NAMES.totalPages, VALUE_NAMES.sheets]);
 });

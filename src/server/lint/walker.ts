@@ -268,8 +268,7 @@ function slicesOf(nodes: readonly SyntaxNode[]): SourceSlice[] {
 /**
  * Walks `ast` and yields one {@link LintLine} per source line, INCLUDING the final line (even
  * when empty — the line after the final terminator; what it means is each rule's call). Line
- * numbers are the AST's, which are LSP's. `ast` holds no node a transform inserted: such a node
- * has no place in the buffer.
+ * numbers are the AST's, which are LSP's.
  */
 export function* walkLines(ast: Ast): Generator<LintLine, void, undefined> {
   // Cross-line state (the "big state machine").

@@ -429,9 +429,9 @@ function lastReal(units: readonly Unit[], start: number, before: number): number
 /**
  * 分離禁止 classes (cl-08, https://www.w3.org/TR/jlreq/#character_classes): adjacent SAME-CLASS
  * chars bind (mixed codepoints included, e.g. —―; the dash class is {@link DASH_CHARS}).
- * Half-width 約物 bind only as an exact pair — the shape autoTcy targets — and only when it left
- * them as two cells (full-width ！？ need no binding: they are 行頭禁則, so the 追い出し cascade
- * already moves a split pair whole).
+ * Half-width 約物 bind only as an exact pair — two cells, a pair with no 縦中横 annotation
+ * (full-width ！？ need no binding: they are 行頭禁則, so the 追い出し cascade already moves a
+ * split pair whole).
  */
 export const INSEP_LEADER = new Set('…‥'); // U+2026 U+2025
 const INSEP_BANG = new Set('!?'); // half-width; exactly-2 runs only

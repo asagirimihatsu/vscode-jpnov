@@ -449,11 +449,3 @@ export function resolve(doc: Syntax, values?: ValueLookup): Ast {
 
   return { lines, issues: ledger.issues.sort(bySource), openAtEnd, pairs: ledger.pairs, bound: ledger.bound, held: ledger.held };
 }
-
-/**
- * What each corner-target postfix of `line` binds to. A postfix looks no further than its own
- * line, so the line is resolved alone.
- */
-export function bindingsOf(line: SyntaxLine, values?: ValueLookup): ReadonlyMap<PostfixNode, Span> {
-  return resolve({ lines: [line], issues: [] }, values).bound;
-}

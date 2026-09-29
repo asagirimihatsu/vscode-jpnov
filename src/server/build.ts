@@ -23,7 +23,7 @@ import type { CancellationToken, WorkDoneProgressReporter } from 'vscode-languag
 import { composeBookChrome, coverPathOf, firstErrorOf, jpbookOutRel, parseJpbook } from '#/shared/book/jpbook.ts';
 import type { JpbookMeta, ParsedLine } from '#/shared/book/jpbook.ts';
 import { concatBookText, renderBook } from '#/shared/compiler/document.ts';
-import type { BookInput } from '#/shared/compiler/document.ts';
+import type { BookInput, TitledBook } from '#/shared/compiler/document.ts';
 import { chapterStem, epubMembers } from '#/shared/compiler/epub.ts';
 import { errorText } from '#/shared/errors.ts';
 import { LocalizedError } from '#/shared/messages.ts';
@@ -228,7 +228,7 @@ function emitArtifact(
   outDirUri: string,
   selection: BuildSelection,
   outRel: string,
-  input: BookInput,
+  input: TitledBook,
   meta: JpbookMeta,
 ): BuildArtifact {
   switch (selection.format) {
@@ -236,12 +236,12 @@ function emitArtifact(
       return {
         kind: 'txt',
         path: childUri(outDirUri, `${outRel}.txt`),
-        content: concatBookText(input, selection.settings.autoTcy, selection.settings.charsPerLine),
+        content: concatBookText(input, selection.settings.charsPerLine),
       };
     case 'html':
-      // Grid geometry, 禁則, and 自動縦中横 come from the request's settings snapshot; the
-      // page furniture is composed per book from its own front matter (this is what lets
-      // one batch build carry a different header per volume).
+      // Grid geometry and 禁則 come from the request's settings snapshot; the page furniture
+      // is composed per book from its own front matter (this is what lets one batch build
+      // carry a different header per volume).
       return {
         kind: 'html',
         path: childUri(outDirUri, `${outRel}.html`),
@@ -251,7 +251,6 @@ function emitArtifact(
           linesPerPage: selection.settings.linesPerPage,
           linePitch: selection.settings.linePitch,
           kinsoku: selection.settings.kinsoku,
-          autoTcy: selection.settings.autoTcy,
           dash: selection.settings.dash,
           paperSize: selection.settings.paperSize,
           paperOrientation: selection.settings.paperOrientation,
@@ -265,10 +264,8 @@ function emitArtifact(
         path: childUri(outDirUri, `${outRel}.epub`),
         members: epubMembers({
           book: input,
-          meta,
           outRel,
           kinsoku: selection.settings.kinsoku,
-          autoTcy: selection.settings.autoTcy,
           dash: selection.settings.dash,
           // dcterms:modified wants CCYY-MM-DDThh:mm:ssZ — second precision, no milliseconds.
           modified: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
@@ -338,13 +335,13 @@ async function* buildRoot(
         continue;
       }
       // The divider and the タイトル／ペンネーム values are BODY-side inputs and ride the
-      // BookInput (the title fallback is the EPUB dc:title rule); composeBookChrome carries
-      // only the page furniture. Covers are html-only, so a missing cover file cannot fail a
-      // txt/epub build; chapters read first, so a book missing both reports the same error
-      // whichever format is built.
+      // BookInput (a book without a title takes the stem of its output name, decided here for
+      // every format); composeBookChrome carries only the page furniture. Covers are html-only,
+      // so a missing cover file cannot fail a txt/epub build; chapters read first, so a book
+      // missing both reports the same error whichever format is built.
       const bookFiles = await readBookFiles(ctx, target.rootUri, parsed.lines, token);
       const coverFiles = selection.format === 'html' ? await readCoverFiles(ctx, target.rootUri, parsed.lines, token) : [];
-      const input: BookInput = {
+      const input: TitledBook = {
         ...bookFiles,
         divider: parsed.meta.divider,
         title: parsed.meta.title ?? chapterStem(outRel),

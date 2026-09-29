@@ -111,6 +111,10 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return 'too many ！ or ？ in a row';
     case 'lint.common.exclamationRun.single':
       return 'use the full-width mark for a single ！ or ？';
+    case 'lint.common.exclamationTcy':
+      return `add the 縦中横 annotation so ${a(0)} sits in one square`;
+    case 'lint.common.exclamationTcy.cut':
+      return `annotation target "${a(0)}" takes only one mark of "${a(1)}" (the pair stays on its side)`;
     case 'lint.common.arabicDigits':
       return 'too many digits in an Arabic numeral';
     case 'lint.common.noTrailingSpace':
