@@ -1,11 +1,16 @@
 /** Pure + vscode-free. */
 
+const UNSAFE = /[&<>"]/;
+
 /**
  * Escapes the four characters that are unsafe in HTML text/attribute contexts:
  * `&`, `<`, `>`, and `"`. (`&` is replaced first so the entities it introduces are
- * not double-escaped.)
+ * not double-escaped.) Most calls hold none of the four: the layout escapes per character.
  */
 export function escapeHtml(s: string): string {
+  if (!UNSAFE.test(s)) {
+    return s;
+  }
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

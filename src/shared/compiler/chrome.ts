@@ -44,7 +44,7 @@ export interface BuildChrome {
   readonly edgeLine: EdgeLineStyle;
   /**
    * Footer line: `.jpnov` notation whose ［＃ここに「…」の値を表示］ fields fill from the book and
-   * the page (VALUE_NAMES in tokenizer.ts); everything else prints as typed. Blank after trim
+   * the page (VALUE_NAMES in ast/notation.ts); everything else prints as typed. Blank after trim
    * suppresses the footer entirely (renderBook normalizes it to `footerAlign: 'none'`).
    */
   readonly footer: string;

@@ -14,7 +14,8 @@
  */
 import type { BuildChrome, FooterAlign } from '../compiler/chrome.ts';
 import { FOOTER_ALIGNS } from '../compiler/chrome.ts';
-import { indentAnnotation, tokenize } from '../compiler/tokenizer.ts';
+import { indentAnnotation } from '../ast/notation.ts';
+import { scan } from '../ast/scan.ts';
 import { BUILD_CHROME_DEFAULT } from '../config/settings.ts';
 import type { LocalizableMessage } from '../protocol.ts';
 
@@ -425,19 +426,19 @@ export interface DividerValue {
 
 /**
  * Splits a `divider` front-matter value into mark + position: a leading ［＃○字下げ］ (the
- * tokenizer's own classification, so the GUI and the render can never disagree) yields its
+ * scanner's own classification, so the GUI and the render can never disagree) yields its
  * amount, a bare value yields `indent: null` = centred at build time. Flush-head is
  * deliberately not expressible — it exists in neither the print nor the web convention.
  */
 export function parseDividerValue(value: string): DividerValue {
-  const first = tokenize(value)[0];
+  const first = scan(value).lines[0]?.syntax[0];
   if (first?.kind === 'indent') {
-    return { mark: value.slice(first.raw.length), indent: first.amount };
+    return { mark: value.slice(first.span.end), indent: first.amount };
   }
   return { mark: value, indent: null };
 }
 
-/** The inverse of {@link parseDividerValue}; the 字下げ spelling comes from the tokenizer. */
+/** The inverse of {@link parseDividerValue}; the 字下げ spelling comes from the notation. */
 export function composeDividerValue(mark: string, indent: number | null): string {
   return indent === null ? mark : indentAnnotation(indent) + mark;
 }

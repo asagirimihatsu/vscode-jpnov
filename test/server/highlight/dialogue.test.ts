@@ -6,8 +6,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createRecognizer } from '../../../src/server/highlight/recognizer.ts';
-import { buildSemanticTokens, tokenTypeIndex } from '../../../src/server/semanticTokens.ts';
-import { at, covers, decode, doc } from './tokens.ts';
+import { tokenTypeIndex } from '../../../src/server/semanticTokens.ts';
+import { at, buildSemanticTokens, covers, decode, doc } from './tokens.ts';
 
 const MARKER = tokenTypeIndex('marker');
 const CHARACTER = tokenTypeIndex('character');

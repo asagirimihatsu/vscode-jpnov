@@ -8,9 +8,9 @@
  *
  * Relative imports only (native test loader).
  */
-import { composeKana, DASH_BY_MODE, DASH_CHARS } from '../../shared/chars.ts';
-import { isHiragana, isKatakana } from '../../shared/compiler/tokenizer.ts';
+import { composeKana, isHiragana, isKatakana } from '../../shared/chars.ts';
 import { isDashMode } from '../../shared/config/types.ts';
+import { DASH_BY_MODE, DASH_CHARS } from '../../shared/dash.ts';
 import { unencodableChars } from '../../shared/encoding.ts';
 import type { ActiveRule } from '../../shared/lint/select.ts';
 import type { LocalizableMessage } from '../../shared/protocol.ts';

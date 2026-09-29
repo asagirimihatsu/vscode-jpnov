@@ -2,22 +2,34 @@
  * Editor-surface tests for src/server/syntax.ts — the always-on unclosed-［＃ Error diagnostics
  * that publishFindings merges ahead of the lint findings. Pure + import-light (relative imports
  * only in the graph), so it runs on Node's native test loader inside the `test/server/lint/**`
- * npm-test glob. The span logic itself is covered in test/shared/compiler/tokenizer.test.ts via
- * `findBrokenAnnotations`; these tests pin the LSP mapping (Range / severity / code / source).
+ * npm-test glob. The findings themselves are covered in test/shared/ast/issues.test.ts; these
+ * tests pin the LSP mapping (Range / severity / code / source).
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { DiagnosticSeverity } from 'vscode-languageserver/node';
+import type { Diagnostic } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
-import { annotationDiagnostics } from '../../../src/server/syntax.ts';
+import { annotationDiagnostics as diagnosticsOf } from '../../../src/server/syntax.ts';
+import { parse } from '../../../src/shared/ast/parse.ts';
+import { COVER_TEMPLATE } from '../../../src/shared/book/create.ts';
+import { D } from '../../shared/_kana.ts';
 
 const doc = (text: string): TextDocument =>
   TextDocument.create('mem://x.jpnov', 'jpnov', 1, text);
 
+/** The syntax diagnostics of `document` over the editor's parse of it. */
+const annotationDiagnostics = (document: TextDocument): Diagnostic[] => diagnosticsOf(document, parse(document.getText()));
+
 test('a clean document yields no syntax diagnostics', () => {
   assert.deepEqual(annotationDiagnostics(doc('本文［＃メモ］と《るび》。')), []);
+});
+
+test('the cover the panel creates yields no syntax diagnostics', () => {
+  // Its counts sit inside ［＃縦中横］: a value field is judged by what it shows, not by its name.
+  assert.deepEqual(annotationDiagnostics(doc(COVER_TEMPLATE)), []);
 });
 
 test('an unclosed ［＃ yields one Error covering ［＃…-to-line-end', () => {
@@ -151,11 +163,11 @@ test('a same-channel re-open replaces the slot (last-wins) — balanced, no Warn
   );
 });
 
-test('lexical Errors come first, then span Warnings', () => {
+test('Errors and Warnings come in source order', () => {
   const diags = annotationDiagnostics(doc('［＃ここから太字］\n壊れ［＃こわれ'));
   assert.deepEqual(
-    diags.map((d) => d.severity),
-    [DiagnosticSeverity.Error, DiagnosticSeverity.Warning],
+    diags.map((d) => [d.range.start.line, d.severity]),
+    [[0, DiagnosticSeverity.Warning], [1, DiagnosticSeverity.Error]],
   );
 });
 
@@ -177,15 +189,75 @@ test('縦中横 structural issues surface as Warnings with their codes', () => {
   assert.deepEqual(annotationDiagnostics(doc('令和［＃縦中横］12［＃縦中横終わり］年')), []);
 });
 
+test('縦中横: a postfix combining too much warns over its target', () => {
+  const diags = annotationDiagnostics(doc('1234［＃「1234」は縦中横］'));
+  assert.deepEqual(diags.map((d): unknown => d.data), [{ code: 'syntax.tcyTooLong' }]);
+  assert.deepEqual(diags[0]?.range, {
+    start: { line: 0, character: 7 },
+    end: { line: 0, character: 11 }, // 1234, inside ［＃「1234」は縦中横］
+  });
+});
+
 test('縦中横: a CRLF \\r is not content (no tooLong on three digits)', () => {
   const diags = annotationDiagnostics(doc('［＃縦中横］123\r\n次'));
   assert.equal(diags.length, 1); // the line-end auto-close only
   assert.deepEqual(diags[0]?.data, { code: 'syntax.unterminatedTcy' });
 });
 
+/** `[code, covered text]` of every diagnostic of a one-line `src`. */
+const onLine = (src: string): unknown[] =>
+  annotationDiagnostics(doc(src)).map((d): unknown => [
+    (d.data as { code: string }).code,
+    src.slice(d.range.start.character, d.range.end.character),
+  ]);
+
+test('縦中横: a span holding too much warns over what it holds, whatever closes it', () => {
+  assert.deepEqual(onLine('［＃縦中横］1234［＃縦中横終わり］'), [['syntax.tcyTooLong', '1234']]);
+  assert.deepEqual(onLine('［＃縦中横］123［＃縦中横終わり］'), []); // three render cleanly
+  // Ruby markup inside joins the cell as typed; a comment adds nothing.
+  assert.deepEqual(onLine('［＃縦中横］漢《かん》［＃縦中横終わり］'), [['syntax.tcyTooLong', '漢《かん》']]);
+  assert.deepEqual(onLine('［＃縦中横］12［＃x］3［＃縦中横終わり］'), []);
+  // Closed by the line end: the range is the content still.
+  for (const eol of ['', '\n次', '\r\n次']) {
+    assert.deepEqual(
+      onLine(`［＃縦中横］1234［＃メモ］${eol}`),
+      [['syntax.unterminatedTcy', '［＃縦中横］'], ['syntax.tcyTooLong', '1234']],
+      JSON.stringify(eol),
+    );
+  }
+});
+
+test('縦中横: the length is counted on the composed text', () => {
+  assert.deepEqual(onLine(`［＃縦中横］か${D}きく［＃縦中横終わり］`), []);
+  assert.deepEqual(onLine(`か${D}きく［＃「か${D}きく」は縦中横］`), []);
+  assert.deepEqual(onLine(`［＃縦中横］か${D}きくけ［＃縦中横終わり］`), [['syntax.tcyTooLong', `か${D}きくけ`]]);
+});
+
+test('縦中横: a value field counts as what it shows, never as its annotation', () => {
+  assert.deepEqual(onLine('［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］'), []);
+  assert.deepEqual(
+    onLine('［＃縦中横］123［＃ここに「ページ番号」の値を表示］［＃縦中横終わり］'),
+    [['syntax.tcyTooLong', '123［＃ここに「ページ番号」の値を表示］']],
+  );
+  // A text value shows its name, a name outside the table itself.
+  assert.deepEqual(
+    onLine('［＃縦中横］［＃ここに「タイトル」の値を表示］［＃縦中横終わり］'),
+    [['syntax.tcyTooLong', '［＃ここに「タイトル」の値を表示］']],
+  );
+  assert.deepEqual(onLine('［＃縦中横］［＃ここに「13」の値を表示］［＃縦中横終わり］'), []);
+});
+
+test('縦中横: a postfix inside an open span is reported where it is written', () => {
+  assert.deepEqual(onLine('［＃縦中横］12［＃「12345」は縦中横］'), [
+    ['syntax.unterminatedTcy', '［＃縦中横］'],
+    ['syntax.postfixTargetMissing', '12345'], // the open span holds the text: nothing to bind to
+    ['syntax.tcyTooLong', '12345'],
+  ]);
+});
+
 // --------------------------------------------------------------- postfix target Warnings
 
-test('an unresolved postfix target yields one Warning over the annotation, carrying the target', () => {
+test('an unresolved postfix target yields one Warning over the target, carrying it', () => {
   const diags = annotationDiagnostics(doc('別の文［＃「無」に傍点］'));
   assert.equal(diags.length, 1);
   const d = diags[0];
@@ -195,8 +267,8 @@ test('an unresolved postfix target yields one Warning over the annotation, carry
   assert.deepEqual(d.data, { code: 'syntax.postfixTargetMissing', args: ['無'] });
   assert.equal(d.message, 'annotation target "無" is not on this line, or is not aligned to a character boundary');
   assert.deepEqual(d.range, {
-    start: { line: 0, character: 3 },
-    end: { line: 0, character: 12 }, // ［＃「無」に傍点］
+    start: { line: 0, character: 6 },
+    end: { line: 0, character: 7 }, // 無, inside ［＃「無」に傍点］
   });
 });
 
@@ -265,7 +337,7 @@ test('a valid ruby and an unclosed 《 raise no ruby Warning; an empty 《》 is
   });
 });
 
-test('ruby Warnings come after the postfix-target Warnings', () => {
+test('a postfix-target Warning and a ruby Warning on one line come in source order', () => {
   const diags = annotationDiagnostics(doc('別の文［＃「無」に傍点］《x》'));
   assert.deepEqual(
     diags.map((d): unknown => d.data),
@@ -276,7 +348,7 @@ test('ruby Warnings come after the postfix-target Warnings', () => {
   );
   assert.deepEqual(
     diags.map((d) => [d.range.start.character, d.range.end.character]),
-    [[3, 12], [12, 15]],
+    [[6, 7], [12, 15]],
   );
 });
 

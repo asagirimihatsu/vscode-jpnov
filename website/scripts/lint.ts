@@ -10,6 +10,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { buildCodeActions } from '../../src/server/lint/codeActions.ts';
 import { computeLintFindings } from '../../src/server/lint/engine.ts';
 import { annotationDiagnostics } from '../../src/server/syntax.ts';
+import { parse } from '../../src/shared/ast/parse.ts';
 import { allSettingKeys } from '../../src/shared/lint/catalog.ts';
 import { selectRules } from '../../src/shared/lint/select.ts';
 import { lintWireValue } from '../../src/shared/lint/wire.ts';
@@ -76,7 +77,8 @@ export interface LintResult {
 
 export function lintSource(src: string): LintResult {
   const doc = TextDocument.create(URI, 'jpnov', 1, src);
-  const findings = computeLintFindings(src, RULES, doc);
+  const ast = parse(src);
+  const findings = computeLintFindings(doc, ast, RULES);
   const out: DiagnosticOut[] = [];
   const push = (diag: Diagnostic, fix?: { range: Range; newText: string }): void => {
     const message = diag.data as LocalizableMessage;
@@ -86,7 +88,7 @@ export function lintSource(src: string): LintResult {
   for (const finding of findings) {
     push(finding.diagnostic, finding.fix === undefined ? undefined : { range: toRange(finding.fix.range), newText: finding.fix.newText });
   }
-  for (const diag of annotationDiagnostics(doc)) {
+  for (const diag of annotationDiagnostics(doc, ast)) {
     push(diag);
   }
   const whole = { start: { line: 0, character: 0 }, end: doc.positionAt(src.length) };

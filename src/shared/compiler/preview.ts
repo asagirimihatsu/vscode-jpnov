@@ -1,9 +1,8 @@
+import { parse } from '../ast/parse.ts';
 import type { LayoutSettings } from '../config/types.ts';
-import { applyAutoTcy } from './autoTcy.ts';
 import type { PreviewChrome } from './chrome.ts';
 import { emrProbe, stylesheet } from './css.ts';
 import { buildRows, flowToHtml } from './layout.ts';
-import { tokenize } from './tokenizer.ts';
 
 /**
  * Renders ONE file as a full standalone `<html>` document for the preview pane: a CONTINUOUS
@@ -25,11 +24,11 @@ export function renderPreview(
   opts: LayoutSettings & { chrome: PreviewChrome },
 ): string {
   // Render the body first so the CSS includes ONLY the classes it used (the sort is
-  // lexicographic, deterministic). The 自動縦中横 rewrite runs before tokenizing — the same
-  // front door as both build outputs, so the preview always agrees with them.
+  // lexicographic, deterministic). 自動縦中横 is applied inside the parse — the same front door
+  // as both build outputs, so the preview always agrees with them.
   const used = new Set<string>();
   const body = flowToHtml(
-    buildRows(tokenize(applyAutoTcy(src, opts.autoTcy)), { dash: opts.dash }),
+    buildRows(parse(src, { autoTcy: opts.autoTcy }), { dash: opts.dash }),
     opts.charsPerLine,
     opts.kinsoku,
     used,

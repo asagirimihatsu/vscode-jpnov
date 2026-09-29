@@ -3,7 +3,12 @@
  * LSP delta-encoded token stream into absolute tuples, and query it by position. (Not a `*.test.ts`
  * file, so the runner imports it as a helper rather than executing it.)
  */
+import type { SemanticTokens } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+
+import type { Recognizer } from '../../../src/server/highlight/recognizer.ts';
+import { buildSemanticTokens as tokensOf } from '../../../src/server/semanticTokens.ts';
+import { scan } from '../../../src/shared/ast/scan.ts';
 
 export interface Tok {
   line: number;
@@ -14,6 +19,10 @@ export interface Tok {
 
 export const doc = (text: string): TextDocument =>
   TextDocument.create('file:///t.txt', 'jpnov', 1, text);
+
+/** The semantic tokens of `document`, from the scan of its text. */
+export const buildSemanticTokens = (document: TextDocument, recognizer: Recognizer | undefined): SemanticTokens =>
+  tokensOf(scan(document.getText()), recognizer);
 
 /** Decode the LSP delta-encoded token array into absolute tuples. */
 export function decode(data: readonly number[]): Tok[] {

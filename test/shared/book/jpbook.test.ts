@@ -149,7 +149,7 @@ test('divider is a free-string key; parse/composeDividerValue split mark and 字
   });
   assert.deepEqual(parseDividerValue('＊　＊　＊'), { mark: '＊　＊　＊', indent: null });
   assert.deepEqual(parseDividerValue('［＃２字下げ］◇'), { mark: '◇', indent: 2 });
-  // The 字下げ must LEAD the value (the tokenizer's own line-head contract).
+  // The 字下げ must LEAD the value (the scanner's own line-head contract).
   assert.deepEqual(parseDividerValue('＊［＃２字下げ］'), { mark: '＊［＃２字下げ］', indent: null });
   assert.equal(composeDividerValue('＊', null), '＊');
   assert.equal(composeDividerValue('＊', 15), '［＃１５字下げ］＊');

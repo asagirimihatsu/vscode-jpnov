@@ -1,30 +1,24 @@
 /**
- * Cross-layer character tables: the single home for the dash-glyph facts, the CJK
- * ideograph blocks and the kana composition shared by the layout engine, the EPUB reflow
- * emitter, the `.txt` codec and the prose lint.
- * Lint shares the tokenizer (token stream + character predicates) and THIS table; it never
- * imports the rendering modules (layout / reflow / css / document).
+ * The character tables every layer shares: the CJK ideograph and kana blocks, and the kana
+ * composition. A leaf: it imports nothing, the AST layer stands on it.
  */
-import type { DashMode } from './config/types.ts';
-
-/** The dash glyph each `jpnov.lint.common.dash` choice stands for. */
-export const DASH_BY_MODE: Readonly<Record<DashMode, string>> = {
-  emDash: '—', // U+2014
-  horizontalBar: '―', // U+2015
-  boxDrawing: '─', // U+2500
-};
-
-/** Every dash glyph, whatever the setting selects: all of them bind as one 分離禁止 class.
- *  Shared with the lint scanner (server/lint/prescan.ts). */
-export const DASH_CHARS = new Set<string>(Object.values(DASH_BY_MODE));
-
-/** The configured dash mode's glyph is EMITTED as this one (U+2014): its ink runs edge to edge
- *  in the default font stack, so a doubled dash joins seamlessly. */
-export const DASH_GLYPH = DASH_BY_MODE.emDash;
 
 /** A CJK ideograph: Ext A + Unified (U+3400–9FFF), Compatibility (U+F900–FAFF), SIP (U+20000–2FFFF). */
 export function isCjkIdeograph(cp: number): boolean {
   return (cp >= 0x3400 && cp <= 0x9fff) || (cp >= 0xf900 && cp <= 0xfaff) || (cp >= 0x20000 && cp <= 0x2ffff);
+}
+
+/** Hiragana block (U+3041..U+3096); the small ヶ is intentionally NOT hiragana. */
+export function isHiragana(cp: number): boolean {
+  return cp >= 0x3041 && cp <= 0x3096;
+}
+
+/** Katakana (U+30A1..U+30FA) plus the prolonged-sound mark ー (U+30FC); ヶ (U+30F6) counts as kanji. */
+export function isKatakana(cp: number): boolean {
+  if (cp === 0x30f6) {
+    return false;
+  }
+  return (cp >= 0x30a1 && cp <= 0x30fa) || cp === 0x30fc;
 }
 
 /** Combining 濁点 (U+3099) and 半濁点 (U+309A): what a decomposed (NFD) kana carries after its base. */
@@ -45,21 +39,38 @@ export function composeKana(text: string): string {
   if (!COMBINING_KANA_MARK.test(text)) {
     return text;
   }
-  const out: string[] = [];
+  return composedChars(text).map((ch) => ch.text).join('');
+}
+
+/** One display character and the UTF-16 range of `text` it came from. */
+export interface ComposedChar {
+  readonly text: string;
+  readonly start: number;
+  readonly end: number;
+}
+
+/**
+ * The characters of `text` as {@link composeKana} joins them, each with its range in `text`: a
+ * composed kana covers its kana and the mark, any other character itself.
+ */
+export function composedChars(text: string): ComposedChar[] {
+  const out: ComposedChar[] = [];
+  let at = 0;
   for (const ch of text) {
-    const cp = ch.codePointAt(0) ?? 0;
-    if (isCombiningKanaMark(cp)) {
-      const prev = out[out.length - 1];
-      const base = prev?.codePointAt(0) ?? 0;
-      if (prev !== undefined && base >= 0x3041 && base <= 0x30ff) {
-        const composed = (prev + ch).normalize('NFC');
+    const start = at;
+    at += ch.length;
+    const prev = out[out.length - 1];
+    if (prev !== undefined && isCombiningKanaMark(ch.codePointAt(0) ?? 0)) {
+      const base = prev.text.codePointAt(0) ?? 0;
+      if (base >= 0x3041 && base <= 0x30ff) {
+        const composed = (prev.text + ch).normalize('NFC');
         if (composed.length === 1) {
-          out[out.length - 1] = composed;
+          out[out.length - 1] = { text: composed, start: prev.start, end: at };
           continue;
         }
       }
     }
-    out.push(ch);
+    out.push({ text: ch, start, end: at });
   }
-  return out.join('');
+  return out;
 }

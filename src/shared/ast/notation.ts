@@ -1,0 +1,229 @@
+/**
+ * The notation's spellings: the markers, the keywords, the decoration variants and the value
+ * names, with the spellers that compose an annotation from its meaning.
+ *
+ * A leaf: it imports types only. Pure + vscode-free.
+ */
+import type { HeadingLevel, Mark, SpanChannel, SpanCloserNode, SpanOpenerNode, ValueLookup } from './nodes.ts';
+
+// Full-width annotation and ruby markers (https://www.aozora.gr.jp/annotation/etc.html).
+export const ANNOTATION_OPEN = '［＃';
+export const ANNOTATION_CLOSE = '］';
+export const RUBY_OPEN = '《';
+export const RUBY_CLOSE = '》';
+export const BASE_MARK = '｜';
+export const CORNER_OPEN = '「';
+export const CORNER_CLOSE = '」';
+
+export const PAGE_BREAK = '改ページ';
+export const SPAN_END = '終わり';
+export const CONNECTOR_NI = 'に';
+export const CONNECTOR_HA = 'は';
+export const BLOCK_FROM = 'ここから';
+export const BLOCK_TO = 'ここで';
+export const INDENT = '字下げ';
+export const TCY = '縦中横';
+export const LEFT_RUBY = 'のルビ';
+export const VALUE_HERE = 'ここに';
+export const VALUE_SHOW = 'の値を表示';
+
+/** The left-side prefixes, fixed by form: a postfix says の左に, a span says 左に
+ *  (https://www.aozora.gr.jp/annotation/emphasis.html). */
+export const LEFT_LONG = 'の左に';
+export const LEFT_SHORT = '左に';
+
+/** The four decoration channels; they are independent, so all four can sit on one character. */
+export const CHANNELS = ['emph', 'line', 'weight', 'style'] as const;
+export type Channel = (typeof CHANNELS)[number];
+
+/** Every decoration variant and the channel it drives; ばつ傍点 and ×傍点 are one style. */
+export const EMPHASIS_VARIANTS = {
+  傍点: 'emph',
+  白ゴマ傍点: 'emph',
+  丸傍点: 'emph',
+  白丸傍点: 'emph',
+  二重丸傍点: 'emph',
+  蛇の目傍点: 'emph',
+  黒三角傍点: 'emph',
+  白三角傍点: 'emph',
+  ばつ傍点: 'emph',
+  '×傍点': 'emph',
+  傍線: 'line',
+  二重傍線: 'line',
+  鎖線: 'line',
+  破線: 'line',
+  波線: 'line',
+  太字: 'weight',
+  斜体: 'style',
+} as const satisfies Record<string, Channel>;
+
+export type EmphasisVariant = keyof typeof EMPHASIS_VARIANTS;
+
+/** Which left prefix a variant may carry; `none` takes neither (a block form, or a postfix whose
+ *  に/は was already taken). */
+export type DirectionForm = 'postfix' | 'span' | 'none';
+
+/** A variant spelling resolved: its mark (the table key, the side) and its channel. */
+export interface VariantStyle extends Mark {
+  readonly channel: Channel;
+  /** UTF-16 length of the left prefix in the spelling; 0 without one. */
+  readonly prefix: number;
+}
+
+function isVariant(name: string): name is EmphasisVariant {
+  return Object.hasOwn(EMPHASIS_VARIANTS, name);
+}
+
+/**
+ * The style a variant spelling names under `form`, or null. The left side exists for 傍点/傍線
+ * only, and only in the form's own prefix spelling.
+ */
+export function variantStyle(spelling: string, form: DirectionForm = 'none'): VariantStyle | null {
+  const prefix = form === 'postfix' ? LEFT_LONG : form === 'span' ? LEFT_SHORT : null;
+  const left = prefix !== null && spelling.startsWith(prefix);
+  const name = left ? spelling.slice(prefix.length) : spelling;
+  if (!isVariant(name)) {
+    return null;
+  }
+  const channel: Channel = EMPHASIS_VARIANTS[name];
+  if (left && channel !== 'emph' && channel !== 'line') {
+    return null;
+  }
+  return { variant: name, left, channel, prefix: left ? prefix.length : 0 };
+}
+
+/** True iff `variant` has a ここから／ここで form: 太字 and 斜体 only. */
+export function hasBlockForm(variant: string): boolean {
+  return isVariant(variant) && (EMPHASIS_VARIANTS[variant] === 'weight' || EMPHASIS_VARIANTS[variant] === 'style');
+}
+
+/** The slot a span start or end drives: its decoration channel, the heading, or the block indent. */
+export function spanChannel(node: SpanOpenerNode | SpanCloserNode): SpanChannel {
+  switch (node.kind) {
+    case 'indentBlockStart':
+    case 'indentBlockEnd':
+      return 'indent';
+    case 'headingSpanStart':
+    case 'headingSpanEnd':
+      return 'heading';
+    case 'emphasisSpanStart':
+    case 'emphasisSpanEnd':
+      return node.channel;
+  }
+}
+
+/** The three 見出し literals; level = index + 1 (https://www.aozora.gr.jp/annotation/heading.html). */
+export const HEADING_LITERALS = ['大見出し', '中見出し', '小見出し'] as const;
+
+/** The heading level `s` names, or null. */
+export function headingLevelOf(s: string): HeadingLevel | null {
+  const idx = (HEADING_LITERALS as readonly string[]).indexOf(s);
+  return idx === -1 ? null : ((idx + 1) as HeadingLevel);
+}
+
+/** The inverse of {@link headingLevelOf}. */
+export function headingLiteralOf(level: HeadingLevel): string {
+  switch (level) {
+    case 1:
+      return HEADING_LITERALS[0];
+    case 2:
+      return HEADING_LITERALS[1];
+    case 3:
+      return HEADING_LITERALS[2];
+  }
+}
+
+/** The value names the notation defines for ［＃ここに「…」の値を表示］. */
+export const VALUE_NAMES = {
+  title: 'タイトル',
+  author: 'ペンネーム',
+  totalPages: '総ページ数',
+  sheets: '原稿用紙換算枚数',
+  page: 'ページ番号',
+} as const;
+
+/** The default of each name of {@link VALUE_NAMES}: a text value reads as its name, a count as 0. */
+export const VALUE_DEFAULTS = {
+  title: VALUE_NAMES.title,
+  author: VALUE_NAMES.author,
+  totalPages: '0',
+  sheets: '0',
+  page: '0',
+} as const satisfies Record<keyof typeof VALUE_NAMES, string>;
+
+// A Map, not an object: the name comes from the document, where `toString` would hit
+// Object.prototype.
+const DEFAULT_BY_NAME: ReadonlyMap<string, string> = new Map(
+  (Object.keys(VALUE_NAMES) as (keyof typeof VALUE_NAMES)[]).map((key) => [VALUE_NAMES[key], VALUE_DEFAULTS[key]]),
+);
+
+/**
+ * The text ［＃ここに「name」の値を表示］ shows: the value `values` holds for `name`, else the
+ * name's default, else — a name outside {@link VALUE_NAMES} — the name itself.
+ */
+export function valueOf(name: string, values: ValueLookup | undefined): string {
+  return values?.get(name) ?? DEFAULT_BY_NAME.get(name) ?? name;
+}
+
+/** `inner` wrapped as a ［＃…］ annotation. */
+export function annotation(inner: string): string {
+  return `${ANNOTATION_OPEN}${inner}${ANNOTATION_CLOSE}`;
+}
+
+/** The value display annotation for `name`. */
+export function valueAnnotation(name: string): string {
+  return annotation(`${VALUE_HERE}${CORNER_OPEN}${name}${CORNER_CLOSE}${VALUE_SHOW}`);
+}
+
+/** ［＃N字下げ］, its digits full-width: the only form that is read. */
+export function indentAnnotation(amount: number): string {
+  const digits = String(amount).replace(/[0-9]/g, (d) =>
+    String.fromCharCode(0xff10 + d.charCodeAt(0) - 0x30),
+  );
+  return annotation(`${digits}${INDENT}`);
+}
+
+/** The indent count of `s` = 「<digits>字下げ」, full-width digits ０-９ only; null otherwise. */
+export function indentAmount(s: string): number | null {
+  if (!s.endsWith(INDENT)) {
+    return null;
+  }
+  const digits = s.slice(0, s.length - INDENT.length);
+  if (digits.length === 0) {
+    return null;
+  }
+  let n = 0;
+  for (let k = 0; k < digits.length; k += 1) {
+    const cp = digits.charCodeAt(k);
+    if (cp < 0xff10 || cp > 0xff19) {
+      return null;
+    }
+    n = n * 10 + (cp - 0xff10);
+  }
+  return n;
+}
+
+export type ClosingAnnotations =
+  | { readonly block: string; readonly inline?: string }
+  | { readonly block?: undefined; readonly inline: string };
+
+/**
+ * The annotations that end `opener`'s span, in the forms its channel has: `block` the ここで form
+ * (字下げ／太字／斜体／見出し), `inline` the ［＃…終わり］ one (every channel but the block 字下げ).
+ */
+export function closingAnnotations(opener: SpanOpenerNode): ClosingAnnotations {
+  const spell = (name: string): { readonly block: string; readonly inline: string } => ({
+    block: annotation(`${BLOCK_TO}${name}${SPAN_END}`),
+    inline: annotation(`${name}${SPAN_END}`),
+  });
+  switch (opener.kind) {
+    case 'indentBlockStart':
+      return { block: spell(INDENT).block };
+    case 'headingSpanStart':
+      return spell(headingLiteralOf(opener.level));
+    case 'emphasisSpanStart': {
+      const forms = spell(`${opener.left ? LEFT_SHORT : ''}${opener.variant}`);
+      return hasBlockForm(opener.variant) ? forms : { inline: forms.inline };
+    }
+  }
+}

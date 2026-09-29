@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { computeLintFindings } from '../../../src/server/lint/engine.ts';
+import { parse } from '../../../src/shared/ast/parse.ts';
 import { RULES, settingKey } from '../../../src/shared/lint/catalog.ts';
 import { selectRules } from '../../../src/shared/lint/select.ts';
 import type { RawLintConfigWire } from '../../../src/shared/protocol.ts';
@@ -25,7 +26,7 @@ interface Hit {
 /** Run the engine and project each finding to { code, flagged source text, optional fix }. */
 function lintAll(src: string, raw: RawLintConfigWire): Hit[] {
   const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, src);
-  const findings = computeLintFindings(src, selectRules(raw), doc);
+  const findings = computeLintFindings(doc, parse(src), selectRules(raw));
   const slice = (r: { start: { line: number; character: number }; end: { line: number; character: number } }): string =>
     src.slice(doc.offsetAt(r.start), doc.offsetAt(r.end));
   return findings.map((f) => ({
@@ -51,7 +52,7 @@ const DASH_BAR: RawLintConfigWire = { 'jpnov.lint.common.dash': 'horizontalBar' 
 
 test('no rules enabled -> empty result', () => {
   const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, '　半 角 が あ る。');
-  assert.deepEqual(computeLintFindings(doc.getText(), selectRules({}), doc), []);
+  assert.deepEqual(computeLintFindings(doc, parse(doc.getText()), selectRules({})), []);
 });
 
 // --- common rules see 地の文 AND 台詞 through the prose view ---
@@ -63,7 +64,7 @@ test('a common rule sees content INSIDE 「」', () => {
 test('a rule message reaches Diagnostic.data whole, args included', () => {
   // renderEnglish substitutes a missing arg with '', so a dropped arg would surface only here
   const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, '彼は——と');
-  const findings = computeLintFindings(doc.getText(), selectRules(DASH_BAR), doc);
+  const findings = computeLintFindings(doc, parse(doc.getText()), selectRules(DASH_BAR));
   assert.deepEqual(
     findings.map((f) => f.diagnostic.data as unknown),
     [{ code: 'lint.common.dash', args: ['―'] }],
@@ -392,6 +393,20 @@ test('endPeriod appends 。 after a ruby reading, a closing annotation, and a po
     '　本文［＃ここに「タイトル」の値を表示］。',
   );
   assert.equal(applied('　彼は山田《やまだ》\r\n次。', PERIOD), '　彼は山田《やまだ》。\r\n次。');
+});
+
+test('endPeriod appends 。 after the end of a channel that was started again behind the sentence', () => {
+  // The second start wraps nothing: the 終わり closes the decoration the sentence sits in.
+  assert.equal(
+    applied('　彼は［＃傍点］行く［＃丸傍点］［＃傍点終わり］', PERIOD),
+    '　彼は［＃傍点］行く［＃丸傍点］［＃傍点終わり］。',
+  );
+  assert.equal(
+    applied('［＃傍点］\n　彼は行く［＃丸傍点］［＃傍点終わり］', PERIOD),
+    '［＃傍点］\n　彼は行く［＃丸傍点］［＃傍点終わり］。',
+  );
+  // A span that opened after the sentence is left after the 。.
+  assert.equal(applied('　山田だ［＃傍点］［＃傍点終わり］', PERIOD), '　山田だ。［＃傍点］［＃傍点終わり］');
 });
 
 test('endPeriod only adds: a trailing 、 stays and gains the 。', () => {
@@ -832,7 +847,7 @@ test('fixtures produce well-formed findings under the full rule set', () => {
     const url = new URL(`../../../test-fixtures/novel/${name}`, import.meta.url);
     const src = readFileSync(fileURLToPath(url), 'utf8');
     const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, src);
-    const findings = computeLintFindings(src, selectRules(everything), doc);
+    const findings = computeLintFindings(doc, parse(src), selectRules(everything));
     assert.ok(findings.length > 0, `${name}: the corpus should trip something`);
     for (const f of findings) {
       const a = doc.offsetAt(f.diagnostic.range.start);

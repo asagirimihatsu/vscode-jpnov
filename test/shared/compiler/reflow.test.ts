@@ -1,13 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { parse } from '../../../src/shared/ast/parse.ts';
 import { reflowStylesheet } from '../../../src/shared/compiler/css.ts';
 import { buildRows, type Row } from '../../../src/shared/compiler/layout.ts';
 import { reflowDocument, reflowSegments } from '../../../src/shared/compiler/reflow.ts';
-import { tokenize } from '../../../src/shared/compiler/tokenizer.ts';
 import { assertWellFormedXml } from '../xml.ts';
+import { D } from '../_kana.ts';
 
 function rows(src: string): Row[] {
-  return buildRows(tokenize(src), { dash: 'horizontalBar' });
+  return buildRows(parse(src), { dash: 'horizontalBar' });
 }
 
 /** Segments with a throwaway sink (most assertions only look at the markup). */
@@ -161,7 +162,6 @@ test('the kitchen sink emits well-formed XML end to end', () => {
 });
 
 test('NFD kana reach the EPUB composed: base, reading and prose alike', () => {
-  const D = '\u3099';
   assert.equal(body(`｜カ${D}ラス戸《か${D}らすと${D}》か${D}開いた`), '<p><ruby>ガラス戸<rt>がらすど</rt></ruby>が開いた</p>');
   assert.equal(body(`聖剣［＃「聖剣」の左に「つるき${D}」のルビ］`), '<p><ruby class="ru">聖剣<rt>つるぎ</rt></ruby></p>');
 });

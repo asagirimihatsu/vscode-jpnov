@@ -1,12 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  resolveStyle,
-  styleRule,
-  styleVariantsByChannel,
-} from '../../../src/shared/compiler/emphasis.ts';
+import { variantStyle } from '../../../src/shared/ast/notation.ts';
+import type { Channel, DirectionForm } from '../../../src/shared/ast/notation.ts';
+import { markClass, styleRule } from '../../../src/shared/compiler/emphasis.ts';
+import { variantsByChannel } from '../ast/_shape.ts';
 
-test('resolveStyle maps all nine dot variants to the emph channel', () => {
+/** The channel and the CSS class of a variant spelling under `form`; null for an unknown one. */
+function styleOf(spelling: string, form: DirectionForm = 'none'): { channel: Channel; className: string } | null {
+  const style = variantStyle(spelling, form);
+  return style === null ? null : { channel: style.channel, className: markClass(style) };
+}
+
+test('the nine dot variants map to the emph channel', () => {
   const table: [string, string][] = [
     ['傍点', 'emph-fs'],
     ['白ゴマ傍点', 'emph-os'],
@@ -19,16 +24,16 @@ test('resolveStyle maps all nine dot variants to the emph channel', () => {
     ['ばつ傍点', 'emph-x'],
   ];
   for (const [variant, className] of table) {
-    assert.deepEqual(resolveStyle(variant), { channel: 'emph', className }, `variant ${variant}`);
+    assert.deepEqual(styleOf(variant), { channel: 'emph', className }, `variant ${variant}`);
   }
 });
 
-test('resolveStyle collapses ×傍点 and ばつ傍点 to the same emph-x class', () => {
-  assert.equal(resolveStyle('×傍点')?.className, 'emph-x');
-  assert.equal(resolveStyle('ばつ傍点')?.className, 'emph-x');
+test('×傍点 and ばつ傍点 share the emph-x class', () => {
+  assert.equal(styleOf('×傍点')?.className, 'emph-x');
+  assert.equal(styleOf('ばつ傍点')?.className, 'emph-x');
 });
 
-test('resolveStyle maps the five 傍線 styles to the line channel (dec-*)', () => {
+test('the five 傍線 styles map to the line channel (dec-*)', () => {
   const table: [string, string][] = [
     ['傍線', 'dec-solid'],
     ['二重傍線', 'dec-double'],
@@ -37,43 +42,24 @@ test('resolveStyle maps the five 傍線 styles to the line channel (dec-*)', () 
     ['波線', 'dec-wavy'],
   ];
   for (const [variant, className] of table) {
-    assert.deepEqual(resolveStyle(variant), { channel: 'line', className }, `variant ${variant}`);
+    assert.deepEqual(styleOf(variant), { channel: 'line', className }, `variant ${variant}`);
   }
-  // A 終わり-suffixed name is NOT a bare variant — the tokenizer strips 終わり before asking.
-  assert.equal(resolveStyle('波線終わり'), null);
+  // A 終わり-suffixed name is NOT a bare variant — the scanner strips 終わり before asking.
+  assert.equal(styleOf('波線終わり'), null);
 });
 
-test('resolveStyle maps 太字/斜体 to the weight/style channels (b / i)', () => {
-  assert.deepEqual(resolveStyle('太字'), { channel: 'weight', className: 'b' });
-  assert.deepEqual(resolveStyle('斜体'), { channel: 'style', className: 'i' });
+test('太字/斜体 map to the weight/style channels (b / i)', () => {
+  assert.deepEqual(styleOf('太字'), { channel: 'weight', className: 'b' });
+  assert.deepEqual(styleOf('斜体'), { channel: 'style', className: 'i' });
 });
 
-test('resolveStyle adds -l form-bound: bare 左に for spans, の左に for postfixes', () => {
-  assert.deepEqual(resolveStyle('左に傍点', 'span'), { channel: 'emph', className: 'emph-fs-l' });
-  assert.deepEqual(resolveStyle('左に二重丸傍点', 'span'), { channel: 'emph', className: 'emph-fd-l' });
-  assert.deepEqual(resolveStyle('左に傍線', 'span'), { channel: 'line', className: 'dec-solid-l' });
-  assert.deepEqual(resolveStyle('の左に傍点', 'postfix'), { channel: 'emph', className: 'emph-fs-l' });
-  assert.deepEqual(resolveStyle('の左にばつ傍点', 'postfix'), { channel: 'emph', className: 'emph-x-l' });
-  assert.deepEqual(resolveStyle('の左に波線', 'postfix'), { channel: 'line', className: 'dec-wavy-l' });
-});
-
-test('resolveStyle rejects the cross-form left prefixes and any prefix under none', () => {
-  // The Aozora spec fixes the spelling by form: a span never carries の左に, a postfix never
-  // carries bare 左に; both degrade to null (→ comment) instead of resolving to -l.
-  assert.equal(resolveStyle('の左に傍点', 'span'), null);
-  assert.equal(resolveStyle('左に傍点', 'postfix'), null);
-  // The default 'none' (block variants; a postfix whose connector was stripped) takes neither —
-  // にの左に傍点 dies here: the connector and the direction prefix are mutually exclusive.
-  assert.equal(resolveStyle('の左に傍点'), null);
-  assert.equal(resolveStyle('左に傍点'), null);
-});
-
-test('resolveStyle rejects 左に on 太字/斜体 (no side) and unknown / empty variants', () => {
-  assert.equal(resolveStyle('左に太字', 'span'), null);
-  assert.equal(resolveStyle('の左に斜体', 'postfix'), null);
-  for (const v of ['', 'なぞ傍点', '傍', 'ページ', '左に']) {
-    assert.equal(resolveStyle(v, 'span'), null, `unknown ${v} must be null`);
-  }
+test('the left side adds -l, form-bound: bare 左に for spans, の左に for postfixes', () => {
+  assert.deepEqual(styleOf('左に傍点', 'span'), { channel: 'emph', className: 'emph-fs-l' });
+  assert.deepEqual(styleOf('左に二重丸傍点', 'span'), { channel: 'emph', className: 'emph-fd-l' });
+  assert.deepEqual(styleOf('左に傍線', 'span'), { channel: 'line', className: 'dec-solid-l' });
+  assert.deepEqual(styleOf('の左に傍点', 'postfix'), { channel: 'emph', className: 'emph-fs-l' });
+  assert.deepEqual(styleOf('の左にばつ傍点', 'postfix'), { channel: 'emph', className: 'emph-x-l' });
+  assert.deepEqual(styleOf('の左に波線', 'postfix'), { channel: 'line', className: 'dec-wavy-l' });
 });
 
 test('styleRule yields the full CSS rule; emph-x uses the real × glyph, not ASCII', () => {
@@ -119,14 +105,14 @@ test('no channel class ever declares position/transform (custom-ruby containment
   // positions its lane (rt>span) against the NEAREST positioned ancestor. A positioned/transformed channel
   // span would capture those annotations — so the rule table must never grow such a property.
   // (text-emphasis-position / text-underline-position are fine; the regex anchors on {/;.)
-  const byChannel = styleVariantsByChannel();
+  const byChannel = variantsByChannel();
   const classNames = new Set<string>();
   for (const v of [...byChannel.weight, ...byChannel.style]) {
-    classNames.add(resolveStyle(v, 'none')?.className ?? '');
+    classNames.add(styleOf(v, 'none')?.className ?? '');
   }
   for (const v of [...byChannel.emph, ...byChannel.line]) {
-    classNames.add(resolveStyle(v, 'none')?.className ?? '');
-    classNames.add(resolveStyle(`左に${v}`, 'span')?.className ?? '');
+    classNames.add(styleOf(v, 'none')?.className ?? '');
+    classNames.add(styleOf(`左に${v}`, 'span')?.className ?? '');
   }
   classNames.delete('');
   assert.ok(classNames.size >= 16, 'expected every channel class (base + -l) to be enumerated');
@@ -137,8 +123,8 @@ test('no channel class ever declares position/transform (custom-ruby containment
   }
 });
 
-test('styleVariantsByChannel exposes the full variant table per channel', () => {
-  const byChannel = styleVariantsByChannel();
+test('the variant table holds every variant, by channel', () => {
+  const byChannel = variantsByChannel();
   assert.deepEqual(
     [...byChannel.emph].sort(),
     [

@@ -2,10 +2,9 @@
  * Editor colouring for the stage: the product's own semantic tokens decoded into per-line runs,
  * so the reconstructed editor paints what VS Code paints for the same source and cast.
  */
-import { TextDocument } from 'vscode-languageserver-textdocument';
-
 import { createRecognizer } from '../../src/server/highlight/recognizer.ts';
 import { buildSemanticTokens, SEMANTIC_LEGEND } from '../../src/server/semanticTokens.ts';
+import { scan } from '../../src/shared/ast/scan.ts';
 import type { EditorLine, EditorToken, TokenKind } from './contract.ts';
 
 export interface Vocabulary {
@@ -50,9 +49,8 @@ function decode(data: readonly number[]): Span[] {
 }
 
 export function colourLines(src: string, vocab: Vocabulary): EditorLine[] {
-  const doc = TextDocument.create('file:///sample.jpnov', 'jpnov', 1, src);
   const spans = new Map<number, Span[]>();
-  for (const span of decode(buildSemanticTokens(doc, createRecognizer(vocab.cast, vocab.keywords)).data)) {
+  for (const span of decode(buildSemanticTokens(scan(src), createRecognizer(vocab.cast, vocab.keywords)).data)) {
     const line = spans.get(span.line);
     if (line === undefined) {
       spans.set(span.line, [span]);

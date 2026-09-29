@@ -12,15 +12,14 @@
  */
 import { createHash } from 'node:crypto';
 
+import { parse } from '../ast/parse.ts';
 import type { JpbookMeta } from '../book/jpbook.ts';
 import type { AutoTcyMode, DashMode, KinsokuMode } from '../config/types.ts';
-import { applyAutoTcy } from './autoTcy.ts';
 import { reflowStylesheet } from './css.ts';
 import type { BookInput } from './document.ts';
 import { escapeHtml } from './escape.ts';
 import { buildRows } from './layout.ts';
 import { reflowDocument, reflowSegments } from './reflow.ts';
-import { tokenize } from './tokenizer.ts';
 
 /** One text member of an EPUB container: its path inside the archive + full content. */
 export interface EpubMember {
@@ -82,7 +81,7 @@ export function epubMembers(opts: {
   // source contributes neither). reflowSegments feeds the shared `used` class sink, so
   // chapters must be processed in file order.
   const chapters = opts.book.files.flatMap((file, index) => {
-    const rows = buildRows(tokenize(applyAutoTcy(file.src, opts.autoTcy)), { dash: opts.dash });
+    const rows = buildRows(parse(file.src, { autoTcy: opts.autoTcy }), { dash: opts.dash });
     const segments = reflowSegments(rows, used, opts.dash);
     if (segments.length === 0) {
       return [];

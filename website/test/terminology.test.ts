@@ -7,7 +7,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join, sep } from 'node:path';
 import { test } from 'node:test';
 
-import { VALUE_NAMES } from '../../src/shared/compiler/tokenizer.ts';
+import { VALUE_NAMES } from '../../src/shared/ast/notation.ts';
 import { UI } from '../src/copy/ui.ts';
 import { readRootText, sitePath } from '../scripts/root.ts';
 

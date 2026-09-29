@@ -15,7 +15,9 @@
  * Relative imports only (native test loader); vscode-free.
  */
 import type { PreScan } from '../prescan.ts';
-import type { FixSpec, LineRule, LintLine, ProseView, RuleContext, SrcSpan } from '../types.ts';
+import type { Span } from '../../../shared/ast/nodes.ts';
+
+import type { FixSpec, LineRule, LintLine, ProseView, RuleContext } from '../types.ts';
 
 /** The resolved `{ max }` of a threshold rule (`selectRules` guarantees the shape). */
 export function maxOf(ctx: RuleContext): number {
@@ -24,7 +26,7 @@ export function maxOf(ctx: RuleContext): number {
 
 /** The source span of a non-empty view hit `[a, b)`: anchored on the LAST included unit, so a hit
  *  ending at elided markup never bleeds across the gap. */
-export function viewSpan(view: ProseView, a: number, b: number): SrcSpan {
+export function viewSpan(view: ProseView, a: number, b: number): Span {
   const start = view.units[a]?.src ?? 0;
   const last = view.units[Math.max(a, b - 1)];
   return { start, end: (last?.src ?? start) + 1 };
@@ -48,7 +50,7 @@ export function viewFix(view: ProseView, a: number, b: number, text: string): Fi
   if (text === '' && start === 0 && end === piece.text.length && piece.rubyBase) {
     return undefined;
   }
-  return { replace: { piece, start, end }, text };
+  return { replace: { slice: piece, start, end }, text };
 }
 
 /** Lifts `scan` onto one view of every line (`'prose'` = both 地の文 and 台詞 with adjacency). */
@@ -82,7 +84,7 @@ export function perPieceScan(scan: PreScan): (ctx: RuleContext) => LineRule {
             ...(hit.message === undefined ? {} : { message: hit.message }),
             ...(hit.fix === undefined
               ? {}
-              : { fix: { replace: { piece, start: hit.start, end: hit.end }, text: hit.fix } }),
+              : { fix: { replace: { slice: piece, start: hit.start, end: hit.end }, text: hit.fix } }),
           });
         }
       }

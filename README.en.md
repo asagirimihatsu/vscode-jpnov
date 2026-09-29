@@ -383,14 +383,14 @@ A cover file can pull in the book's own metadata:
 ［＃７字下げ］４００字詰め原稿用紙換算［＃縦中横］［＃ここに「原稿用紙換算枚数」の値を表示］［＃縦中横終わり］枚
 ```
 
-A build fills in that book's values. The preview shows each annotation's name — タイトル,
-ペンネーム, 総ページ数, 原稿用紙換算枚数 — so one cover file serves any number of books. To
-decorate a substituted value, wrap it in the start/end form
-(`［＃大見出し］［＃ここに「タイトル」の値を表示］［＃大見出し終わり］`).
+A build fills in that book's values. The preview shows each annotation's default — タイトル
+and ペンネーム print as their own names, 総ページ数 and 原稿用紙換算枚数 as `0` — so one cover
+file serves any number of books. To decorate a substituted value, wrap it in the
+start/end form (`［＃大見出し］［＃ここに「タイトル」の値を表示］［＃大見出し終わり］`).
 
-A name outside the table prints as itself: `［＃ここに「13」の値を表示］` renders `13`. Values
-are filled on cover pages and in the header and footer only; in a body chapter every
-annotation prints its name.
+ページ番号 defaults to `0`, like 総ページ数. Any other name prints as itself:
+`［＃ここに「13」の値を表示］` renders `13`. Values are filled on cover pages and in the header
+and footer only; in a body chapter every annotation prints its default.
 
 The manuscript-sheet count is the number of vertical 20 × 20 manuscript sheets
 (400字詰め原稿用紙) the body fills, the unit Japanese literary contests state length in.

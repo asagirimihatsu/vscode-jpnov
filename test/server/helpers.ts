@@ -12,6 +12,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { Connection } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
+import { parse } from '../../src/shared/ast/parse.ts';
 import { selectRules } from '../../src/shared/lint/select.ts';
 import { computeLintFindings } from '../../src/server/lint/engine.ts';
 import type { RawLintConfigWire } from '../../src/shared/protocol.ts';
@@ -135,7 +136,7 @@ export interface LintEdit {
  *  so an insert there survives as under LSP `applyEdits`), returning the result and its edits. */
 export function applyLintFixes(src: string, raw: RawLintConfigWire): { out: string; edits: LintEdit[] } {
   const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, src);
-  const findings = computeLintFindings(src, selectRules(raw), doc);
+  const findings = computeLintFindings(doc, parse(src), selectRules(raw));
   const edits = findings
     .flatMap((f) =>
       f.fix ? [{ s: doc.offsetAt(f.fix.range.start), e: doc.offsetAt(f.fix.range.end), t: f.fix.newText }] : [],

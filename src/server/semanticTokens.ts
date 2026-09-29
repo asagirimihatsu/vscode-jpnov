@@ -1,7 +1,7 @@
 /**
  * Unified highlighter: one semantic-token stream colours BOTH Aozora markup and the author's
- * narration (cast names + coined keywords) from a single tokenize pass plus the recognizer over
- * the reconstructed body-text runs. A ruby BASE is body text and flows into its run (only the
+ * narration (cast names + coined keywords) from the syntax layer of the AST plus the recognizer
+ * over the reconstructed body-text runs. A ruby BASE is body text and flows into its run (only the
  * ｜《》 markers and the reading are holes), so okurigana-split ruby (立《た》ち) still recognises.
  *
  * Dialogue 「」『』 is tracked by a STACK as body text is appended — NEVER by scanning the raw
@@ -9,19 +9,14 @@
  * miscount. The stack lives at document scope (Aozora dialogue may span lines); dialogue content
  * is masked from the recognizer.
  *
- * Colouring is driven by ONE table ({@link HIGHLIGHTS}): the DISTINCT lsp values form the legend
+ * Colouring is driven by TWO tables: {@link HIGHLIGHTS} (the DISTINCT lsp values form the legend
  * and the protocol indices derive from it — reference kinds by name via {@link tokenTypeIndex},
- * never a hard-coded index.
+ * never a hard-coded index) and {@link PART_HIGHLIGHT} (what each part of an annotation reads as).
  */
 import type { SemanticTokens, SemanticTokensLegend } from 'vscode-languageserver/node';
 import { SemanticTokensBuilder } from 'vscode-languageserver/node';
-import type { TextDocument } from 'vscode-languageserver-textdocument';
 
-// Relative (not `#/shared/...`) on purpose: this is a runtime value import, and `npm test` runs
-// semanticTokens.test.ts on Node's native loader, which rejects `#/`-prefixed specifiers. A
-// relative path keeps the test in the default suite. See test/server/highlight/semanticTokens.test.ts.
-import { LEFT_LONG, LEFT_SHORT } from '../shared/compiler/emphasis.ts';
-import { tokenize } from '../shared/compiler/tokenizer.ts';
+import type { PartRole, RolePart, Syntax, SyntaxNode } from '../shared/ast/nodes.ts';
 
 import type { Recognizer } from './highlight/recognizer.ts';
 
@@ -66,8 +61,32 @@ export function tokenTypeIndex(kind: TokenType): number {
   return TYPE_INDEX.get(kind) ?? -1;
 }
 
-const ANNOT_OPEN = 2; // ［＃
-const ONE = 1; // any single full-width marker: ｜ 《 》 「 」 『 』 ］
+/**
+ * What each part of an annotation reads as. The command word is the directive; the brackets, the
+ * scaffolding around it and a reading grey out; a 対象文字列 keeps the default colour.
+ */
+const PART_HIGHLIGHT: Record<PartRole, TokenType | null> = {
+  bracket: 'marker',
+  scaffold: 'marker',
+  connector: 'marker',
+  corner: 'marker',
+  direction: 'direction',
+  keyword: 'directive',
+  name: 'directive',
+  target: null,
+  reading: 'marker',
+  inner: 'marker',
+};
+
+/**
+ * Runs of adjacent parts that are ONE token: a quoted reading with its corners, a reading with
+ * its opening 《, and the value display's ここに「 … 」の値を表示 scaffolding.
+ */
+const JOINED: Partial<Record<SyntaxNode['kind'], readonly (readonly PartRole[])[]>> = {
+  rubyReading: [['bracket', 'reading']],
+  rubyLeftPostfix: [['corner', 'reading', 'corner']],
+  valueField: [['scaffold', 'corner'], ['corner', 'scaffold']],
+};
 
 /** Opening dialogue corner brackets mapped to the closer that pops them. */
 const DIALOGUE_CLOSER = new Map<string, string>([
@@ -75,40 +94,63 @@ const DIALOGUE_CLOSER = new Map<string, string>([
   ['『', '』'],
 ]);
 
-interface Span {
+/** The dialogue corners: the only characters of body text that read as markup. */
+const CORNERS = /[「『」』]/g;
+
+interface TokenSpan {
   readonly start: number; // source UTF-16 offset
   readonly len: number;
   readonly type: TokenType;
 }
 
-/**
- * Length (UTF-16 units) of the leading direction prefix valid for `form`, else 0 — form-bound
- * in lockstep with emphasis.ts resolveStyle (postfix = の左に, span = bare 左に). For accepted
- * tokens this equals an unconditional strip; the parameter keeps the layers congruent.
- */
-function directionLen(variant: string, form: 'postfix' | 'span'): number {
-  if (form === 'postfix' && variant.startsWith(LEFT_LONG)) {
-    return LEFT_LONG.length;
-  }
-  if (form === 'span' && variant.startsWith(LEFT_SHORT)) {
-    return LEFT_SHORT.length;
-  }
-  return 0;
+/** A range `[from, to)` of the run. */
+interface RunRange {
+  readonly from: number;
+  to: number;
 }
 
-export function buildSemanticTokens(
-  document: TextDocument,
-  recognizer: Recognizer | undefined,
-): SemanticTokens {
-  const src = document.getText();
-  const spans: Span[] = [];
+/** A stretch of the run that is contiguous in the source, where it starts at `src`. */
+interface Stretch extends RunRange {
+  readonly src: number;
+}
 
-  // The body-text run being accumulated: its text, the source offset each UTF-16 unit came from (text
-  // and ruby bases are contiguous in the run but jump over markers/readings in source), and whether
-  // each unit sits inside dialogue (so the recognizer never colours dialogue content).
+/** How many parts from `at` on form one joined token of `kind`; 1 when none does. */
+function joinedAt(kind: SyntaxNode['kind'], parts: readonly RolePart[], at: number): number {
+  for (const roles of JOINED[kind] ?? []) {
+    if (roles.every((role, k) => parts[at + k]?.role === role)) {
+      return roles.length;
+    }
+  }
+  return 1;
+}
+
+/** Index of the first of `ranges` (ascending, disjoint) ending past `at`. */
+function firstPast(ranges: readonly RunRange[], at: number): number {
+  let lo = 0;
+  let hi = ranges.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if ((ranges[mid]?.to ?? 0) <= at) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  return lo;
+}
+
+export function buildSemanticTokens(syntax: Syntax, recognizer: Recognizer | undefined): SemanticTokens {
+  const builder = new SemanticTokensBuilder();
+
+  // The tokens of the line being read: no token crosses a line.
+  let spans: TokenSpan[] = [];
+
+  // The body-text run a recognizer reads: its text, the source stretches it was joined from (a
+  // ruby's markers and reading are holes), and its ranges inside dialogue, which are not coloured.
   let runText = '';
-  let runSrc: number[] = [];
-  let runMask: boolean[] = [];
+  let stretches: Stretch[] = [];
+  let spoken: RunRange[] = [];
+  let spokenFrom = -1; // where the open dialogue range starts in the run; -1 in narration
 
   // Dialogue nesting, by expected closer. Document-scoped so it persists across run flushes (a 「…」
   // may span lines); driven ONLY from body text in appendBody (never from raw src — see file header).
@@ -121,298 +163,119 @@ export function buildSemanticTokens(
   };
 
   const flushRun = (): void => {
-    if (recognizer !== undefined && runText !== '') {
+    if (recognizer === undefined) {
+      return;
+    }
+    if (runText !== '') {
+      if (spokenFrom !== -1) {
+        spoken.push({ from: spokenFrom, to: runText.length });
+      }
       for (const sp of recognizer.recognize(runText)) {
-        if (runMask[sp.start] === true) {
+        const inside = spoken[firstPast(spoken, sp.start)];
+        if (inside !== undefined && inside.from <= sp.start) {
           continue; // inside dialogue — body text keeps its default colour
         }
-        // Split the span into runs that are contiguous in the SOURCE (a hole appears where a ruby
+        // One token per stretch that is contiguous in the SOURCE (a hole appears where a ruby
         // reading/markers sat between a base and its okurigana).
-        let i = sp.start;
         const end = sp.start + sp.len;
-        while (i < end) {
-          const segStart = runSrc[i] ?? 0;
-          let j = i + 1;
-          while (j < end && (runSrc[j] ?? -1) === (runSrc[j - 1] ?? -2) + 1) {
-            j++;
+        for (let k = firstPast(stretches, sp.start); k < stretches.length; k += 1) {
+          const stretch = stretches[k];
+          if (stretch === undefined || stretch.from >= end) {
+            break;
           }
-          spans.push({ start: segStart, len: (runSrc[j - 1] ?? segStart) - segStart + 1, type: sp.kind });
-          i = j;
+          const from = Math.max(sp.start, stretch.from);
+          spans.push({ start: stretch.src + (from - stretch.from), len: Math.min(end, stretch.to) - from, type: sp.kind });
         }
       }
     }
     runText = '';
-    runSrc = [];
-    runMask = [];
+    stretches = [];
+    spoken = [];
+    spokenFrom = dialogue.length > 0 ? 0 : -1;
   };
 
-  /** Append body text [srcStart, …) to the current run, tracking dialogue and flushing at line breaks. */
+  /** Append body text [srcStart, …) to the current run, tracking dialogue. */
   const appendBody = (text: string, srcStart: number): void => {
-    for (let i = 0; i < text.length; i++) {
-      const ch = text.charAt(i);
-      if (ch === '\n' || ch === '\r') {
-        flushRun();
-        continue; // the line break itself is not body
-      }
-      const at = srcStart + i;
-      const closer = DIALOGUE_CLOSER.get(ch);
+    const base = runText.length;
+    CORNERS.lastIndex = 0;
+    for (let m = CORNERS.exec(text); m !== null; m = CORNERS.exec(text)) {
+      const closer = DIALOGUE_CLOSER.get(m[0]);
       if (closer !== undefined) {
+        if (dialogue.length === 0) {
+          spokenFrom = base + m.index; // the opening corner is inside
+        }
         dialogue.push(closer);
-        mark(at, ONE, 'marker'); // opening 「 / 『
-      } else if (ch === dialogue[dialogue.length - 1]) {
+        mark(srcStart + m.index, 1, 'marker'); // opening 「 / 『
+      } else if (m[0] === dialogue[dialogue.length - 1]) {
         dialogue.pop();
-        mark(at, ONE, 'marker'); // matching closing 」 / 』 (a lone/mismatched closer stays default text)
+        if (dialogue.length === 0 && recognizer !== undefined) {
+          spoken.push({ from: spokenFrom, to: base + m.index }); // the closing corner is outside
+        }
+        if (dialogue.length === 0) {
+          spokenFrom = -1;
+        }
+        mark(srcStart + m.index, 1, 'marker'); // matching closing 」 / 』 (a lone/mismatched closer stays default text)
       }
-      runText += ch;
-      runSrc.push(at);
-      runMask.push(dialogue.length > 0);
+    }
+    if (recognizer === undefined) {
+      return; // nothing reads the run
+    }
+    const last = stretches[stretches.length - 1];
+    if (last !== undefined && last.src + (last.to - last.from) === srcStart) {
+      last.to += text.length;
+    } else {
+      stretches.push({ from: base, to: base + text.length, src: srcStart });
+    }
+    runText += text;
+  };
+
+  /** One token per part — or per joined run of parts — of an annotation. */
+  const markParts = (node: SyntaxNode, parts: readonly RolePart[]): void => {
+    for (let at = 0; at < parts.length;) {
+      const first = parts[at];
+      const n = joinedAt(node.kind, parts, at);
+      const last = parts[at + n - 1];
+      at += n;
+      const type = first === undefined ? null : PART_HIGHLIGHT[first.role];
+      if (first !== undefined && last !== undefined && type !== null) {
+        mark(first.span.start, last.span.end - first.span.start, type);
+      }
     }
   };
 
-  let offset = 0; // UTF-16 offset of the current token's `raw` in `src`
-  for (const token of tokenize(src)) {
-    const raw = token.raw.length;
-    const last = offset + raw - ONE; // position of the closing ］ / 》
-
-    // Whole inner = one directive: 改ページ and the line-head single-line ［＃○字下げ］ — a lone
-    // command word with no ここから/ここで/終わり scaffolding to demote.
-    const markDirective = (): void => {
-      flushRun();
-      mark(offset, ANNOT_OPEN, 'marker'); // ［＃
-      mark(offset + ANNOT_OPEN, raw - ANNOT_OPEN - ONE, 'directive'); // inner, whole
-      mark(last, ONE, 'marker'); // ］
-    };
-
-    // Corner-target prelude ［＃「対象」 shared by every postfix: ［＃ and both corners demote
-    // to marker, the 対象 keeps its default colour (annotation-internal — never touches the
-    // dialogue stack). Returns the offset of the closing 」.
-    const markCorners = (target: string): number => {
-      flushRun();
-      mark(offset, ANNOT_OPEN, 'marker'); // ［＃
-      const openCorner = offset + ANNOT_OPEN;
-      mark(openCorner, ONE, 'marker'); // 「
-      const closeCorner = openCorner + ONE + target.length;
-      mark(closeCorner, ONE, 'marker'); // 」
-      return closeCorner;
-    };
-
-    switch (token.kind) {
-      case 'text': {
-        appendBody(token.text, offset);
-        break;
-      }
-      case 'rubyImplicit': {
-        appendBody(token.base, offset); // base flows into the recognized run
-        mark(offset + token.base.length, ONE + token.reading.length, 'marker'); // 《ルビ
-        mark(last, ONE, 'marker'); // 》
-        break;
-      }
-      case 'rubyStart': {
-        mark(offset, ONE, 'marker'); // ｜ — the base tokens follow as ordinary text/annotations
-        break;
-      }
-      case 'rubyEnd': {
-        mark(offset, ONE + token.reading.length, 'marker'); // 《ルビ
-        mark(last, ONE, 'marker'); // 》
-        break;
-      }
-      case 'pageBreak': {
-        markDirective(); // 改ページ
-        break;
-      }
-      case 'indent': {
-        markDirective(); // ［＃○字下げ］ (the tokenizer emits this kind only at a line head)
-        break;
-      }
-      case 'valueField': {
-        flushRun();
-        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
-        const ds = offset + ANNOT_OPEN;
-        const open = 'ここに「'.length;
-        const close = '」の値を表示'.length;
-        mark(ds, open, 'marker'); // ここに「 (demoted, like the block scaffolding)
-        mark(ds + open, raw - ANNOT_OPEN - open - close - ONE, 'directive'); // the name
-        mark(ds + raw - ANNOT_OPEN - close - ONE, close, 'marker'); // 」の値を表示 (demoted)
-        mark(last, ONE, 'marker'); // ］
-        break;
-      }
-      case 'indentBlockStart': {
-        flushRun();
-        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
-        const ds = offset + ANNOT_OPEN;
-        const from = 'ここから'.length;
-        mark(ds, from, 'marker'); // ここから (demoted to comment-level, like the postfix connector)
-        mark(ds + from, raw - ANNOT_OPEN - from - ONE, 'directive'); // ○字下げ (digits + 字下げ; length from raw, never amount)
-        mark(last, ONE, 'marker'); // ］
-        break;
-      }
-      case 'indentBlockEnd': {
-        flushRun();
-        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
-        const ds = offset + ANNOT_OPEN;
-        const to = 'ここで'.length;
-        mark(ds, to, 'marker'); // ここで (demoted)
-        mark(ds + to, '字下げ'.length, 'directive'); // 字下げ
-        mark(ds + to + '字下げ'.length, '終わり'.length, 'marker'); // 終わり (demoted)
-        mark(last, ONE, 'marker'); // ］
-        break;
-      }
-      case 'emphasisSpanStart': {
-        flushRun();
-        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
-        const ds = offset + ANNOT_OPEN;
-        if (token.block === true) {
-          const from = 'ここから'.length;
-          mark(ds, from, 'marker'); // ここから (demoted to comment-level)
-          mark(ds + from, token.variant.length, 'directive'); // 太字/斜体
-          mark(last, ONE, 'marker'); // ］
+  for (const line of syntax.lines) {
+    for (const node of line.syntax) {
+      switch (node.kind) {
+        case 'text':
+          appendBody(node.text, node.span.start); // a ruby base too: it flows into the recognized run
           break;
-        }
-        const dir = directionLen(token.variant, 'span');
-        mark(ds, dir, 'direction'); // 左に
-        mark(ds + dir, token.variant.length - dir, 'directive'); // variant name
-        mark(last, ONE, 'marker'); // ］
-        break;
-      }
-      case 'emphasisSpanEnd': {
-        flushRun();
-        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
-        const ds = offset + ANNOT_OPEN;
-        if (token.block === true) {
-          const to = 'ここで'.length;
-          mark(ds, to, 'marker'); // ここで (demoted)
-          mark(ds + to, token.variant.length, 'directive'); // 太字/斜体
-          mark(ds + to + token.variant.length, '終わり'.length, 'marker'); // 終わり (demoted)
-          mark(last, ONE, 'marker'); // ］
+        case 'rubyMark':
+          mark(node.span.start, node.text.length, 'marker'); // the base nodes follow as themselves
           break;
-        }
-        const dir = directionLen(token.variant, 'span');
-        mark(ds, dir, 'direction'); // 左に
-        mark(ds + dir, token.variant.length - dir, 'directive'); // variant name
-        mark(ds + token.variant.length, raw - ANNOT_OPEN - token.variant.length - ONE, 'marker'); // 終わり (demoted)
-        mark(last, ONE, 'marker'); // ］
-        break;
-      }
-      case 'emphasisPostfix': {
-        const closeCorner = markCorners(token.target);
-        const afterCorner = closeCorner + ONE;
-        const conn = raw - (afterCorner - offset) - token.variant.length - ONE; // に / は (0 or 1)
-        mark(afterCorner, conn, 'marker');
-        const vs = afterCorner + conn;
-        const dir = directionLen(token.variant, 'postfix');
-        mark(vs, dir, 'direction'); // の左に
-        mark(vs + dir, token.variant.length - dir, 'directive'); // variant name
-        mark(last, ONE, 'marker'); // ］
-        break;
-      }
-      case 'rubyLeftPostfix': {
-        // ［＃「対象」の左に「よみ」のルビ］ — の左に direction, the reading greyed like a
-        // 《》 reading, のルビ the directive.
-        const closeCorner = markCorners(token.target);
-        const dirStart = closeCorner + ONE;
-        mark(dirStart, LEFT_LONG.length, 'direction'); // の左に
-        const openReading = dirStart + LEFT_LONG.length;
-        mark(openReading, ONE + token.reading.length + ONE, 'marker'); // 「よみ」 greyed whole
-        mark(openReading + ONE + token.reading.length + ONE, 'のルビ'.length, 'directive'); // のルビ
-        mark(last, ONE, 'marker'); // ］
-        break;
-      }
-      case 'tcyPostfix': {
-        // ［＃「対象」は縦中横］ — the は connector demotes to marker, 縦中横 is the directive.
-        const closeCorner = markCorners(token.target);
-        mark(closeCorner + ONE, ONE, 'marker'); // は (connector, demoted like に)
-        mark(closeCorner + ONE + ONE, '縦中横'.length, 'directive'); // 縦中横
-        mark(last, ONE, 'marker'); // ］
-        break;
-      }
-      case 'tcySpanStart': {
-        markDirective(); // ［＃縦中横］ — a lone command word, like 改ページ
-        break;
-      }
-      case 'tcySpanEnd': {
-        flushRun();
-        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
-        const ds = offset + ANNOT_OPEN;
-        mark(ds, '縦中横'.length, 'directive'); // 縦中横
-        mark(ds + '縦中横'.length, '終わり'.length, 'marker'); // 終わり (demoted)
-        mark(last, ONE, 'marker'); // ］
-        break;
-      }
-      case 'headingPostfix': {
-        // ［＃「対象」は大見出し］ — mirrors tcyPostfix; the 見出し literal's length is derived
-        // from the span so no literal is hardcoded here.
-        const closeCorner = markCorners(token.target);
-        mark(closeCorner + ONE, ONE, 'marker'); // は (connector, demoted like に)
-        const litStart = closeCorner + ONE + ONE;
-        mark(litStart, raw - (litStart - offset) - ONE, 'directive'); // 大見出し / 中見出し / 小見出し
-        mark(last, ONE, 'marker'); // ］
-        break;
-      }
-      case 'headingSpanStart': {
-        if (token.block !== true) {
-          markDirective(); // ［＃大見出し］ — a lone command word, like 縦中横
+        case 'rubyReading':
+          markParts(node, node.parts);
           break;
-        }
-        flushRun();
-        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
-        const ds = offset + ANNOT_OPEN;
-        const from = 'ここから'.length;
-        mark(ds, from, 'marker'); // ここから (demoted, like the indent/emphasis blocks)
-        mark(ds + from, raw - ANNOT_OPEN - from - ONE, 'directive'); // level literal (length from raw)
-        mark(last, ONE, 'marker'); // ］
-        break;
-      }
-      case 'headingSpanEnd': {
-        flushRun();
-        mark(offset, ANNOT_OPEN, 'marker'); // ［＃
-        const to = token.block === true ? 'ここで'.length : 0;
-        const lit = raw - ANNOT_OPEN - to - '終わり'.length - ONE; // level literal (length from raw)
-        mark(offset + ANNOT_OPEN, to, 'marker'); // ここで (block form only; len 0 marks nothing)
-        mark(offset + ANNOT_OPEN + to, lit, 'directive'); // 大見出し / 中見出し / 小見出し
-        mark(offset + ANNOT_OPEN + to + lit, '終わり'.length, 'marker'); // 終わり (demoted)
-        mark(last, ONE, 'marker'); // ］
-        break;
-      }
-      case 'comment': {
-        flushRun();
-        mark(offset, raw, 'marker'); // whole ［＃ … ］ greyed
-        break;
-      }
-      case 'brokenAnnotation': {
-        flushRun();
-        // Unclosed ［＃… greyed to its line end — the same span the Error diagnostic covers. The
-        // raw never enters appendBody, so a swallowed 「 cannot corrupt the dialogue stack; it
-        // never contains a line break, so this emits as a single-line token.
-        mark(offset, raw, 'marker');
-        break;
-      }
-      default: {
-        const exhaustive: never = token;
-        throw new Error(`buildSemanticTokens: unhandled token ${JSON.stringify(exhaustive)}`);
+        case 'comment':
+        case 'brokenAnnotation':
+          // Greyed whole. The text never enters appendBody, so a swallowed 「 cannot corrupt the
+          // dialogue stack.
+          flushRun();
+          mark(node.span.start, node.text.length, 'marker');
+          break;
+        default:
+          flushRun();
+          markParts(node, node.parts);
+          break;
       }
     }
-    offset += raw;
-  }
-  flushRun(); // trailing run
+    flushRun(); // the line break itself is not body
 
-  // Emit in source order (markup + recognized spans interleave), splitting any span at line breaks.
-  spans.sort((a, b) => a.start - b.start);
-  const builder = new SemanticTokensBuilder();
-  for (const span of spans) {
-    const index = tokenTypeIndex(span.type);
-    let s = span.start;
-    const end = span.start + span.len;
-    while (s < end) {
-      let nl = src.indexOf('\n', s);
-      if (nl === -1 || nl > end) {
-        nl = end;
-      }
-      if (nl > s) {
-        const p = document.positionAt(s);
-        builder.push(p.line, p.character, nl - s, index, 0);
-      }
-      s = nl + 1;
+    // Emit in source order (markup + recognized spans interleave), at the line's own position.
+    spans.sort((a, b) => a.start - b.start);
+    for (const span of spans) {
+      builder.push(line.index, span.start - line.span.start, span.len, tokenTypeIndex(span.type), 0);
     }
+    spans = [];
   }
   return builder.build();
 }

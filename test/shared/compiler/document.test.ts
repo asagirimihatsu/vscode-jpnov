@@ -3,7 +3,13 @@ import assert from 'node:assert/strict';
 import type { BuildChrome } from '../../../src/shared/compiler/chrome.ts';
 import { chapterGlue, concatBookText, MANUSCRIPT_SHEET, renderBook, type BookInput } from '../../../src/shared/compiler/document.ts';
 import { FOOTER_BAND, HEADER_BAND, SIDE_PAD } from '../../../src/shared/compiler/geometry.ts';
-import { indentAnnotation } from '../../../src/shared/compiler/tokenizer.ts';
+import { VALUE_DEFAULTS, indentAnnotation } from '../../../src/shared/ast/notation.ts';
+import { parse } from '../../../src/shared/ast/parse.ts';
+import { D } from '../_kana.ts';
+
+/** {@link chapterGlue} between two chapter sources. */
+const glue = (prev: string, next: string, divider: string, charsPerLine: number | null): string =>
+  chapterGlue(parse(prev), parse(next), divider, charsPerLine);
 
 // Band totals come from the tunable geometry constants — never write them out as literals.
 const HTOP_RE = new RegExp(String.raw`:root\{[^}]*--htop:` + String(HEADER_BAND) + '[;}]');
@@ -190,6 +196,9 @@ test('concatBookText follows the manuscript EOL: CRLF throughout when any chapte
   );
   // any CRLF chapter decides; an all-LF book stays LF
   assert.equal(concatBookText(files('あ\r\n', 'か\n'), 'none', 40), 'あ\r\n\r\nか');
+  // A lone \r is no line ending of the output: it passes through as typed, in either mode.
+  assert.equal(concatBookText(files('あ\rい\n', 'か\n'), 'none', 40), 'あ\rい\n\nか');
+  assert.equal(concatBookText(files('あ\rい\r\n', 'か\n'), 'none', 40), 'あ\rい\r\n\r\nか');
   assert.equal(concatBookText(files('あ\n', 'か\n'), 'none', 40), 'あ\n\nか');
 });
 
@@ -204,57 +213,57 @@ const two = (a: string, b: string, divider?: string): BookInput =>
   book({ files: [{ name: 'a.jpnov', src: a }, { name: 'b.jpnov', src: b }], divider });
 
 test('chapterGlue: one blank line always; divider centred by CELLS + one blank after', () => {
-  assert.equal(chapterGlue('前章', '次章', '', 40), '\n');
+  assert.equal(glue('前章', '次章', '', 40), '\n');
   // ＊ = 1 cell at cpl 8 → floor((8−1)/2) = 3, spelled as the Aozora annotation.
-  assert.equal(chapterGlue('前章', '次章', '＊', 8), '\n［＃３字下げ］＊\n\n');
+  assert.equal(glue('前章', '次章', '＊', 8), '\n［＃３字下げ］＊\n\n');
   // A 縦中横 mark is ONE cell however many chars it combines (cells ≠ chars).
   assert.equal(
-    chapterGlue('前章', '次章', '!?［＃「!?」は縦中横］', 9),
+    glue('前章', '次章', '!?［＃「!?」は縦中横］', 9),
     '\n［＃４字下げ］!?［＃「!?」は縦中横］\n\n',
   );
   // A value already ［＃○字下げ］-prefixed passes through verbatim (author's own position).
-  assert.equal(chapterGlue('前章', '次章', '［＃２字下げ］＊', 40), '\n［＃２字下げ］＊\n\n');
+  assert.equal(glue('前章', '次章', '［＃２字下げ］＊', 40), '\n［＃２字下げ］＊\n\n');
   // A mark as wide as the line centres to 0 → bare, no ［＃０字下げ］ noise, never negative.
-  assert.equal(chapterGlue('前章', '次章', '＊　＊　＊', 3), '\n＊　＊　＊\n\n');
+  assert.equal(glue('前章', '次章', '＊　＊　＊', 3), '\n＊　＊　＊\n\n');
 });
 
 test('chapterGlue suppression: a 見出し-opening next chapter takes the plain blank seam', () => {
-  assert.equal(chapterGlue('前章', '第二章［＃「第二章」は大見出し］\n本文', '＊', 8), '\n');
+  assert.equal(glue('前章', '第二章［＃「第二章」は大見出し］\n本文', '＊', 8), '\n');
   // Leading blank lines are skipped when probing for the heading.
-  assert.equal(chapterGlue('前章', '\n\n二［＃「二」は中見出し］', '＊', 8), '\n');
+  assert.equal(glue('前章', '\n\n二［＃「二」は中見出し］', '＊', 8), '\n');
   // A broken-target 見出し renders plain, so it does NOT suppress the divider.
-  assert.equal(chapterGlue('前章', '二［＃「別」は中見出し］', '＊', 8), '\n［＃３字下げ］＊\n\n');
+  assert.equal(glue('前章', '二［＃「別」は中見出し］', '＊', 8), '\n［＃３字下げ］＊\n\n');
 });
 
 test('chapterGlue suppression covers the 見出し span/block openers too', () => {
   // Block form: the first non-blank line paints nothing — the opener token decides.
   assert.equal(
-    chapterGlue('前章', '［＃ここから大見出し］\n第二章\n［＃ここで大見出し終わり］', '＊', 8),
+    glue('前章', '［＃ここから大見出し］\n第二章\n［＃ここで大見出し終わり］', '＊', 8),
     '\n',
   );
   // Inline pair on the first line resolves through the normal heading-row probe.
-  assert.equal(chapterGlue('前章', '［＃大見出し］第二章［＃大見出し終わり］\n本文', '＊', 8), '\n');
+  assert.equal(glue('前章', '［＃大見出し］第二章［＃大見出し終わり］\n本文', '＊', 8), '\n');
   // A lone inline opener line (the title follows on the next line) suppresses too.
-  assert.equal(chapterGlue('前章', '［＃大見出し］\n第二章\n［＃大見出し終わり］', '＊', 8), '\n');
+  assert.equal(glue('前章', '［＃大見出し］\n第二章\n［＃大見出し終わり］', '＊', 8), '\n');
   // A non-見出し directive first line still takes the divider (first painted line is prose).
   assert.equal(
-    chapterGlue('前章', '［＃ここから２字下げ］\n本文', '＊', 8),
+    glue('前章', '［＃ここから２字下げ］\n本文', '＊', 8),
     '\n［＃３字下げ］＊\n\n',
   );
 });
 
 test('chapterGlue suppression at ［＃改ページ］ junctions keeps the blank line', () => {
-  assert.equal(chapterGlue('あ\n［＃改ページ］', 'か', '＊', 8), '\n'); // prev ends on a break
-  assert.equal(chapterGlue('あ', '［＃改ページ］\nか', '＊', 8), '\n'); // next opens on a break
-  assert.equal(chapterGlue('あ', 'か', '＊', 8), '\n［＃３字下げ］＊\n\n'); // no break → divider
+  assert.equal(glue('あ\n［＃改ページ］', 'か', '＊', 8), '\n'); // prev ends on a break
+  assert.equal(glue('あ', '［＃改ページ］\nか', '＊', 8), '\n'); // next opens on a break
+  assert.equal(glue('あ', 'か', '＊', 8), '\n［＃３字下げ］＊\n\n'); // no break → divider
 });
 
 test('chapterGlue: charsPerLine null = the bare mark at the line head; an author 字下げ stays', () => {
-  assert.equal(chapterGlue('前章', '次章', '＊', null), '\n＊\n\n');
-  assert.equal(chapterGlue('前章', '次章', '［＃２字下げ］＊', null), '\n［＃２字下げ］＊\n\n');
+  assert.equal(glue('前章', '次章', '＊', null), '\n＊\n\n');
+  assert.equal(glue('前章', '次章', '［＃２字下げ］＊', null), '\n［＃２字下げ］＊\n\n');
   // The suppression rules read the sources alone, so they apply either way.
-  assert.equal(chapterGlue('前章', '第二章［＃「第二章」は大見出し］\n本文', '＊', null), '\n');
-  assert.equal(chapterGlue('前章', '次章', '', null), '\n');
+  assert.equal(glue('前章', '第二章［＃「第二章」は大見出し］\n本文', '＊', null), '\n');
+  assert.equal(glue('前章', '次章', '', null), '\n');
 });
 
 test('concatBookText interleaves the divider; author edge blanks stack literally', () => {
@@ -594,16 +603,16 @@ test('cover: the template annotations substitute the book values; 総ページ�
   assert.match(body, new RegExp(`<div class="ft r">1 / ${String(bodyPages)}</div>`));
 });
 
-test('cover: ページ番号 has no value on a cover page, so the name prints', () => {
+test('cover: ページ番号 has no value on a cover page, so its default prints', () => {
   const body = bodyOf(
     renderBooks([
       withCover([{ name: 'c.jpnov', src: '［＃ここに「ページ番号」の値を表示］' }], [{ name: 'a.jpnov', src: '本文' }]),
     ]),
   );
-  assert.match(body, /<div class="line" data-line="0">ページ番号<\/div>/);
+  assert.match(body, new RegExp(`<div class="line" data-line="0">${VALUE_DEFAULTS.page}</div>`));
 });
 
-test('cover: a value annotation in the BODY prints its name (body chapters take no values)', () => {
+test('cover: a value annotation in the BODY prints its default (body chapters take no values)', () => {
   const body = bodyOf(
     renderBooks([
       withCover(
@@ -811,7 +820,6 @@ test('cover: the sheet count wraps columns at MANUSCRIPT_SHEET.charsPerLine', ()
 });
 
 test('cover: 原稿用紙換算枚数 counts an NFD kana as one cell, like its NFC spelling', () => {
-  const D = '\u3099';
   // linesPerPage full columns: one sheet composed; decomposed, every column would spill into two.
   const filled = (kana: string): BookInput =>
     counted([{ name: 'a.jpnov', src: repeat(MANUSCRIPT_SHEET.linesPerPage, kana.repeat(MANUSCRIPT_SHEET.charsPerLine)) }]);
@@ -843,9 +851,9 @@ test('cover: ［＃改ページ］ starts a new sheet, and the count sums every 
   assert.equal((body.match(/<div class="line" data-line="1">2枚<\/div>/g) ?? []).length, 2);
 });
 
-test('cover: 原稿用紙換算枚数 in a BODY chapter prints its name', () => {
+test('cover: 原稿用紙換算枚数 in a BODY chapter prints its default', () => {
   const body = bodyOf(renderBooks([counted([{ name: 'a.jpnov', src: SHEETS_SRC }])]));
-  assert.match(body, /<div class="line" data-line="0">原稿用紙換算枚数枚<\/div>/);
+  assert.match(body, new RegExp(`<div class="line" data-line="0">${VALUE_DEFAULTS.sheets}枚</div>`));
 });
 
 test('footer: 原稿用紙換算枚数 fills from the same count the cover reports', () => {
@@ -859,26 +867,35 @@ test('footer: 原稿用紙換算枚数 fills from the same count the cover repor
 });
 
 test('cover: the sheet count runs only when a cover or the furniture asks for it, once per render', () => {
-  // renderBook reads `file.src` once per row build: the configured grid always, the
-  // MANUSCRIPT_SHEET re-flow only for a cover (or the header / footer) naming 原稿用紙換算枚数 —
-  // and once for all of them.
-  const readsFor = (covers: readonly string[], chrome: Partial<BuildChrome> = {}): number => {
+  // A chapter is parsed and laid into rows ONCE; a flow of the body differs only in its glue,
+  // which reads the book's `divider`: the configured grid always, the MANUSCRIPT_SHEET re-flow
+  // only for a cover (or the header / footer) naming 原稿用紙換算枚数 — and once for all of them.
+  const flowsFor = (covers: readonly string[], chrome: Partial<BuildChrome> = {}): number => {
+    let flows = 0;
     let reads = 0;
-    const chapter = {
-      name: 'a.jpnov',
+    const chapter = (name: string): { name: string; src: string } => ({
+      name,
       get src(): string {
         reads += 1;
         return 'あ';
       },
+    });
+    const book: BookInput = {
+      ...withCover(covers.map((src, i) => ({ name: `c${String(i)}.jpnov`, src })), [chapter('a.jpnov'), chapter('b.jpnov')]),
+      get divider(): string {
+        flows += 1;
+        return '＊';
+      },
     };
-    renderBooks([withCover(covers.map((src, i) => ({ name: `c${String(i)}.jpnov`, src })), [chapter])], { chrome });
-    return reads;
+    renderBooks([book], { chrome });
+    assert.equal(reads, 2, 'each chapter source is read once');
+    return flows;
   };
-  assert.equal(readsFor(['表紙']), 1);
-  assert.equal(readsFor([COVER_SRC]), 1); // 総ページ数 rides the configured pagination
-  assert.equal(readsFor([SHEETS_SRC]), 2);
-  assert.equal(readsFor([SHEETS_SRC, COUNTS_SRC]), 2);
-  assert.equal(readsFor(['表紙'], { footerAlign: 'right', footer: SHEETS_SRC }), 2);
-  assert.equal(readsFor(['表紙'], { header: SHEETS_SRC }), 2);
-  assert.equal(readsFor([SHEETS_SRC], { header: SHEETS_SRC, footer: SHEETS_SRC }), 2);
+  assert.equal(flowsFor(['表紙']), 1);
+  assert.equal(flowsFor([COVER_SRC]), 1); // 総ページ数 rides the configured pagination
+  assert.equal(flowsFor([SHEETS_SRC]), 2);
+  assert.equal(flowsFor([SHEETS_SRC, COUNTS_SRC]), 2);
+  assert.equal(flowsFor(['表紙'], { footerAlign: 'right', footer: SHEETS_SRC }), 2);
+  assert.equal(flowsFor(['表紙'], { header: SHEETS_SRC }), 2);
+  assert.equal(flowsFor([SHEETS_SRC], { header: SHEETS_SRC, footer: SHEETS_SRC }), 2);
 });

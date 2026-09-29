@@ -2,17 +2,29 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { BuildChrome } from '../../../src/shared/compiler/chrome.ts';
 import type { DashMode, KinsokuMode } from '../../../src/shared/config/types.ts';
+import type { ValueLookup } from '../../../src/shared/ast/nodes.ts';
+import { VALUE_DEFAULTS, VALUE_NAMES, valueAnnotation, valueOf } from '../../../src/shared/ast/notation.ts';
+import { parse } from '../../../src/shared/ast/parse.ts';
 import {
   buildRows,
-  findPostfixTargetIssues,
   flowToHtml,
   paginate,
   pagesToHtml,
   type DisplayLine,
   type RenderPage,
+  type Row,
 } from '../../../src/shared/compiler/layout.ts';
-import { tokenize, VALUE_NAMES, valueAnnotation } from '../../../src/shared/compiler/tokenizer.ts';
-import { DASH_GLYPH } from '../../../src/shared/chars.ts';
+import { DASH_GLYPH } from '../../../src/shared/dash.ts';
+import { issuesOf } from '../ast/_shape.ts';
+import { D } from '../_kana.ts';
+
+/** The rows of `src`: parsed (with the cover's `values`, when given), then laid out. */
+const rowsOf = (src: string, opts?: { dash?: DashMode; values?: ValueLookup | undefined }): Row[] =>
+  buildRows(parse(src, { values: opts?.values }), { dash: opts?.dash });
+
+/** The targets the postfixes of `src` could not bind. */
+const missedTargets = (src: string): string[] =>
+  issuesOf(src, 'postfixTargetMissing').flatMap((issue) => (issue.kind === 'postfixTargetMissing' ? [issue.target] : []));
 
 /** Paginated lines as BODY pages (the cover-less shape every plain-book test wants). */
 const sheets = (ps: readonly DisplayLine[][]): RenderPage[] => ps.map((lines) => ({ lines }));
@@ -28,14 +40,14 @@ const OFF: BuildChrome = {
 
 // The continuous preview flow (no pagination); mirrors what renderPreview emits as <body>.
 const flow = (src: string, charsPerLine = 40, kinsoku: KinsokuMode = 'none'): string =>
-  flowToHtml(buildRows(tokenize(src)), charsPerLine, kinsoku);
+  flowToHtml(rowsOf(src), charsPerLine, kinsoku);
 
 const pages = (src: string, charsPerLine = 40, linesPerPage = 34) =>
-  paginate(buildRows(tokenize(src)), charsPerLine, linesPerPage, 'none');
+  paginate(rowsOf(src), charsPerLine, linesPerPage, 'none');
 // With 禁則処理 on (strict, the shipped tier, unless passed), return each display line as its
 // concatenated unit text (one page only); a hung 句読点 shows as ⟪x⟫ after the column's cells.
 const klines = (src: string, charsPerLine: number, kinsoku: KinsokuMode = 'strict'): string[] =>
-  paginate(buildRows(tokenize(src)), charsPerLine, 34, kinsoku)
+  paginate(rowsOf(src), charsPerLine, 34, kinsoku)
     .flat()
     .map(
       (line) =>
@@ -277,7 +289,7 @@ test('ぶら下げ: a trailing 句読点 hangs as a zero cell instead of 追い�
 });
 
 test('ぶら下げ: the hung unit is zero cells and the column stays at budget', () => {
-  const line = paginate(buildRows(tokenize('文だ。')), 2, 34, 'strict')[0]?.[0];
+  const line = paginate(rowsOf('文だ。'), 2, 34, 'strict')[0]?.[0];
   assert.ok(line);
   assert.ok(line.hang);
   assert.equal(line.hang.text, '。');
@@ -326,7 +338,7 @@ test('ぶら下げ: trailing zero-width units ride the hung column (no orphan em
 
 test('ぶら下げ: a decorated hung 句読点 keeps its channel span around the .hang span', () => {
   const out = pagesToHtml(
-    sheets(paginate(buildRows(tokenize('文だ。［＃「文だ。」に傍点］')), 2, 34, 'strict')),
+    sheets(paginate(rowsOf('文だ。［＃「文だ。」に傍点］'), 2, 34, 'strict')),
     undefined,
     OFF,
   );
@@ -407,9 +419,9 @@ test('flowToHtml: a break followed by a blank line opens the next segment on the
 
 // ダッシュ tests drive the translation explicitly — the plain helpers above stay glyph-agnostic.
 const dashFlow = (src: string, dash: DashMode = 'horizontalBar'): string =>
-  flowToHtml(buildRows(tokenize(src), { dash }), 40, 'none');
+  flowToHtml(rowsOf(src, { dash }), 40, 'none');
 const dashHtml = (src: string): string =>
-  pagesToHtml(sheets(paginate(buildRows(tokenize(src), { dash: 'horizontalBar' }), 40, 34, 'none')), undefined, OFF);
+  pagesToHtml(sheets(paginate(rowsOf(src, { dash: 'horizontalBar' }), 40, 34, 'none')), undefined, OFF);
 
 test('ダッシュ: the configured spelling is emitted as the em dash — bare glyph, no markup', () => {
   assert.equal(
@@ -418,7 +430,7 @@ test('ダッシュ: the configured spelling is emitted as the em dash — bare g
   );
   assert.doesNotMatch(dashFlow('あ――い'), /class="dash/);
   // Translation is per glyph and selected-only; `text` keeps the source for every spelling.
-  const row = buildRows(tokenize('—―─'), { dash: 'horizontalBar' })[0];
+  const row = rowsOf('—―─', { dash: 'horizontalBar' })[0];
   const units = row?.kind === 'line' ? row.units : [];
   assert.deepEqual(units.map((u) => [u.html, u.text, u.cssClass]), [
     ['—', '—', undefined], // already an em dash: nothing to translate
@@ -444,7 +456,7 @@ test('ダッシュ: postfix targets match the SOURCE spelling; the emitted run i
 });
 
 test('ダッシュ: 分離禁止 still binds the run; the merged unit carries the translation', () => {
-  const bound = paginate(buildRows(tokenize('あ――'), { dash: 'horizontalBar' }), 40, 34, 'strict').flat();
+  const bound = paginate(rowsOf('あ――', { dash: 'horizontalBar' }), 40, 34, 'strict').flat();
   assert.deepEqual(bound[0]?.units.map((u) => [u.html, u.text, u.cssClass]), [
     ['あ', 'あ', undefined],
     ['——', '――', undefined],
@@ -467,7 +479,7 @@ test('flowToHtml: lineNumbers emits JS-numbered .ln heads that restart at a brea
   // following siblings in Chromium); a wrapped continuation column counts as its own line,
   // and a collapsed (doubled) break still restarts only once — with the segment it opens.
   assert.equal(
-    flowToHtml(buildRows(tokenize('一二三\n［＃改ページ］\n［＃改ページ］\n四')), 2, 'none', undefined, true),
+    flowToHtml(rowsOf('一二三\n［＃改ページ］\n［＃改ページ］\n四'), 2, 'none', undefined, true),
     '<div class="book"><div class="segment">' +
       '<div class="line" data-line="0"><span class="ln">1</span>一二</div>' +
       '<div class="line"><span class="ln">2</span>三</div></div>' +
@@ -658,7 +670,7 @@ test('左ルビ cutting into a ruby unit is unaligned → degrade + warn', () =>
       '<rt><span><span>か</span><span>ん</span><span>じ</span></span></rt></ruby>' +
       '<!--「字」の左に「よみ」のルビ--></div></div></div></div>',
   );
-  assert.equal(findPostfixTargetIssues('漢字《かんじ》［＃「字」の左に「よみ」のルビ］').length, 1);
+  assert.equal(missedTargets('漢字《かんじ》［＃「字」の左に「よみ」のルビ］').length, 1);
 });
 
 test('左ルビ over MIXED coverage (a ruby unit plus text) degrades + warns', () => {
@@ -666,7 +678,7 @@ test('左ルビ over MIXED coverage (a ruby unit plus text) degrades + warns', (
   // reading — the author must split the annotation.
   const src = '青空《あお》文庫［＃「青空文庫」の左に「x」のルビ］';
   assert.match(html(src), /<ruby class="rr"><span>青<\/span><span>空<\/span><rt><span><span>あ<\/span><span>お<\/span><\/span><\/rt><\/ruby>文庫<!--/);
-  assert.equal(findPostfixTargetIssues(src).length, 1);
+  assert.equal(missedTargets(src).length, 1);
 });
 
 test('左ルビ inherits the replaced units’ channels and stays postfix-matchable', () => {
@@ -754,12 +766,6 @@ test('the used sink collects the tcy class (on-demand stylesheet)', () => {
   assert.ok(!clean.has('tcy'));
 });
 
-test('findPostfixTargetIssues covers 縦中横 postfix misses too', () => {
-  assert.deepEqual(findPostfixTargetIssues('あ［＃「99」は縦中横］'), [
-    { start: 1, end: 1 + '［＃「99」は縦中横］'.length, target: '99' },
-  ]);
-});
-
 // --------------------------------------------------------------- postfix boundary alignment
 
 test('a postfix cutting into an atomic ruby unit does not apply (boundary alignment)', () => {
@@ -778,25 +784,6 @@ test('whole-unit coverage of a ruby unit still applies (aligned)', () => {
     html('漢字《かんじ》［＃「漢字」に傍点］'),
     /<span class="emph-fs"><ruby class="rr"><span>漢<\/span><span>字<\/span><rt><span><span>か<\/span><span>ん<\/span><span>じ<\/span><\/span><\/rt><\/ruby><\/span>/,
   );
-});
-
-test('findPostfixTargetIssues: absent and unaligned targets warn; aligned matches stay silent', () => {
-  // absent — the annotation starts after 別の文 (3 chars)
-  assert.deepEqual(findPostfixTargetIssues('別の文［＃「無」に傍点］'), [
-    { start: 3, end: 3 + '［＃「無」に傍点］'.length, target: '無' },
-  ]);
-  // unaligned — 字 cuts into the ruby unit 漢字 (annotation starts after the 7-char ruby raw)
-  assert.deepEqual(findPostfixTargetIssues('漢字《かんじ》［＃「字」に傍点］'), [
-    { start: 7, end: 7 + '［＃「字」に傍点］'.length, target: '字' },
-  ]);
-  // aligned whole-ruby-unit coverage applies — no issue
-  assert.deepEqual(findPostfixTargetIssues('漢字《かんじ》［＃「漢字」に傍点］'), []);
-  // plain-text partial coverage stays legal (1-char text units always align)
-  assert.deepEqual(findPostfixTargetIssues('文字［＃「字」に傍点］'), []);
-  // postfix binding is line-local: a target on the PREVIOUS line does not resolve
-  assert.deepEqual(findPostfixTargetIssues('対象\n［＃「対象」に傍点］'), [
-    { start: 3, end: 3 + '［＃「対象」に傍点］'.length, target: '対象' },
-  ]);
 });
 
 // --------------------------------------------------------------- 字下げ (indent)
@@ -880,10 +867,7 @@ test('見出し with an unresolved target degrades to a comment and reports the 
     '<div class="book"><div class="page" data-page="0"><div class="grid">' +
       '<div class="line" data-line="0">本文<!--「別文」は大見出し--></div></div></div></div>',
   );
-  assert.deepEqual(
-    findPostfixTargetIssues('本文［＃「別文」は大見出し］').map((i) => i.target),
-    ['別文'],
-  );
+  assert.deepEqual(missedTargets('本文［＃「別文」は大見出し］'), ['別文']);
 });
 
 test('見出し postfix is line-local: the next source line renders plain', () => {
@@ -1003,11 +987,9 @@ test('block 太字: the directive lines vanish and the body lines carry the b cl
 
 // --------------------------------------------------------------- 値の表示 (value substitution)
 
-/** Every unit of `src` in flow order, rendered bookless unless `values` are given. */
+/** Every unit of `src` in flow order, under `values` when given. */
 const unitsOf = (src: string, values?: ReadonlyMap<string, string>) =>
-  buildRows(tokenize(src), values === undefined ? undefined : { values }).flatMap((row) =>
-    row.kind === 'line' ? row.units : [],
-  );
+  rowsOf(src, { values }).flatMap((row) => (row.kind === 'line' ? row.units : []));
 
 /** Every unit's text across the rows, concatenated — what the layout measured. */
 const unitText = (src: string, values?: ReadonlyMap<string, string>): string =>
@@ -1023,21 +1005,22 @@ const REAL: ReadonlyMap<string, string> = new Map([
   [VALUE_NAMES.sheets, '58'],
 ]);
 
-test('値の表示: a compile without values renders every name as itself', () => {
+test('値の表示: a compile without values renders every name as its default', () => {
   for (const name of [...Object.values(VALUE_NAMES), '13', '発行日']) {
-    assert.equal(unitText(valueAnnotation(name)), name);
+    assert.equal(unitText(valueAnnotation(name)), valueOf(name, undefined));
   }
 });
 
-test('値の表示: opts.values substitutes by name; a name it lacks stays a name; an empty value emits nothing', () => {
+test('値の表示: opts.values substitutes by name; a name it lacks shows its default; an empty value emits nothing', () => {
   assert.equal(unitText('［＃ここに「タイトル」の値を表示］', REAL), '作品名');
   assert.equal(unitText('全［＃ここに「総ページ数」の値を表示］ページ', REAL), '全215ページ');
-  assert.equal(unitText('［＃ここに「ページ番号」の値を表示］', REAL), VALUE_NAMES.page); // a cover has no page
+  assert.equal(unitText('［＃ここに「ページ番号」の値を表示］', REAL), VALUE_DEFAULTS.page); // a cover has no page
+  assert.equal(unitText('［＃ここに「発行日」の値を表示］', REAL), '発行日');
   assert.equal(unitText('［＃ここに「ペンネーム」の値を表示］', new Map([[VALUE_NAMES.author, '']])), '');
 });
 
 test('値の表示: substituted text is per-char units — it measures and wraps like prose', () => {
-  const rows = buildRows(tokenize('［＃ここに「タイトル」の値を表示］'), { values: REAL });
+  const rows = rowsOf('［＃ここに「タイトル」の値を表示］', { values: REAL });
   const units = rows.flatMap((row) => (row.kind === 'line' ? row.units : []));
   assert.equal(units.length, Array.from('作品名').length);
   assert.ok(units.every((u) => u.cells === 1));
@@ -1049,7 +1032,7 @@ test('値の表示: substituted text is per-char units — it measures and wraps
 });
 
 test('値の表示: the configured dash inside a value translates like typed prose', () => {
-  const rows = buildRows(tokenize('［＃ここに「タイトル」の値を表示］'), {
+  const rows = rowsOf('［＃ここに「タイトル」の値を表示］', {
     values: new Map([[VALUE_NAMES.title, '光―闇']]),
     dash: 'horizontalBar',
   });
@@ -1059,7 +1042,7 @@ test('値の表示: the configured dash inside a value translates like typed pro
 });
 
 test('値の表示: a value inside ［＃縦中横］ joins the combined cell', () => {
-  const rows = buildRows(tokenize('全［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］ページ'), {
+  const rows = rowsOf('全［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］ページ', {
     values: REAL,
   });
   const units = rows.flatMap((row) => (row.kind === 'line' ? row.units : []));
@@ -1116,7 +1099,7 @@ test('cover pages: the cover class, no furniture, and a footer that counts BODY 
 
 test('cover pages: a cover-less document emits exactly what it always did', () => {
   // Pinned literally: comparing two liftings of the same pages would hold for any impl.
-  const plain = paginate(buildRows(tokenize('前\n［＃改ページ］\n後')), 40, 34, 'none');
+  const plain = paginate(rowsOf('前\n［＃改ページ］\n後'), 40, 34, 'none');
   assert.equal(
     pagesToHtml(sheets(plain), undefined, FURNISHED),
     '<div class="book">' +
@@ -1170,21 +1153,11 @@ test('furniture: only the value annotation is interpreted — other annotations,
   assert.deepEqual([...used], []); // the furniture sinks no on-demand class
 });
 
-test('furniture: a substituted value is escaped, never re-tokenized', () => {
+test('furniture: a substituted value is escaped, never read as notation', () => {
   const values = new Map([[VALUE_NAMES.title, '<i>《x》']]);
   const chrome: BuildChrome = { ...FURNISHED, footerAlign: 'none', header: valueAnnotation(VALUE_NAMES.title) };
   const out = pagesToHtml([{ lines: page1('一'), values }], undefined, chrome);
   assert.match(out, /<div class="hd">&lt;i&gt;《x》<\/div>/);
-});
-
-test('値の表示: a postfix after a value field is left unjudged (the scan is bookless)', () => {
-  const targets = (src: string): string[] => findPostfixTargetIssues(src).map((i) => i.target);
-  // Targeting the REAL value builds correctly, so a warning here would flag working markup.
-  assert.deepEqual(targets('［＃ここに「タイトル」の値を表示］［＃「作品名」は大見出し］'), []);
-  // …scoped: a value field excuses neither an earlier postfix nor a later line.
-  assert.deepEqual(targets('です［＃「ですす」に傍点］［＃ここに「タイトル」の値を表示］'), ['ですす']);
-  assert.deepEqual(targets('［＃ここに「タイトル」の値を表示］\nです［＃「ですす」に傍点］'), ['ですす']);
-  assert.deepEqual(targets('です［＃「ですす」に傍点］'), ['ですす']);
 });
 
 // --------------------------------------------------------------- CRLF sources
@@ -1192,7 +1165,7 @@ test('値の表示: a postfix after a value field is left unjudged (the scan is 
 test('CRLF: a \\r\\n source lays out exactly like its LF twin', () => {
   const lf = 'あいう\n［＃ここから２字下げ］\nあ\n［＃ここで字下げ終わり］\n［＃縦中横］12\n［＃改ページ］\nか\n';
   const crlf = lf.replaceAll('\n', '\r\n');
-  assert.deepEqual(buildRows(tokenize(crlf)), buildRows(tokenize(lf)));
+  assert.deepEqual(rowsOf(crlf), rowsOf(lf));
   assert.equal(html(crlf), html(lf));
   // no ghost cell: one column for 3 chars at cpl 3, no column for the directive line, digits-only 縦中横
   assert.equal(pages('あいう\r\n', 3).flat().length, 1);
@@ -1214,7 +1187,7 @@ test('a ｜ base holding a postfix, a span or a left ruby renders exactly like t
   assert.deepEqual([u?.text, u?.cells, u?.ruby], ['山田太郎', 4, { base: '山田太郎', right: 'やまだたろう' }]);
 });
 
-test('a ｜ base of a value field puts the ruby over the substituted value (the name when bookless)', () => {
+test('a ｜ base of a value field puts the ruby over what the field shows', () => {
   const src = '｜［＃ここに「タイトル」の値を表示］《たいとる》';
   assert.deepEqual(unitsOf(src, new Map([['タイトル', '作品名']])).map((u) => [u.text, u.ruby?.base]), [
     ['作品名', '作品名'],
@@ -1236,11 +1209,7 @@ test('inside 縦中横 an explicit ruby stays literal, like the implicit form', 
 test('a postfix inside a ｜ base binds once the base is one unit: exactly as if written after the reading', () => {
   const same = (inside: string, after: string): void => {
     assert.equal(html(inside), html(after), inside);
-    assert.deepEqual(
-      findPostfixTargetIssues(inside).map((i) => i.target),
-      findPostfixTargetIssues(after).map((i) => i.target),
-      inside,
-    );
+    assert.deepEqual(missedTargets(inside), missedTargets(after), inside);
   };
   // 縦中横 replaces the ruby (手動縦中横 > ルビ); an inner mark overrides the enclosing span.
   same('｜12［＃「12」は縦中横］《じゅうに》', '12《じゅうに》［＃「12」は縦中横］');
@@ -1248,7 +1217,7 @@ test('a postfix inside a ｜ base binds once the base is one unit: exactly as if
   // A target covering part of the base cuts into the atomic ruby: a miss, reported.
   same('｜山田太郎［＃「山田」に傍点］《やまだたろう》', '山田太郎《やまだたろう》［＃「山田」に傍点］');
   same('｜山田太郎［＃「山田」の左に「やまだ」のルビ］《やまだたろう》', '山田太郎《やまだたろう》［＃「山田」の左に「やまだ」のルビ］');
-  assert.equal(findPostfixTargetIssues('｜山田太郎［＃「山田」に傍点］《やまだたろう》').length, 1);
+  assert.equal(missedTargets('｜山田太郎［＃「山田」に傍点］《やまだたろう》').length, 1);
   // A heading postfix and a comment inside the base keep their meaning (the comment survives).
   same('｜序章［＃「序章」は大見出し］《じょしょう》', '序章《じょしょう》［＃「序章」は大見出し］');
   same('｜山田［＃x］《やまだ》', '山田《やまだ》［＃x］');
@@ -1272,12 +1241,10 @@ test('a postfix inside a ｜ base may target text before the ｜; a 縦中横 sp
 
 // --------------------------------------------------------------- NFD kana (#125)
 
-const D = '\u3099'; // combining 濁点
-
 test('NFD: a decomposed kana lays out exactly like its NFC twin — one cell, composed text and ruby', () => {
   const nfd = `　｜カ${D}ラス戸《か${D}らすと${D}》か${D}開いた。`;
   const nfc = '　｜ガラス戸《がらすど》が開いた。';
-  assert.deepEqual(buildRows(tokenize(nfd)), buildRows(tokenize(nfc)));
+  assert.deepEqual(rowsOf(nfd), rowsOf(nfc));
   assert.equal(html(nfd), html(nfc));
   const ruby = unitsOf(nfd).find((u) => u.ruby !== undefined);
   assert.deepEqual([ruby?.cells, ruby?.ruby], [4, { base: 'ガラス戸', right: 'がらすど' }]);
@@ -1295,9 +1262,9 @@ test('NFD: an implicit base and a left reading compose too', () => {
 test('NFD: a postfix target matches its text whichever side is decomposed', () => {
   for (const src of [`た${D}め［＃「だめ」に傍点］`, `だめ［＃「た${D}め」に傍点］`, `た${D}め［＃「た${D}め」に傍点］`]) {
     assert.deepEqual(unitsOf(src), unitsOf('だめ［＃「だめ」に傍点］'), src);
-    assert.deepEqual(findPostfixTargetIssues(src), [], src);
+    assert.deepEqual(missedTargets(src), [], src);
   }
-  const [row] = buildRows(tokenize(`た${D}め［＃「だめ」は大見出し］`));
+  const [row] = rowsOf(`た${D}め［＃「だめ」は大見出し］`);
   assert.equal(row?.kind === 'line' ? row.heading : undefined, 1);
   assert.deepEqual(unitsOf(`か${D}き［＃「がき」は縦中横］`).map((u) => [u.text, u.cssClass]), [['がき', 'tcy']]);
 });
