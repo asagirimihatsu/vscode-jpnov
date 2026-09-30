@@ -48,9 +48,10 @@ const bookOpts = {
   paperOrientation: 'auto',
 } as const;
 const furniture = {
-  footerAlign: 'right',
+  footerAlign: BUILD_CHROME_DEFAULT.footerAlign,
   footer: BUILD_CHROME_DEFAULT.footer,
   header: '吾輩は猫である',
+  headerAlign: BUILD_CHROME_DEFAULT.headerAlign,
 } as const;
 
 type PreviewOpts = Parameters<typeof renderPreview>[1];

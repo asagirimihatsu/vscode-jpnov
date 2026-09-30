@@ -2,7 +2,7 @@
  * Build-time pagination engine: flows a manuscript's content into an explicit
  * page → line DOM skeleton (`<div class="page"><div class="grid"><div class="line">…`). Unlike the
  * continuous preview, the build output is paginated IN the compiler so printed pages are
- * WYSIWYG and the page furniture (page numbers, line numbers, 原稿用紙 grid) has real
+ * WYSIWYG and the page furniture (header, footer, line numbers, 原稿用紙 grid) has real
  * elements to hang off. Pure + vscode-free.
  *
  * Line breaking is a simple hard wrap at `charsPerLine` cells (full-width char = 1 cell,
@@ -754,8 +754,8 @@ function emitLine(line: DisplayLine, used?: Set<string>, anchor = true, head = '
   }
   // `anchor` lets the continuous preview suppress data-line on a source line's wrapped
   // continuation columns (first-display-line-only); the paginated build keeps the default
-  // (anchor=true → every line), so its output is unchanged. `head` is out-of-flow line
-  // furniture (the preview's number span) emitted before the column content.
+  // (anchor=true → every line). `head` is out-of-flow line furniture (the preview's number
+  // span) emitted before the column content.
   const dataLine =
     anchor && line.srcLine >= 0 ? ` data-line="${String(line.srcLine)}"` : '';
   return `<div class="line${indentClass}${headingClass}${emrClass}"${dataLine}>${head}${html}</div>`;
@@ -763,7 +763,7 @@ function emitLine(line: DisplayLine, used?: Set<string>, anchor = true, head = '
 
 /**
  * One output sheet. `cover: true` marks an unnumbered front page: no header, footer or line
- * numbers, and outside the footer's ページ番号／総ページ数 counts. The grid and its reserved
+ * numbers, and outside the ページ番号／総ページ数 counts. The grid and its reserved
  * bands are unchanged. Only the first two are withheld here — the line number is a CSS
  * counter matching `.page`, so its exemption lives in `build.ln.css`; 罫線/枠 stays on.
  * `values` are the book's ［＃ここに「…」の値を表示］ substitutions for the page furniture.
@@ -778,11 +778,11 @@ export interface RenderPage {
  * Renders paginated pages into the `<div class="book">…</div>` body fragment, each page
  * carrying its chrome furniture AFTER the lines (so line-adjacency is preserved for
  * anything matching consecutive `.line`s). The lines sit in a `.grid`, the sheet's only
- * vertical-rl box (build.base.css). When a `used` sink is passed, every emphasis
- * class emitted is recorded into it so the caller can emit only those rules (on-demand CSS)
+ * vertical-rl box (build.base.css). When a `used` sink is passed, every class emitted is
+ * recorded into it so the caller can emit only those rules (on-demand CSS)
  * — the structural `cover` class stays out of the sink. `data-page` is the sequential DOM
- * ordinal over ALL pages; the footer's page number and the parity of its side count BODY pages
- * only, so cover sheets never shift where body page 1 lands.
+ * ordinal over ALL pages; the furniture's page number and the parity of its sides count BODY
+ * pages only, so cover sheets never shift where body page 1 lands.
  */
 export function pagesToHtml(
   pages: readonly RenderPage[],

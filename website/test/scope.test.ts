@@ -18,7 +18,7 @@ const book = (): string => renderBook({
   ...LAYOUT_DEFAULT,
   paperSize: 'a4',
   paperOrientation: 'auto',
-  chrome: { lineNumbers: true, edgeLine: 'red', footerAlign: 'right', footer: BUILD_CHROME_DEFAULT.footer, header: '作品名　一' },
+  chrome: { lineNumbers: true, edgeLine: 'red', footerAlign: 'right', footer: BUILD_CHROME_DEFAULT.footer, header: '作品名　一', headerAlign: 'center' },
 });
 
 test('a preview fragment keeps every rule under its scope and no root or viewport dependency', () => {
@@ -46,7 +46,7 @@ test('a book fragment carries the paper geometry from fitPaper and can keep one 
   assert.equal(scoped.pageCount, 1);
   assert.equal(scoped.totalPages, 2);
   assert.ok(scoped.fragment.body.startsWith('<a class="print" href="/x.html" target="_blank" rel="noopener">印刷／PDF 保存</a><div class="book"><div class="page" data-page="1">'));
-  assert.ok(scoped.fragment.body.includes('<div class="hd">作品名　一</div><div class="ft r">1 / 2</div>'));
+  assert.ok(scoped.fragment.body.includes('<div class="hd c">作品名　一</div><div class="ft r">1 / 2</div>'));
   assert.ok(scoped.fragment.css.includes('.jp-r-b .print{position:absolute;'));
   assert.ok(scoped.fragment.css.includes('.jp-r-b .page{box-shadow:'), 'the screen rules are unwrapped, not dropped');
   for (const leak of LEAKS) {

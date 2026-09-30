@@ -10,6 +10,7 @@
 import { test, mock, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { FURNITURE_ALIGNS } from '../../src/shared/compiler/chrome.ts';
 import { buildVscode, createMockState, doc, FileType, resetMockState, Uri } from './_vscodeMock.ts';
 
 const state = createMockState();
@@ -346,7 +347,7 @@ test('editMeta edits the lines of ONE key and saves the book', async () => {
     ],
     [
       'a picked alignment replaces the rejected line',
-      '---\nfooterAlign: bottom\n---\n', 'footerAlign', { picked: { label: 'Always bottom-left', description: 'left', value: 'left' } },
+      '---\nfooterAlign: bottom\n---\n', 'footerAlign', { picked: { label: 'Left', description: 'left', value: 'left' } },
       [{ range: [1, 0, 1, 19], newText: 'footerAlign: left' }],
     ],
     [
@@ -355,6 +356,11 @@ test('editMeta edits the lines of ONE key and saves the book', async () => {
       { picked: { label: 'Alternate: right, then left', description: 'rightLeft', value: 'rightLeft' } },
       [{ range: [2, 0, 2, 17], newText: 'footerAlign: rightLeft' }, { range: [1, 0, 2, 0], newText: '' }],
     ],
+    [
+      'a picked header alignment lands after the header',
+      '---\nheader: 作品名　一\n---\n', 'headerAlign', { picked: { label: 'Right', description: 'right', value: 'right' } },
+      [{ range: [1, 13, 1, 13], newText: '\nheaderAlign: right' }],
+    ],
   ];
   for (const [name, text, key, given, edits] of cases) {
     reseed(text);
@@ -362,6 +368,22 @@ test('editMeta edits the lines of ONE key and saves the book', async () => {
     const saves = await runEditMeta(key);
     assert.deepEqual(state.appliedEdits, edits.map((e) => ({ uri: BOOK, ...e })), name);
     assert.equal(saves, 1, name);
+  }
+});
+
+test('editMeta offers the five alignments for the header and the footer, each with its own prompt', async () => {
+  const labels = ['Right', 'Left', 'Alternate: right, then left', 'Alternate: left, then right', 'Center'];
+  for (const [key, placeHolder] of [['headerAlign', 'Where the header goes'], ['footerAlign', 'Where the footer goes']] as const) {
+    reseed('---\nheader: 作品名　一\n---\n');
+    state.quickPickCalls.length = 0;
+    answer({ picked: undefined });
+    assert.equal(await runEditMeta(key), 0, key);
+    const call = state.quickPickCalls[0];
+    assert.ok(call, key);
+    const items = call.items as readonly { readonly label: string; readonly value: string }[];
+    assert.deepEqual(items.map((i) => i.value), [...FURNITURE_ALIGNS], key);
+    assert.deepEqual(items.map((i) => i.label), labels, key);
+    assert.deepEqual(call.options, { placeHolder }, key);
   }
 });
 

@@ -1,8 +1,8 @@
 /**
  * Resolves the wire settings payload (`jpnov.layout/preview/paper.*`) into fully-clamped,
- * enum-checked {@link PreviewSettings} / {@link HtmlSettings}. This is the SINGLE home of
- * the product defaults ({@link LAYOUT_DEFAULT} + the chrome/paper default tables); the
- * config-codegen test locks the package.json `default`s to these constants.
+ * enum-checked {@link PreviewSettings} / {@link HtmlSettings}, falling back to
+ * {@link LAYOUT_DEFAULT} (types.ts) and the chrome/paper tables below; the config-codegen test
+ * locks the package.json `default`s to these constants.
  *
  * The input types are the full wire shapes (the client always sends every field), but the
  * helpers take `unknown` on purpose: an IPC payload is untrusted at runtime, and a
@@ -10,7 +10,7 @@
  * anything invalid coerces to its default. This is validation, not a compatibility layer.
  * Pure + vscode-free.
  */
-import type { EdgeLineStyle, FooterAlign } from '../compiler/chrome.ts';
+import type { BuildChrome, PreviewChrome } from '../compiler/chrome.ts';
 import { EDGE_LINE_STYLES } from '../compiler/chrome.ts';
 import type { PaperOrientation, PaperSize } from '../compiler/geometry.ts';
 import { PAPER_ORIENTATIONS, PAPER_SIZES } from '../compiler/geometry.ts';
@@ -22,7 +22,7 @@ import { CHARS_MAX, CHARS_MIN, DASH_MODES, KINSOKU_MODES, LAYOUT_DEFAULT, LINE_P
 export const PREVIEW_CHROME_DEFAULT = {
   lineNumbers: true,
   edgeLine: 'none',
-} as const satisfies { lineNumbers: boolean; edgeLine: EdgeLineStyle };
+} as const satisfies PreviewChrome;
 
 /**
  * Defaults for the `jpnov.layout.paper.size`/`.orientation` settings: the physical output
@@ -35,22 +35,17 @@ export const BUILD_PAPER_DEFAULT = {
 
 /**
  * `lineNumbers`/`edgeLine` default the `jpnov.layout.paper.*` settings; the page-furniture fields
- * (`footerAlign`/`footer`/`header`) are NOT settings — they default a `.jpbook`'s front
- * matter when it omits the key (see `composeBookChrome`).
+ * (`header`/`headerAlign`/`footer`/`footerAlign`) are NOT settings — they default a `.jpbook`'s
+ * front matter when it omits the key (see `composeBookChrome`).
  */
 export const BUILD_CHROME_DEFAULT = {
   lineNumbers: false,
   edgeLine: 'none',
-  footerAlign: 'right',
-  footer: `${valueAnnotation(VALUE_NAMES.page)} / ${valueAnnotation(VALUE_NAMES.totalPages)}`,
   header: '',
-} as const satisfies {
-  lineNumbers: boolean;
-  edgeLine: EdgeLineStyle;
-  footerAlign: FooterAlign;
-  footer: string;
-  header: string;
-};
+  headerAlign: 'center',
+  footer: `${valueAnnotation(VALUE_NAMES.page)} / ${valueAnnotation(VALUE_NAMES.totalPages)}`,
+  footerAlign: 'right',
+} as const satisfies BuildChrome;
 
 /** A safe integer clamped to [{@link CHARS_MIN}..{@link CHARS_MAX}]; anything else → `fallback`. */
 function clampChars(value: unknown, fallback: number): number {

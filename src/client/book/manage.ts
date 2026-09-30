@@ -23,13 +23,14 @@ import type { TextReplace } from '#/shared/book/edits.ts';
 import {
   composeDividerValue,
   DIVIDER_PRESETS,
+  isAlignKey,
   parseDividerValue,
   parseJpbook,
   type EntryList,
   type MetaKey,
   type ParsedLine,
 } from '#/shared/book/jpbook.ts';
-import { FOOTER_ALIGNS, type FooterAlign } from '#/shared/compiler/chrome.ts';
+import { FURNITURE_ALIGNS, type FurnitureAlign } from '#/shared/compiler/chrome.ts';
 import { BUILD_CHROME_DEFAULT } from '#/shared/config/settings.ts';
 import { unencodableChars } from '#/shared/encoding.ts';
 import { errorText } from '#/shared/errors.ts';
@@ -51,6 +52,8 @@ export function metaLabel(key: MetaKey): string {
       return vscode.l10n.t('Author');
     case 'header':
       return vscode.l10n.t('Header');
+    case 'headerAlign':
+      return vscode.l10n.t('Header Alignment');
     case 'footer':
       return vscode.l10n.t('Footer');
     case 'footerAlign':
@@ -60,19 +63,19 @@ export function metaLabel(key: MetaKey): string {
   }
 }
 
-/** Localized display of one footer-alignment member (QuickPick items and meta-row values). */
-function alignLabel(value: FooterAlign): string {
+/** Localized display of one alignment member, shared by the header and the footer (the row names the band). */
+function alignLabel(value: FurnitureAlign): string {
   switch (value) {
     case 'right':
-      return vscode.l10n.t('Always bottom-right');
+      return vscode.l10n.t('Right');
     case 'left':
-      return vscode.l10n.t('Always bottom-left');
+      return vscode.l10n.t('Left');
     case 'rightLeft':
       return vscode.l10n.t('Alternate: right, then left');
     case 'leftRight':
       return vscode.l10n.t('Alternate: left, then right');
-    case 'none':
-      return vscode.l10n.t('No footer');
+    case 'center':
+      return vscode.l10n.t('Center');
   }
 }
 
@@ -84,7 +87,7 @@ function alignLabel(value: FooterAlign): string {
  * alone (no footer) and shows as "(hidden)".
  */
 export function metaValueParts(key: MetaKey, value: string | undefined): { value: string; note: string } {
-  const display = (v: string): string => (key === 'footerAlign' ? alignLabel(v as FooterAlign) : v);
+  const display = (v: string): string => (isAlignKey(key) ? alignLabel(v as FurnitureAlign) : v);
   if (value === '') {
     return { value: '', note: vscode.l10n.t('(hidden)') };
   }
@@ -521,10 +524,14 @@ async function editMeta(arg: unknown): Promise<void> {
     answer = answered(await pickDivider(node.value));
   } else if (node.metaKey === 'footer') {
     answer = await pickFooter(node.value);
-  } else if (node.metaKey === 'footerAlign') {
+  } else if (isAlignKey(node.metaKey)) {
     const picked = await vscode.window.showQuickPick(
-      FOOTER_ALIGNS.map((v) => ({ label: alignLabel(v), description: v, value: v })),
-      { placeHolder: vscode.l10n.t('Where the footer goes') },
+      FURNITURE_ALIGNS.map((v) => ({ label: alignLabel(v), description: v, value: v })),
+      {
+        placeHolder: node.metaKey === 'headerAlign'
+          ? vscode.l10n.t('Where the header goes')
+          : vscode.l10n.t('Where the footer goes'),
+      },
     );
     answer = answered(picked?.value);
   } else {

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { BuildChrome, PreviewChrome } from '../../../src/shared/compiler/chrome.ts';
+import { FURNITURE_ALIGNS } from '../../../src/shared/compiler/chrome.ts';
 import { DEFAULT_FONT_STACK, reflowStylesheet, stylesheet } from '../../../src/shared/compiler/css.ts';
 import type { PaperOrientation, PaperSize } from '../../../src/shared/compiler/geometry.ts';
 import { EDGE_INSET, FOOTER_BAND, HEADER_BAND, LINENUM_BAND, SIDE_PAD, fitPaper } from '../../../src/shared/compiler/geometry.ts';
@@ -33,9 +34,10 @@ const PREVIEW_OFF: PreviewChrome = { lineNumbers: false, edgeLine: 'none' };
 const BUILD_OFF: BuildChrome = {
   lineNumbers: false,
   edgeLine: 'none',
-  footerAlign: 'none',
-  footer: '［＃ここに「ページ番号」の値を表示］',
   header: '',
+  headerAlign: 'center',
+  footer: '',
+  footerAlign: 'right',
 };
 
 /** Preview stylesheet with explicit resolved options (the compiler has no defaults). */
@@ -411,8 +413,8 @@ test('.indent-N rules generate on demand; malformed suffixes are ignored', () =>
 // --- edge-rule colour policy -------------------------------------------------
 
 test('edgeLine → --edge base: red/text inject the base colour, none injects nothing at all', () => {
-  // The 80%-alpha recipe lives once in the edge fragments; the :root variable carries ONLY
-  // the base. 'none' must leave no trace — no variable, no edge fragment (zero dead rules).
+  // The :root variable carries ONLY the base colour. 'none' must leave no trace — no variable,
+  // no edge fragment (zero dead rules).
   assert.match(preview({ chrome: { lineNumbers: false, edgeLine: 'red' } }), /:root\{[^}]*--edge:#cc0000\}/);
   assert.match(
     preview({ chrome: { lineNumbers: false, edgeLine: 'text' } }),
@@ -496,14 +498,15 @@ test('preview: the 改ページ dashed rule overshoots the writing band into the
 const BUILD_ON: BuildChrome = {
   lineNumbers: true,
   edgeLine: 'text',
-  footerAlign: 'rightLeft',
-  footer: '［＃ここに「ページ番号」の値を表示］',
   header: '章',
+  headerAlign: 'rightLeft',
+  footer: '［＃ここに「ページ番号」の値を表示］',
+  footerAlign: 'rightLeft',
 };
 
 test('build all-on chrome: bands, outset frame, counters, rules, furniture styles', () => {
   const css = build({ chrome: BUILD_ON });
-  // Bands: header 2.5 + line numbers 1 on top (--htop), footer 2.5 at the bottom (static).
+  // Bands: HEADER_BAND + LINENUM_BAND on top (--htop), FOOTER_BAND at the bottom (static).
   assert.match(css, /\.page\{[^}]*padding:calc\(var\(--htop\)\*1em\) /);
   assert.match(css, htopRe(HEADER_BAND + LINENUM_BAND)); // header band + line-number band
   assert.match(css, footerPadRe);
@@ -538,15 +541,21 @@ test('build all-on chrome: bands, outset frame, counters, rules, furniture style
   assert.match(css, new RegExp(String.raw`\.line::before\{[^}]*translateY\(calc\(-100% - ` + numRe(EDGE_INSET) + String.raw`rem\)\)`));
   assert.match(css, /\.line::before\{[^}]*line-height:1;/);
   // The furniture sits flush against the paper margin (the MARGIN_MM white stays
-  // furniture-free) in smaller-than-body type — .hd top:0 mirrors .ft bottom:0.
-  assert.match(css, /\.hd\{position:absolute;top:0;left:0;right:0/);
+  // furniture-free) in smaller-than-body type — .hd top:0 mirrors .ft bottom:0. The side is a
+  // class alone: .c centres across the sheet, .r / .l put both bands on one corner, in rem.
+  assert.match(css, /\.hd\{position:absolute;top:0;/);
   assert.match(css, /\.hd\{[^}]*font-size:0\.\d+em;/);
   assert.match(css, /\.hd\{[^}]*line-height:1;/);
   assert.match(css, /\.ft\{position:absolute;bottom:0/);
   assert.match(css, /\.ft\{[^}]*font-size:0\.\d+em;/);
   assert.match(css, /\.ft\{[^}]*line-height:1;/);
-  assert.ok(css.includes(`.ft.r{right:${String(SIDE_PAD + EDGE_INSET)}em;}`));
-  assert.ok(css.includes(`.ft.l{left:${String(SIDE_PAD + EDGE_INSET)}em;}`));
+  assert.doesNotMatch(css, /\.hd\{[^}]*\b(left|right|text-align):/);
+  assert.doesNotMatch(css, /\.ft\{[^}]*\b(left|right|text-align):/);
+  for (const band of ['.hd', '.ft']) {
+    assert.ok(css.includes(`${band}.c{left:0;right:0;text-align:center;}`), band);
+    assert.ok(css.includes(`${band}.r{right:${String(SIDE_PAD + EDGE_INSET)}rem;}`), band);
+    assert.ok(css.includes(`${band}.l{left:${String(SIDE_PAD + EDGE_INSET)}rem;}`), band);
+  }
   // The line-number band widens the sheet, which the fit absorbs in the paper insets —
   // expected strings computed with the band on.
   const paper = paperStrings({ lineNumbers: true });
@@ -583,7 +592,7 @@ test('build all-off chrome keeps a plain sheet with the reserved bands, no chrom
   assert.doesNotMatch(css, /\.line[^{]*\{[^}]*box-shadow/);
   assert.doesNotMatch(css, /::after/); // no inter-column rules without edge lines
   assert.doesNotMatch(css, /counter/);
-  assert.doesNotMatch(css, /\.hd\{|\.ft\{/);
+  assert.doesNotMatch(css, /\.(hd|ft)[{.]/);
 });
 
 test('build red edge lines colour both the frame and the inter-column rules', () => {
@@ -603,7 +612,7 @@ test('build bands: header/footer bands are constant; only line numbers add geome
   const paper = paperStrings();
   for (const chrome of [
     BUILD_OFF,
-    { ...BUILD_OFF, footerAlign: 'right' as const },
+    { ...BUILD_OFF, footer: 'X' },
     { ...BUILD_OFF, header: 'X' },
   ]) {
     const css = build({ chrome });
@@ -617,6 +626,20 @@ test('build bands: header/footer bands are constant; only line numbers add geome
   assert.match(lnOnly, htopRe(HEADER_BAND + LINENUM_BAND)); // header band + line-number band
   assert.match(lnOnly, /\.page\{[^}]*padding:calc\(var\(--htop\)\*1em\) /);
   assert.match(lnOnly, footerPadRe);
+});
+
+test('build furniture: each band ships its rules only while it has a line, whatever its alignment', () => {
+  const cases: readonly (readonly [header: string, footer: string])[] = [['柱', ''], ['', '1'], ['柱', '1']];
+  for (const [header, footer] of cases) {
+    const css = build({ chrome: { ...BUILD_OFF, header, footer } });
+    assert.equal(/\.hd[{.]/.test(css), header !== '', `header ${JSON.stringify(header)}`);
+    assert.equal(/\.ft[{.]/.test(css), footer !== '', `footer ${JSON.stringify(footer)}`);
+  }
+  // The side is the element's class, so every alignment ships the same rules.
+  const base = build({ chrome: BUILD_ON });
+  for (const align of FURNITURE_ALIGNS) {
+    assert.equal(build({ chrome: { ...BUILD_ON, headerAlign: align, footerAlign: align } }), base, align);
+  }
 });
 
 test('paper settings pick the box: A6, forced orientation, auto portrait', () => {

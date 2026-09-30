@@ -2,8 +2,7 @@
  * Integration tests for the impure `*.jpbook` editor features (diagnostics, completion,
  * document links) against real `file:` fixtures. Entries are root-relative, so every
  * function takes the owning workspace-folder root (null = no root: syntax-only).
- * Runs via `npm run test:integration` (not plain `npm test`): `src/server/jpbook.ts`
- * has `#/*` VALUE imports, which need the resolve hook in `test/resolve-hooks.mjs`.
+ * Runs via `npm run test:integration` with the other fs-fixture suite.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -115,8 +114,8 @@ test('completeJpbook routes front-matter lines to key/value completion (root-fre
   assert.equal(firstKey.kind, CompletionItemKind.Property);
   assert.equal(firstKey.textEdit?.newText, 'footer: ');
 
-  const vals = await completeJpbook(null, parsed, 'footerAlign: n', { line: 1, character: 14 });
-  assert.deepEqual(vals.map((i) => i.label), ['none']);
+  const vals = await completeJpbook(null, parsed, 'headerAlign: c', { line: 1, character: 14 });
+  assert.deepEqual(vals.map((i) => i.label), ['center']);
   assert.equal(vals[0]?.kind, CompletionItemKind.EnumMember);
 
   // On the fences themselves: nothing.

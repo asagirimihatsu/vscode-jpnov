@@ -10,6 +10,7 @@ import { test, mock, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { CancellationTokenSource } from 'vscode-languageserver/node';
 
+import { META_KEYS } from '../../src/shared/book/jpbook.ts';
 import {
   buildVscode,
   createFakeWebviewView,
@@ -522,7 +523,7 @@ test('openDetail posts covers and chapters (missing flagged) and the metadata ro
   assert.equal(ch2.folder, 'sub');
   assert.equal(ch2.line, 7);
   assert.equal(ch2.path, 'sub/ch2.jpnov');
-  assert.equal(detail.meta.length, 6);
+  assert.equal(detail.meta.length, META_KEYS.length);
   // A set value carries no status note; the note is separate from the value (rendered by the label).
   const titleRow = detail.meta.find((m) => m.key === 'title');
   assert.ok(titleRow);
@@ -545,9 +546,11 @@ test('the metadata rows show an empty value as not set, an empty footer as hidde
   const detail = firstDetail(view) as { meta: { key: string; value: string; note: string }[] };
   const rows = new Map(detail.meta.map((m) => [m.key, [m.value, m.note]]));
   assert.deepEqual(rows.get('title'), ['', '(not set)']);
+  assert.deepEqual(rows.get('header'), ['', '(not set)']);
   assert.deepEqual(rows.get('footer'), ['', '(hidden)']);
-  // The alignment row shows its own value, whatever the footer holds.
-  assert.deepEqual(rows.get('footerAlign'), ['Always bottom-right', '(default)']);
+  // An alignment row shows its own value, whatever its header or footer holds.
+  assert.deepEqual(rows.get('headerAlign'), ['Center', '(default)']);
+  assert.deepEqual(rows.get('footerAlign'), ['Right', '(default)']);
 });
 
 // --- edit dispatch (reuses manage.ts via executeCommand) --------------------

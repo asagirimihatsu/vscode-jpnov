@@ -74,24 +74,27 @@ test('the .css geometry literals equal the geometry.ts constants (paper-fit doub
   // Print margin: the vertical sides pinned to ZERO — the paper inset rides the TS-emitted
   // border (geometry.ts fitPaper), so any vertical print margin would push the border box
   // (== the paper) past the @page box; the horizontal `auto` only centres the rounding
-  // slack. PRINT_MARGIN lives only in the fit math now.
+  // slack. PRINT_MARGIN lives only in the fit math.
   assert.equal(cssValue(buildBase, '.page', 'margin', '@media print'), 0);
 
   // SIDE_PAD: the sheet's physical left/right padding (fitPaper's block-axis sheet size), the
   // outset frame's side insets (flush with the grid's side columns), and its one derived
-  // literal — the footer corners at SIDE_PAD + EDGE_INSET (just inside the frame line).
+  // literal — the header and footer corners at SIDE_PAD + EDGE_INSET rem (just inside the frame
+  // line), the same in both bands.
   assert.equal(Number.parseFloat(pad[1] ?? ''), SIDE_PAD);
   assert.equal(Number.parseFloat(pad[3] ?? ''), SIDE_PAD);
   assert.equal(cssValue(read('build.edge.css'), '.page::before', 'left'), SIDE_PAD);
   assert.equal(cssValue(read('build.edge.css'), '.page::before', 'right'), SIDE_PAD);
-  assert.equal(cssValue(read('build.footer.css'), '.ft.r', 'right'), SIDE_PAD + EDGE_INSET);
-  assert.equal(cssValue(read('build.footer.css'), '.ft.l', 'left'), SIDE_PAD + EDGE_INSET);
+  const corner = `${String(SIDE_PAD + EDGE_INSET)}rem`;
+  for (const [file, band] of [['build.header.css', '.hd'], ['build.footer.css', '.ft']] as const) {
+    assert.ok(read(file).includes(`${band}.r{right:${corner};}`), `${file}: ${band}.r`);
+    assert.ok(read(file).includes(`${band}.l{left:${corner};}`), `${file}: ${band}.l`);
+  }
 });
 
 test('the EDGE_INSET fragment sites all derive from the constant (reserve double-home guard)', () => {
-  // Fragments write the String(n) canonical form ('0.7', not '.70'). Same-value literals
-  // that are NOT this constant stay out: .ft{font-size:0.7em} and layout.ts's ruby-hang
-  // tolerance.
+  // Fragments write the String(n) canonical form ('0.7', not '.70'). A same-value literal
+  // that is NOT this constant stays out: .ft{font-size:0.7em}.
   assert.equal(cssValue(read('preview.base.css'), '.segment', 'padding-inline'), EDGE_INSET);
   const calcSites: readonly (readonly [file: string, needle: string])[] = [
     ['preview.base.css', `(var(--cpl) + ${String(2 * EDGE_INSET)})`],
@@ -136,7 +139,7 @@ test('the edge fragments paint NO background of their own (edgeRules owns the �
   }
 });
 
-test('the base fragments carry NO ruby rules (the css.ts classRule lanes own rt sizing)', () => {
+test('the base fragments carry NO ruby rules (the class.ruby-*.css lanes own rt sizing)', () => {
   // Every <rt> the layout emits sits inside a classed ruby (rr/lr/br) whose on-demand rule
   // set declares font-size:0.5em itself — a fragment-level ruby>rt rule would be a silent
   // second home for that value. Guard the absence in both fragments.

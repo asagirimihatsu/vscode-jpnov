@@ -17,6 +17,7 @@ import {
   type CompletionEntry,
   type JpbookLineKind,
 } from '../../../src/shared/book/jpbook.ts';
+import { FURNITURE_ALIGNS } from '../../../src/shared/compiler/chrome.ts';
 
 const kinds = (text: string): JpbookLineKind[] => parseJpbook(text).lines.map((l) => l.kind);
 const E = (name: string, isDir = false): CompletionEntry => ({ name, isDir });
@@ -102,11 +103,12 @@ test('parseJpbook collects fenced metadata and still parses the body', () => {
 
 test('parseJpbook accepts every recognized key and validates the enum', () => {
   const got = parseJpbook(
-    '---\ntitle: t\nheader: h\nfooterAlign: left\nfooter: ［＃ここに「ページ番号」の値を表示］\n---\n',
+    '---\ntitle: t\nheader: h\nheaderAlign: right\nfooterAlign: left\nfooter: ［＃ここに「ページ番号」の値を表示］\n---\n',
   );
   assert.deepEqual(got.meta, {
     title: 't',
     header: 'h',
+    headerAlign: 'right',
     footerAlign: 'left',
     footer: '［＃ここに「ページ番号」の値を表示］',
   });
@@ -164,21 +166,22 @@ test('divider is a free-string key; parse/composeDividerValue split mark and 字
   assert.deepEqual(parseDividerValue(composeDividerValue('†', 3)), { mark: '†', indent: 3 });
 });
 
-test('parseJpbook warns on an invalid footerAlign value and leaves it unset', () => {
-  const got = parseJpbook('---\nfooterAlign: middle\n---\n');
-  assert.deepEqual(got.meta, {});
-  assert.deepEqual(got.lines[1]?.kind, {
-    warning: {
-      code: 'jpbook.metaBadEnum',
-      args: ['footerAlign', 'middle', 'right, left, rightLeft, leftRight, none'],
-    },
-  });
-});
-
-test('parseJpbook: a rejected footerAlign value does not take the key', () => {
-  const got = parseJpbook('---\nfooterAlign: middle\nfooterAlign: left\n---\n');
-  assert.deepEqual(got.meta, { footerAlign: 'left' });
-  assert.equal(got.lines[2]?.kind, 'meta');
+test('parseJpbook: headerAlign and footerAlign take the five alignments and warn on anything else', () => {
+  for (const key of ['headerAlign', 'footerAlign'] as const) {
+    for (const align of FURNITURE_ALIGNS) {
+      assert.deepEqual(parseJpbook(`---\n${key}: ${align}\n---\n`).meta, { [key]: align }, `${key}: ${align}`);
+    }
+    // A rejected value (the retired `none` and an empty value too) warns and leaves the key
+    // to a later valid line.
+    for (const bad of ['middle', 'none', '']) {
+      const got = parseJpbook(`---\n${key}: ${bad}\n${key}: left\n---\n`);
+      assert.deepEqual(got.lines[1]?.kind, {
+        warning: { code: 'jpbook.metaBadEnum', args: [key, bad, FURNITURE_ALIGNS.join(', ')] },
+      }, `${key}: ${bad}`);
+      assert.equal(got.lines[2]?.kind, 'meta');
+      assert.deepEqual(got.meta, { [key]: 'left' }, `${key}: ${bad}`);
+    }
+  }
 });
 
 test('parseJpbook errors on a colon-less (or key-less) metadata line', () => {
@@ -291,8 +294,9 @@ test('cover: item paths validate like chapter paths, quoting the line an item st
 test('the front-matter key list is the user-visible contract', () => {
   // A stable contract, pinned literally: everything else derives from these constants.
   assert.deepEqual([...FRONT_MATTER_KEYS], [
-    'title', 'author', 'header', 'footer', 'footerAlign', 'divider', 'cover',
+    'title', 'author', 'header', 'headerAlign', 'footer', 'footerAlign', 'divider', 'cover',
   ]);
+  assert.deepEqual([...FURNITURE_ALIGNS], ['right', 'left', 'rightLeft', 'leftRight', 'center']);
   assert.deepEqual([...COVER_ITEM_MARKS], ['-', '－']);
 });
 
@@ -396,9 +400,10 @@ test('composeBookChrome: absent keys fall back to the product defaults', () => {
   assert.deepEqual(composeBookChrome(BASE, {}), {
     lineNumbers: true,
     edgeLine: 'red',
-    footerAlign: 'right',
-    footer: '［＃ここに「ページ番号」の値を表示］ / ［＃ここに「総ページ数」の値を表示］',
     header: '',
+    headerAlign: 'center',
+    footer: '［＃ここに「ページ番号」の値を表示］ / ［＃ここに「総ページ数」の値を表示］',
+    footerAlign: 'right',
   });
 });
 
@@ -406,15 +411,17 @@ test('composeBookChrome: front-matter values override the furniture, never the p
   assert.deepEqual(
     composeBookChrome(BASE, {
       header: '第二巻',
-      footerAlign: 'none',
+      headerAlign: 'leftRight',
       footer: '［＃ここに「ページ番号」の値を表示］',
+      footerAlign: 'center',
     }),
     {
       lineNumbers: true,
       edgeLine: 'red',
-      footerAlign: 'none',
-      footer: '［＃ここに「ページ番号」の値を表示］',
       header: '第二巻',
+      headerAlign: 'leftRight',
+      footer: '［＃ここに「ページ番号」の値を表示］',
+      footerAlign: 'center',
     },
   );
 });
@@ -509,15 +516,19 @@ test('completeMetaLine filters keys by case-insensitive prefix, replacing the ty
   const got = completeMetaLine('  FOOT');
   assert.deepEqual(got.map((c) => c.label), ['footer', 'footerAlign']);
   assert.deepEqual(got[0]?.replace, { startChar: 2, endChar: 6 });
+  assert.deepEqual(completeMetaLine('head').map((c) => c.label), ['header', 'headerAlign']);
 });
 
-test('completeMetaLine offers enum members after "footerAlign:"', () => {
-  const got = completeMetaLine('footerAlign: le');
-  assert.deepEqual(got.map((c) => c.label), ['left', 'leftRight']);
-  const first = got[0];
-  assert.ok(first);
-  assert.equal(first.kind, 'value');
-  assert.deepEqual(first.replace, { startChar: 13, endChar: 15 });
+test('completeMetaLine offers the alignments after "headerAlign:" and "footerAlign:"', () => {
+  for (const key of ['headerAlign', 'footerAlign']) {
+    assert.deepEqual(completeMetaLine(`${key}: `).map((c) => c.label), [...FURNITURE_ALIGNS], key);
+    const got = completeMetaLine(`${key}: le`);
+    assert.deepEqual(got.map((c) => c.label), ['left', 'leftRight'], key);
+    const first = got[0];
+    assert.ok(first);
+    assert.equal(first.kind, 'value');
+    assert.deepEqual(first.replace, { startChar: key.length + 2, endChar: key.length + 4 });
+  }
 });
 
 test('completeMetaLine offers nothing after the colon of a free-text key', () => {

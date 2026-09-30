@@ -273,13 +273,14 @@ export function renderBook(opts: {
     ];
   });
 
-  // Blank-footer normalization (single source): a footer that is blank after trim means
-  // "no footer", folded into the one `footerAlign === 'none'` gate so the `.ft` DOM element
-  // and its CSS rule always agree. Only the suppression check trims — a rendered non-blank
-  // footer keeps the author's literal spaces.
+  // Blank-furniture normalization (single source): a header or footer blank after trim folds to
+  // '', the one test both the `.hd`/`.ft` element and its CSS fragment key off, so the two always
+  // agree. Only this check trims — a rendered line keeps the author's literal spaces.
+  const unblank = (line: string): string => (line.trim() === '' ? '' : line);
   const chrome: BuildChrome = {
     ...opts.chrome,
-    footerAlign: opts.chrome.footer.trim() === '' ? 'none' : opts.chrome.footerAlign,
+    header: unblank(opts.chrome.header),
+    footer: unblank(opts.chrome.footer),
   };
 
   // Emit the body first so the CSS carries ONLY the classes used (on-demand).
