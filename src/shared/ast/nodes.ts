@@ -239,6 +239,12 @@ export interface Chars {
   readonly kind: 'chars';
   readonly text: string;
   readonly span: Span;
+  /**
+   * Where each character of `text` was written, when kana were composed in its source (a composed
+   * kana covers its kana and mark); without it, each sits at `span.start` plus its offset in `text`.
+   * A value's characters have no place of their own: they all come from `span`, its annotation.
+   */
+  readonly starts?: readonly number[];
   readonly origin: CharsOrigin;
   readonly marks: Marks;
 }
@@ -253,7 +259,7 @@ export interface Ruby {
   readonly marks: Marks;
 }
 
-/** A 縦中横 cell; atomic, one cell whatever it holds. */
+/** A 縦中横 cell; atomic, one cell whatever it holds. `span` is where that was written, its annotations aside. */
 export interface Tcy {
   readonly kind: 'tcy';
   readonly text: string;

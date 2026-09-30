@@ -189,10 +189,15 @@ export interface BooksInit {
 
 // Live preview — messages + bootstrap
 
-/** Host → preview webview: scroll the anchor for `line` to the reveal position (with a glide). */
-export interface RevealMessage {
-  readonly type: 'reveal';
+/** A cursor as the editor counts it: a 0-based line and the UTF-16 offset in it. */
+export interface Cursor {
   readonly line: number;
+  readonly character: number;
+}
+
+/** Host → preview webview: glide the column holding the cursor to the reveal position. */
+export interface RevealMessage extends Cursor {
+  readonly type: 'reveal';
 }
 
 /** The two `jpnov.layout.*` grid keys the preview's layout widget adjusts in place. */
@@ -238,11 +243,10 @@ export interface PreviewLayoutInit {
 
 /**
  * The preview webview's `__INIT` bootstrap: the previewed document URI (persisted through the
- * webview state API for the window-reload serializer), the line to park on the first paint, and
+ * webview state API for the window-reload serializer), the cursor to park on the first paint, and
  * the layout widget's state.
  */
-export interface PreviewInit {
+export interface PreviewInit extends Cursor {
   readonly uri: string;
-  readonly line: number;
   readonly layout: PreviewLayoutInit;
 }

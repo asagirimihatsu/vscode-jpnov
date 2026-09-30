@@ -1,13 +1,14 @@
 /**
  * The live preview's cursor-follow scroller (runs in the preview panel's browser realm). It parks
- * the paragraph whose `data-line` is the greatest value ≤ the target line at the {@link REVEAL_RATIO}
- * viewport position — synchronously at parse time (so the first paint is already parked, never a
- * frame at the origin), on `reveal` messages (with a {@link REVEAL_EASE} glide), on resize, and
- * re-asserted after load — and persists `{uri, line}` through the webview state API for the
- * window-reload serializer. History scroll restoration is forced to manual so a same-URL html swap
- * can't async-replay the old offset. The uri/line arrive via the host's `__INIT` bootstrap.
+ * the column holding the cursor — the last whose `data-line`, then `data-ch` (absent = 0), is at
+ * or before the cursor's line and character — at the {@link REVEAL_RATIO} viewport position:
+ * synchronously at parse time (so the first paint is already parked, never a frame at the origin),
+ * on `reveal` messages (with a {@link REVEAL_EASE} glide), on resize, and re-asserted after load.
+ * It persists `{uri, line, character}` through the webview state API for the window-reload
+ * serializer. History scroll restoration is forced to manual so a same-URL html swap can't
+ * async-replay the old offset. The uri and the cursor arrive via the host's `__INIT` bootstrap.
  */
-import type { PreviewInit } from '../../protocol.ts';
+import type { Cursor, PreviewInit } from '../../protocol.ts';
 
 import { api } from './api.ts';
 
@@ -30,12 +31,12 @@ try {
   // Not supported in this webview runtime — the load-time re-assert below still corrects it.
 }
 
-let cur = init.line;
+let cur: Cursor = init;
 
 // Persist immediately and OUTSIDE rAF: rAF is suspended in hidden webviews, so a render finishing in
 // a background panel would otherwise never reach setState.
-function persist(line: number): void {
-  api.setState({ uri: init.uri, line });
+function persist(at: Cursor): void {
+  api.setState({ uri: init.uri, line: at.line, character: at.character });
 }
 persist(cur);
 
@@ -52,19 +53,19 @@ function dst(t: Element): [number, number] {
   ];
 }
 
-function reveal(line: number, glide?: boolean): void {
-  cur = line;
+function reveal(at: Cursor, glide?: boolean): void {
+  cur = at;
   let t: Element | null = null;
   for (const n of document.querySelectorAll('[data-line]')) {
-    const l = parseInt(n.getAttribute('data-line') ?? '', 10);
-    if (Number.isNaN(l)) {
+    const line = parseInt(n.getAttribute('data-line') ?? '', 10);
+    const ch = parseInt(n.getAttribute('data-ch') ?? '0', 10);
+    if (Number.isNaN(line) || Number.isNaN(ch)) {
       continue;
     }
-    if (l <= line) {
-      t = n;
-    } else {
+    if (line > at.line || (line === at.line && ch > at.character)) {
       break;
     }
+    t = n;
   }
   cancelAnimationFrame(anim);
   if (t === null) {
@@ -102,10 +103,11 @@ reveal(cur);
 window.addEventListener('message', (e: MessageEvent) => {
   const m: unknown = e.data;
   if (typeof m === 'object' && m !== null && (m as { type?: unknown }).type === 'reveal') {
-    const line = (m as { line?: unknown }).line;
-    if (typeof line === 'number') {
-      reveal(line, true);
-      persist(line);
+    const { line, character } = m as { line?: unknown; character?: unknown };
+    if (typeof line === 'number' && typeof character === 'number') {
+      const at = { line, character };
+      reveal(at, true);
+      persist(at);
     }
   }
 });

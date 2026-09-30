@@ -8,33 +8,14 @@
  */
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
 
 import { BOOKS_CSS, BOOKS_JS } from '../../src/client/book/webviewBundle.generated.ts';
 import type { EntryList } from '../../src/client/protocol.ts';
 
-import { resolveBrowserExecutable } from './_browser.ts';
 import { MARKER, measurePage } from './_headless.ts';
+import { BROWSER_SKIP, browser, cleanups, removeCleanups } from './_setup.ts';
 
-const browser = resolveBrowserExecutable({
-  env: process.env,
-  platform: process.platform,
-  exists: existsSync,
-});
-const browserRequired = process.env.JPNOV_E2E_REQUIRE_BROWSER === '1';
-const BROWSER_SKIP = {
-  skip: browser === undefined && !browserRequired
-    ? 'no Chromium-family browser on this machine (CI requires one via JPNOV_E2E_REQUIRE_BROWSER=1)'
-    : false,
-};
-
-const cleanups: string[] = [];
-after(async () => {
-  await Promise.all(
-    cleanups.map((dir) => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })),
-  );
-});
+after(removeCleanups);
 
 /**
  * The stub workspace: three books under one root, listed A, B, C. B's name carries the raw

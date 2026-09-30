@@ -15,7 +15,7 @@ import {
   type Row,
 } from '../../../src/shared/compiler/layout.ts';
 import { DASH_GLYPH } from '../../../src/shared/dash.ts';
-import { issuesOf } from '../ast/_shape.ts';
+import { at, issuesOf } from '../ast/_shape.ts';
 import { D } from '../_kana.ts';
 
 /** The rows of `src`: parsed (with the cover's `values`, when given), then laid out. */
@@ -76,7 +76,7 @@ test('one display line per source line; trailing newline dropped, middle blank k
 test('a long source line hard-wraps at charsPerLine', () => {
   assert.equal(
     html('一二三', 2),
-    '<div class="book"><div class="page" data-page="0"><div class="grid"><div class="line" data-line="0">一二</div><div class="line" data-line="0">三</div></div></div></div>',
+    '<div class="book"><div class="page" data-page="0"><div class="grid"><div class="line" data-line="0">一二</div><div class="line" data-line="0" data-ch="2">三</div></div></div></div>',
   );
 });
 
@@ -89,7 +89,7 @@ test('a ruby unit is atomic — it wraps whole, never split', () => {
     html('あ漢字《かんじ》', 2),
     '<div class="book"><div class="page" data-page="0"><div class="grid">' +
       '<div class="line" data-line="0">あ</div>' +
-      '<div class="line" data-line="0"><ruby class="rr"><span>漢</span><span>字</span>' +
+      '<div class="line" data-line="0" data-ch="1"><ruby class="rr"><span>漢</span><span>字</span>' +
       '<rt><span><span>か</span><span>ん</span><span>じ</span></span></rt></ruby></div></div></div></div>',
   );
 });
@@ -119,7 +119,7 @@ test('emphasis span groups consecutive units and re-opens across a wrap', () => 
     html('［＃傍点］一二三［＃傍点終わり］', 2),
     '<div class="book"><div class="page" data-page="0"><div class="grid">' +
       '<div class="line emr" data-line="0"><span class="emph-fs">一二</span></div>' +
-      '<div class="line emr" data-line="0"><span class="emph-fs">三</span></div></div></div></div>',
+      '<div class="line emr" data-line="0" data-ch="7"><span class="emph-fs">三</span></div></div></div></div>',
   );
 });
 
@@ -152,7 +152,7 @@ test('broken-annotation text consumes cells and wraps like ordinary prose', () =
     html('本［＃こわれ', 3),
     '<div class="book"><div class="page" data-page="0"><div class="grid">' +
       '<div class="line" data-line="0">本［＃</div>' +
-      '<div class="line" data-line="0">こわれ</div></div></div></div>',
+      '<div class="line" data-line="0" data-ch="3">こわれ</div></div></div></div>',
   );
 });
 
@@ -348,11 +348,11 @@ test('ぶら下げ: a decorated hung 句読点 keeps its channel span around the
 
 // --- flowToHtml: the continuous preview flow over the shared engine -------------------
 
-test('flowToHtml: continuous .line columns in one .segment, first-only data-line, no .page', () => {
+test('flowToHtml: continuous .line columns in one .segment, each anchored like the build, no .page', () => {
   assert.equal(
     flow('一二三', 2),
     '<div class="book"><div class="segment">' +
-      '<div class="line" data-line="0">一二</div><div class="line">三</div></div></div>',
+      '<div class="line" data-line="0">一二</div><div class="line" data-line="0" data-ch="2">三</div></div></div>',
   );
 });
 
@@ -471,7 +471,7 @@ test('flowToHtml: honors the kinsoku mode (禁則) — the SAME engine as the bu
   assert.equal(
     flow('ああ」', 2, 'relaxed'),
     '<div class="book"><div class="segment">' +
-      '<div class="line" data-line="0">あ</div><div class="line">あ」</div></div></div>',
+      '<div class="line" data-line="0">あ</div><div class="line" data-line="0" data-ch="1">あ」</div></div></div>',
   );
 });
 
@@ -483,7 +483,7 @@ test('flowToHtml: lineNumbers emits JS-numbered .ln heads that restart at a brea
     flowToHtml(rowsOf('一二三\n［＃改ページ］\n［＃改ページ］\n四'), 2, 'none', undefined, true),
     '<div class="book"><div class="segment">' +
       '<div class="line" data-line="0"><span class="ln">1</span>一二</div>' +
-      '<div class="line"><span class="ln">2</span>三</div></div>' +
+      '<div class="line" data-line="0" data-ch="2"><span class="ln">2</span>三</div></div>' +
       '<div class="pagebreak"><span class="pb-label">改ページ</span></div>' +
       '<div class="segment"><div class="line" data-line="3"><span class="ln">1</span>四</div></div></div>',
   );
@@ -794,8 +794,8 @@ test('block 字下げ: every wrapped continuation column keeps indent-N', () => 
     html('［＃ここから１字下げ］\n一二三\n［＃ここで字下げ終わり］', 2),
     '<div class="book"><div class="page" data-page="0"><div class="grid">' +
       '<div class="line indent-1" data-line="1">一</div>' +
-      '<div class="line indent-1" data-line="1">二</div>' +
-      '<div class="line indent-1" data-line="1">三</div></div></div></div>',
+      '<div class="line indent-1" data-line="1" data-ch="1">二</div>' +
+      '<div class="line indent-1" data-line="1" data-ch="2">三</div></div></div></div>',
   );
 });
 
@@ -804,7 +804,7 @@ test('N_eff clamp: an indent ≥ charsPerLine clamps to cpl−1 for BOTH class a
     html('［＃９字下げ］一二', 3),
     '<div class="book"><div class="page" data-page="0"><div class="grid">' +
       '<div class="line indent-2" data-line="0">一</div>' +
-      '<div class="line indent-2" data-line="0">二</div></div></div></div>',
+      '<div class="line indent-2" data-line="0" data-ch="8">二</div></div></div></div>',
   );
 });
 
@@ -845,7 +845,7 @@ test('見出し: every wrapped continuation keeps .midashi (like indent)', () =>
     html('一二三［＃「一二三」は中見出し］', 2),
     '<div class="book"><div class="page" data-page="0"><div class="grid">' +
       '<div class="line midashi" data-line="0">一二</div>' +
-      '<div class="line midashi" data-line="0">三</div></div></div></div>',
+      '<div class="line midashi" data-line="0" data-ch="2">三</div></div></div></div>',
   );
 });
 
@@ -1243,11 +1243,18 @@ test('a postfix inside a ｜ base may target text before the ｜; a 縦中横 sp
 
 // --------------------------------------------------------------- NFD kana (#125)
 
+/** The rows of `src` without where each unit was written: what a decomposed source shares with its composed twin. */
+const layoutOf = (src: string): Row[] =>
+  rowsOf(src).map((row) => (row.kind === 'line' ? { ...row, units: row.units.map((u) => ({ ...u, at: 0 })) } : row));
+
 test('NFD: a decomposed kana lays out exactly like its NFC twin — one cell, composed text and ruby', () => {
   const nfd = `　｜カ${D}ラス戸《か${D}らすと${D}》か${D}開いた。`;
   const nfc = '　｜ガラス戸《がらすど》が開いた。';
-  assert.deepEqual(rowsOf(nfd), rowsOf(nfc));
+  assert.deepEqual(layoutOf(nfd), layoutOf(nfc));
   assert.equal(html(nfd), html(nfc));
+  // Each unit still says where it was written: a composed kana at its kana, what follows past the mark.
+  const atOf = (text: string): number | undefined => unitsOf(nfd).find((u) => u.text === text)?.at;
+  assert.deepEqual([atOf('が'), atOf('開')], [at(nfd, `か${D}開`).start, at(nfd, '開').start]);
   const ruby = unitsOf(nfd).find((u) => u.ruby !== undefined);
   assert.deepEqual([ruby?.cells, ruby?.ruby], [4, { base: 'ガラス戸', right: 'がらすど' }]);
   assert.deepEqual(unitsOf(`か${D}き`).map((u) => [u.text, u.cells]), [['が', 1], ['き', 1]]);
@@ -1263,7 +1270,7 @@ test('NFD: an implicit base and a left reading compose too', () => {
 
 test('NFD: a postfix target matches its text whichever side is decomposed', () => {
   for (const src of [`た${D}め［＃「だめ」に傍点］`, `だめ［＃「た${D}め」に傍点］`, `た${D}め［＃「た${D}め」に傍点］`]) {
-    assert.deepEqual(unitsOf(src), unitsOf('だめ［＃「だめ」に傍点］'), src);
+    assert.deepEqual(layoutOf(src), layoutOf('だめ［＃「だめ」に傍点］'), src);
     assert.deepEqual(missedTargets(src), [], src);
   }
   const [row] = rowsOf(`た${D}め［＃「だめ」は大見出し］`);
@@ -1290,4 +1297,74 @@ test('NFD: a pair that composes nothing, or is split by markup, keeps its two ce
   for (const src of [`あ${D}`, `\uFF76${D}`, `か［＃x］${D}`]) {
     assert.equal(unitsOf(src).filter((u) => u.text !== '').length, 2, src);
   }
+});
+
+// --------------------------------------------------------------- where it was written (cursor follow)
+
+test('each unit says where it was written, counted from the head of its line', () => {
+  const second = `王都［＃「王都」に傍点］${valueAnnotation(VALUE_NAMES.title)}聖剣《せいけん》［＃x］12［＃「12」は縦中横］`;
+  const where = (needle: string): number => at(second, needle).start;
+  assert.deepEqual(unitsOf(`前\n${second}`, REAL).map((u) => [u.text, u.at]), [
+    ['前', 0],
+    ['王', where('王')],
+    ['都', where('都')],
+    ['作', where('聖剣')], // a value's characters count as written where its annotation ends
+    ['品', where('聖剣')],
+    ['名', where('聖剣')],
+    ['聖剣', where('聖剣')], // a ruby where its base is
+    ['', where('［＃x］')], // an annotation that took no effect
+    ['12', where('12')], // a 縦中横 cell where its first character is
+  ]);
+  const explicit = '前｜聖剣《せいけん》';
+  assert.deepEqual(unitsOf(explicit).map((u) => u.at), [0, at(explicit, '｜').start]); // an explicit ruby at its ｜
+  const astral = '𠮷野原';
+  assert.deepEqual(unitsOf(astral).map((u) => u.at), Array.from(astral, (c) => at(astral, c).start)); // two units, one character
+});
+
+test('a bound run keeps where its first unit was written', () => {
+  const dash = 'あいう――え';
+  const [, second] = paginate(rowsOf(dash), 4, 34, 'strict').flat();
+  assert.deepEqual(second?.units.map((u) => [u.text, u.at]), [['――', at(dash, '―').start], ['え', at(dash, 'え').start]]);
+});
+
+test('a column starts at the head of its line, else where its first real unit was written', () => {
+  const starts = (src: string, cpl: number, values?: ReadonlyMap<string, string>): number[] =>
+    paginate(rowsOf(src, { values }), cpl, 34, 'strict').flat().map((line) => line.at);
+  /** Where each of `chars` is in `src`. */
+  const where = (src: string, ...chars: string[]): number[] => chars.map((c) => at(src, c).start);
+  assert.deepEqual(starts('一二三四五', 2), [0, ...where('一二三四五', '三', '五')]);
+  // The annotations at the line head belong to its first column.
+  const head = '［＃２字下げ］一二三四';
+  assert.deepEqual(starts(head, 4), [0, ...where(head, '三')]);
+  // 追い出し back to its floor lets an annotation open the next column; the column still starts at
+  // its first real unit, so the annotation belongs to the column before.
+  const floor = 'あ［＃x］、」';
+  assert.deepEqual(klines(floor, 2), ['あ', '、」']);
+  assert.deepEqual(starts(floor, 2), [0, ...where(floor, '、')]);
+  // An empty value empties a ｜ base: its markup prints as typed and the annotation inside the base
+  // follows it, yet the columns still start in source order.
+  const markup = `｜${valueAnnotation(VALUE_NAMES.author)}［＃x］《よみ》、」`;
+  const empty = new Map([[VALUE_NAMES.author, '']]);
+  assert.deepEqual(starts(markup, 2, empty), [0, ...where(markup, '《', 'み', '》', '、')]);
+  // A column that opens on a value's characters starts where its annotation ends, so the annotation
+  // belongs to the column before: after a wrap mid-value, at a column head, at a line head.
+  const title = valueAnnotation(VALUE_NAMES.title);
+  const wrapped = `${'あ'.repeat(14)}${title}いう`;
+  assert.deepEqual(starts(wrapped, 16), [0, ...where(wrapped, 'い')]);
+  const opening = `あい${title}う`;
+  const end = at(opening, title).end;
+  assert.deepEqual(starts(opening, 2), [0, end, end, end]);
+  const author = valueAnnotation(VALUE_NAMES.author);
+  assert.deepEqual(starts(`［＃ここから１２字下げ］\n${author}`, 16), [0, author.length]);
+  // A span-form 縦中横 starts where what it holds does: its opening annotation belongs to the column before.
+  const tcy = 'あい［＃縦中横］12［＃縦中横終わり］う';
+  assert.deepEqual(starts(tcy, 2), [0, ...where(tcy, '12')]);
+  const astral = '𠮷野原';
+  assert.deepEqual(starts(astral, 2), [0, ...where(astral, '原')]);
+});
+
+test('a column of no source line (a glue row) carries no anchor, wrapped or not', () => {
+  const glue = pages('一二三', 2).flat().map((line) => ({ ...line, srcLine: -1 }));
+  assert.equal(glue.length, 2);
+  assert.doesNotMatch(pagesToHtml(sheets([glue]), undefined, OFF), /data-(line|ch)/);
 });

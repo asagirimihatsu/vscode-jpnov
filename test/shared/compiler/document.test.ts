@@ -114,7 +114,7 @@ test('renderBook joins files[] in order with one blank separator line', () => {
     fontFamily: '',
     chrome: OFF,
   });
-  // The glue's blank column is synthetic (srcLine −1): no data-line anchor.
+  // The glue's blank column is synthetic (srcLine −1): no anchor.
   assert.equal(
     bodyOf(html),
     '<div class="book"><div class="page" data-page="0"><div class="grid">' +
@@ -154,8 +154,8 @@ test('renderBook wraps a long source line at charsPerLine', () => {
     bodyOf(render('一二三四五', { charsPerLine: 2 })),
     '<div class="book"><div class="page" data-page="0"><div class="grid">' +
       '<div class="line" data-line="0">一二</div>' +
-      '<div class="line" data-line="0">三四</div>' +
-      '<div class="line" data-line="0">五</div></div></div></div>',
+      '<div class="line" data-line="0" data-ch="2">三四</div>' +
+      '<div class="line" data-line="0" data-ch="4">五</div></div></div></div>',
   );
 });
 

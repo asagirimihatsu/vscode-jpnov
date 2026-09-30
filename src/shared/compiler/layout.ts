@@ -41,6 +41,12 @@ export interface Unit {
   /** The displayed text the 禁則 classes read; '' for zero-width units (comments). */
   text: string;
   /**
+   * Where the unit was written: its UTF-16 offset in its source line. A value's characters come
+   * from their annotation and count as written where it ends, so the annotation belongs to the
+   * column before.
+   */
+  readonly at: number;
+  /**
    * Space-separated on-demand stylesheet classes baked inside `html` (tcy / rr / lr / br /
    * rh-N) — not channels (invisible to unitKey); emitLine collects them into `used` so css.ts
    * emits each rule only when actually present (zero dead rules).
@@ -78,6 +84,12 @@ export type Row =
 /** A laid-out display line — one column on the page. `indent` = 字下げ cells (already clamped). */
 export interface DisplayLine {
   readonly srcLine: number;
+  /**
+   * Where the column starts in its source line: 0 for the line's first column, so the annotations
+   * at the line head belong to it; else its first real unit's `at`, so an annotation between two
+   * columns belongs to the one before it.
+   */
+  readonly at: number;
   readonly units: readonly Unit[];
   readonly indent?: number;
   /** 見出し level (大=1) — stamped on every wrapped continuation, like `indent`. */
@@ -87,8 +99,8 @@ export interface DisplayLine {
 }
 
 /** An annotation that took no effect: a zero-width HTML comment of its inner text, verbatim. */
-function commentUnit(inner: string): Unit {
-  return { cells: 0, html: `<!--${escapeComment(inner)}-->`, text: '' };
+function commentUnit(inner: string, at: number): Unit {
+  return { cells: 0, html: `<!--${escapeComment(inner)}-->`, text: '', at };
 }
 
 /**
@@ -198,11 +210,12 @@ function classOf(mark: Mark | undefined): string | undefined {
 }
 
 /** A unit carrying the four channels of `marks` — one stable hidden class for all real units. */
-function mk(cells: number, html: string, text: string, marks: Marks): Unit {
+function mk(cells: number, html: string, text: string, marks: Marks, at: number): Unit {
   return {
     cells,
     html,
     text,
+    at,
     emph: classOf(marks.emph),
     line: classOf(marks.line),
     weight: classOf(marks.weight),
@@ -214,15 +227,20 @@ function mk(cells: number, html: string, text: string, marks: Marks): Unit {
  * The units of one content inline. `want` is the configured dash glyph: it is emitted as
  * {@link DASH_GLYPH} while `Unit.text` keeps the source character, so 分離禁止 still classes it
  * — except inside an unclosed ［＃, which prints exactly as typed. 縦中横 and ルビ cells build
- * their own html: a dash inside one stays the source glyph.
+ * their own html: a dash inside one stays the source glyph. `lineStart` is the source offset of
+ * the item's line: each `at` counts from it.
  */
-function unitsOf(item: Inline, want: string | undefined): Unit[] {
+function unitsOf(item: Inline, want: string | undefined, lineStart: number): Unit[] {
+  const at = item.span.start - lineStart;
   switch (item.kind) {
     case 'chars': {
       const translate = item.origin !== 'broken';
       const units: Unit[] = [];
+      let offset = item.span.start;
       for (const ch of item.text) {
-        units.push(mk(1, translate && ch === want ? DASH_GLYPH : escapeHtml(ch), ch, item.marks));
+        const written = item.origin === 'value' ? item.span.end : (item.starts?.[units.length] ?? offset);
+        units.push(mk(1, translate && ch === want ? DASH_GLYPH : escapeHtml(ch), ch, item.marks, written - lineStart));
+        offset += ch.length;
       }
       return units;
     }
@@ -233,12 +251,12 @@ function unitsOf(item: Inline, want: string | undefined): Unit[] {
         ...(item.left === undefined ? {} : { left: item.left }),
       };
       const cells = rubyCells(ruby); // safe whole-cell advance; the settle pass may tighten
-      return [{ ...mk(cells, rubyHtml(ruby, cells), item.base, item.marks), ruby, cssClass: rubyLane(ruby, cells) }];
+      return [{ ...mk(cells, rubyHtml(ruby, cells), item.base, item.marks, at), ruby, cssClass: rubyLane(ruby, cells) }];
     }
     case 'tcy':
-      return [{ ...mk(1, `<span class="tcy">${escapeHtml(item.text)}</span>`, item.text, item.marks), cssClass: 'tcy' }];
+      return [{ ...mk(1, `<span class="tcy">${escapeHtml(item.text)}</span>`, item.text, item.marks, at), cssClass: 'tcy' }];
     case 'comment':
-      return [commentUnit(item.inner)];
+      return [commentUnit(item.inner, at)];
     default: {
       const exhaustive: never = item;
       throw new Error(`unitsOf: unhandled inline ${JSON.stringify(exhaustive)}`);
@@ -304,7 +322,7 @@ export function buildRows(ast: Ast, opts?: { readonly dash?: DashMode | undefine
   ast.lines.forEach((line, at) => {
     const shape = rowShape(line, at === end);
     if (shape.line) {
-      const units = line.content.flatMap((item) => unitsOf(item, want));
+      const units = line.content.flatMap((item) => unitsOf(item, want, line.span.start));
       settleRubyOverhang(units);
       // `heading` is CONDITIONAL: row snapshots deepEqual whole objects, so an absent heading
       // must be an absent KEY, never an explicit undefined.
@@ -374,6 +392,11 @@ function everyCharIn(u: Unit | undefined, set: Set<string>): boolean {
  */
 const HANGABLE = new Set('、。，．');
 
+/** Where the column that opens at `units[from]` starts: see {@link DisplayLine.at}. */
+function columnAt(units: readonly Unit[], from: number): number {
+  return from === 0 ? 0 : (units[nextReal(units, from)]?.at ?? 0);
+}
+
 /** Index of the first real (cells>0) unit in `units[from..)`, or -1 if none. */
 function nextReal(units: readonly Unit[], from: number): number {
   for (let i = from; i < units.length; i += 1) {
@@ -408,6 +431,7 @@ function makeHangUnit(u: Unit): Unit {
     cells: 0,
     text: u.text,
     html: `<span class="hang">${u.html}</span>`,
+    at: u.at,
     cssClass: 'hang',
     emph: u.emph,
     line: u.line,
@@ -466,7 +490,7 @@ function mergeRun(units: readonly Unit[], head: Unit, start: number, end: number
       html += u.html;
     }
   }
-  const merged: Unit = { cells, text, html, emph: head.emph, line: head.line, weight: head.weight, style: head.style };
+  const merged: Unit = { cells, text, html, at: head.at, emph: head.emph, line: head.line, weight: head.weight, style: head.style };
   if (head.cssClass !== undefined) {
     // emitLine's class sink is what emits the rule, so a merged unit must keep the class.
     merged.cssClass = head.cssClass;
@@ -563,7 +587,7 @@ function wrapRow(
   const hs: { heading?: HeadingLevel } =
     row.heading === undefined ? {} : { heading: row.heading };
   if (units.length === 0) {
-    return [{ srcLine, units: [], indent, ...hs }];
+    return [{ srcLine, at: 0, units: [], indent, ...hs }];
   }
   const lines: DisplayLine[] = [];
   let start = 0; // first unit index of the line being built
@@ -585,7 +609,7 @@ function wrapRow(
             ns += 1;
           }
           const kept = [...units.slice(start, i), ...units.slice(i + 1, ns)];
-          lines.push({ srcLine, units: kept, indent, hang: makeHangUnit(u), ...hs });
+          lines.push({ srcLine, at: columnAt(units, start), units: kept, indent, hang: makeHangUnit(u), ...hs });
           start = ns;
           cells = 0;
           continue; // u is consumed as the hang — it must not count into the next column
@@ -600,7 +624,7 @@ function wrapRow(
           brk -= 1;
         }
       }
-      lines.push({ srcLine, units: units.slice(start, brk), indent, ...hs });
+      lines.push({ srcLine, at: columnAt(units, start), units: units.slice(start, brk), indent, ...hs });
       start = brk;
       cells = 0;
       for (let j = brk; j < i; j += 1) {
@@ -611,7 +635,7 @@ function wrapRow(
   }
   if (start < units.length) {
     // A hang can consume the row's very last unit; only a non-empty tail becomes a column.
-    lines.push({ srcLine, units: units.slice(start), indent, ...hs });
+    lines.push({ srcLine, at: columnAt(units, start), units: units.slice(start), indent, ...hs });
   }
   return lines;
 }
@@ -721,7 +745,7 @@ export function emitUnits(units: readonly Unit[], used?: Set<string>): string {
   return html;
 }
 
-function emitLine(line: DisplayLine, used?: Set<string>, anchor = true, head = ''): string {
+function emitLine(line: DisplayLine, used?: Set<string>, head = ''): string {
   let html = emitUnits(line.units, used);
   if (line.hang !== undefined) {
     // The hung 句読点 lands after the last cell; its channel span cannot join a neighbour's
@@ -752,13 +776,13 @@ function emitLine(line: DisplayLine, used?: Set<string>, anchor = true, head = '
   if (used && emrClass !== '') {
     used.add('emr');
   }
-  // `anchor` lets the continuous preview suppress data-line on a source line's wrapped
-  // continuation columns (first-display-line-only); the paginated build keeps the default
-  // (anchor=true → every line). `head` is out-of-flow line furniture (the preview's number
-  // span) emitted before the column content.
-  const dataLine =
-    anchor && line.srcLine >= 0 ? ` data-line="${String(line.srcLine)}"` : '';
-  return `<div class="line${indentClass}${headingClass}${emrClass}"${dataLine}>${head}${html}</div>`;
+  // The cursor-follow anchor: the source line, and where a wrapped column starts in it. A glue
+  // row (srcLine −1) has none. `head` is out-of-flow line furniture (the preview's number span)
+  // emitted before the column content.
+  const anchor = line.srcLine < 0
+    ? ''
+    : ` data-line="${String(line.srcLine)}"${line.at > 0 ? ` data-ch="${String(line.at)}"` : ''}`;
+  return `<div class="line${indentClass}${headingClass}${emrClass}"${anchor}>${head}${html}</div>`;
 }
 
 /**
@@ -818,8 +842,9 @@ export function pagesToHtml(
  *   ［＃改ページ］ collapses to nothing — mirroring the build's empty-page elision.
  * - The labelled `<div class="pagebreak">` marker lands BETWEEN segments as a direct `.book`
  *   child, outside every frame.
- * - Only the FIRST display line of a source line carries `data-line` (1:1 anchors, so the
- *   cursor-follow scroller lands on the line's head).
+ * - Every column carries `data-line`, and a wrapped one `data-ch`: where it starts in its source
+ *   line, so the cursor-follow scroller parks the column holding the cursor. The build's pages
+ *   carry the same.
  * - A `used` sink records every emitted class so the caller emits only those rules.
  */
 export function flowToHtml(
@@ -830,7 +855,6 @@ export function flowToHtml(
   lineNumbers = false,
 ): string {
   const parts: string[] = [];
-  let prevSrcLine = -1;
   let pendingBreak = false;
   let segmentOpen = false;
   let lineNo = 0;
@@ -863,12 +887,10 @@ export function flowToHtml(
         segmentOpen = true;
       }
       lineNo += 1;
-      const anchor = line.srcLine >= 0 && line.srcLine !== prevSrcLine;
-      prevSrcLine = line.srcLine;
       // The number span is absolutely positioned (out of the text flow), so it neither
       // consumes cells nor disturbs the pre-formatted column content it precedes.
       const head = lineNumbers ? `<span class="ln">${String(lineNo)}</span>` : '';
-      parts.push(emitLine(line, used, anchor, head));
+      parts.push(emitLine(line, used, head));
     }
   }
   if (segmentOpen) {

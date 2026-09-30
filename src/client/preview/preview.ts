@@ -26,6 +26,7 @@ import {
 } from '#/shared/protocol.ts';
 
 import type {
+  Cursor,
   PreviewInit,
   PreviewLayoutInit,
   PreviewLayoutKey,
@@ -53,6 +54,9 @@ function isLayoutKey(value: unknown): value is PreviewLayoutKey {
   return typeof value === 'string' && (LAYOUT_KEYS as readonly string[]).includes(value);
 }
 
+/** The document head: where a render parks with no cursor to follow. */
+const DOC_HEAD: Cursor = { line: 0, character: 0 };
+
 /** A widget override: the preview-only value, and the resolved setting it was set against. */
 interface LayoutOverride {
   readonly value: number;
@@ -69,11 +73,11 @@ export class Preview {
   /** URI string of the document currently shown, to scope edit/cursor re-renders. */
   private currentDocUri: string | undefined;
   /**
-   * The last line baked into a render or posted as a reveal — always for currentDocUri,
+   * The last cursor baked into a render or posted as a reveal — always for currentDocUri,
    * reset on document switch. A re-render falls back here while the editor is transiently
-   * absent from visibleTextEditors, instead of snapping to line 0.
+   * absent from visibleTextEditors, instead of snapping to the document head.
    */
-  private lastRevealLine: number | undefined;
+  private lastReveal: Cursor | undefined;
   /**
    * Uri of the last `.jpnov` document rendered or made active; open() falls back to it when no
    * previewable editor is active. Resolved through workspace.textDocuments at use time, so a
@@ -189,7 +193,7 @@ export class Preview {
    * Content policy is active-editor-first: this preview mirrors the CURRENTLY active
    * editor, and revival can happen long after reload (a restored tab deserializes when
    * it first becomes visible), so the persisted state may be stale. `state.uri` is used
-   * only when no previewable editor is active; the persisted `line` scrolls the restored
+   * only when no previewable editor is active; the persisted cursor scrolls the restored
    * render only when the rendered document is `state.uri` itself.
    */
   adopt(panel: vscode.WebviewPanel, state: unknown): void {
@@ -203,17 +207,17 @@ export class Preview {
     // persistence would die silently — and every later reload would degrade further.
     panel.webview.options = { enableScripts: true };
 
-    const { uri, line } = parsePanelState(state);
+    const { uri, cursor } = parsePanelState(state);
     const editor = this.previewableEditor(vscode.window.activeTextEditor);
     if (editor !== undefined) {
       // Paint before the async render: the server is cold right after a reload, so the
       // first response can take seconds, and a wedged start must never leave a blank tab.
       panel.webview.html = this.loadingShell(panel.webview);
-      const fallbackLine = editor.document.uri.toString() === uri ? line : undefined;
-      void this.renderDocument(editor.document, fallbackLine);
+      const fallback = editor.document.uri.toString() === uri ? cursor : undefined;
+      void this.renderDocument(editor.document, fallback);
     } else if (uri !== undefined) {
       panel.webview.html = this.loadingShell(panel.webview);
-      void this.renderRestored(panel, uri, line);
+      void this.renderRestored(panel, uri, cursor);
     } else {
       panel.webview.html = this.emptyShell(panel.webview);
     }
@@ -305,10 +309,11 @@ export class Preview {
     return doc !== undefined && this.isPreviewable(doc) ? doc : undefined;
   }
 
-  /** Posts a scroll-to-line message to the live webview (no re-render). */
-  private reveal(line: number): void {
-    this.lastRevealLine = line;
-    const message: RevealMessage = { type: 'reveal', line };
+  /** Posts a scroll-to-cursor message to the live webview (no re-render). */
+  private reveal(at: Cursor): void {
+    this.lastReveal = at;
+    // Picked, not spread: a vscode.Position keeps them in getters.
+    const message: RevealMessage = { type: 'reveal', line: at.line, character: at.character };
     // Posts to the webview; postMessage never rejects (resolves false if the panel is gone), so void is safe.
     void this.panel?.webview.postMessage(message);
   }
@@ -436,7 +441,7 @@ export class Preview {
       // ...and follow the top-most cursor as it moves (a scroll message, no re-render).
       vscode.window.onDidChangeTextEditorSelection((e) => {
         if (e.textEditor.document.uri.toString() === this.currentDocUri) {
-          this.reveal(minCursorLine(e.selections));
+          this.reveal(minCursor(e.selections));
         }
       }),
     );
@@ -446,7 +451,7 @@ export class Preview {
   private async renderRestored(
     panel: vscode.WebviewPanel,
     uri: string,
-    line: number | undefined,
+    cursor: Cursor | undefined,
   ): Promise<void> {
     let doc: vscode.TextDocument | undefined;
     try {
@@ -458,7 +463,7 @@ export class Preview {
       return; // closed or replaced while the document loaded
     }
     if (doc !== undefined && this.isPreviewable(doc)) {
-      await this.renderDocument(doc, line);
+      await this.renderDocument(doc, cursor);
       return;
     }
     panel.webview.html = this.emptyShell(panel.webview);
@@ -471,7 +476,7 @@ export class Preview {
    */
   private async renderDocument(
     doc: vscode.TextDocument,
-    fallbackLine?: number,
+    fallback?: Cursor,
     focus?: PreviewLayoutKey,
   ): Promise<void> {
     const panel = this.panel;
@@ -480,7 +485,7 @@ export class Preview {
     }
     const uri = doc.uri.toString();
     if (uri !== this.currentDocUri) {
-      this.lastRevealLine = undefined; // the remembered line belongs to the old document
+      this.lastReveal = undefined; // the remembered cursor belongs to the old document
     }
     this.currentDocUri = uri;
     this.lastDocUri = uri;
@@ -520,19 +525,19 @@ export class Preview {
     if (seq !== this.renderSeq) {
       return;
     }
-    // Sampled at swap time, after the seq check: pre-await sampling bakes a stale line,
-    // and a dropped response must not write lastRevealLine. `fallbackLine` (revived
-    // panel state) applies only before any live cursor line is known.
-    const activeLine = this.topCursorLine(uri) ?? this.lastRevealLine ?? fallbackLine ?? 0;
-    this.lastRevealLine = activeLine;
-    panel.webview.html = this.harden(result.html, panel.webview, activeLine, uri, layout);
+    // Sampled at swap time, after the seq check: pre-await sampling bakes a stale cursor,
+    // and a dropped response must not write lastReveal. `fallback` (revived panel state)
+    // applies only before any live cursor is known.
+    const active = this.topCursor(uri) ?? this.lastReveal ?? fallback ?? DOC_HEAD;
+    this.lastReveal = active;
+    panel.webview.html = this.harden(result.html, panel.webview, active, uri, layout);
   }
 
-  /** The top-most (earliest) cursor line among all selections in an editor for `docUri`. */
-  private topCursorLine(docUri: string): number | undefined {
+  /** The top-most (earliest) cursor among all selections in an editor for `docUri`. */
+  private topCursor(docUri: string): Cursor | undefined {
     for (const ed of vscode.window.visibleTextEditors) {
       if (ed.document.uri.toString() === docUri) {
-        return minCursorLine(ed.selections);
+        return minCursor(ed.selections);
       }
     }
     return undefined;
@@ -546,7 +551,7 @@ export class Preview {
   private harden(
     html: string,
     webview: vscode.Webview,
-    activeLine: number,
+    active: Cursor,
     docUri: string,
     layout: PreviewLayoutInit,
   ): string {
@@ -574,7 +579,7 @@ export class Preview {
 
     // Inject the bundle at the end of <body> (DOM is ready): the `__INIT` bootstrap, then the
     // scroller + widget — see bootScript for the escaping / script-split constraints.
-    const init: PreviewInit = { uri: docUri, line: activeLine, layout };
+    const init: PreviewInit = { uri: docUri, line: active.line, character: active.character, layout };
     const script = `${bootScript(nonce, init)}<script nonce="${nonce}">${PREVIEW_JS}</script>`;
     if (/<\/body>/i.test(out)) {
       return out.replace(/<\/body>/i, () => `${script}</body>`);
@@ -623,39 +628,41 @@ export class Preview {
     this.panelDisposables.length = 0;
     this.panel = undefined;
     this.currentDocUri = undefined;
-    this.lastRevealLine = undefined;
+    this.lastReveal = undefined;
     // The overrides live with the panel: the next one starts on the settings.
     this.layoutOverride.clear();
     this.syncContext();
   }
 }
 
-/** The earliest (smallest-line) active cursor among `selections`; 0 if none. */
-function minCursorLine(selections: readonly vscode.Selection[]): number {
-  let min = Number.MAX_SAFE_INTEGER;
-  for (const sel of selections) {
-    if (sel.active.line < min) {
-      min = sel.active.line;
+/** The earliest active cursor among `selections`, by line then character; the document head if none. */
+function minCursor(selections: readonly vscode.Selection[]): Cursor {
+  let min: Cursor | undefined;
+  for (const { active } of selections) {
+    if (min === undefined || active.line < min.line || (active.line === min.line && active.character < min.character)) {
+      min = active;
     }
   }
-  return min === Number.MAX_SAFE_INTEGER ? 0 : min;
+  return min ?? DOC_HEAD;
 }
 
 /**
  * Defensive read of the serializer's persisted webview state: whatever a previous
  * session's injected script last `setState`-ed, or `undefined`, so nothing about its
- * shape can be trusted.
+ * shape can be trusted. A state without a usable `character` (an older session's)
+ * parks at the head of its line.
  */
 function parsePanelState(state: unknown): {
   uri: string | undefined;
-  line: number | undefined;
+  cursor: Cursor | undefined;
 } {
   if (typeof state !== 'object' || state === null) {
-    return { uri: undefined, line: undefined };
+    return { uri: undefined, cursor: undefined };
   }
-  const { uri, line } = state as { uri?: unknown; line?: unknown };
+  const { uri, line, character } = state as { uri?: unknown; line?: unknown; character?: unknown };
+  const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
   return {
     uri: typeof uri === 'string' ? uri : undefined,
-    line: typeof line === 'number' && Number.isFinite(line) ? line : undefined,
+    cursor: finite(line) ? { line, character: finite(character) ? character : 0 } : undefined,
   };
 }

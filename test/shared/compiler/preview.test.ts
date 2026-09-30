@@ -115,11 +115,11 @@ test('renderPreview emits per-line data-line anchors (for cursor-follow)', () =>
   );
 });
 
-test('renderPreview hard-wraps at charsPerLine; data-line is first-only on a wrapped line', () => {
-  // 一二三 at cpl 2 → two columns; only the first carries the source-line anchor.
+test('renderPreview hard-wraps at charsPerLine; a wrapped column says where it starts in its line', () => {
+  // 一二三 at cpl 2 → two columns of source line 0; the second starts at its character 2.
   assert.match(
     preview('一二三', { charsPerLine: 2 }),
-    /<div class="line" data-line="0">一二<\/div><div class="line">三<\/div>/,
+    /<div class="line" data-line="0">一二<\/div><div class="line" data-line="0" data-ch="2">三<\/div>/,
   );
 });
 
@@ -127,7 +127,7 @@ test('renderPreview honors the kinsoku mode (禁則) — the same engine as the 
   // cpl 2: naive ああ|」 would leave 」 at a line start; 追い出し pulls あ down → あ|あ」.
   assert.match(
     preview('ああ」', { charsPerLine: 2, kinsoku: 'relaxed' }),
-    /<div class="line" data-line="0">あ<\/div><div class="line">あ」<\/div>/,
+    /<div class="line" data-line="0">あ<\/div><div class="line" data-line="0" data-ch="1">あ」<\/div>/,
   );
   // A trailing 。 hangs (ぶら下げ): the .hang span and its on-demand rule ride together,
   // and neither appears when nothing hangs.
@@ -138,7 +138,7 @@ test('renderPreview honors the kinsoku mode (禁則) — the same engine as the 
   // With 禁則 off, the naive wrap returns (」 leads the second column).
   assert.match(
     preview('ああ」', { charsPerLine: 2 }),
-    /<div class="line" data-line="0">ああ<\/div><div class="line">」<\/div>/,
+    /<div class="line" data-line="0">ああ<\/div><div class="line" data-line="0" data-ch="2">」<\/div>/,
   );
 });
 
@@ -181,12 +181,12 @@ test('renderPreview: 傍線 postfix emits a dec-solid span + its on-demand rule 
   );
 });
 
-test('renderPreview: block 字下げ continuations keep indent-N; only the first column anchors', () => {
+test('renderPreview: block 字下げ continuations keep indent-N and anchor where they start', () => {
   const out = preview('［＃ここから１字下げ］\n一二\n［＃ここで字下げ終わり］', {
     charsPerLine: 2,
   });
   assert.match(out, /<div class="line indent-1" data-line="1">一<\/div>/);
-  assert.match(out, /<div class="line indent-1">二<\/div>/);
+  assert.match(out, /<div class="line indent-1" data-line="1" data-ch="1">二<\/div>/);
   assert.match(out, /\.indent-1\{padding-inline-start:1em\}/);
 });
 
@@ -208,7 +208,7 @@ test('renderPreview line numbers count wrapped continuation columns as their own
   const on = preview('一二三', { charsPerLine: 2, chrome: { lineNumbers: true, edgeLine: 'none' } });
   assert.match(
     on,
-    /<div class="line" data-line="0"><span class="ln">1<\/span>一二<\/div><div class="line"><span class="ln">2<\/span>三<\/div>/,
+    /<div class="line" data-line="0"><span class="ln">1<\/span>一二<\/div><div class="line" data-line="0" data-ch="2"><span class="ln">2<\/span>三<\/div>/,
   );
 });
 

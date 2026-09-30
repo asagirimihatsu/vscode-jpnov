@@ -134,6 +134,7 @@ Where things live today:
 | Which characters before a `《…》` are its base | Scanner | a rule of the notation |
 | Pairing ［＃傍点］ with ［＃傍点終わり］; finding what ［＃「…」に傍点］ names | AST | what the notation means |
 | Composing a decomposed kana for display | AST | content is what is shown |
+| Where each character shown was written in the source | AST | kana are composed and values substituted there; Output does not read the source |
 | The ダッシュ glyph, 禁則, 分離禁止, ぶら下げ, ruby overhang, wrapping, pagination | Output | typesetting, driven by layout settings |
 | A 縦中横 too long to fit its cell | editor | a threshold, judged on what the AST holds |
 | A half-width pair (`!?`) with no 縦中横 annotation | editor | a manuscript convention, judged on what the AST holds; the fix writes the annotation |
