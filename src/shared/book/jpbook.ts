@@ -99,6 +99,11 @@ export function isEntryList(v: unknown): v is EntryList {
 export const META_KEYS = ['title', 'author', 'header', 'footer', 'footerAlign', 'divider'] as const;
 export type MetaKey = (typeof META_KEYS)[number];
 
+/** `footer` alone holds an empty value (`footer:` = no footer); an empty value of any other key leaves it unset. */
+export function keepsEmptyValue(key: MetaKey): boolean {
+  return key === 'footer';
+}
+
 /** The list-valued front-page key — parsed as line kinds, never a {@link JpbookMeta} field. */
 export const COVER_KEY = 'cover';
 
@@ -112,7 +117,7 @@ export function isCoverMark(ch: string): boolean {
 }
 
 /** Every recognized key (unknown-key message + key completion). `cover` stays out of
- *  {@link META_KEYS}: the panel's meta rows and `upsertMeta` are single-line only. */
+ *  {@link META_KEYS}: the panel's meta rows and `setMeta` are single-line only. */
 export const FRONT_MATTER_KEYS = [...META_KEYS, COVER_KEY] as const;
 
 /** The key portion of a front-matter line's trimmed content, or null when key-less. */
@@ -158,8 +163,9 @@ export function entryPathOf(pl: ParsedLine): { readonly value: string; readonly 
 
 /**
  * Parsed front-matter values, field names = file keys. All optional — an absent key falls
- * back at composition time ({@link composeBookChrome} for the page furniture; `title` has
- * no fallback, it is display metadata only and never affects the output path).
+ * back where it is consumed ({@link composeBookChrome} for the page furniture, the build for
+ * `title`), and an empty value reads as absent unless {@link keepsEmptyValue}. `title` is
+ * display metadata only and never affects the output path.
  */
 export interface JpbookMeta {
   readonly title?: string;
@@ -177,7 +183,7 @@ export interface JpbookMeta {
   /**
    * Chapter-divider line inserted between chapters that do not open with a 見出し. A line of
    * `.jpnov` notation: a bare mark is centred at build time; a ［＃○字下げ］ prefix positions
-   * it instead ({@link parseDividerValue}). Absent/empty = no divider.
+   * it instead ({@link parseDividerValue}). Absent = no divider.
    */
   readonly divider?: string;
 }
@@ -208,15 +214,17 @@ const FENCE = '---';
  * Parses raw `.jpbook` text into one {@link ParsedLine} per source line plus the collected
  * {@link JpbookMeta}. CRLF-safe; blank lines are skipped everywhere; interior whitespace is
  * preserved (a filename may contain spaces). Front matter opens ONLY on the first non-blank
- * line; inside it, duplicate keys keep the FIRST value, and an unclosed block turns the
- * opening fence into an Error (the remaining lines still parse as metadata). A `cover` list
- * survives blank lines and closes at any other metadata line or the fence. Chapter and cover
- * paths must be backslash-free `.jpnov`; later exact repeats are `'duplicate'`/
- * `'coverDuplicate'`, the two lists deduping independently. Never throws.
+ * line; inside it, duplicate keys keep the FIRST valid line (an empty value included), and an
+ * unclosed block turns the opening fence into an Error (the remaining lines still parse as
+ * metadata). A `cover` list survives blank lines and closes at any other metadata line or the
+ * fence. Chapter and cover paths must be backslash-free `.jpnov`; later exact repeats are
+ * `'duplicate'`/`'coverDuplicate'`, the two lists deduping independently. Never throws.
  */
 export function parseJpbook(text: string): ParsedJpbook {
   const seen = new Set<string>();
   const seenCovers = new Set<string>();
+  // Keys a valid line already took: an empty `title:` takes its key without filling `meta`.
+  const takenKeys = new Set<MetaKey>();
   const lines: ParsedLine[] = [];
   const meta: { -readonly [K in keyof JpbookMeta]: JpbookMeta[K] } = {};
 
@@ -277,7 +285,7 @@ export function parseJpbook(text: string): ParsedJpbook {
       return { warning: { code: 'jpbook.metaUnknownKey', args: [key, FRONT_MATTER_KEYS.join(', ')] } };
     }
     const metaKey = key as MetaKey;
-    if (meta[metaKey] !== undefined) {
+    if (takenKeys.has(metaKey)) {
       return { warning: { code: 'jpbook.metaDuplicateKey', args: [key] } };
     }
     // metaKeyOf returned a key, so the line has a colon: colonIndex is non-negative here.
@@ -289,9 +297,10 @@ export function parseJpbook(text: string): ParsedJpbook {
         };
       }
       meta.footerAlign = val as FooterAlign;
-    } else {
+    } else if (val !== '' || keepsEmptyValue(metaKey)) {
       meta[metaKey] = val;
     }
+    takenKeys.add(metaKey);
     return 'meta';
   };
 

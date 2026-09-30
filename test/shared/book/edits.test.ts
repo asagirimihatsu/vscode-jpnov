@@ -9,11 +9,14 @@ import {
   moveEntryTo,
   removeEntry,
   resolveEntry,
-  upsertMeta,
+  setMeta,
 } from '../../../src/shared/book/edits.ts';
-import { META_KEYS, parseJpbook, type EntryList } from '../../../src/shared/book/jpbook.ts';
+import { META_KEYS, parseJpbook, type EntryList, type MetaKey } from '../../../src/shared/book/jpbook.ts';
 
-/** Applies LSP-style replaces to `text` (offsets computed per line) — the test's oracle. */
+/**
+ * Applies LSP-style replaces to `text` (offsets computed per line) — the test's oracle. Edits may
+ * touch but never overlap: VS Code drops a whole `WorkspaceEdit` whose ranges overlap.
+ */
 function apply(text: string, replaces: readonly { start: { line: number; character: number }; end: { line: number; character: number }; newText: string }[]): string {
   const offsets: number[] = [0];
   for (let i = 0; i < text.length; i++) {
@@ -24,68 +27,112 @@ function apply(text: string, replaces: readonly { start: { line: number; charact
   const abs = (p: { line: number; character: number }): number => (offsets[p.line] ?? text.length) + p.character;
   const sorted = [...replaces].sort((a, b) => abs(b.start) - abs(a.start));
   let out = text;
-  for (const r of sorted) {
+  for (const [i, r] of sorted.entries()) {
+    const before = sorted[i + 1];
+    assert.ok(before === undefined || abs(before.end) <= abs(r.start), `overlapping edits: ${JSON.stringify(replaces)}`);
     out = out.slice(0, abs(r.start)) + r.newText + out.slice(abs(r.end));
   }
   return out;
 }
 
-// --- upsertMeta ---------------------------------------------------------------
+// --- setMeta -------------------------------------------------------------------
 
-test('upsertMeta rewrites an existing key in place (line position and neighbours untouched)', () => {
-  const text = '---\ntitle: 一\nheader: 柱\n---\na.jpnov\n';
-  const out = apply(text, [upsertMeta(text, 'title', '二')]);
-  assert.equal(out, '---\ntitle: 二\nheader: 柱\n---\na.jpnov\n');
+const FOOTER = '［＃ここに「ページ番号」の値を表示］';
+
+/** What the row pins, the text, the key and the value the panel sets, the text afterwards. */
+type MetaCase = readonly [name: string, text: string, key: MetaKey, value: string | undefined, expected: string];
+
+/** Runs each row once. No edit may add an Error line or take an item out of a cover list. */
+function runMetaCases(cases: readonly MetaCase[]): void {
+  const count = (text: string, kind: string): number => kindsOf(text).filter((k) => k === kind).length;
+  for (const [name, text, key, value, expected] of cases) {
+    const out = apply(text, setMeta(text, key, value));
+    assert.equal(out, expected, name);
+    assert.ok(count(out, 'error') <= count(text, 'error'), `${name}: a new Error line`);
+    assert.ok(count(out, 'coverEntry') >= count(text, 'coverEntry'), `${name}: a lost cover item`);
+  }
+}
+
+test('setMeta rewrites the key in place, in canonical form; other keys stay put', () => {
+  runMetaCases([
+    ['an existing key', '---\ntitle: 作品名\nheader: 作品名　一\n---\na.jpnov\n', 'title', '作品名　第一巻', '---\ntitle: 作品名　第一巻\nheader: 作品名　一\n---\na.jpnov\n'],
+    ['a full-width colon', '---\ntitle：作品名\n---\n', 'title', '作品名　第一巻', '---\ntitle: 作品名　第一巻\n---\n'],
+    ['a default value is written like any other', '---\nfooterAlign: left\n---\n', 'footerAlign', 'right', '---\nfooterAlign: right\n---\n'],
+    ['pasted newlines and edge whitespace', '---\ntitle: 作品名\n---\n', 'title', '  作品名\n第一巻  ', '---\ntitle: 作品名 第一巻\n---\n'],
+    ['an empty footer is a value', `---\nfooter: ${FOOTER}\n---\n`, 'footer', '', '---\nfooter:\n---\n'],
+    ['CRLF', '---\r\ntitle: 作品名\r\n---\r\n', 'title', '作品名　第一巻', '---\r\ntitle: 作品名　第一巻\r\n---\r\n'],
+  ]);
 });
 
-test('upsertMeta rewrites the WINNING (first) occurrence and normalizes a full-width colon', () => {
-  const text = '---\ntitle：古い\ntitle: 負け\n---\n';
-  const out = apply(text, [upsertMeta(text, 'title', '新しい')]);
-  assert.equal(out, '---\ntitle: 新しい\ntitle: 負け\n---\n');
+test('setMeta leaves ONE line for the key: its repeats and invalid lines go', () => {
+  runMetaCases([
+    ['a repeat', '---\ntitle: 作品名\nauthor: ペンネーム\ntitle: 作品名　第一巻\n---\n', 'title', '作品名　第二巻', '---\ntitle: 作品名　第二巻\nauthor: ペンネーム\n---\n'],
+    ['a rejected value', '---\nfooterAlign: bottom\n---\n', 'footerAlign', 'left', '---\nfooterAlign: left\n---\n'],
+    ['an empty footerAlign', '---\nfooterAlign:\n---\n', 'footerAlign', 'left', '---\nfooterAlign: left\n---\n'],
+    ['a rejected value above the valid line', '---\nfooterAlign: bottom\nfooterAlign: left\n---\n', 'footerAlign', 'rightLeft', '---\nfooterAlign: rightLeft\n---\n'],
+    ['the key in another case', '---\nTitle: 作品名\n---\n', 'title', '作品名　第一巻', '---\ntitle: 作品名　第一巻\n---\n'],
+    ['the key in lower case', '---\nfooteralign: left\n---\n', 'footerAlign', 'rightLeft', '---\nfooterAlign: rightLeft\n---\n'],
+    ['the key in full-width letters', '---\nｔｉｔｌｅ：作品名\n---\n', 'title', '作品名　第一巻', '---\ntitle: 作品名　第一巻\n---\n'],
+    ['another case above the valid line', '---\nTitle: 作品名\ntitle: 作品名\n---\n', 'title', '作品名　第一巻', '---\ntitle: 作品名　第一巻\n---\n'],
+    ['another case on the last document line', '---\ntitle: 作品名\nTitle: 作品名', 'title', '作品名　第一巻', '---\ntitle: 作品名　第一巻'],
+    ['an empty first line and its repeat', '---\ntitle:\ntitle: 作品名\n---\n', 'title', '作品名　第一巻', '---\ntitle: 作品名　第一巻\n---\n'],
+    ['footerAlign is not a line of footer', '---\nfooterAlign: left\n---\n', 'footer', '', '---\nfooter:\nfooterAlign: left\n---\n'],
+  ]);
 });
 
-test('upsertMeta appends an absent key before the closing fence (no reordering)', () => {
-  const text = '---\nheader: 柱\n---\na.jpnov\n';
-  const out = apply(text, [upsertMeta(text, 'footerAlign', 'none')]);
-  assert.equal(out, '---\nheader: 柱\nfooterAlign: none\n---\na.jpnov\n');
+test('setMeta clears a key by deleting every line written for it', () => {
+  runMetaCases([
+    ['an empty value', '---\ntitle: 作品名\nheader: 作品名　一\n---\n第一章.jpnov\n', 'title', '', '---\nheader: 作品名　一\n---\n第一章.jpnov\n'],
+    ['whitespace only', '---\ntitle: 作品名\nheader: 作品名　一\n---\n', 'title', ' 　 ', '---\nheader: 作品名　一\n---\n'],
+    ['a divider', '---\ntitle: 作品名\ndivider: ＊　＊　＊\n---\n', 'divider', '', '---\ntitle: 作品名\n---\n'],
+    ['repeats go with it', '---\ntitle: 作品名\nauthor: ペンネーム\ntitle: 作品名　第一巻\n---\n', 'title', '', '---\nauthor: ペンネーム\n---\n'],
+    ['a line that already reads as unset', '---\ntitle:\nheader: 作品名　一\n---\n', 'title', '', '---\nheader: 作品名　一\n---\n'],
+    ['an invalid line of an unset key', '---\nTitle: 作品名\n---\n', 'title', '', '---\n---\n'],
+    ['the only key leaves an empty block', '---\ntitle: 作品名\n---\n第一章.jpnov\n', 'title', '', '---\n---\n第一章.jpnov\n'],
+    ['the last document line', '---\nheader: 作品名　一\ntitle: 作品名', 'title', '', '---\nheader: 作品名　一'],
+    ['neighbours ending the document', '---\ntitle: 作品名\ntitle: 作品名　第一巻', 'title', '', '---'],
+    ['CRLF', '---\r\ntitle: 作品名\r\nheader: 作品名　一\r\n---\r\n', 'title', '', '---\r\nheader: 作品名　一\r\n---\r\n'],
+    ['CRLF, the last document line', '---\r\nheader: 作品名　一\r\ntitle: 作品名', 'title', '', '---\r\nheader: 作品名　一'],
+    ['the footer, back to unwritten', '---\ntitle: 作品名\nfooter:\n---\n', 'footer', undefined, '---\ntitle: 作品名\n---\n'],
+    ['a title, back to unwritten', '---\ntitle: 作品名\ntitle: 作品名　第一巻\n---\n', 'title', undefined, '---\n---\n'],
+  ]);
 });
 
-test('upsertMeta creates the front matter when the file has none', () => {
-  const text = 'a.jpnov\n';
-  const out = apply(text, [upsertMeta(text, 'title', '第一巻')]);
-  assert.equal(out, '---\ntitle: 第一巻\n---\na.jpnov\n');
-  assert.deepEqual(parseJpbook(out).meta, { title: '第一巻' });
+test('setMeta plans nothing when an unset key has no line', () => {
+  for (const text of ['---\nheader: 作品名　一\n---\n', 'a.jpnov\n', '']) {
+    assert.deepEqual(setMeta(text, 'title', ''), [], JSON.stringify(text));
+    assert.deepEqual(setMeta(text, 'footer', undefined), [], JSON.stringify(text));
+  }
 });
 
-test('upsertMeta creates the block even in an empty document', () => {
-  const out = apply('', [upsertMeta('', 'header', '柱')]);
-  assert.equal(out, '---\nheader: 柱\n---\n');
+test('setMeta inserts an absent key at its place in the key order', () => {
+  runMetaCases([
+    ['after the nearest earlier key', '---\ntitle: 作品名\ndivider: ＊\n---\n', 'author', 'ペンネーム', '---\ntitle: 作品名\nauthor: ペンネーム\ndivider: ＊\n---\n'],
+    ['before the nearest later key', '---\nheader: 作品名　一\n---\na.jpnov\n', 'title', '作品名', '---\ntitle: 作品名\nheader: 作品名　一\n---\na.jpnov\n'],
+    ['an empty line anchors like any other', '---\ntitle:\n---\n', 'author', 'ペンネーム', '---\ntitle:\nauthor: ペンネーム\n---\n'],
+    ['above a cover list', '---\ncover:\n  - 表紙.jpnov\n---\n第一章.jpnov\n', 'divider', '＊', '---\ndivider: ＊\ncover:\n  - 表紙.jpnov\n---\n第一章.jpnov\n'],
+    ['between an earlier key and a cover list', '---\ntitle: 作品名\ncover:\n  - 表紙.jpnov\n  - あらすじ.jpnov\n---\na.jpnov', 'header', '作品名　一', '---\ntitle: 作品名\nheader: 作品名　一\ncover:\n  - 表紙.jpnov\n  - あらすじ.jpnov\n---\na.jpnov'],
+    ['between a cover list and a later key', '---\ncover:\n  - 表紙.jpnov\ndivider: ＊\n---\n', 'header', '作品名　一', '---\ncover:\n  - 表紙.jpnov\nheader: 作品名　一\ndivider: ＊\n---\n'],
+    ['an empty block', '---\n---\n', 'footer', '', '---\nfooter:\n---\n'],
+    ['no front matter', 'a.jpnov\n', 'title', '作品名', '---\ntitle: 作品名\n---\na.jpnov\n'],
+    ['an empty document', '', 'header', '作品名　一', '---\nheader: 作品名　一\n---\n'],
+    ['an unterminated block', '---\ntitle: 作品名', 'header', '作品名　一', '---\ntitle: 作品名\nheader: 作品名　一'],
+    ['an unterminated block without a key', '---', 'header', '作品名　一', '---\nheader: 作品名　一'],
+    ['CRLF, after a key', '---\r\ntitle: 作品名\r\n---\r\n', 'header', '作品名　一', '---\r\ntitle: 作品名\r\nheader: 作品名　一\r\n---\r\n'],
+    ['CRLF, before a key', '---\r\nheader: 作品名　一\r\n---\r\n', 'title', '作品名', '---\r\ntitle: 作品名\r\nheader: 作品名　一\r\n---\r\n'],
+  ]);
 });
 
-test('upsertMeta appends inside an UNTERMINATED block (still metadata territory)', () => {
-  const text = '---\ntitle: t';
-  const out = apply(text, [upsertMeta(text, 'header', '柱')]);
-  assert.equal(out, '---\ntitle: t\nheader: 柱');
-  assert.deepEqual(parseJpbook(out).meta, { title: 't', header: '柱' });
-});
-
-test('upsertMeta keeps an explicitly-default or empty value (upsert never deletes)', () => {
-  const text = '---\nfooterAlign: left\n---\n';
-  const out = apply(text, [upsertMeta(text, 'footerAlign', 'right')]);
-  assert.equal(out, '---\nfooterAlign: right\n---\n');
-  const cleared = apply(out, [upsertMeta(out, 'header', '')]);
-  assert.equal(cleared, '---\nfooterAlign: right\nheader:\n---\n');
-});
-
-test('upsertMeta sanitizes pasted newlines and edge whitespace out of the value', () => {
-  const out = apply('', [upsertMeta('', 'title', '  一\n二  ')]);
-  assert.equal(out, '---\ntitle: 一 二\n---\n');
-});
-
-test('upsertMeta follows a CRLF document', () => {
-  const text = '---\r\ntitle: t\r\n---\r\n';
-  const out = apply(text, [upsertMeta(text, 'header', '柱')]);
-  assert.equal(out, '---\r\ntitle: t\r\nheader: 柱\r\n---\r\n');
+test('setMeta: keys filled in any order end in the key order', () => {
+  const fills: readonly (readonly [MetaKey, string])[] = [
+    ['author', 'ペンネーム'], ['divider', '＊'], ['title', '作品名'], ['footerAlign', 'left'], ['footer', ''], ['header', '作品名　一'],
+  ];
+  let text = 'a.jpnov\n';
+  for (const [key, value] of fills) {
+    text = apply(text, setMeta(text, key, value));
+  }
+  assert.equal(text, '---\ntitle: 作品名\nauthor: ペンネーム\nheader: 作品名　一\nfooter:\nfooterAlign: left\ndivider: ＊\n---\na.jpnov\n');
+  assert.deepEqual(Object.keys(parseJpbook(text).meta), [...META_KEYS]);
 });
 
 // --- appendEntries (chapters) -------------------------------------------------------------
@@ -176,14 +223,13 @@ test('entryLines(chapters) and metaRows project the panel model in fixed order',
   ]);
 });
 
-test('upsertMeta never splits a cover list: an absent key still lands before the fence', () => {
-  const text = ['---', 'title: 一', 'cover:', '  - c1.jpnov', '  - c2.jpnov', '---', 'a.jpnov'].join('\n');
-  const out = apply(text, [upsertMeta(text, 'header', '柱')]);
-  assert.equal(out, ['---', 'title: 一', 'cover:', '  - c1.jpnov', '  - c2.jpnov', 'header: 柱', '---', 'a.jpnov'].join('\n'));
+test('setMeta never splits a cover list: an absent key lands beside a key line', () => {
+  const text = ['---', 'title: 作品名', 'cover:', '  - c1.jpnov', '  - c2.jpnov', '---', 'a.jpnov'].join('\n');
+  const out = apply(text, setMeta(text, 'header', '作品名　一'));
   // The list still parses as one contiguous block after the edit.
   assert.deepEqual(
     parseJpbook(out).lines.map((l) => l.kind),
-    ['fence', 'meta', 'cover', 'coverEntry', 'coverEntry', 'meta', 'fence', 'ok'],
+    ['fence', 'meta', 'meta', 'cover', 'coverEntry', 'coverEntry', 'fence', 'ok'],
   );
 });
 

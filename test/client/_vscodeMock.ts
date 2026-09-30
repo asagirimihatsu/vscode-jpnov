@@ -437,6 +437,9 @@ export function buildVscode(state: MockState): Record<string, unknown> {
       state.quickPickCalls.push({ items, options });
       return Promise.resolve(state.quickPickQueue.shift());
     },
+    createQuickPick(): FakeQuickPick<{ label: string }> {
+      return new FakeQuickPick(state);
+    },
     showInputBox(options?: RecordedInputBox): Promise<string | undefined> {
       state.inputBoxCalls.push({ options });
       return Promise.resolve(state.inputBoxQueue.shift());
@@ -689,6 +692,58 @@ export function buildVscode(state: MockState): Record<string, unknown> {
     ProgressLocation,
     ConfigurationTarget,
   };
+}
+
+/**
+ * A `window.createQuickPick()` fake. `show()` takes the next `quickPickQueue` entry: `{ type }` types
+ * that text first (the value listeners run), `{ label }` accepts the item so labelled, an object with
+ * neither accepts the first item, undefined = Esc.
+ */
+export class FakeQuickPick<T extends { label: string }> {
+  value = '';
+  title: string | undefined;
+  placeholder: string | undefined;
+  items: readonly T[] = [];
+  activeItems: readonly T[] = [];
+  selectedItems: readonly T[] = [];
+  private readonly valueChanged = new EventEmitter<string>();
+  private readonly accepted = new EventEmitter<void>();
+  private readonly hidden = new EventEmitter<void>();
+  readonly onDidChangeValue = this.valueChanged.event;
+  readonly onDidAccept = this.accepted.event;
+  readonly onDidHide = this.hidden.event;
+  private readonly state: MockState;
+
+  constructor(state: MockState) {
+    this.state = state;
+  }
+
+  show(): void {
+    const answer = this.state.quickPickQueue.shift() as { type?: string; label?: string } | undefined;
+    queueMicrotask(() => {
+      if (answer === undefined) {
+        this.hide();
+        return;
+      }
+      if (answer.type !== undefined) {
+        this.value = answer.type;
+        this.valueChanged.fire(answer.type);
+      }
+      const pick = answer.label === undefined ? this.items[0] : this.items.find((i) => i.label === answer.label);
+      this.selectedItems = pick === undefined ? [] : [pick];
+      this.accepted.fire(undefined);
+    });
+  }
+
+  hide(): void {
+    this.hidden.fire(undefined);
+  }
+
+  dispose(): void {
+    this.valueChanged.dispose();
+    this.accepted.dispose();
+    this.hidden.dispose();
+  }
 }
 
 export function doc(uri: string, languageId: string, text = '', encoding = 'utf8'): FakeTextDocument {

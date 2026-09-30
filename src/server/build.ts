@@ -454,7 +454,7 @@ export async function handleListBooks(ctx: ServerContext, params: ListBooksParam
         rootUri: target.rootUri,
         fileRel: fl.fileRel,
         outRel: jpbookOutRel(fl.fileRel),
-        ...(title !== undefined && title !== '' ? { title } : {}),
+        ...(title !== undefined ? { title } : {}),
       };
     }));
   }));

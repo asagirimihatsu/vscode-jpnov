@@ -339,9 +339,10 @@ divider: ＊　＊　＊
 | `cover` | — | Cover pages placed before the body: a cover sheet, a title page, a synopsis (see below) |
 
 Every key is optional; unknown keys warn and are ignored, so future keys stay
-forward-compatible. The six keys from `title` to `divider` are also editable from
-the **Book Info** rows in the Books view, and `cover` from its **Cover pages**
-section.
+forward-compatible. For `title`, `author`, `header` and `divider`, an empty
+value is the same as leaving the key out. The six keys from `title` to `divider`
+are also editable from the **Book Info** rows in the Books view, and `cover`
+from its **Cover pages** section.
 
 The header and footer take the same value annotations as a cover page (below), plus
 ページ番号, the current page; any other annotation or ruby prints as typed.
