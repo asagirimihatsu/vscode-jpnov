@@ -5,16 +5,13 @@
 import type { ValueLookup } from '../ast/nodes.ts';
 import { VALUE_NAMES, valueOf } from '../ast/notation.ts';
 import { scan } from '../ast/scan.ts';
-import type { BuildChrome, FooterAlign } from './chrome.ts';
+import type { BuildChrome, FurnitureAlign } from './chrome.ts';
 import { escapeHtml } from './escape.ts';
 
-/** The footer's physical side on page `pi` (0-based), or null for no footer. */
-function footerSide(pos: FooterAlign, pi: number): 'r' | 'l' | null {
-  if (pos === 'none') {
-    return null;
-  }
+/** The side class (`r` / `l` / `c`) of a header or footer on page `pi` (0-based). */
+function furnitureSide(align: FurnitureAlign, pi: number): 'r' | 'l' | 'c' {
   const odd = pi % 2 === 0; // display page = pi + 1, so an even index is an odd page
-  switch (pos) {
+  switch (align) {
     case 'rightLeft':
       return odd ? 'r' : 'l';
     case 'leftRight':
@@ -23,6 +20,8 @@ function footerSide(pos: FooterAlign, pi: number): 'r' | 'l' | null {
       return 'r';
     case 'left':
       return 'l';
+    case 'center':
+      return 'c';
   }
 }
 
@@ -56,8 +55,8 @@ export function cutFurniture(chrome: BuildChrome): Furniture {
 
 /**
  * One page's absolutely-positioned furniture (header + footer), emitted after its lines. The
- * page's own numbers join the book's `values` under {@link VALUE_NAMES}. A blank footer never
- * reaches here (renderBook normalizes it to footerAlign 'none').
+ * page's own numbers join the book's `values` under {@link VALUE_NAMES}. An empty header or footer
+ * emits no element (renderBook folds a blank one to '').
  */
 export function pageFurniture(
   chrome: BuildChrome,
@@ -71,13 +70,7 @@ export function pageFurniture(
     [VALUE_NAMES.totalPages, String(totalPage)],
   ]);
   const all: ValueLookup = { get: (name) => own.get(name) ?? values?.get(name) };
-  let out = '';
-  if (chrome.header !== '') {
-    out += `<div class="hd">${furnitureHtml(furniture.header, all)}</div>`;
-  }
-  const side = footerSide(chrome.footerAlign, pi);
-  if (side !== null) {
-    out += `<div class="ft ${side}">${furnitureHtml(furniture.footer, all)}</div>`;
-  }
-  return out;
+  const band = (cls: 'hd' | 'ft', key: 'header' | 'footer', align: FurnitureAlign): string =>
+    chrome[key] === '' ? '' : `<div class="${cls} ${furnitureSide(align, pi)}">${furnitureHtml(furniture[key], all)}</div>`;
+  return band('hd', 'header', chrome.headerAlign) + band('ft', 'footer', chrome.footerAlign);
 }

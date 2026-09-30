@@ -320,6 +320,7 @@ optional `---`-fenced block of `key: value` lines:
 ---
 title: 作品名　第一巻
 header: 作品名　一
+headerAlign: center
 footer: ［＃ここに「ページ番号」の値を表示］ / ［＃ここに「総ページ数」の値を表示］
 footerAlign: right
 divider: ＊　＊　＊
@@ -332,15 +333,16 @@ divider: ＊　＊　＊
 | --- | --- | --- |
 | `title` | — | Display name in the Books view and the EPUB title (the output path still derives from the file name) |
 | `author` | — | Author name; becomes the EPUB creator metadata |
-| `header` | `""` | Running head centred at the top of every page; omit for none |
+| `header` | `""` | Running head at the top of every page; omit for none |
+| `headerAlign` | `center` | Header placement: pinned (`right`, `left`), alternating per page (`rightLeft`, `leftRight`), or centred (`center`) |
 | `footer` | `［＃ここに「ページ番号」の値を表示］ / ［＃ここに「総ページ数」の値を表示］` | Footer line, `12 / 215` by default; blank suppresses it |
-| `footerAlign` | `right` | Footer placement: pinned (`right`, `left`) or alternating per page (`rightLeft`, `leftRight`), or `none` |
+| `footerAlign` | `right` | Footer placement: pinned (`right`, `left`), alternating per page (`rightLeft`, `leftRight`), or centred (`center`) |
 | `divider` | — | Chapter divider inserted between chapters that do not open with a heading (e.g. `＊　＊　＊`); a bare mark is centred along the line at build time, a `［＃３字下げ］` prefix indents it instead; omit for a single blank line |
 | `cover` | — | Cover pages placed before the body: a cover sheet, a title page, a synopsis (see below) |
 
 Every key is optional; unknown keys warn and are ignored, so future keys stay
 forward-compatible. For `title`, `author`, `header` and `divider`, an empty
-value is the same as leaving the key out. The six keys from `title` to `divider`
+value is the same as leaving the key out. The seven keys from `title` to `divider`
 are also editable from the **Book Info** rows in the Books view, and `cover`
 from its **Cover pages** section.
 

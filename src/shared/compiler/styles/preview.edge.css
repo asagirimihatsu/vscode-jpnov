@@ -1,6 +1,6 @@
 /* Edge rules (罫線 + 枠) — included when edgeLine ≠ none. --edge carries only the BASE colour
-   (#cc0000 or currentColor); the 80%-alpha color-mix recipe lives HERE, once, identical in
-   preview and build — rules sit under the text's weight. Every length is REM on purpose: the
+   (#cc0000 or currentColor); the 80%-alpha color-mix recipe is identical in preview and build
+   (here, build.edge.css and css.ts's edgeRules) — rules sit under the text's weight. Every length is REM on purpose: the
    webview host injects body{font-size}, so an em on .segment would follow it while the text
    follows the 1rem-pinned .line — rem is the exact base of the var(--pitch) em column pitch. */
 

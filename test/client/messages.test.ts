@@ -13,6 +13,7 @@ import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { FRONT_MATTER_KEYS } from '../../src/shared/book/jpbook.ts';
+import { FURNITURE_ALIGNS } from '../../src/shared/compiler/chrome.ts';
 import { renderEnglish } from '../../src/shared/messages.ts';
 import type { MsgCode } from '../../src/shared/protocol.ts';
 import { buildVscode, createMockState } from './_vscodeMock.ts';
@@ -38,7 +39,7 @@ const ARGS: Record<MsgCode, readonly (string | number)[]> = {
   'jpbook.metaNotKeyValue': ['just text'],
   'jpbook.metaUnknownKey': ['publisher', FRONT_MATTER_KEYS.join(', ')],
   'jpbook.metaDuplicateKey': ['title'],
-  'jpbook.metaBadEnum': ['footerAlign', 'middle', 'right, left, rightLeft, leftRight, none'],
+  'jpbook.metaBadEnum': ['footerAlign', 'middle', FURNITURE_ALIGNS.join(', ')],
   'jpbook.metaUnterminated': [],
   'jpbook.coverItemWithoutKey': ['- cover.jpnov'],
   'jpbook.coverNeedsList': ['cover: 表紙.jpnov'],

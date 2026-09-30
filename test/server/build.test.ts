@@ -1,7 +1,6 @@
 /**
  * Integration tests for the `jpnov/build` + `jpnov/listBooks` handlers against real `file:`
- * fixtures. Runs via `npm run test:integration` (not plain `npm test`): it imports server
- * modules whose `#/*` VALUE imports need the resolve hook in `test/resolve-hooks.mjs`.
+ * fixtures. Runs via `npm run test:integration` with the other fs-fixture suite.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -405,7 +404,7 @@ test('build honors the kinsoku mode from the settings snapshot (禁則)', async 
   // (The footer is suppressed through the book's OWN front matter, not settings.)
   const { ctx } = boot();
   const head = 'あ'.repeat(15);
-  await writeUnder(ws.dir, 'vol1/index.jpbook', '---\nfooterAlign: none\n---\nvol1/a.jpnov');
+  await writeUnder(ws.dir, 'vol1/index.jpbook', '---\nfooter:\n---\nvol1/a.jpnov');
   await writeUnder(ws.dir, 'vol1/a.jpnov', `${head}「い」`);
 
   const result = await handleBuild(ctx, {
@@ -760,7 +759,7 @@ test('one batch build renders a DIFFERENT header per volume, each from its own f
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
   await writeUnder(ws.dir, 'vol1.jpbook', '---\nheader: 作品名　一\n---\nch/a.jpnov');
-  await writeUnder(ws.dir, 'vol2.jpbook', '---\nheader: 作品名　二\nfooterAlign: none\n---\nch/b.jpnov');
+  await writeUnder(ws.dir, 'vol2.jpbook', '---\nheader: 作品名　二\nheaderAlign: right\nfooter:\n---\nch/b.jpnov');
   await writeUnder(ws.dir, 'ch/a.jpnov', 'いち');
   await writeUnder(ws.dir, 'ch/b.jpnov', 'に');
 
@@ -776,12 +775,12 @@ test('one batch build renders a DIFFERENT header per volume, each from its own f
   const vol2 = result.artifacts.find((a) => a.path.endsWith('/vol2.html'));
   assert.ok(vol1?.kind === 'html');
   assert.ok(vol2?.kind === 'html');
-  assert.ok(vol1.content.includes('<div class="hd">作品名　一</div>'), 'vol1 carries its own header');
-  assert.ok(vol2.content.includes('<div class="hd">作品名　二</div>'), 'vol2 carries its own header');
+  assert.ok(vol1.content.includes('<div class="hd c">作品名　一</div>'), 'vol1 carries its own header, centred by default');
+  assert.ok(vol2.content.includes('<div class="hd r">作品名　二</div>'), 'vol2 carries its own header, where it asked');
   assert.ok(!vol1.content.includes('作品名　二'), 'no cross-contamination');
   // The settings snapshot carries no furniture: vol1 gets the default footer, vol2 opted out.
-  assert.match(vol1.content, /<div class="ft [rl]">/);
-  assert.ok(!/<div class="ft [rl]">/.test(vol2.content), 'footerAlign: none suppresses the footer');
+  assert.match(vol1.content, /<div class="ft r">/);
+  assert.ok(!vol2.content.includes('class="ft'), 'an empty footer suppresses the footer');
 });
 
 test('front matter never leaks into the artifacts: body starts at the first chapter', async () => {
@@ -938,7 +937,7 @@ test('build: covers render as unnumbered front pages carrying the book values (h
   for (const cover of [sheets[0], sheets[1]]) {
     assert.ok(cover !== undefined && !cover.includes('class="hd') && !cover.includes('class="ft'));
   }
-  assert.match(sheets[2] ?? '', /<div class="hd">柱<\/div><div class="ft r">1 \/ 2<\/div>/);
+  assert.match(sheets[2] ?? '', /<div class="hd c">柱<\/div><div class="ft r">1 \/ 2<\/div>/);
 });
 
 test('build: the header and footer take the value annotations, filled per page', async () => {
@@ -961,7 +960,7 @@ test('build: the header and footer take the value annotations, filled per page',
     projectDirs: projectsFor(ws.uri),
   })).artifacts[0];
   assert.ok(html?.kind === 'html');
-  assert.match(html.content, /<div class="hd">作品名<\/div><div class="ft r">ペンネーム　1<\/div>/);
+  assert.match(html.content, /<div class="hd c">作品名<\/div><div class="ft r">ペンネーム　1<\/div>/);
 });
 
 test('build: a title-less book takes the STEM of its outRel as its title, in every format that shows one', async () => {

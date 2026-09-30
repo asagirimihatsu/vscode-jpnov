@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { BuildChrome } from '../../../src/shared/compiler/chrome.ts';
+import type { BuildChrome, FurnitureAlign } from '../../../src/shared/compiler/chrome.ts';
+import { FURNITURE_ALIGNS } from '../../../src/shared/compiler/chrome.ts';
 import { chapterGlue, concatBookText, MANUSCRIPT_SHEET, renderBook, type BookInput } from '../../../src/shared/compiler/document.ts';
 import { FOOTER_BAND, HEADER_BAND, SIDE_PAD } from '../../../src/shared/compiler/geometry.ts';
 import { VALUE_DEFAULTS, indentAnnotation } from '../../../src/shared/ast/notation.ts';
@@ -23,10 +24,13 @@ const book = (over: Pick<BookInput, 'files' | 'divider'>): BookInput => ({ ...ov
 const OFF: BuildChrome = {
   lineNumbers: false,
   edgeLine: 'none',
-  footerAlign: 'none',
-  footer: '［＃ここに「ページ番号」の値を表示］ / ［＃ここに「総ページ数」の値を表示］',
   header: '',
+  headerAlign: 'center',
+  footer: '',
+  footerAlign: 'right',
 };
+/** A page-number footer, `1 / 2`. */
+const PAGE_FOOTER = '［＃ここに「ページ番号」の値を表示］ / ［＃ここに「総ページ数」の値を表示］';
 
 /** Render one file with explicit resolved options; returns the full HTML document. */
 const render = (
@@ -411,7 +415,7 @@ test('footer parity: rightLeft puts odd pages bottom-right, even bottom-left', (
   const body = bodyOf(
     render(THREE_PAGES, {
       linesPerPage: 1,
-      chrome: { footerAlign: 'rightLeft' },
+      chrome: { footer: PAGE_FOOTER, footerAlign: 'rightLeft' },
     }),
   );
   assert.match(body, /data-page="0">[^]*?<div class="ft r">1 \/ 3<\/div>/);
@@ -421,41 +425,45 @@ test('footer parity: rightLeft puts odd pages bottom-right, even bottom-left', (
   assert.match(body, /<div class="line" data-line="0">一<\/div><\/div><div class="ft r">/);
 });
 
-test('footer positions: all five enum values place (or omit) the number correctly', () => {
-  const sides = (pos: BuildChrome['footerAlign']): (string | null)[] => {
-    const body = bodyOf(
-      render('一\n二', { linesPerPage: 1, chrome: { footerAlign: pos } }),
-    );
-    return [0, 1].map((i) => {
-      const m = new RegExp(`data-page="${String(i)}">[^]*?<div class="ft (r|l)">`).exec(body);
-      return m?.[1] ?? null;
-    });
+test('header and footer positions: every alignment picks the side class of each page', () => {
+  const expected: Record<FurnitureAlign, readonly string[]> = {
+    right: ['r', 'r'],
+    left: ['l', 'l'],
+    rightLeft: ['r', 'l'],
+    leftRight: ['l', 'r'],
+    center: ['c', 'c'],
   };
-  assert.deepEqual(sides('rightLeft'), ['r', 'l']);
-  assert.deepEqual(sides('leftRight'), ['l', 'r']);
-  assert.deepEqual(sides('right'), ['r', 'r']);
-  assert.deepEqual(sides('left'), ['l', 'l']);
-  assert.deepEqual(sides('none'), [null, null]);
+  for (const align of FURNITURE_ALIGNS) {
+    const body = bodyOf(
+      render('一\n二', { linesPerPage: 1, chrome: { header: '柱', headerAlign: align, footer: PAGE_FOOTER, footerAlign: align } }),
+    );
+    for (const band of ['hd', 'ft']) {
+      const sides = [0, 1].map((i) => new RegExp(`data-page="${String(i)}">[^]*?<div class="${band} ([rlc])">`).exec(body)?.[1]);
+      assert.deepEqual(sides, expected[align], `${band} ${align}`);
+    }
+  }
 });
 
 test('footer: markup around a value is escaped; a name the page lacks prints as itself', () => {
   const escaped = render('本文', {
-    chrome: { footerAlign: 'right', footer: '<b>［＃ここに「ページ番号」の値を表示］</b>' },
+    chrome: { footer: '<b>［＃ここに「ページ番号」の値を表示］</b>' },
   });
   assert.match(escaped, /<div class="ft r">&lt;b&gt;1&lt;\/b&gt;<\/div>/);
   const unknown = render('本文', {
-    chrome: { footerAlign: 'right', footer: 'p［＃ここに「ページ番号」の値を表示］/［＃ここに「foo」の値を表示］' },
+    chrome: { footer: 'p［＃ここに「ページ番号」の値を表示］/［＃ここに「foo」の値を表示］' },
   });
   assert.match(unknown, /<div class="ft r">p1\/foo<\/div>/);
 });
 
-test('footer blank suppression: a blank footer drops the footer, keeps its band', () => {
-  for (const footer of ['', '   ']) {
+test('furniture blank suppression: a blank header or footer drops its element and rules, keeps its band', () => {
+  for (const blank of ['', '   ', '　']) {
     const html = render('本文', {
-      chrome: { footerAlign: 'rightLeft', footer },
+      chrome: { header: blank, headerAlign: 'rightLeft', footer: blank, footerAlign: 'rightLeft' },
     });
-    assert.doesNotMatch(html, /class="ft/);
-    assert.match(html, FOOTER_PAD_RE); // element goes, band stays reserved
+    assert.doesNotMatch(html, /class="(hd|ft)/);
+    assert.doesNotMatch(html, /\.(hd|ft)[{.]/);
+    assert.match(html, HTOP_RE); // elements go, bands stay reserved
+    assert.match(html, FOOTER_PAD_RE);
   }
   // A non-blank footer is NOT suppressed; literal spaces are kept as-is.
   const kept = render('本文', {
@@ -471,7 +479,6 @@ test('header and footer: タイトル／ペンネーム／ページ番号／総�
       {
         linesPerPage: 1,
         chrome: {
-          footerAlign: 'right',
           header: '［＃ここに「タイトル」の値を表示］　［＃ここに「ペンネーム」の値を表示］',
           footer: '［＃ここに「ページ番号」の値を表示］／［＃ここに「総ページ数」の値を表示］',
         },
@@ -479,34 +486,28 @@ test('header and footer: タイトル／ペンネーム／ページ番号／総�
     ),
   );
   const sheets = body.split(/(?=<div class="page)/).slice(1);
-  assert.match(sheets[0] ?? '', /<div class="hd">作品名　ペンネーム<\/div><div class="ft r">1／2<\/div>/);
-  assert.match(sheets[1] ?? '', /<div class="hd">作品名　ペンネーム<\/div><div class="ft r">2／2<\/div>/);
+  assert.match(sheets[0] ?? '', /<div class="hd c">作品名　ペンネーム<\/div><div class="ft r">1／2<\/div>/);
+  assert.match(sheets[1] ?? '', /<div class="hd c">作品名　ペンネーム<\/div><div class="ft r">2／2<\/div>/);
 });
 
 test('header and footer: a book without title and author fills them blank', () => {
   const body = bodyOf(
     render('本文', {
       chrome: {
-        footerAlign: 'right',
         header: '［＃ここに「タイトル」の値を表示］',
         footer: '［＃ここに「ペンネーム」の値を表示］',
       },
     }),
   );
-  assert.match(body, /<div class="hd"><\/div><div class="ft r"><\/div>/);
+  assert.match(body, /<div class="hd c"><\/div><div class="ft r"><\/div>/);
 });
 
-test('header: centered furniture div, escaped, absent (with its band) when empty', () => {
+test('header: a centred furniture div by default, escaped', () => {
   const on = render('本文', { chrome: { header: '第一章' } });
-  assert.match(on, /<div class="hd">第一章<\/div>/);
+  assert.match(on, /<div class="hd c">第一章<\/div>/);
   assert.match(on, HTOP_RE);
   const escaped = render('本文', { chrome: { header: 'a<b' } });
-  assert.match(escaped, /<div class="hd">a&lt;b<\/div>/);
-  const off = render('本文');
-  assert.doesNotMatch(off, /class="hd"/);
-  // No element, but the band stays reserved — sheet geometry is header-independent.
-  assert.match(off, HTOP_RE);
-  assert.match(off, /\.page\{[^}]*padding:calc\(var\(--htop\)\*1em\) /);
+  assert.match(escaped, /<div class="hd c">a&lt;b<\/div>/);
 });
 
 test('line numbers and edge lines never change the body DOM (pure CSS features)', () => {
@@ -556,7 +557,7 @@ test('cover: front pages precede the body, unnumbered and furniture-free', () =>
   const body = bodyOf(
     renderBooks(
       [withCover([{ name: 'c.jpnov', src: '表紙' }], [{ name: 'a.jpnov', src: '一\n二' }])],
-      { linesPerPage: 1, chrome: { footerAlign: 'rightLeft', header: '柱' } },
+      { linesPerPage: 1, chrome: { footer: PAGE_FOOTER, footerAlign: 'rightLeft', header: '柱' } },
     ),
   );
   const sheets = body.split(/(?=<div class="page)/).slice(1);
@@ -566,8 +567,8 @@ test('cover: front pages precede the body, unnumbered and furniture-free', () =>
   assert.ok(!sheets[0]?.includes('class="ft') && !sheets[0]?.includes('class="hd'));
   assert.match(sheets[0] ?? '', /<div class="line" data-line="0">表紙<\/div>/);
   // The body still starts at page 1 of 2 — the cover is not counted, and page 1 stays odd.
-  assert.match(sheets[1] ?? '', /<div class="hd">柱<\/div><div class="ft r">1 \/ 2<\/div>/);
-  assert.match(sheets[2] ?? '', /<div class="hd">柱<\/div><div class="ft l">2 \/ 2<\/div>/);
+  assert.match(sheets[1] ?? '', /<div class="hd c">柱<\/div><div class="ft r">1 \/ 2<\/div>/);
+  assert.match(sheets[2] ?? '', /<div class="hd c">柱<\/div><div class="ft l">2 \/ 2<\/div>/);
 });
 
 test('cover: each cover file starts a fresh page', () => {
@@ -596,7 +597,7 @@ test('cover: the template annotations substitute the book values; 総ページ�
           { title: '作品名', author: 'ペンネーム' },
         ),
       ],
-      { linesPerPage: 1, chrome: { footerAlign: 'right' } },
+      { linesPerPage: 1, chrome: { footer: PAGE_FOOTER } },
     ),
   );
   const bodyPages = (body.match(/<div class="page" data-page=/g) ?? []).length;
@@ -642,7 +643,7 @@ test('cover: covers interleave per book and the footer numbers the bodies contin
         withCover([{ name: 'c1.jpnov', src: '表紙一' }], [{ name: 'a.jpnov', src: '一' }]),
         withCover([{ name: 'c2.jpnov', src: '表紙二' }], [{ name: 'b.jpnov', src: '二' }]),
       ],
-      { chrome: { footerAlign: 'right' } },
+      { chrome: { footer: PAGE_FOOTER } },
     ),
   );
   const sheets = body.split(/(?=<div class="page)/).slice(1);
@@ -677,7 +678,7 @@ test('cover: line numbers are exempted in CSS, since the counter matches .page l
 });
 
 test('cover: the sheet geometry and its reserved bands are cover-independent', () => {
-  const opts = { chrome: { footerAlign: 'right' as const, header: '柱' } };
+  const opts = { chrome: { footer: PAGE_FOOTER, header: '柱' } };
   const body = [{ name: 'a.jpnov', src: '本文' }];
   const covered = renderBooks([withCover([{ name: 'c.jpnov', src: '表紙' }], body)], opts);
   const plain = renderBooks([{ files: body }], opts);
@@ -706,14 +707,14 @@ test('cover: covers reach the on-demand CSS sink like any other content', () => 
 test('cover: a book with covers and no chapters renders the covers, page count 0', () => {
   const body = bodyOf(
     renderBooks([withCover([{ name: 'c.jpnov', src: COVER_SRC }], [], { title: '題', author: '著' })], {
-      chrome: { footerAlign: 'right', header: '柱' },
+      chrome: { footer: PAGE_FOOTER, header: '柱' },
     }),
   );
   const sheets = body.split(/(?=<div class="page)/).slice(1);
   assert.equal(sheets.length, 1);
   assert.ok(sheets[0]?.startsWith('<div class="page cover" data-page="0">'));
   assert.match(body, /全<span class="tcy">0<\/span>ページ/);
-  assert.doesNotMatch(body, /class="(pn|hd)/); // no body page exists to carry furniture
+  assert.doesNotMatch(body, /class="(hd|ft)/); // no body page exists to carry furniture
 });
 
 test('cover: an unset author leaves its column blank, indent and neighbours intact', () => {
@@ -733,8 +734,9 @@ test('cover: an unset author leaves its column blank, indent and neighbours inta
 });
 
 test('per-book pagination: an empty book adds no blank sheet and never breaks the run', () => {
-  // Per-book pagination equals the old joined run because paginate flushes only non-empty
-  // pages; an empty middle book is where the two would diverge if it did not.
+  // Per-book pagination equals one joined run with a page break at each seam because paginate
+  // flushes only non-empty pages; an empty middle book is where the two would diverge if it
+  // did not.
   const body = bodyOf(
     renderBooks(
       [
@@ -742,7 +744,7 @@ test('per-book pagination: an empty book adds no blank sheet and never breaks th
         { files: [] },
         { files: [{ name: 'b.jpnov', src: '二' }] },
       ],
-      { chrome: { footerAlign: 'right' } },
+      { chrome: { footer: PAGE_FOOTER } },
     ),
   );
   assert.equal(
@@ -766,7 +768,7 @@ test('per-book pagination: a book opening with ［＃改ページ］ still start
   assert.match(body, /data-page="1"><div class="grid"><div class="line" data-line="1">二<\/div>/);
 });
 
-test('cover: the footer side follows the BODY page, whatever the cover count', () => {
+test('cover: the header and footer sides follow the BODY page, whatever the cover count', () => {
   // Product ruling: front pages never shift the body's numbering.
   for (const count of [0, 1, 2, 3]) {
     const files = Array.from({ length: count }, (_, i) => ({ name: `c${String(i)}.jpnov`, src: `表紙${String(i)}` }));
@@ -774,11 +776,12 @@ test('cover: the footer side follows the BODY page, whatever the cover count', (
     const book: BookInput = count === 0
       ? { files: body }
       : { files: body, title: '題', author: '著', cover: { files } };
-    const out = bodyOf(renderBooks([book], { linesPerPage: 1, chrome: { footerAlign: 'rightLeft' } }));
+    const chrome = { header: '柱', headerAlign: 'leftRight', footer: PAGE_FOOTER, footerAlign: 'rightLeft' } as const;
+    const out = bodyOf(renderBooks([book], { linesPerPage: 1, chrome }));
     const sheets = out.split(/(?=<div class="page)/).slice(1);
     assert.equal(sheets.length, count + 2, `${String(count)} covers + 2 body pages`);
-    assert.match(sheets[count] ?? '', /<div class="ft r">1 \/ 2<\/div>/, `${String(count)} covers: body page 1 stays right`);
-    assert.match(sheets[count + 1] ?? '', /<div class="ft l">2 \/ 2<\/div>/, `${String(count)} covers: body page 2 stays left`);
+    assert.match(sheets[count] ?? '', /<div class="hd l">柱<\/div><div class="ft r">1 \/ 2<\/div>/, `${String(count)} covers: body page 1`);
+    assert.match(sheets[count + 1] ?? '', /<div class="hd r">柱<\/div><div class="ft l">2 \/ 2<\/div>/, `${String(count)} covers: body page 2`);
   }
 });
 
@@ -868,7 +871,7 @@ test('cover: 原稿用紙換算枚数 in a BODY chapter prints its default', () 
 test('footer: 原稿用紙換算枚数 fills from the same count the cover reports', () => {
   const n = MANUSCRIPT_SHEET.linesPerPage * 2 + 5;
   const body = bodyOf(
-    renderBooks([counted([{ name: 'a.jpnov', src: repeat(n, 'あ') }])], { chrome: { footerAlign: 'right', footer: SHEETS_SRC } }),
+    renderBooks([counted([{ name: 'a.jpnov', src: repeat(n, 'あ') }])], { chrome: { footer: SHEETS_SRC } }),
   );
   const expected = String(Math.ceil(n / MANUSCRIPT_SHEET.linesPerPage));
   assert.match(body, new RegExp(`<div class="line" data-line="1">${expected}枚</div>`));
@@ -904,7 +907,7 @@ test('cover: the sheet count runs only when a cover or the furniture asks for it
   assert.equal(flowsFor([COVER_SRC]), 1); // 総ページ数 rides the configured pagination
   assert.equal(flowsFor([SHEETS_SRC]), 2);
   assert.equal(flowsFor([SHEETS_SRC, COUNTS_SRC]), 2);
-  assert.equal(flowsFor(['表紙'], { footerAlign: 'right', footer: SHEETS_SRC }), 2);
+  assert.equal(flowsFor(['表紙'], { footer: SHEETS_SRC }), 2);
   assert.equal(flowsFor(['表紙'], { header: SHEETS_SRC }), 2);
   assert.equal(flowsFor([SHEETS_SRC], { header: SHEETS_SRC, footer: SHEETS_SRC }), 2);
 });

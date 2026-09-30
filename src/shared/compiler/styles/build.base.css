@@ -21,7 +21,7 @@ body{margin:0;}
    ruby-clearance ladder lives on LINE_PITCHES in config/types.ts). */
 .line{block-size:calc(var(--pitch)*1em);margin:0;white-space:pre;}
 /* No ruby rules here: every <rt> lives inside a classed ruby (rr/lr/br), whose on-demand
-   classRule (css.ts) owns the lane layout INCLUDING the 0.5em lane size — the single home. */
+   class.ruby-*.css rules own the lane layout, the 0.5em lane size included. */
 
 /* Screen-only paper look: grey backdrop + paper shadow make the white paper's edges visible
    (the shadow rides the border box = the paper). The 2.5em surround is a purely cosmetic

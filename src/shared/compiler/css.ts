@@ -1,8 +1,9 @@
 /**
  * Assembles the document stylesheet from the static fragments in `styles/*.css` (compiled to
  * strings in `styles.generated.ts` by `scripts/gen-styles.ts`) plus the dynamic residue: the
- * `:root{}` variable block (`--cpl`/`--pitch`/`--lpp`/`--htop`, `--edge`), the BUILD paper
- * rules, the 罫線 layers ({@link edgeRules}) and the on-demand `indent-N` / emphasis class rules.
+ * `:root{}` variable block (`--cpl`/`--pitch`/`--lpp`/`--htop`/`--font-family`, `--edge`), the
+ * BUILD paper rules, the 罫線 layers ({@link edgeRules}) and the on-demand `indent-N` / emphasis
+ * class rules.
  * Constraints:
  * - everything is a RULE inside the document's one `<style>`, never a `style=` attribute (the
  *   webview CSP strips those);
@@ -48,7 +49,7 @@ function classRule(name: string): string {
   }
   if (name.startsWith('rh-')) {
     // Stretched ruby: the box grows to the unit's true advance — the SAME N layout.ts accounts
-    // as cells — and the lane flex below spreads the base across it, like native ruby.
+    // as cells — and the class.ruby-*.css lane flex spreads the base across it, like native ruby.
     const n = name.slice('rh-'.length);
     return /^[1-9][0-9]*$/.test(n) ? `.rh-${n}{min-height:${n}em}` : '';
   }
@@ -82,8 +83,8 @@ function classRule(name: string): string {
  * Edge BASE colour for `--edge`, or null for 'none' (include no edge fragment, inject no
  * variable). One policy for both media: `red` is the semantic 赤 (EDGE_RED), `text` bases on
  * currentColor — the rules always match the surrounding text (theme foreground in the
- * preview, ink on the build's white sheet). The 80%-alpha `color-mix` recipe lives ONCE in
- * the edge fragments; this picks only the base colour it mixes.
+ * preview, ink on the build's white sheet). The edge fragments and {@link edgeRules} apply the
+ * 80%-alpha `color-mix`; this picks only the base colour it mixes.
  */
 function edgeBase(edge: EdgeLineStyle): string | null {
   switch (edge) {
@@ -155,12 +156,12 @@ export function emrProbe(used: ReadonlySet<string>): string {
 /**
  * The dynamic paper rules (BUILD), from geometry.ts's {@link fitPaper}. `@page` margins stay
  * 0 — browsers render their own print header/footer into `@page` margin boxes. The font size
- * goes on `html` ONLY, so the one build rem (build.ln.css) keeps equalling the page em. The
- * sheet→paper inset is a white BORDER: it paints outside the padding box, so the `.page`
- * border box IS the paper in both media while `overflow:hidden` clipping and the furniture
- * offsets stay on the padding box. border-width is PHYSICAL four-value (.page is
- * vertical-rl): top/bottom carry the asymmetric inline-axis insets, left/right the centered
- * block-axis inset.
+ * goes on `html` ONLY, so the build's rems (the line-number lift in build.ln.css, the header and
+ * footer corners) keep equalling the page em. The sheet→paper inset is a white BORDER: it
+ * paints outside the padding box, so the `.page` border box IS the paper in both media while
+ * `overflow:hidden` clipping and the furniture offsets stay on the padding box. border-width is
+ * PHYSICAL four-value (.page is vertical-rl): top/bottom carry the asymmetric inline-axis
+ * insets, left/right the centered block-axis inset.
  */
 function paperRules(fit: PaperFit): string {
   return `@page{size:${String(fit.widthMm)}mm ${String(fit.heightMm)}mm;margin:0;}` +
@@ -250,7 +251,7 @@ export function stylesheet(opts: StylesheetOptions): string {
       chrome.lineNumbers ? S.buildLn : '',
       edge !== null ? S.buildEdge : '',
       chrome.header !== '' ? S.buildHeader : '',
-      chrome.footerAlign !== 'none' ? S.buildFooter : '',
+      chrome.footer !== '' ? S.buildFooter : '',
       rootVars(vars),
       paperRules(fit),
       edge !== null ? edgeRules('.page::before', opts.linesPerPage, 'em') : '',

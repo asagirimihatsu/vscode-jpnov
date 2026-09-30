@@ -58,7 +58,7 @@ test('the stage previews share one scope and the book footer counts two body pag
   const book = sample('stageBook');
   assert.equal(book.kind, 'book');
   assert.equal(book.totalPages, 2);
-  assert.ok(book.fragment.body.includes('<div class="hd">作品名　一</div><div class="ft r">1 / 2</div>'));
+  assert.ok(book.fragment.body.includes('<div class="hd c">作品名　一</div><div class="ft r">1 / 2</div>'));
   assert.ok(book.fragment.body.startsWith(`<a class="print" href="${LINKS.sampleBook}?p=1" target="_blank" rel="noopener">印刷／PDF 保存</a>`));
   const cover = sample('cover');
   assert.equal(cover.kind, 'book');

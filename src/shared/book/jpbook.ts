@@ -12,8 +12,8 @@
  * "a backslash-free relative `.jpnov` path"; the server (`src/server/jpbook.ts`) resolves it
  * through {@link resolveContained} and stats it before trusting it.
  */
-import type { BuildChrome, FooterAlign } from '../compiler/chrome.ts';
-import { FOOTER_ALIGNS } from '../compiler/chrome.ts';
+import type { BuildChrome, FurnitureAlign } from '../compiler/chrome.ts';
+import { FURNITURE_ALIGNS } from '../compiler/chrome.ts';
 import { indentAnnotation } from '../ast/notation.ts';
 import { scan } from '../ast/scan.ts';
 import { BUILD_CHROME_DEFAULT } from '../config/settings.ts';
@@ -96,12 +96,17 @@ export function isEntryList(v: unknown): v is EntryList {
  * {@link composeBookChrome} for page furniture, or at the assembly seam
  * (`renderBook`/`concatBookText`) for BODY content like `divider`, which is never chrome.
  */
-export const META_KEYS = ['title', 'author', 'header', 'footer', 'footerAlign', 'divider'] as const;
+export const META_KEYS = ['title', 'author', 'header', 'headerAlign', 'footer', 'footerAlign', 'divider'] as const;
 export type MetaKey = (typeof META_KEYS)[number];
 
 /** `footer` alone holds an empty value (`footer:` = no footer); an empty value of any other key leaves it unset. */
 export function keepsEmptyValue(key: MetaKey): boolean {
   return key === 'footer';
+}
+
+/** The keys whose value is one of {@link FURNITURE_ALIGNS}: the parser checks it, completion and the panel offer it. */
+export function isAlignKey(key: string): key is 'headerAlign' | 'footerAlign' {
+  return key === 'headerAlign' || key === 'footerAlign';
 }
 
 /** The list-valued front-page key — parsed as line kinds, never a {@link JpbookMeta} field. */
@@ -173,13 +178,15 @@ export interface JpbookMeta {
   readonly author?: string;
   /** Header line, filled like `footer`; absent = none. */
   readonly header?: string;
+  /** Header placement; absent = the product default. */
+  readonly headerAlign?: FurnitureAlign;
   /**
    * Footer line: `.jpnov` notation whose ［＃ここに「…」の値を表示］ fields fill from the book and
    * the page ({@link BuildChrome.footer}); absent = the product default, '' = no footer.
    */
   readonly footer?: string;
   /** Footer placement; absent = the product default. */
-  readonly footerAlign?: FooterAlign;
+  readonly footerAlign?: FurnitureAlign;
   /**
    * Chapter-divider line inserted between chapters that do not open with a 見出し. A line of
    * `.jpnov` notation: a bare mark is centred at build time; a ［＃○字下げ］ prefix positions
@@ -290,13 +297,13 @@ export function parseJpbook(text: string): ParsedJpbook {
     }
     // metaKeyOf returned a key, so the line has a colon: colonIndex is non-negative here.
     const val = value.slice(colonIndex(value) + 1).trim();
-    if (metaKey === 'footerAlign') {
-      if (!(FOOTER_ALIGNS as readonly string[]).includes(val)) {
+    if (isAlignKey(metaKey)) {
+      if (!(FURNITURE_ALIGNS as readonly string[]).includes(val)) {
         return {
-          warning: { code: 'jpbook.metaBadEnum', args: [key, val, FOOTER_ALIGNS.join(', ')] },
+          warning: { code: 'jpbook.metaBadEnum', args: [key, val, FURNITURE_ALIGNS.join(', ')] },
         };
       }
-      meta.footerAlign = val as FooterAlign;
+      meta[metaKey] = val as FurnitureAlign;
     } else if (val !== '' || keepsEmptyValue(metaKey)) {
       meta[metaKey] = val;
     }
@@ -418,9 +425,10 @@ export function composeBookChrome(
   return {
     lineNumbers: base.lineNumbers,
     edgeLine: base.edgeLine,
-    footerAlign: meta.footerAlign ?? BUILD_CHROME_DEFAULT.footerAlign,
-    footer: meta.footer ?? BUILD_CHROME_DEFAULT.footer,
     header: meta.header ?? BUILD_CHROME_DEFAULT.header,
+    headerAlign: meta.headerAlign ?? BUILD_CHROME_DEFAULT.headerAlign,
+    footer: meta.footer ?? BUILD_CHROME_DEFAULT.footer,
+    footerAlign: meta.footerAlign ?? BUILD_CHROME_DEFAULT.footerAlign,
   };
 }
 
@@ -531,8 +539,8 @@ export function completeEntryLine(
 /**
  * Computes completions for a FRONT-MATTER line: metadata keys while the cursor is before
  * any colon (inserted as `key: `), and value proposals after it — the enum members for
- * `footerAlign`, the preset marks for `divider`. Both filter by case-insensitive prefix.
- * Pure and fs-free.
+ * `headerAlign` and `footerAlign`, the preset marks for `divider`. Both filter by
+ * case-insensitive prefix. Pure and fs-free.
  */
 export function completeMetaLine(linePrefix: string): JpbookCompletion[] {
   let keyStart = 0;
@@ -554,7 +562,7 @@ export function completeMetaLine(linePrefix: string): JpbookCompletion[] {
 
   const key = linePrefix.slice(keyStart, sep).trim();
   const values: readonly string[] | null =
-    key === 'footerAlign' ? FOOTER_ALIGNS : key === 'divider' ? DIVIDER_PRESETS : null;
+    isAlignKey(key) ? FURNITURE_ALIGNS : key === 'divider' ? DIVIDER_PRESETS : null;
   if (values === null) {
     return [];
   }

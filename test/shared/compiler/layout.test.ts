@@ -33,9 +33,10 @@ const sheets = (ps: readonly DisplayLine[][]): RenderPage[] => ps.map((lines) =>
 const OFF: BuildChrome = {
   lineNumbers: false,
   edgeLine: 'none',
-  footerAlign: 'none',
-  footer: '［＃ここに「ページ番号」の値を表示］ / ［＃ここに「総ページ数」の値を表示］',
   header: '',
+  headerAlign: 'center',
+  footer: '',
+  footerAlign: 'right',
 };
 
 // The continuous preview flow (no pagination); mirrors what renderPreview emits as <body>.
@@ -302,7 +303,7 @@ test('ぶら下げ: the hung unit is zero cells and the column stays at budget',
 
 test('ぶら下げ: a following 行頭禁則 char cancels the hang — 追い出し instead', () => {
   // 。」: hanging 。 would leave 」 heading the next line → give up, 追い出し (the head
-  // violation left at the no-empty guard is the same degrade as today's cascade).
+  // violation left at the no-empty guard is the same degrade as the plain 追い出し cascade).
   assert.deepEqual(klines('文。」', 2), ['文', '。」']);
   // 。。: the first 。 cannot hang (the second would head a line); the second one hangs.
   assert.deepEqual(klines('ああ。。', 2), ['あ', 'あ。⟪。⟫']);
@@ -1061,9 +1062,10 @@ test('値の表示: a value inside ［＃縦中横］ joins the combined cell', 
 const FURNISHED: BuildChrome = {
   lineNumbers: false,
   edgeLine: 'none',
-  footerAlign: 'rightLeft',
-  footer: '［＃ここに「ページ番号」の値を表示］ / ［＃ここに「総ページ数」の値を表示］',
   header: '柱',
+  headerAlign: 'center',
+  footer: '［＃ここに「ページ番号」の値を表示］ / ［＃ここに「総ページ数」の値を表示］',
+  footerAlign: 'rightLeft',
 };
 
 /** One page's worth of display lines. */
@@ -1093,20 +1095,20 @@ test('cover pages: the cover class, no furniture, and a footer that counts BODY 
   for (const cover of [parts[0], parts[1]]) {
     assert.ok(cover !== undefined && !cover.includes('class="ft') && !cover.includes('class="hd'));
   }
-  assert.match(parts[2] ?? '', /<div class="hd">柱<\/div><div class="ft r">1 \/ 2<\/div>/);
-  assert.match(parts[3] ?? '', /<div class="hd">柱<\/div><div class="ft l">2 \/ 2<\/div>/);
+  assert.match(parts[2] ?? '', /<div class="hd c">柱<\/div><div class="ft r">1 \/ 2<\/div>/);
+  assert.match(parts[3] ?? '', /<div class="hd c">柱<\/div><div class="ft l">2 \/ 2<\/div>/);
 });
 
-test('cover pages: a cover-less document emits exactly what it always did', () => {
+test('cover pages: a cover-less document emits plain body sheets', () => {
   // Pinned literally: comparing two liftings of the same pages would hold for any impl.
   const plain = paginate(rowsOf('前\n［＃改ページ］\n後'), 40, 34, 'none');
   assert.equal(
     pagesToHtml(sheets(plain), undefined, FURNISHED),
     '<div class="book">' +
       '<div class="page" data-page="0"><div class="grid"><div class="line" data-line="0">前</div>' +
-      '</div><div class="hd">柱</div><div class="ft r">1 / 2</div></div>' +
+      '</div><div class="hd c">柱</div><div class="ft r">1 / 2</div></div>' +
       '<div class="page" data-page="1"><div class="grid"><div class="line" data-line="2">後</div>' +
-      '</div><div class="hd">柱</div><div class="ft l">2 / 2</div></div>' +
+      '</div><div class="hd c">柱</div><div class="ft l">2 / 2</div></div>' +
       '</div>',
   );
 });
@@ -1123,8 +1125,8 @@ test('furniture: header and footer fill ［＃ここに「…」の値を表示�
   };
   const out = pagesToHtml([{ lines: page1('一'), values }, { lines: page1('二'), values }], undefined, chrome);
   const parts = sheetsOf(out);
-  assert.match(parts[0] ?? '', /<div class="hd">作品名　1<\/div><div class="ft r">ペンネーム　1／2<\/div>/);
-  assert.match(parts[1] ?? '', /<div class="hd">作品名　2<\/div><div class="ft r">ペンネーム　2／2<\/div>/);
+  assert.match(parts[0] ?? '', /<div class="hd c">作品名　1<\/div><div class="ft r">ペンネーム　1／2<\/div>/);
+  assert.match(parts[1] ?? '', /<div class="hd c">作品名　2<\/div><div class="ft r">ペンネーム　2／2<\/div>/);
 });
 
 test('furniture: a name the page lacks prints as itself; a page without values prints every name', () => {
@@ -1135,7 +1137,7 @@ test('furniture: a name the page lacks prints as itself; a page without values p
     footer: valueAnnotation(VALUE_NAMES.title),
   };
   const out = pagesToHtml([{ lines: page1('一') }], undefined, chrome);
-  assert.match(out, /<div class="hd">発行日<\/div><div class="ft r">タイトル<\/div>/);
+  assert.match(out, /<div class="hd c">発行日<\/div><div class="ft r">タイトル<\/div>/);
 });
 
 test('furniture: only the value annotation is interpreted — other annotations, ruby and markup print as typed', () => {
@@ -1147,7 +1149,7 @@ test('furniture: only the value annotation is interpreted — other annotations,
   };
   const used = new Set<string>();
   const out = pagesToHtml([{ lines: page1('一') }], used, chrome);
-  assert.match(out, /<div class="hd">作品名《さくひんめい》［＃「作品名」に傍点］<\/div>/);
+  assert.match(out, /<div class="hd c">作品名《さくひんめい》［＃「作品名」に傍点］<\/div>/);
   assert.match(out, /<div class="ft r">&lt;b&gt;［＃縦中横］１２［＃縦中横終わり］&lt;\/b&gt;<\/div>/);
   assert.doesNotMatch(out, /<ruby|class="tcy"|emph-/);
   assert.deepEqual([...used], []); // the furniture sinks no on-demand class
@@ -1155,9 +1157,9 @@ test('furniture: only the value annotation is interpreted — other annotations,
 
 test('furniture: a substituted value is escaped, never read as notation', () => {
   const values = new Map([[VALUE_NAMES.title, '<i>《x》']]);
-  const chrome: BuildChrome = { ...FURNISHED, footerAlign: 'none', header: valueAnnotation(VALUE_NAMES.title) };
+  const chrome: BuildChrome = { ...FURNISHED, footer: '', header: valueAnnotation(VALUE_NAMES.title) };
   const out = pagesToHtml([{ lines: page1('一'), values }], undefined, chrome);
-  assert.match(out, /<div class="hd">&lt;i&gt;《x》<\/div>/);
+  assert.match(out, /<div class="hd c">&lt;i&gt;《x》<\/div>/);
 });
 
 // --------------------------------------------------------------- CRLF sources

@@ -77,6 +77,7 @@ test('setMeta leaves ONE line for the key: its repeats and invalid lines go', ()
     ['another case on the last document line', '---\ntitle: 作品名\nTitle: 作品名', 'title', '作品名　第一巻', '---\ntitle: 作品名　第一巻'],
     ['an empty first line and its repeat', '---\ntitle:\ntitle: 作品名\n---\n', 'title', '作品名　第一巻', '---\ntitle: 作品名　第一巻\n---\n'],
     ['footerAlign is not a line of footer', '---\nfooterAlign: left\n---\n', 'footer', '', '---\nfooter:\nfooterAlign: left\n---\n'],
+    ['headerAlign is not a line of header', '---\nheaderAlign: left\n---\n', 'header', '作品名　一', '---\nheader: 作品名　一\nheaderAlign: left\n---\n'],
   ]);
 });
 
@@ -125,13 +126,17 @@ test('setMeta inserts an absent key at its place in the key order', () => {
 
 test('setMeta: keys filled in any order end in the key order', () => {
   const fills: readonly (readonly [MetaKey, string])[] = [
-    ['author', 'ペンネーム'], ['divider', '＊'], ['title', '作品名'], ['footerAlign', 'left'], ['footer', ''], ['header', '作品名　一'],
+    ['author', 'ペンネーム'], ['divider', '＊'], ['title', '作品名'], ['footerAlign', 'left'], ['headerAlign', 'right'], ['footer', ''],
+    ['header', '作品名　一'],
   ];
   let text = 'a.jpnov\n';
   for (const [key, value] of fills) {
     text = apply(text, setMeta(text, key, value));
   }
-  assert.equal(text, '---\ntitle: 作品名\nauthor: ペンネーム\nheader: 作品名　一\nfooter:\nfooterAlign: left\ndivider: ＊\n---\na.jpnov\n');
+  assert.equal(
+    text,
+    '---\ntitle: 作品名\nauthor: ペンネーム\nheader: 作品名　一\nheaderAlign: right\nfooter:\nfooterAlign: left\ndivider: ＊\n---\na.jpnov\n',
+  );
   assert.deepEqual(Object.keys(parseJpbook(text).meta), [...META_KEYS]);
 });
 
@@ -217,6 +222,7 @@ test('entryLines(chapters) and metaRows project the panel model in fixed order',
     { key: 'title', value: undefined },
     { key: 'author', value: undefined },
     { key: 'header', value: '柱' },
+    { key: 'headerAlign', value: undefined },
     { key: 'footer', value: undefined },
     { key: 'footerAlign', value: undefined },
     { key: 'divider', value: undefined },
@@ -235,7 +241,7 @@ test('setMeta never splits a cover list: an absent key lands beside a key line',
 
 test('a cover list never leaks into the metadata the panel edits', () => {
   const text = ['---', 'title: 一', 'cover:', '  - c1.jpnov', '---', 'a.jpnov'].join('\n');
-  // The list lives in the LINE KINDS, so the panel's six single-line rows stay complete.
+  // The list lives in the LINE KINDS, so the panel's seven single-line rows stay complete.
   assert.deepEqual(parseJpbook(text).meta, { title: '一' });
   assert.deepEqual(metaRows(parseJpbook(text).meta).map((r) => r.key), [...META_KEYS]);
 });

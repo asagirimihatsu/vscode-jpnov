@@ -1,7 +1,11 @@
-/* Page header — included when header ≠ ''. Centered in the always-reserved top band, flush
-   against the paper margin (top:0, the mirror of .ft's bottom:0 — the MARGIN_MM white
-   stays furniture-free), in smaller-than-body type. line-height:1 (as on .ft and
-   .line::before) keeps the furniture box its glyph height — an inherited --pitch line box
-   would graze the frame. PHYSICAL top/left/right (horizontal-tb inside vertical-rl);
-   ink #000 literal (print, not themed). */
-.hd{position:absolute;top:0;left:0;right:0;writing-mode:horizontal-tb;text-align:center;font-size:0.75em;line-height:1;color:#000;}
+/* Page header — included when header ≠ '' (renderBook folds a blank header to '', so the .hd DOM
+   element and these rules always agree). Flush against the paper margin (top:0, the mirror of
+   .ft's bottom:0 — the MARGIN_MM white stays furniture-free), in smaller-than-body type; the side
+   classes mirror .ft's (build.footer.css), so a header and a footer on the same side share one
+   corner. line-height:1 (as on .ft and .line::before) keeps the furniture box its
+   glyph height — an inherited --pitch line box would graze the frame. PHYSICAL top/left/right
+   (horizontal-tb inside vertical-rl); ink #000 literal (print, not themed). */
+.hd{position:absolute;top:0;writing-mode:horizontal-tb;font-size:0.75em;line-height:1;color:#000;}
+.hd.c{left:0;right:0;text-align:center;}
+.hd.r{right:1.85rem;}
+.hd.l{left:1.85rem;}

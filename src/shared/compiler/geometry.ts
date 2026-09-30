@@ -30,14 +30,14 @@ export const FOOTER_BAND = 2;
 /**
  * Sheet padding on the physical left/right (the vertical-rl block axis): the text grid and
  * the outset frame never touch the paper's side cut. Doubly homed as fragment literals
- * (padding-block, frame sides, footer corners at SIDE_PAD + EDGE_INSET) —
+ * (padding-block, frame sides, header and footer corners at SIDE_PAD + EDGE_INSET) —
  * styles-codegen.test.ts guards the set.
  */
 export const SIDE_PAD = 1.5;
 /**
  * Frame ↔ text breathing gap in em, reserved UNCONDITIONALLY by both media (toggling
  * edgeLine never moves a glyph). Guard-only: the fit math never consumes it — the value
- * lives as fragment literals (preview reserve/lifts, frame top/bottom, footer corners),
+ * lives as fragment literals (preview reserve/lifts, frame top/bottom, header and footer corners),
  * every site derived-asserted from this constant by styles-codegen.test.ts.
  */
 export const EDGE_INSET = 0.35;
