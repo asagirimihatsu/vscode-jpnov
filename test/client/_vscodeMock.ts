@@ -185,7 +185,7 @@ export interface FakeWebview {
 
 /** Just enough of a TextEditor: its document + the cursor selections. */
 export interface FakeSelection {
-  active: { line: number };
+  active: { line: number; character: number };
 }
 export interface FakeTextEditor {
   document: FakeTextDocument;

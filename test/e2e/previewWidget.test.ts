@@ -8,33 +8,14 @@
  */
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
 
 import { PREVIEW_JS, WIDGET_CSS } from '../../src/client/preview/webviewBundle.generated.ts';
 import type { PreviewInit, PreviewLayoutInit } from '../../src/client/protocol.ts';
 
-import { resolveBrowserExecutable } from './_browser.ts';
 import { MARKER, measurePage } from './_headless.ts';
+import { BROWSER_SKIP, browser, cleanups, removeCleanups } from './_setup.ts';
 
-const browser = resolveBrowserExecutable({
-  env: process.env,
-  platform: process.platform,
-  exists: existsSync,
-});
-const browserRequired = process.env.JPNOV_E2E_REQUIRE_BROWSER === '1';
-const BROWSER_SKIP = {
-  skip: browser === undefined && !browserRequired
-    ? 'no Chromium-family browser on this machine (CI requires one via JPNOV_E2E_REQUIRE_BROWSER=1)'
-    : false,
-};
-
-const cleanups: string[] = [];
-after(async () => {
-  await Promise.all(
-    cleanups.map((dir) => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })),
-  );
-});
+after(removeCleanups);
 
 /** Every label reads as its own tag, so the DOM report names controls without echoing real copy. */
 const LABELS = {
@@ -142,7 +123,7 @@ const set = (key: 'charsPerLine' | 'linesPerPage', value: number): unknown => ({
 
 test('folded by default, the widget opens on its summary, clamps and de-duplicates its inputs, and folds when focus leaves', BROWSER_SKIP, async () => {
   assert.ok(browser, 'JPNOV_E2E_REQUIRE_BROWSER=1 but no Chromium-family browser was found');
-  const init: PreviewInit = { uri: 'file:///ws/a.jpnov', line: 0, layout: layout({}) };
+  const init: PreviewInit = { uri: 'file:///ws/a.jpnov', line: 0, character: 0, layout: layout({}) };
   const driver = scenario(`
   step('loaded', () => {});
   step('summary-click', () => { summary.click(); });
@@ -190,6 +171,7 @@ test('a render caused by the widget opens it on the named input, and the buttons
   const init: PreviewInit = {
     uri: 'file:///ws/a.jpnov',
     line: 0,
+    character: 0,
     layout: layout({ charsPerLine: 42, adjusted: true, focus: 'charsPerLine' }),
   };
   const driver = scenario(`
@@ -216,7 +198,7 @@ test('a render caused by the widget opens it on the named input, and the buttons
 
 test('folded while adjusted, the framed summary is the way back in', BROWSER_SKIP, async () => {
   assert.ok(browser, 'JPNOV_E2E_REQUIRE_BROWSER=1 but no Chromium-family browser was found');
-  const init: PreviewInit = { uri: 'file:///ws/a.jpnov', line: 0, layout: layout({ charsPerLine: 42, adjusted: true }) };
+  const init: PreviewInit = { uri: 'file:///ws/a.jpnov', line: 0, character: 0, layout: layout({ charsPerLine: 42, adjusted: true }) };
   const driver = scenario(`
   step('loaded', () => {});
   step('summary-click', () => { summary.click(); });

@@ -416,7 +416,7 @@ test('build honors the kinsoku mode from the settings snapshot (禁則)', async 
   assert.ok(
     html.includes(
       `<div class="line" data-line="0">${head}</div>` +
-          '<div class="line" data-line="0">「い」</div>',
+          `<div class="line" data-line="0" data-ch="${String(head.length)}">「い」</div>`,
     ),
     '追い出し keeps the opening bracket with its content',
   );

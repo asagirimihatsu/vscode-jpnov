@@ -423,7 +423,7 @@ class LineResolver {
       this.cells.push({
         kind: 'tcy',
         text,
-        span: { start: tcy.opener.span.start, end: closer?.span.end ?? tcy.contentEnd },
+        span: { start: tcy.contentStart, end: tcy.contentEnd },
         marks: this.flow.marks,
       });
     }

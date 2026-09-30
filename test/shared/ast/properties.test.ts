@@ -15,7 +15,7 @@ import { scan } from '../../../src/shared/ast/scan.ts';
 import { composeKana } from '../../../src/shared/chars.ts';
 
 import { manuscripts, withEol } from './_fuzz.ts';
-import { isPostfix, nodesIn } from './_shape.ts';
+import { charStarts, isPostfix, nodesIn } from './_shape.ts';
 
 const CORPUS = manuscripts();
 /** The same manuscripts with a lone CR for every terminator — the third line ending. */
@@ -139,6 +139,29 @@ test('the content stays inside its line, is never empty, and is composed', () =>
         const shown = item.kind === 'chars' || item.kind === 'tcy' ? item.text : item.kind === 'ruby' ? item.base : 'x';
         assert.ok(shown !== '', `an empty ${item.kind} in ${JSON.stringify(src)}`);
         assert.equal(composeKana(shown), shown);
+      }
+    }
+  }
+});
+
+test('every character of the content knows where it was written', () => {
+  for (const src of ALL) {
+    for (const line of parse(src).lines) {
+      for (const item of line.content) {
+        if (item.kind !== 'chars') {
+          continue;
+        }
+        if (item.origin === 'value') {
+          assert.equal(item.starts, undefined, JSON.stringify(src)); // a value has no place of its own
+          continue;
+        }
+        const starts = charStarts(item);
+        Array.from(item.text).forEach((ch, i) => {
+          const from = starts[i] ?? -1;
+          const to = starts[i + 1] ?? item.span.end;
+          assert.ok(item.span.start <= from && from < to && to <= item.span.end, JSON.stringify(src));
+          assert.equal(composeKana(src.slice(from, to)), ch, JSON.stringify(src));
+        });
       }
     }
   }

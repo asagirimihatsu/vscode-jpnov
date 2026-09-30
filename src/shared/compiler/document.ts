@@ -174,7 +174,7 @@ const PRINT_BUTTON = '<button class="print" type="button" onclick="window.print(
 const PRINT_AUTORUN =
   '<script>if(new URLSearchParams(location.search).get(\'p\')===\'1\')addEventListener(\'load\',()=>{window.print();});</script>';
 
-/** One junction's glue as rows; srcLine −1 = synthetic (emitLine emits no data-line anchor). */
+/** One junction's glue as rows; srcLine −1 = synthetic (emitLine emits no anchor). */
 function glueRows(glue: string, dash: DashMode): Row[] {
   return buildRows(parse(glue), { dash }).map((row) =>
     row.kind === 'line' ? { ...row, srcLine: -1 } : row,

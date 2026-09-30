@@ -192,6 +192,31 @@ function sameMarks(a: Marks, b: Marks): boolean {
   return a === b || CHANNELS.every((ch) => a[ch]?.variant === b[ch]?.variant && a[ch]?.left === b[ch]?.left);
 }
 
+/**
+ * Where each character of `cell` was written, when kana were composed in its source; null when
+ * each sits at its span start plus its offset. `from` counts the display text, so the walk adds
+ * up display lengths.
+ */
+function startsOf(cell: CharsCell): number[] | null {
+  const { source } = cell;
+  if (source.chars === null) {
+    return null;
+  }
+  const starts: number[] = [];
+  const end = cell.from + cell.text.length;
+  let shown = 0;
+  for (const ch of source.chars) {
+    if (shown >= end) {
+      break;
+    }
+    if (shown >= cell.from) {
+      starts.push(source.start + ch.start);
+    }
+    shown += ch.text.length;
+  }
+  return starts;
+}
+
 /** The cells as content: adjacent pieces of one source with equal marks rejoin into one run. */
 export function contentOf(cells: readonly Cell[]): Inline[] {
   const runs: Cell[] = [];
@@ -209,9 +234,12 @@ export function contentOf(cells: readonly Cell[]): Inline[] {
       runs.push(cell);
     }
   }
-  return runs.map((run): Inline =>
-    run.kind === 'chars'
-      ? { kind: 'chars', text: run.text, span: spanOf(run), origin: run.origin, marks: run.marks }
-      : run,
-  );
+  return runs.map((run): Inline => {
+    if (run.kind !== 'chars') {
+      return run;
+    }
+    // `starts` goes last: spread mid-literal, V8 builds every run on its slow path once one has it.
+    const starts = startsOf(run);
+    return { kind: 'chars', text: run.text, span: spanOf(run), origin: run.origin, marks: run.marks, ...(starts === null ? {} : { starts }) };
+  });
 }

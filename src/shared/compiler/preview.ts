@@ -12,8 +12,8 @@ import { buildRows, flowToHtml } from './layout.ts';
  * the 禁則処理 tier; ［＃改ページ］ shows as a labelled `<div class="pagebreak">` marker rather
  * than a real page break. `chrome` drives the line-head numbers (JS-numbered `.ln` spans that
  * restart after every break marker, see {@link flowToHtml}) and the CSS-only column edge rules.
- * Each source line's first display column carries a `data-line` anchor so the client can
- * scroll the preview to follow the editor cursor.
+ * Each column carries its source line (`data-line`) and, once a line wraps, where in the line
+ * the column starts (`data-ch`), so the client can park the column holding the editor cursor.
  *
  * All options are required and pre-resolved (the settings resolver is the only default layer);
  * "off" is the explicit `{ lineNumbers: false, edgeLine: 'none' }`. Pure + vscode-free (the

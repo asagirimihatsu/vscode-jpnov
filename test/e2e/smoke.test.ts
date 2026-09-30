@@ -9,7 +9,7 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -26,8 +26,8 @@ import type {
   RenderFileResult,
 } from '../../src/shared/protocol.ts';
 
-import { resolveBrowserExecutable } from './_browser.ts';
 import { MARKER, measurePage } from './_headless.ts';
+import { BROWSER_SKIP, browser, cleanups, removeCleanups } from './_setup.ts';
 import { LspClient } from './lsp.ts';
 
 const SERVER_MODULE = fileURLToPath(new URL('../../dist/server/server.js', import.meta.url));
@@ -66,21 +66,7 @@ const CHAPTER_TEXT = [
   '',
 ].join('\n');
 
-const browser = resolveBrowserExecutable({
-  env: process.env,
-  platform: process.platform,
-  exists: existsSync,
-});
-const browserRequired = process.env.JPNOV_E2E_REQUIRE_BROWSER === '1';
-/** Shared options for every browser-rendering leg. */
-const BROWSER_SKIP = {
-  skip: browser === undefined && !browserRequired
-    ? 'no Chromium-family browser on this machine (CI requires one via JPNOV_E2E_REQUIRE_BROWSER=1)'
-    : false,
-};
-
 let client: LspClient | undefined;
-const cleanups: string[] = [];
 let builtHtml: string | undefined;
 
 const conn = (): LspClient => {
@@ -107,9 +93,7 @@ after(async () => {
   if (client) {
     await client.dispose();
   }
-  await Promise.all(
-    cleanups.map((dir) => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })),
-  );
+  await removeCleanups();
 });
 
 test('jpnov/renderFile renders ruby, 縦中横, and the pagebreak marker over the wire', async () => {

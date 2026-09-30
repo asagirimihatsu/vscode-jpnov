@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { VALUE_DEFAULTS, VALUE_NAMES, valueAnnotation } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
 
-import { at, boundOf, contentOf } from './_shape.ts';
+import { at, boundOf, charStarts, contentOf } from './_shape.ts';
 import { D } from '../_kana.ts';
 
 /** The content of a one-line source. */
@@ -184,6 +184,29 @@ test('a run maps back to the source it came from', () => {
     at(`前${field}`, '前'),
     at(`前${field}`, field), // a value stands where its annotation is
   ]);
+});
+
+test('each character of a run maps back to where it was written', () => {
+  /** The characters of the one-line `src`'s runs, each with where it was written. */
+  const written = (src: string): [string, number][] =>
+    (parse(src).lines[0]?.content ?? []).flatMap((item) => {
+      if (item.kind !== 'chars') {
+        return [];
+      }
+      const chars = Array.from(item.text);
+      return charStarts(item).map((start, i): [string, number] => [chars[i] ?? '', start]);
+    });
+  // A composed kana sits at its kana and what follows it past its mark: after a character of two
+  // units, and in a piece a postfix cut off.
+  const nfd = `𠮷か${D}きく［＃「く」に傍点］`;
+  const start = (needle: string): number => at(nfd, needle).start;
+  assert.deepEqual(written(nfd), [['𠮷', 0], ['が', start(`か${D}`)], ['き', start('き')], ['く', start('く')]]);
+
+  // Only a run cut from a source with composed kana carries `starts`; plain text and a value never do.
+  const carries = (src: string, values?: ReadonlyMap<string, string>): boolean[] =>
+    (parse(src, values).lines[0]?.content ?? []).flatMap((item) => (item.kind === 'chars' ? ['starts' in item] : []));
+  assert.deepEqual(carries(nfd), [true, true]);
+  assert.deepEqual(carries(`前${valueAnnotation(VALUE_NAMES.title)}`, REAL), [false, false]);
 });
 
 // --------------------------------------------------------------- line state

@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict';
 
-import type { Ast, Held, Inline, Issue, PairedNode, PostfixNode, Span, SyntaxNode, ValueLookup } from '../../../src/shared/ast/nodes.ts';
+import type { Ast, Chars, Held, Inline, Issue, PairedNode, PostfixNode, Span, SyntaxNode, ValueLookup } from '../../../src/shared/ast/nodes.ts';
 import { EMPHASIS_VARIANTS } from '../../../src/shared/ast/notation.ts';
 import type { Channel } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
@@ -128,4 +128,17 @@ function inlineLabel(item: Inline): string {
  */
 export function contentOf(src: string, values?: ValueLookup): string[][] {
   return parse(src, values).lines.map((line) => line.content.map(inlineLabel));
+}
+
+/**
+ * Where each character of a run was written: its `starts`, else its span start plus its offset. Not
+ * for a value: its characters have no place of their own.
+ */
+export function charStarts(item: Chars): number[] {
+  let offset = 0;
+  return Array.from(item.text, (ch, i) => {
+    const start = item.starts?.[i] ?? item.span.start + offset;
+    offset += ch.length;
+    return start;
+  });
 }
