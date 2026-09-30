@@ -38,6 +38,7 @@ import { createFile, registerBookCommands } from './book/manage.ts';
 import { BooksViewProvider } from './book/view.ts';
 import { command } from './commands.ts';
 import { registerAutoIndent } from './editor/autoIndent.ts';
+import { registerWordCommands } from './editor/wordCommands.ts';
 import { buildHighlightSnapshot } from './highlightConfig.ts';
 import { buildLintSnapshot } from './lintConfig.ts';
 import { folderIsNovelProject } from './probe.ts';
@@ -304,8 +305,8 @@ export function activate(context: vscode.ExtensionContext): void {
     ...registerBookCommands(),
   );
 
-  // Editor typing behavior (自動字下げ): server-free, so it registers in Phase 1.
-  context.subscriptions.push(registerAutoIndent());
+  // Editor behavior (自動字下げ and the word commands): server-free, so it registers in Phase 1.
+  context.subscriptions.push(registerAutoIndent(), registerWordCommands());
 
   // Lazy-start triggers. The listener covers documents opened AFTER activation; the
   // synchronous scan below covers the one that caused an onLanguage activation (it was
