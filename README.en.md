@@ -209,6 +209,25 @@ convention as you type:
 
 Turn it off under **Japanese Novel — Editor** (`jpnov.editor.autoIndent`).
 
+## Moving, selecting and deleting by word
+
+In `.jpnov` editors, ⌥← / ⌥→ (Ctrl+← / Ctrl+→ on Windows and Linux) stop
+partway through a sentence. By default, VS Code jumps to the start or end of
+the line: it only breaks words at ASCII punctuation and spaces, so it treats a
+Japanese paragraph as one word. Add ⇧ to select up to the next stop; ⌥⌫ / ⌥⌦
+(Ctrl+Backspace / Ctrl+Delete) delete up to it.
+
+The stops follow a rough split by script. Hiragana after kanji or katakana
+stays with them, a run of one script stays together, and so does a run of
+punctuation and spaces, cut before an opening bracket and after a closing one.
+`ぱっともらった` is one piece, and a sentence splits into
+`聖剣を / 抜いたのは / 山田 / 　 / 太郎だった / 。`. Each stop depends only on
+its neighbouring pieces, so left and right moves stop at the same places.
+
+VS Code's own behaviour applies during IME composition, and to the move
+commands while a screen reader is running on Windows. To opt out, remove the
+keybindings for the **Japanese Novel** word commands in Keyboard Shortcuts.
+
 ## Preview
 
 Open it from the editor title bar (**Open Preview to the Side**) on any
@@ -558,8 +577,11 @@ All under the **Japanese Novel** category.
 | Select All Books, Deselect All Books | Links at the bottom of the Books view |
 | Refresh Books | Books view title bar |
 | Open the Getting Started Guide | Command Palette |
+| Move One Word Left, Move One Word Right | ⌥← / ⌥→ in `.jpnov` editors (Ctrl+← / Ctrl+→ on Windows and Linux) |
+| Select One Word Left, Select One Word Right | ⇧⌥← / ⇧⌥→ (Ctrl+Shift+← / Ctrl+Shift+→) |
+| Delete One Word Left, Delete One Word Right | ⌥⌫ / ⌥⌦ (Ctrl+Backspace / Ctrl+Delete) |
 
-There are no default keybindings.
+Only the word commands have default keybindings.
 
 ## No-AI policy
 

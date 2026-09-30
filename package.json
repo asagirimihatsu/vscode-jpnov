@@ -628,6 +628,74 @@
         "command": "jpnov.preview.saveLayout",
         "category": "%command.category%",
         "title": "%command.preview.saveLayout.title%"
+      },
+      {
+        "command": "jpnov.cursorWordLeft",
+        "category": "%command.category%",
+        "title": "%command.cursorWordLeft.title%"
+      },
+      {
+        "command": "jpnov.cursorWordEndRight",
+        "category": "%command.category%",
+        "title": "%command.cursorWordEndRight.title%"
+      },
+      {
+        "command": "jpnov.cursorWordLeftSelect",
+        "category": "%command.category%",
+        "title": "%command.cursorWordLeftSelect.title%"
+      },
+      {
+        "command": "jpnov.cursorWordEndRightSelect",
+        "category": "%command.category%",
+        "title": "%command.cursorWordEndRightSelect.title%"
+      },
+      {
+        "command": "jpnov.deleteWordLeft",
+        "category": "%command.category%",
+        "title": "%command.deleteWordLeft.title%"
+      },
+      {
+        "command": "jpnov.deleteWordRight",
+        "category": "%command.category%",
+        "title": "%command.deleteWordRight.title%"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "jpnov.cursorWordLeft",
+        "key": "ctrl+left",
+        "mac": "alt+left",
+        "when": "textInputFocus && editorLangId == jpnov && !isComposing && !(accessibilityModeEnabled && isWindows)"
+      },
+      {
+        "command": "jpnov.cursorWordEndRight",
+        "key": "ctrl+right",
+        "mac": "alt+right",
+        "when": "textInputFocus && editorLangId == jpnov && !isComposing && !(accessibilityModeEnabled && isWindows) && !inlineSuggestionVisible"
+      },
+      {
+        "command": "jpnov.cursorWordLeftSelect",
+        "key": "ctrl+shift+left",
+        "mac": "shift+alt+left",
+        "when": "textInputFocus && editorLangId == jpnov && !isComposing && !(accessibilityModeEnabled && isWindows)"
+      },
+      {
+        "command": "jpnov.cursorWordEndRightSelect",
+        "key": "ctrl+shift+right",
+        "mac": "shift+alt+right",
+        "when": "textInputFocus && editorLangId == jpnov && !isComposing && !(accessibilityModeEnabled && isWindows)"
+      },
+      {
+        "command": "jpnov.deleteWordLeft",
+        "key": "ctrl+backspace",
+        "mac": "alt+backspace",
+        "when": "textInputFocus && !editorReadonly && editorLangId == jpnov && !isComposing"
+      },
+      {
+        "command": "jpnov.deleteWordRight",
+        "key": "ctrl+delete",
+        "mac": "alt+delete",
+        "when": "textInputFocus && !editorReadonly && editorLangId == jpnov && !isComposing"
       }
     ],
     "views": {
@@ -686,6 +754,30 @@
         {
           "command": "jpbook.createFile",
           "when": "workspaceFolderCount != 0"
+        },
+        {
+          "command": "jpnov.cursorWordLeft",
+          "when": "false"
+        },
+        {
+          "command": "jpnov.cursorWordEndRight",
+          "when": "false"
+        },
+        {
+          "command": "jpnov.cursorWordLeftSelect",
+          "when": "false"
+        },
+        {
+          "command": "jpnov.cursorWordEndRightSelect",
+          "when": "false"
+        },
+        {
+          "command": "jpnov.deleteWordLeft",
+          "when": "false"
+        },
+        {
+          "command": "jpnov.deleteWordRight",
+          "when": "false"
         }
       ]
     },
@@ -780,7 +872,7 @@
     "watch:tsc:webview": "tsc -p src/client/webview/tsconfig.json --noEmit --watch",
     "watch": "npm run watch:tsc & npm run watch:tsc:webview & npm run watch:esbuild & wait",
     "pretest": "npm run gen && npm run type-check",
-    "test": "node --import ./test/register.mjs --test --experimental-test-module-mocks \"test/shared/**/*.test.ts\" \"test/server/highlight/**/*.test.ts\" \"test/server/lint/**/*.test.ts\" \"test/server/parsed.test.ts\" \"test/client/bookRename.test.ts\" \"test/client/editorIndent.test.ts\"",
+    "test": "node --import ./test/register.mjs --test --experimental-test-module-mocks \"test/shared/**/*.test.ts\" \"test/server/highlight/**/*.test.ts\" \"test/server/lint/**/*.test.ts\" \"test/server/parsed.test.ts\" \"test/client/bookRename.test.ts\" \"test/client/editorIndent.test.ts\" \"test/client/editorWord.test.ts\"",
     "pretest:integration": "npm run gen",
     "test:integration": "node --import ./test/register.mjs --test --experimental-test-module-mocks \"test/client/bookCreate.test.ts\" \"test/client/bookManage.test.ts\" \"test/client/booksView.test.ts\" \"test/client/highlightConfig.test.ts\" \"test/client/messages.test.ts\" \"test/client/preview.test.ts\" \"test/client/probe.test.ts\" \"test/client/readText.test.ts\" \"test/server/build.test.ts\" \"test/server/jpbook.test.ts\"",
     "pretest:e2e": "npm run build:dev",
