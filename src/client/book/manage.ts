@@ -3,10 +3,9 @@
  * Every action plans precise range edits via the pure `#/shared/book/edits.ts`, applies
  * them as one `WorkspaceEdit`, and SAVES immediately (settings-UI semantics: a panel
  * action persists on the spot; the saved file then re-enters through the panel's own
- * watcher, so no manual refresh plumbing exists here). Metadata is upsert-only: every
- * META_KEYS key is always shown and never deleted or reordered — layout-conscious authors
- * use code mode. Chapters and covers are the two entry lists; a list action takes an
- * `EntryList` and never touches the other list.
+ * watcher, so no manual refresh plumbing exists here). Every META_KEYS key is always shown;
+ * editing one rewrites or removes the lines of that key alone. Chapters and covers are the
+ * two entry lists; a list action takes an `EntryList` and never touches the other list.
  */
 import * as vscode from 'vscode';
 
@@ -18,7 +17,7 @@ import {
   moveEntryTo,
   removeEntry,
   resolveEntry,
-  upsertMeta,
+  setMeta,
 } from '#/shared/book/edits.ts';
 import type { TextReplace } from '#/shared/book/edits.ts';
 import {
@@ -81,10 +80,14 @@ function alignLabel(value: FooterAlign): string {
  * The meta row split into its bare display VALUE and a status NOTE (default / not-set), so the
  * panel can place the note beside the LABEL rather than inside the value: a set value carries no
  * note, an absent key with a default shows that default value tagged "(default)", and an absent
- * key with no default shows an empty value tagged "(not set)".
+ * key with no default shows an empty value tagged "(not set)". An empty value is the footer's
+ * alone (no footer) and shows as "(hidden)".
  */
 export function metaValueParts(key: MetaKey, value: string | undefined): { value: string; note: string } {
   const display = (v: string): string => (key === 'footerAlign' ? alignLabel(v as FooterAlign) : v);
+  if (value === '') {
+    return { value: '', note: vscode.l10n.t('(hidden)') };
+  }
   if (value !== undefined) {
     return { value: display(value), note: '' };
   }
@@ -390,7 +393,7 @@ async function moveEntry(arg: unknown, direction: -1 | 1): Promise<void> {
  * parseDividerValue/composeDividerValue). Any step dismissed = whole edit dismissed.
  */
 async function pickDivider(current: string | undefined): Promise<string | undefined> {
-  const parsed = current !== undefined && current !== '' ? parseDividerValue(current) : null;
+  const parsed = current !== undefined ? parseDividerValue(current) : null;
 
   type MarkItem = vscode.QuickPickItem & { pick: 'none' | 'preset' | 'custom' };
   const markItems: MarkItem[] = [
@@ -405,7 +408,7 @@ async function pickDivider(current: string | undefined): Promise<string | undefi
     return undefined;
   }
   if (markPick.pick === 'none') {
-    return ''; // upsert-only: the row stays, with an empty value
+    return ''; // an empty value clears the key
   }
   let mark = markPick.label;
   if (markPick.pick === 'custom') {
@@ -463,34 +466,79 @@ async function pickDivider(current: string | undefined): Promise<string | undefi
   return composeDividerValue(mark, Number(digits));
 }
 
+/** The panel's answer for a key: dismissed (`undefined`), or the value to set — `undefined` = back to unwritten. */
+type MetaAnswer = { readonly value: string | undefined } | undefined;
+
+const answered = (value: string | undefined): MetaAnswer => (value === undefined ? undefined : { value });
+
+/**
+ * One dialog for the footer: the typed line rides as the first item, so Enter takes it as is;
+ * the default (the key goes back to unwritten) and no footer (`footer:`) stay listed below it.
+ */
+function pickFooter(current: string | undefined): Promise<MetaAnswer> {
+  type FooterItem = vscode.QuickPickItem & { readonly pick: 'typed' | 'default' | 'none' };
+  const fixed: FooterItem[] = [
+    { label: vscode.l10n.t('Default'), description: BUILD_CHROME_DEFAULT.footer, alwaysShow: true, pick: 'default' },
+    { label: vscode.l10n.t('No footer'), alwaysShow: true, pick: 'none' },
+  ];
+  const qp = vscode.window.createQuickPick<FooterItem>();
+  qp.title = metaLabel('footer');
+  qp.placeholder = vscode.l10n.t('Type the footer, or pick one below');
+  const refresh = (): void => {
+    const typed = qp.value.trim();
+    qp.items = typed === '' ? fixed : [{ label: typed, alwaysShow: true, pick: 'typed' }, ...fixed];
+    qp.activeItems = qp.items.slice(0, 1);
+  };
+  qp.value = current ?? '';
+  refresh();
+  qp.onDidChangeValue(refresh);
+
+  return new Promise((resolve) => {
+    let answer: MetaAnswer;
+    qp.onDidAccept(() => {
+      const item = qp.selectedItems[0];
+      if (item !== undefined) {
+        answer = { value: item.pick === 'typed' ? item.label : item.pick === 'none' ? '' : undefined };
+      }
+      qp.hide();
+    });
+    qp.onDidHide(() => {
+      qp.dispose();
+      resolve(answer);
+    });
+    qp.show();
+  });
+}
+
 async function editMeta(arg: unknown): Promise<void> {
   const node = nodeOf(arg);
   if (node?.kind !== 'meta') {
     return;
   }
 
-  let value: string | undefined;
+  let answer: MetaAnswer;
   if (node.metaKey === 'divider') {
-    value = await pickDivider(node.value);
+    answer = answered(await pickDivider(node.value));
+  } else if (node.metaKey === 'footer') {
+    answer = await pickFooter(node.value);
   } else if (node.metaKey === 'footerAlign') {
     const picked = await vscode.window.showQuickPick(
       FOOTER_ALIGNS.map((v) => ({ label: alignLabel(v), description: v, value: v })),
       { placeHolder: vscode.l10n.t('Where the footer goes') },
     );
-    value = picked?.value;
+    answer = answered(picked?.value);
   } else {
-    value = await vscode.window.showInputBox({
-      prompt: metaLabel(node.metaKey),
-      value: node.value ?? (node.metaKey === 'footer' ? BUILD_CHROME_DEFAULT.footer : ''),
-      ...(node.metaKey === 'footer' ? { placeHolder: BUILD_CHROME_DEFAULT.footer } : {}),
-    });
+    answer = answered(await vscode.window.showInputBox({ prompt: metaLabel(node.metaKey), value: node.value ?? '' }));
   }
-  if (value === undefined) {
+  if (answer === undefined) {
     return; // dismissed
   }
 
   const { uri, text } = await bookText(node.entry);
-  await applyBookEdits(uri, [upsertMeta(text, node.metaKey, value)]);
+  const edits = setMeta(text, node.metaKey, answer.value);
+  if (edits.length > 0) {
+    await applyBookEdits(uri, edits);
+  }
 }
 
 /** Registers the five panel commands (plain — they only fire from the Books panel). */

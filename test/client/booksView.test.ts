@@ -535,6 +535,21 @@ test('openDetail posts covers and chapters (missing flagged) and the metadata ro
   assert.equal(dividerRow.note, '(not set)');
 });
 
+test('the metadata rows show an empty value as not set, an empty footer as hidden', async () => {
+  const root = 'file:///ws';
+  const bookUri = `${root}/src/a.jpbook`;
+  state.textDocuments.push(doc(bookUri, 'jpbook', '---\ntitle:\nfooter:\n---\nch1.jpnov\n'));
+  const { view } = await setup([entry(root, 'a')]);
+  view.webview.receive({ type: 'openDetail', uri: bookUri });
+  await tick();
+  const detail = firstDetail(view) as { meta: { key: string; value: string; note: string }[] };
+  const rows = new Map(detail.meta.map((m) => [m.key, [m.value, m.note]]));
+  assert.deepEqual(rows.get('title'), ['', '(not set)']);
+  assert.deepEqual(rows.get('footer'), ['', '(hidden)']);
+  // The alignment row shows its own value, whatever the footer holds.
+  assert.deepEqual(rows.get('footerAlign'), ['Always bottom-right', '(default)']);
+});
+
 // --- edit dispatch (reuses manage.ts via executeCommand) --------------------
 
 test('editMeta dispatches jpbook.editMeta with the entry, key, and current value', async () => {

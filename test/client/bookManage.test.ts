@@ -1,8 +1,8 @@
 /**
  * Unit tests for the Books panel's management commands (manage.ts), driven through the
  * registered `jpbook.*` handlers against the mocked `vscode`. Covers the QuickPick add-
- * chapters flow end to end (candidate enumeration → pick → the applied `.jpbook` edit)
- * and `createFile`'s chapter mode (prompt → write → append → open).
+ * chapters flow end to end (candidate enumeration → pick → the applied `.jpbook` edit),
+ * `createFile`'s chapter mode (prompt → write → append → open), and the Book Info edits.
  *
  * Runs in CI via `npm run test:integration`; directly (see test/client/README.md):
  *   node --import ./test/register.mjs --test --experimental-test-module-mocks "test/client/bookManage.test.ts"
@@ -265,4 +265,118 @@ test('a row the panel rendered before the text changed plans nothing (#77)', asy
   await runEntry('jpbook.moveEntryDown', 'covers', 2, 'b.jpnov');
   await runEntry('jpbook.moveEntryUp', 'covers', 3, 'a.jpnov');
   assert.deepEqual(state.appliedEdits, []);
+});
+
+// --- editMeta -----------------------------------------------------------------
+
+/** The book as `text`, alone: a row loop seeds one document per row. */
+function reseed(text: string): void {
+  state.textDocuments.length = 0;
+  state.appliedEdits.length = 0;
+  seed(text, []);
+}
+
+/** Runs `jpbook.editMeta` on the seeded book as the panel dispatches it; returns how often the book was saved. */
+async function runEditMeta(metaKey: string): Promise<number> {
+  let saves = 0;
+  const book = state.textDocuments.find((d) => d.uri.toString() === BOOK);
+  assert.ok(book, 'seed the book first');
+  book.save = () => {
+    saves += 1;
+    return Promise.resolve(true);
+  };
+  const handler = state.registeredCommands.get('jpbook.editMeta');
+  assert.ok(handler, 'jpbook.editMeta must be registered');
+  await handler({ kind: 'meta', entry: ENTRY, metaKey, value: undefined });
+  assert.deepEqual(state.errorMessages, []);
+  return saves;
+}
+
+/** What the panel's dialog answers: a quick pick's entry (see `FakeQuickPick`) or an input box's text; `undefined` = Esc. */
+type Answer = { readonly picked: unknown } | { readonly typed: string | undefined };
+
+function answer(given: Answer): void {
+  if ('picked' in given) {
+    state.quickPickQueue.push(given.picked);
+  } else {
+    state.inputBoxQueue.push(given.typed);
+  }
+}
+
+test('editMeta edits the lines of ONE key and saves the book', async () => {
+  interface Planned {
+    readonly range: [number, number, number, number];
+    readonly newText: string;
+  }
+  const cases: readonly (readonly [name: string, text: string, key: string, given: Answer, edits: readonly Planned[]])[] = [
+    [
+      'an emptied input box deletes the line',
+      '---\ntitle: 作品名\nheader: 作品名　一\n---\na.jpnov\n', 'title', { typed: '' },
+      [{ range: [1, 0, 2, 0], newText: '' }],
+    ],
+    [
+      'whitespace alone is an empty value',
+      '---\ntitle: 作品名\nheader: 作品名　一\n---\na.jpnov\n', 'title', { typed: ' 　 ' },
+      [{ range: [1, 0, 2, 0], newText: '' }],
+    ],
+    [
+      'Enter on an unset key deletes the lines written for it',
+      '---\nTitle: 作品名\ntitle:\n---\n', 'title', { typed: '' },
+      [{ range: [1, 0, 3, 0], newText: '' }],
+    ],
+    [
+      'the footer pick "No footer" is written as a value',
+      '---\ntitle: 作品名\n---\n', 'footer', { picked: { label: 'No footer' } },
+      [{ range: [1, 10, 1, 10], newText: '\nfooter:' }],
+    ],
+    [
+      'the footer pick "Default" deletes the line',
+      '---\ntitle: 作品名\nfooter:\n---\n', 'footer', { picked: { label: 'Default' } },
+      [{ range: [2, 0, 3, 0], newText: '' }],
+    ],
+    [
+      'a typed footer is the first item, taken as typed',
+      '---\ntitle: 作品名\nfooter:\n---\n', 'footer', { picked: { type: ' ページ番号 ' } },
+      [{ range: [2, 0, 2, 7], newText: 'footer: ページ番号' }],
+    ],
+    [
+      'the divider picker\'s "(none)" deletes the line',
+      '---\ntitle: 作品名\ndivider: ＊\n---\n', 'divider', { picked: { label: '(none)', pick: 'none' } },
+      [{ range: [2, 0, 3, 0], newText: '' }],
+    ],
+    [
+      'a picked alignment replaces the rejected line',
+      '---\nfooterAlign: bottom\n---\n', 'footerAlign', { picked: { label: 'Always bottom-left', description: 'left', value: 'left' } },
+      [{ range: [1, 0, 1, 19], newText: 'footerAlign: left' }],
+    ],
+    [
+      'the rewrite comes first, then the deletions',
+      '---\nfooterAlign: bottom\nfooterAlign: left\n---\n', 'footerAlign',
+      { picked: { label: 'Alternate: right, then left', description: 'rightLeft', value: 'rightLeft' } },
+      [{ range: [2, 0, 2, 17], newText: 'footerAlign: rightLeft' }, { range: [1, 0, 2, 0], newText: '' }],
+    ],
+  ];
+  for (const [name, text, key, given, edits] of cases) {
+    reseed(text);
+    answer(given);
+    const saves = await runEditMeta(key);
+    assert.deepEqual(state.appliedEdits, edits.map((e) => ({ uri: BOOK, ...e })), name);
+    assert.equal(saves, 1, name);
+  }
+});
+
+test('editMeta with nothing to change applies nothing and saves nothing', async () => {
+  const cases: readonly (readonly [name: string, key: string, given: Answer])[] = [
+    ['a cleared key without a line', 'title', { typed: '' }],
+    ['a dismissed input box', 'title', { typed: undefined }],
+    ['the footer pick "Default" on an unwritten footer', 'footer', { picked: { label: 'Default' } }],
+    ['a dismissed footer pick', 'footer', { picked: undefined }],
+  ];
+  for (const [name, key, given] of cases) {
+    reseed('---\nheader: 作品名　一\n---\na.jpnov\n');
+    answer(given);
+    const saves = await runEditMeta(key);
+    assert.deepEqual(state.appliedEdits, [], name);
+    assert.equal(saves, 0, name);
+  }
 });

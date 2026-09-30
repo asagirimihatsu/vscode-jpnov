@@ -118,8 +118,16 @@ test('parseJpbook accepts a full-width colon separator', () => {
   assert.equal(got.lines[1]?.kind, 'meta');
 });
 
-test('parseJpbook: an empty value is kept (explicitly blank)', () => {
-  assert.deepEqual(parseJpbook('---\nheader:\n---\n').meta, { header: '' });
+test('parseJpbook: an empty value leaves its key unset; footer alone keeps it', () => {
+  const text = '---\ntitle:\nauthor:　\nheader:\nfooter:\ndivider:\n---\n';
+  assert.deepEqual(parseJpbook(text).meta, { footer: '' });
+  assert.deepEqual(kinds(text).slice(1, 6), ['meta', 'meta', 'meta', 'meta', 'meta']);
+});
+
+test('parseJpbook: an empty first line still takes its key', () => {
+  const got = parseJpbook('---\ntitle:\ntitle: 作品名\n---\n');
+  assert.deepEqual(got.meta, {});
+  assert.deepEqual(got.lines[2]?.kind, { warning: { code: 'jpbook.metaDuplicateKey', args: ['title'] } });
 });
 
 test('parseJpbook: blank lines inside the front matter are skipped', () => {
@@ -165,6 +173,12 @@ test('parseJpbook warns on an invalid footerAlign value and leaves it unset', ()
       args: ['footerAlign', 'middle', 'right, left, rightLeft, leftRight, none'],
     },
   });
+});
+
+test('parseJpbook: a rejected footerAlign value does not take the key', () => {
+  const got = parseJpbook('---\nfooterAlign: middle\nfooterAlign: left\n---\n');
+  assert.deepEqual(got.meta, { footerAlign: 'left' });
+  assert.equal(got.lines[2]?.kind, 'meta');
 });
 
 test('parseJpbook errors on a colon-less (or key-less) metadata line', () => {

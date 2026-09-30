@@ -454,12 +454,13 @@ test('listBooks enumerates every jpbook, carrying its front-matter title when pr
   await writeUnder(ws.dir, 'vol1/a.jpnov', 'あ');
   await writeUnder(ws.dir, 'part1/vol2/index.jpbook', '---\ntitle: 第二巻\n---\npart1/vol2/c.jpnov');
   await writeUnder(ws.dir, 'part1/vol2/c.jpnov', 'て');
+  await writeUnder(ws.dir, 'vol3.jpbook', '---\ntitle:\n---\nvol1/a.jpnov');
 
   // Enumeration reads each file (through the context's reader) only for its title; it
   // publishes no diagnostics by construction.
   const result: ListBooksResult = await handleListBooks(boot().ctx, { projectDirs: projectsFor(ws.uri) });
 
-  assert.equal(result.books.length, 2);
+  assert.equal(result.books.length, 3);
   const byOut = new Map(result.books.map((b) => [b.outRel, b]));
   const vol1 = byOut.get('vol1');
   const vol2 = byOut.get('part1/vol2');
@@ -469,6 +470,7 @@ test('listBooks enumerates every jpbook, carrying its front-matter title when pr
   assert.equal(vol1.fileRel, 'vol1/index.jpbook');
   assert.equal(vol1.rootUri, ws.uri);
   assert.equal(vol1.title, undefined, 'no front matter -> no title');
+  assert.equal(byOut.get('vol3')?.title, undefined, 'an empty title -> no title');
   assert.equal(vol2.fileRel, 'part1/vol2/index.jpbook');
   assert.equal(vol2.title, '第二巻');
 });
@@ -963,32 +965,35 @@ test('build: the header and footer take the value annotations, filled per page',
 });
 
 test('build: a title-less book takes the STEM of its outRel as its title, in every format that shows one', async () => {
-  await using ws = await makeTmpWorkspace();
-  const { ctx } = boot();
-  // Nested on purpose: outRel is `part1/vol2` but its stem is `vol2`, so the two differ.
-  await writeUnder(ws.dir, 'part1/vol2.jpbook', '---\ncover:\n- c.jpnov\n---\na.jpnov');
-  await writeUnder(ws.dir, 'c.jpnov', '［＃ここに「タイトル」の値を表示］／［＃ここに「ペンネーム」の値を表示］');
-  await writeUnder(ws.dir, 'a.jpnov', '本文。');
+  // A title and an author left empty read as not written.
+  for (const keys of ['', 'title:\nauthor:\n']) {
+    await using ws = await makeTmpWorkspace();
+    const { ctx } = boot();
+    // Nested on purpose: outRel is `part1/vol2` but its stem is `vol2`, so the two differ.
+    await writeUnder(ws.dir, 'part1/vol2.jpbook', `---\n${keys}cover:\n- c.jpnov\n---\na.jpnov`);
+    await writeUnder(ws.dir, 'c.jpnov', '［＃ここに「タイトル」の値を表示］／［＃ここに「ペンネーム」の値を表示］');
+    await writeUnder(ws.dir, 'a.jpnov', '本文。');
 
-  const html = (await handleBuild(ctx, {
-    format: 'html',
-    settings: SETTINGS,
-    projectDirs: projectsFor(ws.uri),
-  })).artifacts[0];
-  assert.ok(html?.kind === 'html');
-  // The stem alone, and an absent author contributes nothing after the separator.
-  assert.match(html.content, /<div class="line" data-line="0">vol2／<\/div>/);
-  assert.doesNotMatch(html.content, /part1\/vol2/);
+    const html = (await handleBuild(ctx, {
+      format: 'html',
+      settings: SETTINGS,
+      projectDirs: projectsFor(ws.uri),
+    })).artifacts[0];
+    assert.ok(html?.kind === 'html');
+    // The stem alone, and an absent author contributes nothing after the separator.
+    assert.match(html.content, /<div class="line" data-line="0">vol2／<\/div>/);
+    assert.doesNotMatch(html.content, /part1\/vol2/);
 
-  // …and the EPUB's dc:title agrees: both read the title the build decided.
-  const epub = (await handleBuild(ctx, {
-    format: 'epub',
-    settings: SETTINGS,
-    projectDirs: projectsFor(ws.uri),
-  })).artifacts[0];
-  assert.ok(epub?.kind === 'epub');
-  const opf = epub.members.find((m) => m.name === 'OEBPS/package.opf')?.content ?? '';
-  assert.match(opf, /<dc:title>vol2<\/dc:title>/);
+    // …and the EPUB's dc:title agrees: both read the title the build decided.
+    const epub = (await handleBuild(ctx, {
+      format: 'epub',
+      settings: SETTINGS,
+      projectDirs: projectsFor(ws.uri),
+    })).artifacts[0];
+    assert.ok(epub?.kind === 'epub');
+    const opf = epub.members.find((m) => m.name === 'OEBPS/package.opf')?.content ?? '';
+    assert.match(opf, /<dc:title>vol2<\/dc:title>/);
+  }
 });
 
 test('build: txt and epub ignore the cover key entirely (byte-identical either way)', async () => {

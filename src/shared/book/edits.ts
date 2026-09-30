@@ -2,18 +2,19 @@
  * Pure edit planners for the Books panel's tree-as-form editing: each returns LSP-style
  * range replacements against the CURRENT `.jpbook` text, which the client applies as one
  * `WorkspaceEdit` (text stays the single source of truth — the panel and code mode can
- * never disagree). Metadata is UPSERT-ONLY by design: an existing key is edited in place
- * (its line never moves), an absent key is appended, and nothing here ever deletes or
- * reorders a metadata line — authors who care about metadata layout use code mode. The
- * entry planners take an {@link EntryList} (chapters = body lines, covers = the `- path`
+ * never disagree). Metadata is edited by KEY, not by line: setting a key leaves ONE line
+ * for it, clearing it leaves none, and the lines of every other key stay where they are.
+ * The entry planners take an {@link EntryList} (chapters = body lines, covers = the `- path`
  * items under `cover:`) and never touch the other list.
  */
 import {
   COVER_KEY,
   coverPathOf,
   entryPathOf,
+  FRONT_MATTER_KEYS,
   isCover,
   isEntryOf,
+  keepsEmptyValue,
   META_KEYS,
   metaKeyOf,
   metaRegionOf,
@@ -68,23 +69,88 @@ function appendAfterLine(pl: ParsedLine, text: string): TextReplace {
 }
 
 /**
- * Sets `key` to `value` (canonical `key: value` form). The FIRST occurrence of the key —
- * the one the parser lets win — is rewritten in place; an absent key is appended at the
- * end of the front matter, and a missing block is created at the very top. Never deletes:
- * writing a default (or empty) value keeps the line.
+ * Removes the lines `first`..`last` whole. Their newlines go with them; a run that ends the
+ * document swallows the PRECEDING newline instead, so no blank tail accumulates.
  */
-export function upsertMeta(text: string, key: MetaKey, value: string): TextReplace {
-  const parsed = parseJpbook(text);
-  const eol = eolOf(text);
-  const clean = sanitizeValue(value);
-  const entry = clean === '' ? `${key}:` : `${key}: ${clean}`;
+function deleteRun(lines: readonly ParsedLine[], first: ParsedLine, last: ParsedLine): TextReplace {
+  if (last.line + 1 < lines.length) {
+    return { start: at(first.line, 0), end: at(last.line + 1, 0), newText: '' };
+  }
+  const prev = lines[first.line - 1];
+  const start = prev === undefined ? at(first.line, 0) : at(prev.line, prev.raw.length);
+  return { start, end: at(last.line, last.raw.length), newText: '' };
+}
 
-  for (const pl of parsed.lines) {
-    if (pl.kind === 'meta' && metaKeyOf(pl.value) === key) {
-      return { start: at(pl.line, pl.range.startChar), end: at(pl.line, pl.range.endChar), newText: entry };
+/** Deletes whole lines, each run of neighbours as ONE range: an edit overlapping another is dropped whole. */
+function deleteLines(lines: readonly ParsedLine[], doomed: readonly ParsedLine[]): TextReplace[] {
+  const runs: { first: ParsedLine; last: ParsedLine }[] = [];
+  for (const pl of doomed) {
+    const run = runs[runs.length - 1];
+    if (run !== undefined && run.last.line + 1 === pl.line) {
+      run.last = pl;
+    } else {
+      runs.push({ first: pl, last: pl });
     }
   }
-  return insertMetaBlock(parsed.lines, eol, entry);
+  return runs.map((run) => deleteRun(lines, run.first, run.last));
+}
+
+/** A line written for `key`: its valid line, a repeat, a rejected value, or the key in another case or width. */
+function holdsKey(pl: ParsedLine, key: MetaKey): boolean {
+  const written = pl.kind === 'meta' || (typeof pl.kind === 'object' && 'warning' in pl.kind);
+  return written && metaKeyOf(pl.value)?.normalize('NFKC').toLowerCase() === key.toLowerCase();
+}
+
+/**
+ * Sets `key` to `value` (canonical `key: value` form), or unsets it — `undefined`, or an empty
+ * value for a key that does not hold one ({@link keepsEmptyValue}). The key's valid line — else
+ * the first line written for it — is rewritten in place and every other line of the key is
+ * deleted; a key without a line is inserted at its position. Empty when an unset key has no line.
+ */
+export function setMeta(text: string, key: MetaKey, value: string | undefined): TextReplace[] {
+  const parsed = parseJpbook(text);
+  const clean = value === undefined ? undefined : sanitizeValue(value);
+  const held = parsed.lines.filter((pl) => holdsKey(pl, key));
+  if (clean === undefined || (clean === '' && !keepsEmptyValue(key))) {
+    return deleteLines(parsed.lines, held);
+  }
+
+  const entry = clean === '' ? `${key}:` : `${key}: ${clean}`;
+  const target = held.find((pl) => pl.kind === 'meta') ?? held[0];
+  if (target === undefined) {
+    return [insertMeta(parsed.lines, eolOf(text), key, entry)];
+  }
+  return [
+    { start: at(target.line, target.range.startChar), end: at(target.line, target.range.endChar), newText: entry },
+    ...deleteLines(parsed.lines, held.filter((pl) => pl !== target)),
+  ];
+}
+
+/**
+ * Inserts a new key line at its {@link FRONT_MATTER_KEYS} position: after the nearest earlier
+ * key the block holds, else before the nearest later one, else at the end of the block. Only
+ * a `'meta'` line anchors an insert AFTER it: a line right under `cover:` would close the list.
+ */
+function insertMeta(lines: readonly ParsedLine[], eol: string, key: MetaKey, entry: string): TextReplace {
+  const keyLines = new Map<string, ParsedLine>();
+  for (const pl of lines) {
+    const name = pl.kind === 'meta' || pl.kind === 'cover' ? metaKeyOf(pl.value) : null;
+    if (name !== null) {
+      keyLines.set(name, pl);
+    }
+  }
+
+  const order = FRONT_MATTER_KEYS.indexOf(key);
+  const held = FRONT_MATTER_KEYS.map((k) => keyLines.get(k));
+  const earlier = held.slice(0, order).findLast((pl) => pl?.kind === 'meta');
+  if (earlier !== undefined) {
+    return appendAfterLine(earlier, `${eol}${entry}`);
+  }
+  const later = held.slice(order + 1).find((pl) => pl !== undefined);
+  if (later !== undefined) {
+    return { start: at(later.line, 0), end: at(later.line, 0), newText: `${entry}${eol}` };
+  }
+  return insertMetaBlock(lines, eol, entry);
 }
 
 /** Inserts front-matter line(s) at the end of the block, creating the block when absent. */
@@ -167,23 +233,14 @@ export function resolveEntry(lines: readonly ParsedLine[], list: EntryList, ref:
 }
 
 /**
- * Deletes the entry line entirely (the file itself is untouched). The trailing newline
- * goes with it; deleting the document's last line swallows the PRECEDING newline instead,
- * so no blank tail accumulates. A cover list emptied this way keeps its bare `cover:`
- * line. Null when `line` is not an entry of `list`.
+ * Deletes the entry line entirely (the file itself is untouched), as {@link deleteRun} does.
+ * A cover list emptied this way keeps its bare `cover:` line. Null when `line` is not an
+ * entry of `list`.
  */
 export function removeEntry(text: string, list: EntryList, line: number): TextReplace | null {
   const parsed = parseJpbook(text);
   const pl = entryAt(parsed.lines, list, line);
-  if (pl === null) {
-    return null;
-  }
-  if (line + 1 < parsed.lines.length) {
-    return { start: at(line, 0), end: at(line + 1, 0), newText: '' };
-  }
-  const prev = parsed.lines[line - 1];
-  const startPos = prev === undefined ? at(line, 0) : at(prev.line, prev.raw.length);
-  return { start: startPos, end: at(line, pl.raw.length), newText: '' };
+  return pl === null ? null : deleteRun(parsed.lines, pl, pl);
 }
 
 /**
