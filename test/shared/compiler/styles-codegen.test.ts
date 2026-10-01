@@ -112,15 +112,17 @@ test('the pitch-bearing fragment sites all read var(--pitch), and no literal pit
   // the full var(--pitch) strings instead (the .line sizing and the 罫線 offsets MUST read
   // the same variable: the uniform-layout contract; the 罫線 themselves are emitted by
   // css.ts's edgeRules(), pinned in css.test.ts).
-  assert.ok(
-    read('preview.edge.css').includes('min-block-size:calc(var(--lpp)*var(--pitch)*1rem)'),
-    'preview.edge.css page extent must read var(--pitch)',
-  );
-  assert.ok(read('preview.base.css').includes('line-height:var(--pitch);'), 'preview html line-height must read var(--pitch)');
-  assert.ok(read('preview.base.css').includes('.line{block-size:calc(var(--pitch)*1em);'), 'preview .line must read var(--pitch)');
-  assert.ok(read('build.base.css').includes('line-height:var(--pitch);'), 'build .page line-height must read var(--pitch)');
-  assert.ok(read('build.base.css').includes('width:calc(var(--lpp)*var(--pitch)*1em);'), 'build .page extent must read var(--pitch)');
-  assert.ok(read('build.base.css').includes('.line{block-size:calc(var(--pitch)*1em);'), 'build .line must read var(--pitch)');
+  const pitchSites: readonly (readonly [file: string, needle: string])[] = [
+    ['preview.edge.css', 'min-block-size:calc(var(--lpp)*var(--pitch)*1em)'],
+    ['preview.base.css', 'line-height:var(--pitch);'],
+    ['preview.base.css', '.line{block-size:calc(var(--pitch)*1em);'],
+    ['build.base.css', 'html{line-height:var(--pitch);}'],
+    ['build.base.css', 'width:calc(var(--lpp)*var(--pitch)*1em);'],
+    ['build.base.css', '.line{block-size:calc(var(--pitch)*1em);'],
+  ];
+  for (const [file, needle] of pitchSites) {
+    assert.ok(read(file).includes(needle), `${file}: expected ${needle}`);
+  }
   // Tripwire: a bare pitch number sneaking back into a pitch-bearing fragment would silently
   // detach that site from the setting (comments excepted — they may name the tiers).
   for (const file of ['preview.base.css', 'build.base.css', 'preview.edge.css', 'build.edge.css']) {

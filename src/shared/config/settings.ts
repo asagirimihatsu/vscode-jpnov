@@ -60,7 +60,7 @@ function boolOr(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
 
-/** Any string passes (css.ts sanitizes at emission); anything else → `fallback`. */
+/** Any string passes (css.ts validates at emission); anything else → `fallback`. */
 function stringOr(value: unknown, fallback: string): string {
   return typeof value === 'string' ? value : fallback;
 }

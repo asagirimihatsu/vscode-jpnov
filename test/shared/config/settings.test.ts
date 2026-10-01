@@ -86,7 +86,7 @@ test('fontFamily rides both snapshots: any string kept verbatim, non-strings def
     resolvePreviewSettings({ ...PREVIEW_BASE, fontFamily: 'Yu Mincho' }).fontFamily,
     'Yu Mincho',
   );
-  // The resolver is type-only — sanitizing is css.ts's job at emission.
+  // The resolver is type-only — validating is css.ts's job at emission.
   assert.equal(resolveHtmlSettings(badHtml({ fontFamily: 42 })).fontFamily, LAYOUT_DEFAULT.fontFamily);
   assert.equal(
     resolvePreviewSettings(badPreview({ fontFamily: null })).fontFamily,

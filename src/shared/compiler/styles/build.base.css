@@ -1,9 +1,8 @@
 /* BUILD base — always included. Styles the explicit .book > .page > .line skeleton the layout
    engine emits; each .page is one printed sheet. Ink colours are LITERAL on purpose (standalone
    print document — no --vscode-* variables exist outside the webview). */
-html{font-family:var(--font-family);}
+html{line-height:var(--pitch);}
 body{margin:0;}
-.book{display:block;}
 
 /* One sheet = the paper (css.ts adds the white border that insets it). The sheet is a plain
    horizontal-tb block and only the .grid inside flows vertical-rl: a vertical-rl root prints
@@ -11,7 +10,7 @@ body{margin:0;}
    papers in Chromium (orthogonal near-page-size block). Bands are physical padding outside the
    grid — top --htop em, bottom 2em = FOOTER_BAND, sides 1.5em = SIDE_PAD (geometry.ts, guarded by
    styles-codegen.test.ts); overflow clips on the padding box, where the furniture anchors. */
-.page{line-height:var(--pitch);width:calc(var(--lpp)*var(--pitch)*1em);height:calc(var(--cpl)*1em);padding:calc(var(--htop)*1em) 1.5em 2em 1.5em;position:relative;margin:2.5em auto;background:#fff;box-sizing:content-box;overflow:hidden;break-after:page;page-break-after:always;break-inside:avoid;}
+.page{width:calc(var(--lpp)*var(--pitch)*1em);height:calc(var(--cpl)*1em);padding:calc(var(--htop)*1em) 1.5em 2em 1.5em;position:relative;margin:2.5em auto;background:#fff;box-sizing:content-box;overflow:hidden;break-after:page;page-break-after:always;break-inside:avoid;}
 
 /* The text grid: linesPerPage columns × charsPerLine chars filling the sheet's content box;
    explicit 100% sizes because an orthogonal flow's auto size is engine-dependent. */
@@ -19,7 +18,7 @@ body{margin:0;}
 
 /* Each line is one fixed-thickness column of the configured 行送り (--pitch em; the
    ruby-clearance ladder lives on LINE_PITCHES in config/types.ts). */
-.line{block-size:calc(var(--pitch)*1em);margin:0;white-space:pre;}
+.line{block-size:calc(var(--pitch)*1em);white-space:pre;}
 /* No ruby rules here: every <rt> lives inside a classed ruby (rr/lr/br), whose on-demand
    class.ruby-*.css rules own the lane layout, the 0.5em lane size included. */
 

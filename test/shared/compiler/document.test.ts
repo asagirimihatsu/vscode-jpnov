@@ -35,7 +35,7 @@ const PAGE_FOOTER = '［＃ここに「ページ番号」の値を表示］ / �
 /** Render one file with explicit resolved options; returns the full HTML document. */
 const render = (
   src: string,
-  opts: { charsPerLine?: number; linesPerPage?: number; chrome?: Partial<BuildChrome> } = {},
+  opts: { charsPerLine?: number; linesPerPage?: number; fontFamily?: string; chrome?: Partial<BuildChrome> } = {},
 ): string =>
   renderBook({
     books: [book({ files: [{ name: 'a.jpnov', src }] })],
@@ -46,7 +46,7 @@ const render = (
     dash: 'horizontalBar',
     paperSize: 'a4',
     paperOrientation: 'auto',
-    fontFamily: '',
+    fontFamily: opts.fontFamily ?? '',
     chrome: { ...OFF, ...opts.chrome },
   });
 
@@ -68,6 +68,14 @@ test('renderBook emits a paginated page/line skeleton document', () => {
     bodyOf(html),
     '<div class="book"><div class="page" data-page="0"><div class="grid"><div class="line" data-line="0">本文</div></div></div></div>',
   );
+});
+
+test('renderBook hands the font setting to the stylesheet, the last rule before </style>', () => {
+  // The rule itself is pinned by css.test.ts; here only that the setting arrives and ends the sheet.
+  assert.match(render('本文'), /\.book\{font-family:[^;}]*\}<\/style>/);
+  assert.ok(render('本文', { fontFamily: '"游明朝", serif' }).includes(';font-family:"游明朝", serif}</style>'));
+  // A value that is not a plain font list never reaches the document.
+  assert.equal(render('本文', { fontFamily: '"游明朝' }), render('本文'));
 });
 
 test('every build document opens with exactly one print button, removed under @media print', () => {

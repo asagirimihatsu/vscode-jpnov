@@ -7,7 +7,7 @@
    always-reserved frame gaps fill the pane top to bottom; vh re-evaluates on panel resize, so
    no script is involved. --cpl is the only dynamic input; the denominator's constant term
    is 2 × EDGE_INSET (geometry.ts; styles-codegen.test.ts derives the guard). */
-html{writing-mode:vertical-rl;font-family:var(--font-family);line-height:var(--pitch);font-size:calc((100vh - 32px) / (var(--cpl) + 0.7));}
+html{writing-mode:vertical-rl;line-height:var(--pitch);font-size:calc((100vh - 32px) / (var(--cpl) + 0.7));}
 
 /* The inline axis is vertical here: padding-inline is the top/bottom breathing room the
    fit formula subtracts (32px = 2 × this pad). The bottom half also keeps the horizontal
@@ -15,18 +15,20 @@ html{writing-mode:vertical-rl;font-family:var(--font-family);line-height:var(--p
    as the band the .ln numbers are lifted into (see preview.ln.css). */
 body{margin:0;padding-inline:16px;}
 
+/* The manuscript takes the fitted root size back (1rem): the webview host injects
+   body{font-size}, and every em under .book is the text's em (the injected body font stops
+   here too: css.ts fontRule). */
+.book{font-size:1rem;}
+
 /* EDGE_INSET reserve: every segment insets its text from both band ends — the reserve
    the fit formula's denominator pays for. Unconditional (frame or not): toggling edgeLine must
-   not move the text. REM, not em: the webview host injects body{font-size}, and an em here
-   would follow it while the text follows the 1rem-pinned .line. position:relative doubles as
-   the frame's anchor box (see preview.edge.css). */
-.segment{position:relative;padding-inline:0.35rem;}
+   not move the text. position:relative doubles as the frame's anchor box (see
+   preview.edge.css). */
+.segment{position:relative;padding-inline:0.35em;}
 
-/* Re-pin the manuscript to the scaled root (1rem) on .line, so a host/webview-injected
-   body{font-size}/font-family can't desync the glyph advance from the em-based line pitch.
-   block-size = the configured 行送り (--pitch em; the ruby-clearance ladder lives on
+/* block-size = the configured 行送り (--pitch em; the ruby-clearance ladder lives on
    LINE_PITCHES in config/types.ts). */
-.line{block-size:calc(var(--pitch)*1em);margin:0;white-space:pre;font-size:1rem;font-family:var(--font-family);}
+.line{block-size:calc(var(--pitch)*1em);white-space:pre;}
 /* No ruby rules here: every <rt> lives inside a classed ruby (rr/lr/br), whose on-demand
    classRule (css.ts) owns the lane layout INCLUDING the 0.5em lane size — the single home. */
 
@@ -34,6 +36,8 @@ body{margin:0;padding-inline:16px;}
    to its middle. The negative inline margins (−8px = pad ÷ 2) stretch the auto-sized box past
    the writing band into each pad, so the rule's tips overshoot the segment frames and the text
    alike (hierarchy: 改ページ > 枠 > text) — deliberately independent of edgeLine. Must stay
-   ≤ the 16px pad so the marker never leaves the body padding box. */
-.pagebreak{position:relative;border-block-start:2px dashed currentColor;margin-block:1em;margin-inline:-8px;}
-.pb-label{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);writing-mode:vertical-rl;font-size:10px;line-height:1;color:currentColor;background:var(--vscode-editor-background,#fff);padding-block:2px;pointer-events:none;user-select:none;}
+   ≤ the 16px pad so the marker never leaves the body padding box. The block margins keep two
+   things off the label: one text em for a ルビ on the next column, which grows with the text,
+   and never under 13px for the segments themselves — the label is 14px wide at any fit size. */
+.pagebreak{position:relative;border-block-start:2px dashed;margin-block:max(1em,13px);margin-inline:-8px;}
+.pb-label{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:10px;line-height:1;background:var(--vscode-editor-background,#fff);padding-block:2px;pointer-events:none;user-select:none;}

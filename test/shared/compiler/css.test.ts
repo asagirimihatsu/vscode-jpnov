@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { BuildChrome, PreviewChrome } from '../../../src/shared/compiler/chrome.ts';
 import { FURNITURE_ALIGNS } from '../../../src/shared/compiler/chrome.ts';
-import { DEFAULT_FONT_STACK, reflowStylesheet, stylesheet } from '../../../src/shared/compiler/css.ts';
+import { DEFAULT_FONT_STACK, FONT_LIST_MAX, reflowStylesheet, stylesheet } from '../../../src/shared/compiler/css.ts';
 import type { PaperOrientation, PaperSize } from '../../../src/shared/compiler/geometry.ts';
 import { EDGE_INSET, FOOTER_BAND, HEADER_BAND, LINENUM_BAND, SIDE_PAD, fitPaper } from '../../../src/shared/compiler/geometry.ts';
 import type { LinePitch } from '../../../src/shared/config/types.ts';
@@ -16,14 +16,14 @@ const EDGE_MIX = 'color-mix(in srgb,var(--edge) 80%,transparent)';
 /** A match pattern: raw regex source with the escaped recipe appended. */
 const edgeMixRe = (raw: string): RegExp => new RegExp(raw + EDGE_MIX.replace(/[()]/g, '\\$&'));
 /** The inter-column rules: css.ts edgeRules() — one 1px background layer per interior column
- *  boundary, each an independent `right calc(k*pitch)` offset (em in build, rem in preview;
- *  the no-repeating-gradient ruling lives on edgeRules). */
-const EDGE_RULES = (selector: string, u: 'em' | 'rem', linesPerPage = 34): string => {
+ *  boundary, each an independent `right calc(k*pitch)` offset in the text's em (the
+ *  no-repeating-gradient ruling lives on edgeRules). */
+const EDGE_RULES = (selector: string, linesPerPage = 34): string => {
   const images: string[] = [];
   const positions: string[] = [];
   for (let k = 1; k < linesPerPage; k++) {
     images.push(`linear-gradient(${EDGE_MIX},${EDGE_MIX})`);
-    positions.push(`right calc(${String(k)}*var(--pitch)*1${u} - 1px) top`);
+    positions.push(`right calc(${String(k)}*var(--pitch)*1em - 1px) top`);
   }
   return `${selector}{background-image:${images.join(',')};` +
     `background-position:${positions.join(',')};` +
@@ -38,6 +38,14 @@ const BUILD_OFF: BuildChrome = {
   headerAlign: 'center',
   footer: '',
   footerAlign: 'right',
+};
+const BUILD_ON: BuildChrome = {
+  lineNumbers: true,
+  edgeLine: 'text',
+  header: '章',
+  headerAlign: 'rightLeft',
+  footer: '［＃ここに「ページ番号」の値を表示］',
+  footerAlign: 'rightLeft',
 };
 
 /** Preview stylesheet with explicit resolved options (the compiler has no defaults). */
@@ -136,9 +144,14 @@ const FRAME_INSETS = `top:calc(var(--htop)*1em - ${String(EDGE_INSET)}em);right:
 const fitFormulaRe = new RegExp(
   String.raw`html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ \(var\(--cpl\) \+ ` + numRe(2 * EDGE_INSET) + String.raw`\)\)`,
 );
+/** The unconditional text inset of a preview segment: EDGE_INSET in the text's em. */
+const SEGMENT_INSET = `.segment{position:relative;padding-inline:${String(EDGE_INSET)}em;}`;
+/** The 本文 font rule: the built-in stack, then the setting's list when it has a legal one. */
+const fontRule = (list = ''): string =>
+  `.book{font-family:${DEFAULT_FONT_STACK}${list === '' ? '' : `;font-family:${list}`}}`;
 
 test('stylesheet renders vertical-rl writing mode', () => {
-  assert.match(preview(), /writing-mode:vertical-rl/);
+  assert.match(preview(), /html\{writing-mode:vertical-rl;/);
 });
 
 test('paginated stylesheet sizes the page grid + fits the paper', () => {
@@ -183,8 +196,6 @@ test('non-paginated (preview) stylesheet makes .pagebreak a labelled rule, no @p
   assert.doesNotMatch(css, /@page/);
   assert.doesNotMatch(css, /break-before:page/);
   assert.match(css, /\.pagebreak\{[^}]*border-block-start/);
-  // The 「改ページ」 label styling is always present (the marker DOM always carries it).
-  assert.match(css, /\.pb-label\{[^}]*writing-mode:vertical-rl/);
 });
 
 test('non-paginated (preview) stylesheet emits no width cap (JS hard-wraps)', () => {
@@ -197,45 +208,83 @@ test('non-paginated (preview) stylesheet emits no width cap (JS hard-wraps)', ()
 test('non-paginated (preview) stylesheet fits the root font-size to the viewport', () => {
   // In vertical-rl a full-width char advances exactly 1em along the column, so root
   // font-size = (100vh − 2·16px padding) / (charsPerLine + 2·EDGE_INSET) makes a full
-  // line plus the always-reserved frame gaps fill the pane height. `.line` re-pins to
+  // line plus the always-reserved frame gaps fill the pane height. `.book` re-pins to
   // that root (1rem) so a webview-injected body{font-size} can't desync the glyph
   // advance from the em-based pitch.
   const css = preview({ charsPerLine: 25 });
   assert.match(css, fitFormulaRe);
-  assert.ok(css.includes(`:root{--cpl:25;--pitch:2;--font-family:${DEFAULT_FONT_STACK}}`));
-  assert.match(css, /\.line\{[^}]*font-size:1rem/);
+  assert.ok(css.includes(':root{--cpl:25;--pitch:2}'));
+  assert.ok(css.includes('.book{font-size:1rem;}'));
 });
 
 test('preview fit formula at the standard 40 chars per line pads the columns', () => {
   const css = preview();
   assert.match(css, fitFormulaRe);
-  assert.ok(css.includes(`:root{--cpl:40;--pitch:2;--font-family:${DEFAULT_FONT_STACK}}`));
+  assert.ok(css.includes(':root{--cpl:40;--pitch:2}'));
   // The padding the formula subtracts (top/bottom = inline axis in vertical-rl).
   assert.match(css, /body\{[^}]*padding-inline:16px/);
   // The matching text inset the denominator pays for — reserved with or without a frame.
-  assert.match(css, /\.segment\{position:relative;padding-inline:0\.35rem;\}/);
+  assert.ok(css.includes(SEGMENT_INSET));
 });
 
-test('--font-family: blank setting falls back to the built-in 明朝 stack in both media', () => {
+/** The sheets the font rule has to close: both media, bare and with every chrome and class rules. */
+const fontSheets = (fontFamily: string): string[] => [
+  preview({ fontFamily }),
+  preview({ fontFamily, chrome: { lineNumbers: true, edgeLine: 'red' }, usedClasses: ['midashi', 'tcy'] }),
+  build({ fontFamily }),
+  build({ fontFamily, chrome: BUILD_ON, usedClasses: ['midashi', 'tcy'] }),
+];
+
+test('本文 font: the built-in 明朝 stack on .book, the last rule of every sheet', () => {
   // The named-JP-first stack is what keeps shared codepoints (… ‥ quotes) off Latin serif
   // fonts — a bare generic `serif` stops per-codepoint fallback before any JP font.
-  const expected = `--font-family:${DEFAULT_FONT_STACK}}`;
-  assert.ok(preview().includes(expected));
-  assert.ok(build().includes(expected));
-  assert.match(preview(), /html\{[^}]*font-family:var\(--font-family\)/);
-  assert.match(build(), /html\{font-family:var\(--font-family\);\}/);
-  // EPUB is reader-controlled: the reflow sheet never carries the variable.
-  assert.doesNotMatch(reflowStylesheet('relaxed', []), /--font-family/);
+  for (const css of fontSheets('')) {
+    // Last: the one rule that can carry a raw setting has nothing after it.
+    assert.ok(css.endsWith(fontRule()));
+  }
+  for (const css of [preview(), build()]) {
+    assert.equal(css.split('font-family:').length - 1, 1); // no other rule sets the font
+  }
+  // EPUB is reader-controlled: the reflow sheet takes no 本文 font rule.
+  assert.doesNotMatch(reflowStylesheet('relaxed', []), /\.book\{/);
 });
 
-test('--font-family: a custom stack passes through; breakout tokens are stripped', () => {
-  const css = preview({ fontFamily: '"游明朝", YuMincho, serif' });
-  assert.ok(css.includes('--font-family:"游明朝", YuMincho, serif}'));
-  // `;` `{` `}` `<` `>` `\` and `/*` cannot leave the declaration or the one <style> block.
-  const dirty = preview({ fontFamily: 'serif;}</style><script>/*' });
-  assert.ok(dirty.includes('--font-family:serif/stylescript}'));
-  // Whitespace-only means blank: the built-in stack, never an empty declaration.
-  assert.ok(preview({ fontFamily: '  ' }).includes(`--font-family:${DEFAULT_FONT_STACK}}`));
+test('本文 font: a plain font list follows the built-in stack in the same rule', () => {
+  // The stack comes first, so a list the browser cannot parse drops out and the stack stays.
+  const lists = [
+    '"游明朝", YuMincho, serif',
+    "'游明朝', serif", // either quote closes a name
+    '"A\'s", "A (B)", "A*", serif', // inside one, the other quote, brackets and * belong to the name
+    '  serif  ', // trimmed, otherwise as written
+    'x'.repeat(FONT_LIST_MAX),
+  ];
+  for (const fontFamily of lists) {
+    for (const css of fontSheets(fontFamily)) {
+      assert.ok(css.endsWith(fontRule(fontFamily.trim())), fontFamily);
+    }
+  }
+});
+
+test('本文 font: any other value leaves the stack alone, never a repaired list', () => {
+  const illegal = [
+    '  ', // whitespace-only means blank
+    'serif;}</style><script>/*', // would leave the declaration and the one <style> block
+    // Each character that could, outside a quoted name and inside one.
+    ...[';', '{', '}', '<', '>', '\\', '\n', '\r', '\f'].flatMap((ch) => [`a${ch}b, serif`, `"a${ch}b", serif`]),
+    // Outside a quoted name only: a bracket left open takes every rule up to its match, and
+    // * opens a comment after a /.
+    ...['(', ')', '[', ']', '*'].map((ch) => `a${ch}b, serif`),
+    'url(',
+    '/*',
+    '"Yu Mincho', // a quote left open runs through the rest of the one-line sheet
+    "'游明朝",
+    '\'"\'"', // a closed '"', then an open "
+    'x'.repeat(FONT_LIST_MAX + 1),
+  ];
+  const blank = fontSheets('');
+  for (const fontFamily of illegal) {
+    assert.deepEqual(fontSheets(fontFamily), blank, JSON.stringify(fontFamily));
+  }
 });
 
 test('stylesheet emits ONLY the requested class rules (on-demand)', () => {
@@ -277,12 +326,12 @@ test('字下げ padding is inline-start, never block-start (axis lock)', () => {
 
 test('base fill rules stay untouched by decoration/indent classes', () => {
   const p = build({ usedClasses: ['dec-wavy', 'b', 'i', 'indent-5'] });
-  assert.match(p, /\.line\{block-size:calc\(var\(--pitch\)\*1em\);margin:0;white-space:pre;\}/);
+  assert.match(p, /\.line\{block-size:calc\(var\(--pitch\)\*1em\);white-space:pre;\}/);
   assert.match(p, /@page\{size:297mm 210mm;margin:0;\}/); // 34 > 40/2 → auto lands on landscape A4
   const v = preview({ usedClasses: ['indent-5'] });
-  assert.match(v, /html\{[^}]*font-size:calc\(\(100vh - 32px\) \/ \(var\(--cpl\) \+ 0\.7\)\)/);
-  assert.ok(v.includes(`:root{--cpl:40;--pitch:2;--font-family:${DEFAULT_FONT_STACK}}`));
-  assert.match(v, /\.line\{[^}]*block-size:calc\(var\(--pitch\)\*1em\)[^}]*font-size:1rem/);
+  assert.match(v, fitFormulaRe);
+  assert.ok(v.includes(':root{--cpl:40;--pitch:2}'));
+  assert.match(v, /\.line\{block-size:calc\(var\(--pitch\)\*1em\);white-space:pre;\}/);
 });
 
 test('傍線 rules carry an explicit text-underline-position (right default / left variant)', () => {
@@ -344,7 +393,7 @@ test('ruby rr/lr/br rule sets are on-demand, self-contained and media-identical'
     // (native ruby-align).
     assert.match(
       lr,
-      /ruby\.lr>rt>span\{position:absolute;top:50%;left:50%;min-height:100%;display:flex;flex-direction:row;justify-content:space-around;writing-mode:vertical-rl;font-size:0\.5em;line-height:1;white-space:nowrap\}/,
+      /ruby\.lr>rt>span\{position:absolute;top:50%;left:50%;min-height:100%;display:flex;flex-direction:row;justify-content:space-around;font-size:0\.5em;line-height:1;white-space:nowrap\}/,
     );
     assert.match(lr, /ruby\.lr>rt>span\{transform:translate\(-50%,-50%\) translateX\(-1\.5em\)\}/);
     assert.doesNotMatch(lr, /ruby\.br/); // only the requested set
@@ -435,7 +484,7 @@ test('preview line numbers: fixed-px out-of-flow .ln rule (numbers are JS-emitte
   // Lifted into the pad band, past the text inset (the rem term cancels the em inset at
   // any fit size) and 2px clear of where the frame line would sit — the SAME spot
   // whether edgeLine is on or off.
-  assert.match(css, /\.ln\{[^}]*translateY\(calc\(-100% - 0\.35rem - 2px\)\)/);
+  assert.match(css, new RegExp(String.raw`\.ln\{[^}]*translateY\(calc\(-100% - ` + numRe(EDGE_INSET) + String.raw`rem - 2px\)\)`));
   // No CSS counters: a sibling counter-reset does not reset following siblings in Chromium.
   assert.doesNotMatch(css, /counter/);
   assert.doesNotMatch(css, /::after/); // no edge rules leak into the lineNumbers-only sheet
@@ -445,25 +494,26 @@ test('preview edge: frame + full-page background rules on the shared pitch', () 
   const red = preview({ chrome: { lineNumbers: false, edgeLine: 'red' } });
   assert.match(red, /\.line\{position:relative;\}/); // paint order: text above the frame pseudo
   // The rules ride the frame's own background — independent of the .line count.
-  assert.ok(red.includes(EDGE_RULES('.segment::before', 'rem')));
+  assert.ok(red.includes(EDGE_RULES('.segment::before')));
   assert.match(red, edgeMixRe(String.raw`\.segment::before\{[^}]*border:1px solid `));
   assert.match(red, /:root\{[^}]*--edge:#cc0000\}/); // the recipe's base colour rides --edge
   assert.doesNotMatch(red, /::after/);
   assert.doesNotMatch(red, /border-left|border-right/);
   // While the frame is drawn, a segment reserves the full linesPerPage page width; the
   // --lpp it reads is gated in WITH the edge variables (none ⇒ neither appears).
-  assert.match(red, /\.segment\{min-block-size:calc\(var\(--lpp\)\*var\(--pitch\)\*1rem\);\}/);
+  assert.match(red, /\.segment\{min-block-size:calc\(var\(--lpp\)\*var\(--pitch\)\*1em\);\}/);
   assert.match(red, /:root\{[^}]*--lpp:34;--edge:#cc0000\}/);
   // The frame is full-band-high and starts at top:0 (containing block = the segment band).
   assert.match(red, /\.segment::before\{[^}]*top:0;[^}]*height:calc\(100vh - 32px\)/);
-  assert.match(red, /\.segment\{position:relative;padding-inline:0\.35rem;\}/);
-  assert.doesNotMatch(red, /\.book/); // the frame is per-segment, never one around .book
+  assert.ok(red.includes(SEGMENT_INSET));
+  // The frame is per-segment, never one around .book: its only rules are the size pin and the font.
+  assert.deepEqual(red.match(/\.book[^{]*\{[^}]*\}/g), ['.book{font-size:1rem;}', fontRule()]);
   // The pitch is the SAME --pitch value with rules on or off (uniform-layout contract):
   // the .line sizing and the 罫線 period read the one variable.
   assert.match(red, /html\{[^}]*line-height:var\(--pitch\)/);
   assert.match(red, /\.line\{[^}]*block-size:calc\(var\(--pitch\)\*1em\)/);
   const text = preview({ chrome: { lineNumbers: false, edgeLine: 'text' } });
-  assert.ok(text.includes(EDGE_RULES('.segment::before', 'rem')));
+  assert.ok(text.includes(EDGE_RULES('.segment::before')));
   assert.match(text, edgeMixRe(String.raw`\.segment::before\{[^}]*border:1px solid `));
   assert.match(text, /:root\{[^}]*--edge:currentColor\}/);
   // Rules off ⇒ the SAME pitch — toggling edgeLine never moves a glyph within its segment
@@ -477,7 +527,7 @@ test('preview all-off chrome emits no .ln rule, no edge rules, no frame', () => 
   assert.doesNotMatch(css, /::after/);
   assert.doesNotMatch(css, /\.segment::before/); // no frame is drawn…
   // …but the text inset stays reserved, so turning a frame on moves nothing.
-  assert.match(css, /\.segment\{position:relative;padding-inline:0\.35rem;\}/);
+  assert.ok(css.includes(SEGMENT_INSET));
   // Zero dead payload: the frame's page extent (and its --lpp) rides ONLY the edge fragment.
   assert.doesNotMatch(css, /--lpp|min-block-size|linear-gradient/);
   assert.doesNotMatch(css, /counter/);
@@ -488,21 +538,12 @@ test('preview: the 改ページ dashed rule overshoots the writing band into the
   // Negative inline margins stretch the auto-sized marker 8px (half the pad) past the
   // band on each side, independent of edgeLine — the break outranks frame and text alike.
   const css = preview();
-  assert.match(css, /\.pagebreak\{[^}]*border-block-start:2px dashed currentColor/);
-  assert.match(css, /\.pagebreak\{[^}]*margin-block:1em/);
+  assert.match(css, /\.pagebreak\{[^}]*border-block-start:2px dashed;/);
+  assert.match(css, /\.pagebreak\{[^}]*margin-block:max\(1em,13px\)/);
   assert.match(css, /\.pagebreak\{[^}]*margin-inline:-8px/);
 });
 
 // --- build chrome ------------------------------------------------------------
-
-const BUILD_ON: BuildChrome = {
-  lineNumbers: true,
-  edgeLine: 'text',
-  header: '章',
-  headerAlign: 'rightLeft',
-  footer: '［＃ここに「ページ番号」の値を表示］',
-  footerAlign: 'rightLeft',
-};
 
 test('build all-on chrome: bands, outset frame, counters, rules, furniture styles', () => {
   const css = build({ chrome: BUILD_ON });
@@ -522,14 +563,14 @@ test('build all-on chrome: bands, outset frame, counters, rules, furniture style
   assert.doesNotMatch(css, /\.page\{[^}]*border:1px/);
   assert.match(css, /\.page\{border:solid #fff;/);
   // The pitch is the same --pitch value with rules on or off (uniform-layout contract).
-  assert.match(css, /\.page\{[^}]*line-height:var\(--pitch\)/);
+  assert.match(css, /html\{line-height:var\(--pitch\);\}/);
   assert.match(css, /\.page\{[^}]*width:calc\(var\(--lpp\)\*var\(--pitch\)\*1em\)/);
   assert.match(css, /:root\{[^}]*--pitch:2[;}]/);
   assert.match(css, /:root\{[^}]*--lpp:34/);
   assert.match(css, /\.line\{[^}]*block-size:calc\(var\(--pitch\)\*1em\)/);
   // 罫線 ride the frame's own background (full page extent, independent of the .line count);
   // print-color-adjust keeps them in print/PDF (borders print, backgrounds are omitted).
-  assert.ok(css.includes(EDGE_RULES('.page::before', 'em')));
+  assert.ok(css.includes(EDGE_RULES('.page::before')));
   assert.match(css, /\.page::before\{[^}]*-webkit-print-color-adjust:exact;print-color-adjust:exact/);
   assert.doesNotMatch(css, /::after/);
   assert.doesNotMatch(css, /\.line[^{]*\{[^}]*box-shadow/);
@@ -572,7 +613,7 @@ test('build all-off chrome keeps a plain sheet with the reserved bands, no chrom
   assert.match(css, /\.page\{[^}]*padding:calc\(var\(--htop\)\*1em\) /);
   assert.match(css, htopRe(HEADER_BAND)); // header band only — no line-number band
   assert.match(css, footerPadRe);
-  assert.match(css, /\.page\{[^}]*line-height:var\(--pitch\)/); // the SAME pitch without edge rules
+  assert.match(css, /html\{line-height:var\(--pitch\);\}/); // the SAME pitch without edge rules
   // The paper rules: 投稿書式 40×34 on auto-landscape A4 — exact mm @page, the root font
   // that scales the em sheet onto it, and the sheet→paper insets as a white border
   // (physical T R B L; the bottom leads the top by the MARGIN_MM floor bias). Strings
@@ -602,7 +643,7 @@ test('build red edge lines colour both the frame and the inter-column rules', ()
   // No line-number band here, so the frame floats EDGE_INSET off the header band.
   assert.ok(css.includes(FRAME_INSETS), 'frame insets must track the band constants');
   assert.match(css, htopRe(HEADER_BAND));
-  assert.ok(css.includes(EDGE_RULES('.page::before', 'em')));
+  assert.ok(css.includes(EDGE_RULES('.page::before')));
   assert.match(css, /\.line\{[^}]*position:relative/); // paint order: text above the frame pseudo
   assert.match(css, /\.line\{[^}]*block-size:calc\(var\(--pitch\)\*1em\)/); // the one --pitch value
 });
@@ -663,10 +704,10 @@ test('paper settings pick the box: A6, forced orientation, auto portrait', () =>
 
 test('every linePitch tier rides :root{--pitch}, identical with edge rules on or off', () => {
   // The acceptance contract: one --pitch value per document, injected unconditionally in both
-  // media, unchanged by edgeLine (the uniform-layout contract) — the .line sizing, the html/.page
+  // media, unchanged by edgeLine (the uniform-layout contract) — the .line sizing, the html
   // line-height and the 罫線 layer offsets all read this one variable.
   for (const linePitch of LINE_PITCHES) {
-    const probe = new RegExp(`:root\\{[^}]*--pitch:${String(linePitch).replace('.', '\\.')}[;}]`);
+    const probe = new RegExp(`:root\\{[^}]*--pitch:${numRe(linePitch)}[;}]`);
     for (const edgeLine of ['none', 'red'] as const) {
       assert.match(
         preview({ linePitch, chrome: { lineNumbers: false, edgeLine } }),
@@ -696,7 +737,7 @@ test('edgeLine none draws no frame in either medium (preview/build cohesion)', (
   // …while both keep the text where a frame-bearing sheet puts it: the reserve is
   // unconditional (preview text inset / build grid position), so toggling edgeLine
   // never moves a glyph within its segment/page.
-  assert.match(preview(), /\.segment\{position:relative;padding-inline:0\.35rem;\}/);
+  assert.ok(preview().includes(SEGMENT_INSET));
   assert.match(build(), /\.page\{[^}]*padding:calc\(var\(--htop\)\*1em\) /);
 });
 

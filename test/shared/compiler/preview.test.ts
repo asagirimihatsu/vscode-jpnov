@@ -1,6 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { PreviewChrome } from '../../../src/shared/compiler/chrome.ts';
 import { EDGE_INSET } from '../../../src/shared/compiler/geometry.ts';
 import { renderPreview } from '../../../src/shared/compiler/preview.ts';
 import { VALUE_DEFAULTS } from '../../../src/shared/ast/notation.ts';
@@ -19,12 +18,7 @@ const EDGE_GRAD_PROBE = /\.segment::before\{background-image:linear-gradient\(/;
 /** renderPreview with explicit resolved options (the compiler has no defaults); chrome all-off. */
 function preview(
   src: string,
-  o: Partial<{
-    charsPerLine: number;
-    linesPerPage: number;
-    kinsoku: 'none' | 'relaxed' | 'strict';
-    chrome: PreviewChrome;
-  }> = {},
+  o: Partial<Parameters<typeof renderPreview>[1]> = {},
 ): string {
   return renderPreview(src, {
     charsPerLine: 40,
@@ -55,6 +49,14 @@ test('renderPreview wraps the body in a standalone HTML document', () => {
     html,
     /<body><div class="book"><div class="segment"><div class="line" data-line="0">本文です。<\/div><\/div><\/div><\/body><\/html>$/,
   );
+});
+
+test('renderPreview hands the font setting to the stylesheet, the last rule before </style>', () => {
+  // The rule itself is pinned by css.test.ts; here only that the setting arrives and ends the sheet.
+  assert.match(preview('本文'), /\.book\{font-family:[^;}]*\}<\/style>/);
+  assert.ok(preview('本文', { fontFamily: '"游明朝", serif' }).includes(';font-family:"游明朝", serif}</style>'));
+  // A value that is not a plain font list never reaches the document.
+  assert.equal(preview('本文', { fontFamily: '"游明朝' }), preview('本文'));
 });
 
 test('renderPreview is continuous: no pagination (no .page / @page)', () => {
@@ -157,9 +159,9 @@ test('renderPreview keeps a blank source line as a blank column', () => {
   );
 });
 
-test('renderPreview pins line font-size to the root and emits no CSS width cap', () => {
+test('renderPreview pins the manuscript font-size to the root and emits no CSS width cap', () => {
   const html = preview('本文', { charsPerLine: 24 });
-  assert.match(html, /\.line\{[^}]*font-size:1rem/);
+  assert.ok(html.includes('.book{font-size:1rem;}'));
   assert.doesNotMatch(html, /inline-size/);
 });
 
@@ -169,7 +171,7 @@ test('renderPreview scales the root font so a full line fills the pane height', 
   // frame gaps measures exactly 100vh − padding.
   const html = preview('本文', { charsPerLine: 20 });
   assert.ok(html.includes(`font-size:calc((100vh - 32px) / (var(--cpl) + ${String(2 * EDGE_INSET)}))`));
-  assert.match(html, /:root\{--cpl:20;--pitch:2;--font-family:/);
+  assert.match(html, /:root\{--cpl:20;--pitch:2\}/);
 });
 
 test('renderPreview: 傍線 postfix emits a dec-solid span + its on-demand rule (right side)', () => {
@@ -216,7 +218,7 @@ test('renderPreview edge lines ride the stylesheet only: red and text, both at 8
   const red = preview('一', { chrome: { lineNumbers: false, edgeLine: 'red' } });
   assert.match(red, EDGE_GRAD_PROBE); // full-page rules on the frame's own background
   assert.match(red, edgeMixRe(String.raw`\.segment::before\{[^}]*border:1px solid `));
-  assert.match(red, /\.segment\{min-block-size:calc\(var\(--lpp\)\*var\(--pitch\)\*1rem\);\}/);
+  assert.match(red, /\.segment\{min-block-size:calc\(var\(--lpp\)\*var\(--pitch\)\*1em\);\}/);
   assert.match(red, /:root\{[^}]*--lpp:34;--edge:#cc0000\}/);
   const text = preview('一', { chrome: { lineNumbers: false, edgeLine: 'text' } });
   assert.match(text, EDGE_GRAD_PROBE);
