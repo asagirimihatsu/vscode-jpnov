@@ -169,7 +169,7 @@ test('revealNewBook focuses the view and opens the detail of a non-ASCII book', 
   state.textDocuments.push(doc(bookUri, 'jpbook', '---\ntitle: 本\n---\nch1.jpnov\n'));
   const { provider, view } = await setupProvider([{ uri: bookUri, rootUri: ROOT, fileRel: '本.jpbook', outRel: '本' }]);
 
-  await provider.revealNewBook(Uri.parse(ROOT) as never, '本.jpbook');
+  await provider.revealNewBook(Uri.parse(bookUri) as never);
   await tick();
 
   assert.ok(state.executedCommands.some((c) => c.command === 'jpnov.books.focus'));
@@ -196,7 +196,7 @@ test('revealNewBook re-finds the book when the stored name is NFD-normalized', a
   state.textDocuments.push(doc(bookUri, 'jpbook', ''));
   const { provider, view } = await setupProvider([{ uri: bookUri, rootUri: ROOT, fileRel: nfdName, outRel: 'ガイド'.normalize('NFD') }]);
 
-  await provider.revealNewBook(Uri.parse(ROOT) as never, 'ガイド.jpbook');
+  await provider.revealNewBook(Uri.parse(`${ROOT}/ガイド.jpbook`) as never);
   await tick();
 
   assert.equal(revealedDetail(view)?.uri, bookUri);

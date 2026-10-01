@@ -265,20 +265,17 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
    * the same way (`childUri`); a normalization-insensitive re-find is the fallback for volumes
    * that store names as NFD.
    */
-  async revealNewBook(folder: vscode.Uri, fileName: string): Promise<void> {
+  async revealNewBook(file: vscode.Uri): Promise<void> {
     // `<viewId>.focus` resolves a never-shown webview; the ready handshake then re-pulls
     // state + detail, so this must precede the refresh.
     await vscode.commands.executeCommand(`${BooksViewProvider.viewId}.focus`).then(undefined, () => undefined);
-    const folderUri = folder.toString();
-    const rootUri = folderUri.endsWith('/') ? folderUri.slice(0, -1) : folderUri;
     // Set BEFORE refreshing: whichever refresh lands first (this one, the watcher's
     // onDidCreate, or the post-start fill) re-pushes the open detail once enumerated.
-    this.openDetailUri = chapterUri(rootUri, fileName).toString();
+    this.openDetailUri = file.toString();
     await this.refresh();
     if (this.entryOf(this.openDetailUri) === undefined) {
-      const entry = this.books.find(
-        (b) => b.rootUri === rootUri && b.fileRel.normalize('NFC') === fileName.normalize('NFC'),
-      );
+      const path = file.path.normalize('NFC');
+      const entry = this.books.find((b) => vscode.Uri.parse(b.uri).path.normalize('NFC') === path);
       if (entry === undefined) {
         return;
       }

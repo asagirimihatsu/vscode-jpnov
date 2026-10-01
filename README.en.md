@@ -73,7 +73,10 @@ No AI anywhere in the writing path (see [No-AI policy](#no-ai-policy)).
 Chapters and book files can live anywhere in the workspace folder; subfolders are
 mirrored into the output (`src/volume1.jpbook` builds to
 `dist/src/volume1.html`). The output folder (`jpnov.layout.outDir`, default
-`dist`), dot-folders, and `node_modules` are never scanned. The extension
+`dist`), dot-folders, and `node_modules` are never scanned. When workspace
+folders nest, a book belongs to the innermost folder that contains it: its
+paths count from that folder, and its output goes to that folder's output
+folder. The extension
 activates when you open a `.jpnov`/`.jpbook`, when a workspace folder
 contains a `*.jpbook`, or when any `jpnov.*` setting is saved at workspace
 or folder level — preview and book editing need no configuration at all. A

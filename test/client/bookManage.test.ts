@@ -29,9 +29,8 @@ function listNode(list: List = 'chapters'): unknown {
   return { kind: 'list', list, entry: ENTRY };
 }
 
-/** One folder at ROOT, the book document with `text`, and the folder's .jpnov sweep results. */
+/** The book document with `text`, and the .jpnov sweep results of its root. */
 function seed(text: string, files: readonly string[]): void {
-  state.workspaceFolders = [{ uri: Uri.parse(ROOT), name: 'ws', index: 0 }];
   state.textDocuments.push(doc(BOOK, 'jpbook', text));
   state.findFilesResults.set(ROOT, files.map((rel) => Uri.parse(`${ROOT}/${rel}`)));
 }

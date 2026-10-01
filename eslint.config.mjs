@@ -64,6 +64,19 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // A chapter inside a nested workspace folder would come back relative to that folder.
+    files: ['src/client/**/*.ts'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        {
+          property: 'asRelativePath',
+          message: 'It counts from the innermost workspace folder of the file, not from the root of the book: start from BookEntry.rootUri.',
+        },
+      ],
+    },
+  },
   // The blocks below use the typescript-eslint rule: it adds to the blocks above, where a
   // second `no-restricted-imports` block would replace them.
   {

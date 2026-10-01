@@ -206,7 +206,8 @@ export interface ProjectDirs {
 /**
  * The per-root `jpnov.layout.outDir` snapshot carried on `jpnov/listBooks` and `jpnov/build`:
  * one entry per workspace folder, keyed by folder URI. The map DEFINES which roots the
- * request targets — a root absent from it contributes no books and builds nothing.
+ * request targets — a root absent from it contributes no books and builds nothing. Where
+ * roots nest, a book belongs to the innermost one.
  */
 export type ProjectDirsMap = Readonly<Record<string, ProjectDirs>>;
 
@@ -294,7 +295,7 @@ export interface ListBooksParams {
 export interface BookEntry {
   /** Absolute URI of the `.jpbook` file (stable id + build selector). */
   readonly uri: string;
-  /** Owning root URI (normalized, no trailing slash). */
+  /** The book's root: the innermost targeted root that contains it (normalized, no trailing slash). */
   readonly rootUri: string;
   /** Path relative to the workspace folder root (POSIX separators), e.g. `"part1/vol2.jpbook"`. */
   readonly fileRel: string;
