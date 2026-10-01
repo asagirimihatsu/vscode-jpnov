@@ -596,18 +596,6 @@ export function buildVscode(state: MockState): Record<string, unknown> {
       }
       return Promise.resolve(true);
     },
-    // Single-folder parity: strip the containing folder's prefix; a uri outside every
-    // folder comes back unshortened.
-    asRelativePath(uri: Uri): string {
-      const s = uri.toString();
-      for (const folder of state.workspaceFolders ?? []) {
-        const base = `${folder.uri.toString().replace(/\/+$/, '')}/`;
-        if (s.startsWith(base)) {
-          return s.slice(base.length);
-        }
-      }
-      return uri.fsPath;
-    },
     openTextDocument(uri: Uri): Promise<FakeTextDocument> {
       state.openedDocs.push(uri.toString());
       if (state.unopenableDocs.has(uri.toString())) {

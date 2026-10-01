@@ -1,7 +1,9 @@
 /**
  * The `jpnov/build` and `jpnov/listBooks` request handlers. Constraints:
  * - the request's `projectDirs` map DEFINES the targeted roots; every `*.jpbook` under a root
- *   is a book (dot-folders, `node_modules` and the resolved output dir are never scanned);
+ *   is a book (dot-folders, `node_modules` and the resolved output dirs are never scanned);
+ * - a root nested in another is a root of its own: the outer walk stops there, so a book has ONE
+ *   root, the innermost — the folder the live editor features resolve against;
  * - two book files that derive the same output path (`jpbookOutRel`) are a build error and
  *   neither is emitted;
  * - a `.jpbook` with an Error line is that book's build error (the first such line's message);
@@ -58,10 +60,12 @@ interface DiscoveredJpbook {
   readonly uri: string;
 }
 
-/** One targeted root: its normalized URI plus the RESOLVED output dir URI. */
+/** One targeted root, always `file:`: its normalized URI plus the RESOLVED output dir URI. */
 interface ProjectRoot {
   readonly rootUri: string;
   readonly outDirUri: string;
+  /** The {@link dirKey} of every targeted root and every output dir; the roots of a request share one set. */
+  readonly skipDirs: ReadonlySet<string>;
 }
 
 /**
@@ -82,27 +86,31 @@ function joinRel(parent: string, name: string): string {
 }
 
 /**
- * Recursively walks the workspace folder root collecting every `*.jpbook` file. `file:`
- * scheme only — virtual-fs trees cannot be enumerated, so such roots simply yield no books.
- * Three fixed exclusions, deliberately NOT configurable ("your output folder, dot-folders,
- * and node_modules are never scanned"): dot-DIRECTORIES (dot-files still match), any
- * `node_modules` at any depth, and the resolved output dir. The outDir comparison happens in
- * DECODED fs-path space (the walk needs the fs path for `readdir` anyway), so it never
- * depends on percent-encoding. Symlinked dirents report neither file nor
- * directory under `withFileTypes`, so links are never followed (no cycle risk). Results are
- * sorted by `fileRel` for deterministic output and stable collision reporting.
+ * A directory's fs path as a {@link ProjectRoot.skipDirs} key. NFC: the disk may hold a name
+ * decomposed where the folder's URI holds it composed.
  */
-async function discoverJpbooks(rootUri: string, outDirUri: string): Promise<DiscoveredJpbook[]> {
-  if (!isFileScheme(rootUri)) {
-    return [];
-  }
-  const found = await Array.fromAsync(walkJpbooks(rootUri, fileURLToPath(rootUri), '', fileURLToPath(outDirUri)));
+function dirKey(fsPath: string): string {
+  return fsPath.normalize('NFC');
+}
+
+/**
+ * Recursively walks one targeted root collecting every `*.jpbook` file. Four fixed exclusions,
+ * deliberately NOT configurable ("your output folder, dot-folders, and node_modules are never
+ * scanned"): dot-DIRECTORIES (dot-files still match), any `node_modules` at any depth, every
+ * resolved output dir, and every other targeted root — a root nested in this one keeps its
+ * books to itself. The comparison happens in DECODED fs-path space (the walk needs the fs path
+ * for `readdir` anyway), so it never depends on percent-encoding. Symlinked dirents report
+ * neither file nor directory under `withFileTypes`, so links are never followed (no cycle
+ * risk). Results are sorted by `fileRel` for deterministic output and stable collision reporting.
+ */
+async function discoverJpbooks(target: ProjectRoot): Promise<DiscoveredJpbook[]> {
+  const found = await Array.fromAsync(walkJpbooks(target.rootUri, fileURLToPath(target.rootUri), '', target.skipDirs));
   found.sort((a, b) => (a.fileRel < b.fileRel ? -1 : a.fileRel > b.fileRel ? 1 : 0));
   return found;
 }
 
 /** The recursive walk behind {@link discoverJpbooks}; yields matches depth-first in `readdir` order. */
-async function* walkJpbooks(dirUri: string, dirPath: string, dirRel: string, outDirPath: string): AsyncGenerator<DiscoveredJpbook> {
+async function* walkJpbooks(dirUri: string, dirPath: string, dirRel: string, skipDirs: ReadonlySet<string>): AsyncGenerator<DiscoveredJpbook> {
   let dirents;
   try {
     dirents = await readdir(dirPath, { withFileTypes: true });
@@ -120,10 +128,10 @@ async function* walkJpbooks(dirUri: string, dirPath: string, dirRel: string, out
         continue;
       }
       const childPath = join(dirPath, dirent.name);
-      if (childPath === outDirPath) {
+      if (skipDirs.has(dirKey(childPath))) {
         continue;
       }
-      yield* walkJpbooks(childUri(dirUri, dirent.name), childPath, joinRel(dirRel, dirent.name), outDirPath);
+      yield* walkJpbooks(childUri(dirUri, dirent.name), childPath, joinRel(dirRel, dirent.name), skipDirs);
     }
   }
 }
@@ -293,7 +301,7 @@ async function* buildRoot(
   selection: BuildSelection,
   token?: CancellationToken,
 ): AsyncGenerator<BuildOutput> {
-  const jpbooks = await discoverJpbooks(target.rootUri, target.outDirUri);
+  const jpbooks = await discoverJpbooks(target);
   // Group by derived output path to detect collisions across the whole root up front.
   const byOutRel = Map.groupBy(jpbooks, (fl) => jpbookOutRel(fl.fileRel));
 
@@ -366,12 +374,20 @@ function resolveProjectDir(rootUri: string, value: string, fallback: string): st
   return resolved.ok ? resolved.abs : childUri(rootUri, fallback);
 }
 
-/** The roots a request targets: every `projectDirs` entry with its output dir resolved — the map is the SOLE source of buildable roots. */
+/**
+ * The roots a request targets: every `file:` entry of `projectDirs` with its output dir resolved —
+ * the map is the SOLE source of buildable roots. A virtual-fs tree cannot be enumerated, so such
+ * a root yields no books.
+ */
 function targetRoots(projectDirs: ProjectDirsMap): ProjectRoot[] {
-  return Object.entries(projectDirs).map(([rawUri, dirs]) => {
-    const rootUri = normalizeRootUri(rawUri);
-    return { rootUri, outDirUri: resolveProjectDir(rootUri, dirs.outDir, PROJECT_DEFAULT.outDir) };
-  });
+  const resolved = Object.entries(projectDirs)
+    .map(([rawUri, dirs]) => {
+      const rootUri = normalizeRootUri(rawUri);
+      return { rootUri, outDirUri: resolveProjectDir(rootUri, dirs.outDir, PROJECT_DEFAULT.outDir) };
+    })
+    .filter(({ rootUri }) => isFileScheme(rootUri));
+  const skipDirs = new Set(resolved.flatMap((r) => [r.rootUri, r.outDirUri]).map((uri) => dirKey(fileURLToPath(uri))));
+  return resolved.map((r) => ({ ...r, skipDirs }));
 }
 
 /**
@@ -445,7 +461,7 @@ export async function handleBuild(
  */
 export async function handleListBooks(ctx: ServerContext, params: ListBooksParams): Promise<ListBooksResult> {
   const perRoot = await Promise.all(targetRoots(params.projectDirs).map(async (target) => {
-    const jpbooks = await discoverJpbooks(target.rootUri, target.outDirUri);
+    const jpbooks = await discoverJpbooks(target);
     return Promise.all(jpbooks.map(async (fl): Promise<BookEntry> => {
       const reply = await ctx.readText(fl.uri);
       const title = reply.ok ? parseJpbook(reply.text).meta.title : undefined;

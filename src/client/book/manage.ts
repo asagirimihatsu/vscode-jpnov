@@ -7,6 +7,8 @@
  * editing one rewrites or removes the lines of that key alone. Chapters and covers are the
  * two entry lists; a list action takes an `EntryList` and never touches the other list.
  */
+import { posix } from 'node:path';
+
 import * as vscode from 'vscode';
 
 import { COVER_TEMPLATE, normalizeFileInput } from '#/shared/book/create.ts';
@@ -160,10 +162,11 @@ function listText(list: EntryList): { placeHolder: string; noneLeft: string; alr
   };
 }
 
-/** The folder's `.jpnov` files as sorted root-relative paths (book entries are root-relative). */
+/** The `.jpnov` files under the book's root as sorted paths from that root, the form an entry takes. */
 async function findJpnovFiles(rootUri: vscode.Uri): Promise<string[]> {
   const found = await vscode.workspace.findFiles(new vscode.RelativePattern(rootUri, '**/*.jpnov'), FIND_FILES_EXCLUDE);
-  return found.map((uri) => normalizeFsPath(vscode.workspace.asRelativePath(uri, false))).sort();
+  const rootPath = normalizeFsPath(rootUri.fsPath);
+  return found.map((uri) => posix.relative(rootPath, normalizeFsPath(uri.fsPath))).sort();
 }
 
 /**
@@ -324,8 +327,9 @@ async function createBook(view: BooksViewProvider | undefined): Promise<void> {
   if (rel === undefined) {
     return;
   }
-  if (await writeNewFile(root, rel) !== null) {
-    await view?.revealNewBook(folder.uri, rel);
+  const target = await writeNewFile(root, rel);
+  if (target !== null) {
+    await view?.revealNewBook(target);
   }
 }
 

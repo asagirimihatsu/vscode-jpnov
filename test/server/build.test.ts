@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { CancellationToken, CancellationTokenSource } from 'vscode-languageserver/node';
 
 import { handleBuild, handleListBooks } from '../../src/server/build.ts';
+import { longestPrefixRoot } from '../../src/server/fsUri.ts';
 import {
   makeContext,
   makeFakeConnection,
@@ -669,6 +670,86 @@ test('a non-ASCII outDir (出力) is still excluded from discovery', async () =>
   assert.equal(result.artifacts.length, 1, '出力/old.jpbook is not a book');
   assert.ok(result.artifacts.every((a) => a.path.startsWith(`${ws.uri}/`)));
   assert.ok(result.artifacts.some((a) => a.path.endsWith('/vol1.txt')));
+});
+
+/** The nested-root fixture: `extra/` is a targeted root inside the targeted root `dir`. */
+async function writeNestedRoots(dir: string): Promise<void> {
+  // The outer book lists a chapter of its own and one inside the nested root.
+  await writeUnder(dir, 'vol1.jpbook', 'ch1.jpnov\nextra/ch.jpnov');
+  await writeUnder(dir, 'ch1.jpnov', 'そと');
+  await writeUnder(dir, 'extra/side.jpbook', 'ch.jpnov');
+  await writeUnder(dir, 'extra/deep/index.jpbook', 'ch.jpnov');
+  await writeUnder(dir, 'extra/ch.jpnov', 'うち');
+}
+
+test('nested roots: a book belongs to the innermost root and is listed once, in either order of the roots', async () => {
+  await using ws = await makeTmpWorkspace();
+  await writeNestedRoots(ws.dir);
+  const inner = `${ws.uri}/extra`;
+
+  for (const roots of [[ws.uri, inner], [inner, ws.uri]]) {
+    const projectDirs: ProjectDirsMap = Object.fromEntries(roots.map((uri) => [uri, { outDir: 'dist' }]));
+    const { books } = await handleListBooks(boot().ctx, { projectDirs });
+
+    assert.equal(books.length, 3, 'each book once');
+    assert.deepEqual(
+      Object.fromEntries(books.map((b) => [b.uri, [b.rootUri, b.fileRel, b.outRel]])),
+      {
+        [`${ws.uri}/vol1.jpbook`]: [ws.uri, 'vol1.jpbook', 'vol1'],
+        [`${inner}/side.jpbook`]: [inner, 'side.jpbook', 'side'],
+        [`${inner}/deep/index.jpbook`]: [inner, 'deep/index.jpbook', 'deep'],
+      },
+    );
+    // The list and the editor answer alike: an open `.jpbook` resolves against this same root.
+    for (const book of books) {
+      assert.equal(longestPrefixRoot(roots, book.uri), book.rootUri);
+    }
+  }
+});
+
+test("nested roots: each book builds once, against its own root, into that root's output dir", async () => {
+  await using ws = await makeTmpWorkspace();
+  const { ctx, conn } = boot();
+  await writeNestedRoots(ws.dir);
+  const inner = `${ws.uri}/extra`;
+
+  const result = await handleBuild(ctx, {
+    format: 'txt',
+    settings: SETTINGS,
+    projectDirs: { ...projectsFor(ws.uri), ...projectsFor(inner) },
+  });
+
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(
+    result.artifacts.map((a) => [a.path, a.kind === 'txt' ? a.content : a.kind]),
+    [
+      [`${ws.uri}/dist/vol1.txt`, 'そと\n\nうち'], // an entry may name a file inside the nested root
+      [`${inner}/dist/deep.txt`, 'うち'],
+      [`${inner}/dist/side.txt`, 'うち'],
+    ],
+  );
+  // One publish per book: no second root diagnoses the same file against another base.
+  assert.deepEqual(conn.diagnostics, [
+    { uri: `${ws.uri}/vol1.jpbook`, count: 0 },
+    { uri: `${inner}/deep/index.jpbook`, count: 0 },
+    { uri: `${inner}/side.jpbook`, count: 0 },
+  ]);
+});
+
+test('nested roots: a nested folder the disk holds decomposed still ends the outer walk', async () => {
+  await using ws = await makeTmpWorkspace();
+  const name = 'ガイド';
+  await writeUnder(ws.dir, `${name.normalize('NFD')}/side.jpbook`, 'ch.jpnov');
+  // The folder's URI as the editor gives it: the composed name, percent-encoded.
+  const inner = `${ws.uri}/${encodeURIComponent(name)}`;
+
+  const { books } = await handleListBooks(boot().ctx, {
+    projectDirs: { ...projectsFor(ws.uri), ...projectsFor(inner) },
+  });
+
+  // Whether the nested root itself finds the book depends on the file system resolving the
+  // composed path; the outer root never claims it.
+  assert.deepEqual(books.filter((b) => b.rootUri === ws.uri), []);
 });
 
 test("names with # and % (issue #76) list, build, and select — URIs are percent-encoded like the client's", async () => {

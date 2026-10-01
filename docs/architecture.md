@@ -164,6 +164,32 @@ already. Spans that run across lines are paired in the Resolver.
 What the full list contributes is the order, and with it rule 2: a setting that
 belongs to the IR must not reach the stages above it.
 
+## Books and workspace folders
+
+A root is a workspace folder, and a folder nested in another is a root of its
+own. A book has one root: the innermost root that contains its `.jpbook`. VS Code
+picks the folder of a file the same way, for its settings and for
+`getWorkspaceFolder`.
+
+Everything about a book comes from that root: where its entries count from, what
+they may not escape, the group it is listed under, its output path and its output
+folder. An entry may name a file inside a nested root. The folder a chapter sits
+in decides only the settings of that file: the narration vocabulary it is
+highlighted with, the encoding it is read in.
+
+Each reader takes the root from one place:
+
+| Reader | Takes the root from |
+| --- | --- |
+| The list and the builds (`src/server/build.ts`) | the walk that reached the book; a walk stops at every other root |
+| An open `.jpbook` (`src/server/server.ts`) | `WorkspaceRoots.rootOf` |
+| The Books view (`src/client/book/`) | `BookEntry.rootUri`, as the server listed it |
+| Rename tracking (`src/client/book/tracking.ts`) | `getWorkspaceFolder` of the book |
+
+The client never asks VS Code for a workspace-relative path. `asRelativePath`
+counts from the innermost folder of the file it is given, and that file is the
+chapter.
+
 ## What keeps this true
 
 - **Import rules** (`eslint.config.mjs`): `src/shared/` and `src/server/` may not
@@ -183,5 +209,8 @@ belongs to the IR must not reach the stages above it.
 - **The dual of the text build** (`test/shared/compiler/document.test.ts`):
   rendering the concatenated text gives the pages that rendering the chapters
   gave.
+- **The root of a book** (`eslint.config.mjs`, `test/server/build.test.ts`):
+  `src/client/` may not call `asRelativePath`, and the tests hold the list and the
+  builds to the root the editor resolves the same book against.
 - **End to end** (`test/e2e/`): the bundled server over LSP, and the pages it
   renders in a headless browser.
