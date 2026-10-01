@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import type { Connection } from 'vscode-languageserver/node';
+import type { Connection, PublishDiagnosticsParams } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { parse } from '../../src/shared/ast/parse.ts';
@@ -34,6 +34,9 @@ export interface RecordedDiagnostics {
 
 export interface FakeConnection {
   readonly notifications: RecordedNotification[];
+  /** Every `sendDiagnostics` payload, as sent. */
+  readonly published: PublishDiagnosticsParams[];
+  /** {@link published} as one uri and count per publish. */
   readonly diagnostics: RecordedDiagnostics[];
   /** How many times the server asked the client to re-pull semantic tokens. */
   semanticTokenRefreshes(): number;
@@ -43,13 +46,16 @@ export interface FakeConnection {
 
 export function makeFakeConnection(): FakeConnection {
   const notifications: RecordedNotification[] = [];
-  const diagnostics: RecordedDiagnostics[] = [];
+  const published: PublishDiagnosticsParams[] = [];
 
   let refreshCount = 0;
 
   const impl = {
     notifications,
-    diagnostics,
+    published,
+    get diagnostics(): RecordedDiagnostics[] {
+      return published.map((p) => ({ uri: p.uri, count: p.diagnostics.length }));
+    },
     languages: {
       semanticTokens: {
         refresh(): Promise<void> {
@@ -65,8 +71,8 @@ export function makeFakeConnection(): FakeConnection {
       notifications.push({ method, params });
       return Promise.resolve();
     },
-    sendDiagnostics(params: { uri: string; diagnostics: unknown[] }): Promise<void> {
-      diagnostics.push({ uri: params.uri, count: params.diagnostics.length });
+    sendDiagnostics(params: PublishDiagnosticsParams): Promise<void> {
+      published.push(params);
       return Promise.resolve();
     },
     sendRequest(): Promise<unknown> {
