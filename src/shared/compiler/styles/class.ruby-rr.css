@@ -1,10 +1,10 @@
 /* Ruby lane (rr = right). Chrome has no working double-sided ruby and native ruby's fractional
    advance breaks the whole-cell grid, so every ruby renders here: <ruby> is an inline-flex
    distributing its base spans; <rt> is a display:contents shell (font-size:inherit undoes the
-   UA's 50%) whose single <span> is the absolute 0.5em vertical-rl lane — centred on the ruby
+   UA's 50%) whose single <span> is the absolute 0.5em lane — centred on the ruby
    box, min-height 100% of it, shifted ±1.5em of its own em. The <rt> can never be the positioned
    box: WebKit forces it position:static (WebCore/style/StyleAdjuster.cpp). */
 ruby.rr{display:inline-flex;flex-direction:row;justify-content:space-around;position:relative}
 ruby.rr>rt{display:contents;font-size:inherit}
-ruby.rr>rt>span{position:absolute;top:50%;left:50%;min-height:100%;display:flex;flex-direction:row;justify-content:space-around;writing-mode:vertical-rl;font-size:0.5em;line-height:1;white-space:nowrap}
+ruby.rr>rt>span{position:absolute;top:50%;left:50%;min-height:100%;display:flex;flex-direction:row;justify-content:space-around;font-size:0.5em;line-height:1;white-space:nowrap}
 ruby.rr>rt>span{transform:translate(-50%,-50%) translateX(1.5em)}

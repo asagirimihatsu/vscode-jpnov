@@ -1,9 +1,9 @@
 /**
  * Assembles the document stylesheet from the static fragments in `styles/*.css` (compiled to
  * strings in `styles.generated.ts` by `scripts/gen-styles.ts`) plus the dynamic residue: the
- * `:root{}` variable block (`--cpl`/`--pitch`/`--lpp`/`--htop`/`--font-family`, `--edge`), the
- * BUILD paper rules, the 罫線 layers ({@link edgeRules}) and the on-demand `indent-N` / emphasis
- * class rules.
+ * `:root{}` variable block (`--cpl`/`--pitch`/`--lpp`/`--htop`, `--edge`), the BUILD paper
+ * rules, the 罫線 layers ({@link edgeRules}), the on-demand `indent-N` / emphasis class rules
+ * and the 本文 font ({@link fontRule}).
  * Constraints:
  * - everything is a RULE inside the document's one `<style>`, never a `style=` attribute (the
  *   webview CSP strips those);
@@ -14,8 +14,9 @@
  *   absent from the output;
  * - in BOTH modes the EDGE_INSET gap is reserved and the pitch is the one `--pitch` value
  *   whether edgeLine is on or off, so toggling it never moves a glyph;
- * - chrome sub-elements (`.ft` / `.hd` / `.ln` / `.line::before`) are horizontal-tb INSIDE a
- *   vertical-rl container and use PHYSICAL positioning properties only.
+ * - the line numbers (`.ln` / `.line::before`) are horizontal-tb INSIDE a vertical-rl container
+ *   and, like the furniture on the horizontal sheet (`.hd` / `.ft`), use PHYSICAL positioning
+ *   properties only.
  * Pure + vscode-free.
  */
 
@@ -79,6 +80,12 @@ function classRule(name: string): string {
   return styleRule(name);
 }
 
+/** The base colours `--edge` carries ({@link edgeBase}). */
+type EdgeBase = typeof EDGE_RED | 'currentColor';
+
+/** What a `:root` variable may carry: a number or the edge base colour, never a raw setting. */
+type RootValue = number | EdgeBase;
+
 /**
  * Edge BASE colour for `--edge`, or null for 'none' (include no edge fragment, inject no
  * variable). One policy for both media: `red` is the semantic 赤 (EDGE_RED), `text` bases on
@@ -86,7 +93,7 @@ function classRule(name: string): string {
  * preview, ink on the build's white sheet). The edge fragments and {@link edgeRules} apply the
  * 80%-alpha `color-mix`; this picks only the base colour it mixes.
  */
-function edgeBase(edge: EdgeLineStyle): string | null {
+function edgeBase(edge: EdgeLineStyle): EdgeBase | null {
   switch (edge) {
     case 'none':
       return null;
@@ -98,28 +105,37 @@ function edgeBase(edge: EdgeLineStyle): string | null {
 }
 
 /**
- * The built-in 明朝-first stack `--font-family` falls back to when `jpnov.layout.fontFamily`
- * is blank. Named JP families must come FIRST: shared codepoints (… ‥ quotes) exist in Latin
- * serif fonts too, so a bare `serif` stops per-codepoint fallback before any JP font — and a
- * rotated (UAX#50 VO=R) Latin ellipsis then hugs the column edge. macOS → Windows (EN + JA
- * localized names) → Linux Noto, generic serif last.
+ * The built-in 明朝-first stack: the 本文 font, which `jpnov.layout.fontFamily` follows in the
+ * same rule ({@link fontRule}). Named JP families must come FIRST: shared codepoints (… ‥
+ * quotes) exist in Latin serif fonts too, so a bare `serif` stops per-codepoint fallback before
+ * any JP font — and a rotated (UAX#50 VO=R) Latin ellipsis then hugs the column edge. macOS →
+ * Windows (EN + JA localized names) → Linux Noto, generic serif last.
  */
 export const DEFAULT_FONT_STACK =
   '"Hiragino Mincho ProN","Yu Mincho","YuMincho","游明朝","Noto Serif CJK JP","Noto Serif JP",serif';
 
+/** The longest `jpnov.layout.fontFamily` taken; a font list is far shorter. */
+export const FONT_LIST_MAX = 256;
+
 /**
- * `jpnov.layout.fontFamily` → the `--font-family` value. The raw setting lands inside the
- * document's one `<style>` block, so strip anything that could leave the declaration (`;` `}`),
- * open a tag (`<`), escape (`\`), or comment out the rest of the sheet (`/*`); quotes and
- * commas are legal font-list tokens and pass. Blank → {@link DEFAULT_FONT_STACK}.
+ * The 本文 font, on the `.book` wrapper of both media: the built-in stack, then
+ * `jpnov.layout.fontFamily` — a list the browser cannot parse drops out and the stack stays.
+ * The raw setting lands inside the document's one `<style>` block, so it is written only when
+ * it is a plain font list, and never repaired: a character that could leave the declaration
+ * (`;` `}`), open a block (`{`), a tag (`<` `>`) or an escape (`\`), a control character (a new
+ * line ends a quoted name), or, once the closed quoted names are set aside, a quote, a bracket
+ * or `*` → the stack alone, as for a blank value or one over {@link FONT_LIST_MAX}.
  */
-function fontFamilyValue(raw: string): string {
-  const clean = raw.replace(/\/\*|[;{}<>\\\p{Cc}]/gu, '').trim().slice(0, 256);
-  return clean === '' ? DEFAULT_FONT_STACK : clean;
+function fontRule(raw: string): string {
+  const list = raw.trim();
+  const legal = list !== '' && list.length <= FONT_LIST_MAX &&
+    !/[;{}<>\\\p{Cc}]/u.test(list) &&
+    !/["'()[\]*]/.test(list.replace(/"[^"]*"|'[^']*'/g, ''));
+  return `.book{font-family:${DEFAULT_FONT_STACK}${legal ? `;font-family:${list}` : ''}}`;
 }
 
 /** The `:root{}` dynamic-values rule (insertion order — deterministic output). */
-function rootVars(vars: Record<string, string | number>): string {
+function rootVars(vars: Record<string, RootValue>): string {
   const decls = Object.entries(vars)
     .map(([name, value]) => `${name}:${String(value)}`)
     .join(';');
@@ -131,14 +147,14 @@ function rootVars(vars: Record<string, string | number>): string {
  * frame pseudo-element, each anchored an independent `k × var(--pitch)` from the frame's right
  * edge. NEVER a repeating gradient — Chromium's print rasterizer tiles those on a
  * device-pixel-snapped period, drifting off the vector-placed glyph columns (~half a column
- * across an A4 page) and dropping some repetitions. `em` on the build sheet, `rem` in the
- * preview (see preview.edge.css on the rem pinning).
+ * across an A4 page) and dropping some repetitions. The em is the text's in both media (the
+ * build sheet's; the preview's `.book` pins it, preview.base.css).
  */
-function edgeRules(selector: string, linesPerPage: number, unit: 'em' | 'rem'): string {
+function edgeRules(selector: string, linesPerPage: number): string {
   const mix = 'color-mix(in srgb,var(--edge) 80%,transparent)';
   const boundaries = Array.from({ length: linesPerPage - 1 }, (_, i) => i + 1);
   const images = boundaries.map(() => `linear-gradient(${mix},${mix})`);
-  const positions = boundaries.map((k) => `right calc(${String(k)}*var(--pitch)*1${unit} - 1px) top`);
+  const positions = boundaries.map((k) => `right calc(${String(k)}*var(--pitch)*1em - 1px) top`);
   return `${selector}{background-image:${images.join(',')};` +
     `background-position:${positions.join(',')};` +
     'background-size:1px 100%;background-repeat:no-repeat;}';
@@ -160,8 +176,8 @@ export function emrProbe(used: ReadonlySet<string>): string {
  * footer corners) keep equalling the page em. The sheet→paper inset is a white BORDER: it
  * paints outside the padding box, so the `.page` border box IS the paper in both media while
  * `overflow:hidden` clipping and the furniture offsets stay on the padding box. border-width is
- * PHYSICAL four-value (.page is vertical-rl): top/bottom carry the asymmetric inline-axis
- * insets, left/right the centered block-axis inset.
+ * PHYSICAL four-value on the horizontal sheet: top/bottom carry the asymmetric insets along the
+ * grid's inline axis, left/right the centered ones along its block axis.
  */
 function paperRules(fit: PaperFit): string {
   return `@page{size:${String(fit.widthMm)}mm ${String(fit.heightMm)}mm;margin:0;}` +
@@ -215,23 +231,22 @@ type StylesheetOptions =
  * (callers pass it pre-sorted, lexicographic by class name, for deterministic output);
  * chrome features select their fragment in a fixed order (anchor → line numbers → edge →
  * header → footer), followed by the `:root` variables and (BUILD) the paper rules, so the
- * output stays deterministic.
+ * output stays deterministic. The font rule is LAST: it alone carries a raw setting, and
+ * nothing follows it.
  */
 export function stylesheet(opts: StylesheetOptions): string {
   const edge = edgeBase(opts.chrome.edgeLine); // null ⟺ no edge fragment, no --edge
   const anchor = opts.chrome.lineNumbers || edge !== null; // .line{position:relative} — rationale in *.anchor.css
-  const font = fontFamilyValue(opts.fontFamily);
-  const tail = (opts.usedClasses ?? []).map(classRule);
+  const tail = [...(opts.usedClasses ?? []).map(classRule), fontRule(opts.fontFamily)];
 
   if (opts.paginate) {
     const { chrome } = opts;
     const hTop = HEADER_BAND + (chrome.lineNumbers ? LINENUM_BAND : 0);
-    const vars: Record<string, string | number> = {
+    const vars: Record<string, RootValue> = {
       '--cpl': opts.charsPerLine,
       '--pitch': opts.linePitch,
       '--lpp': opts.linesPerPage,
       '--htop': hTop,
-      '--font-family': font,
     };
     if (edge !== null) {
       vars['--edge'] = edge;
@@ -254,15 +269,14 @@ export function stylesheet(opts: StylesheetOptions): string {
       chrome.footer !== '' ? S.buildFooter : '',
       rootVars(vars),
       paperRules(fit),
-      edge !== null ? edgeRules('.page::before', opts.linesPerPage, 'em') : '',
+      edge !== null ? edgeRules('.page::before', opts.linesPerPage) : '',
       ...tail,
     ].join('');
   }
 
-  const vars: Record<string, string | number> = {
+  const vars: Record<string, RootValue> = {
     '--cpl': opts.charsPerLine,
     '--pitch': opts.linePitch,
-    '--font-family': font,
   };
   if (edge !== null) {
     vars['--lpp'] = opts.linesPerPage; // read only by the edge fragment's .segment min-block-size
@@ -274,7 +288,7 @@ export function stylesheet(opts: StylesheetOptions): string {
     opts.chrome.lineNumbers ? S.previewLn : '',
     edge !== null ? S.previewEdge : '',
     rootVars(vars),
-    edge !== null ? edgeRules('.segment::before', opts.linesPerPage, 'rem') : '',
+    edge !== null ? edgeRules('.segment::before', opts.linesPerPage) : '',
     ...tail,
   ].join('');
 }

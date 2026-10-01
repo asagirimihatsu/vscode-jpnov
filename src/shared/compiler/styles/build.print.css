@@ -4,7 +4,7 @@
    z-index is load-bearing: the .page sheets are positioned and later in the DOM, so
    without it they would paint over the button. px sizing: the document's em/rem track the
    paper's mm-derived font size (css.ts paperRules) and would scale this UI with A4/A6.
-   system-ui, never --font-family: UI chrome, not 本文. Colours are literal (no --vscode-*
+   system-ui, never the 本文 font: UI chrome, outside .book. Colours are literal (no --vscode-*
    variables exist in the standalone document): the VS Code light-theme primary-button blue. */
 .print{position:fixed;top:16px;right:16px;z-index:1;font:14px/1 system-ui,sans-serif;color:#fff;background:#005fb8;padding:10px 22px;border:none;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,0.25);cursor:pointer;}
 .print:hover{background:#0258a8;}
