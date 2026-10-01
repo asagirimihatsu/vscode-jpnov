@@ -1339,3 +1339,27 @@ test('build: the request token rides every readText call', async () => {
   assert.equal(seen.length, 3); // the manifest + two chapters
   assert.ok(seen.every((t) => t === token));
 });
+
+// --- an open manifest (issue #82): its diagnostics sit on the lines the reader returns ---
+
+/** A reader that answers `rel` with `text`, the editor's unsaved buffer, and reads everything else from disk. */
+function unsaved(rel: string, text: string): ReadText {
+  const disk = nodeReader();
+  return (uri, token) => (uri.endsWith(`/${rel}`) ? Promise.resolve({ ok: true, text }) : disk(uri, token));
+}
+
+test('build: the manifest is diagnosed on the lines the reader returns, unsaved edits included', async () => {
+  await using ws = await makeTmpWorkspace();
+  await writeUnder(ws.dir, 'vol1.jpbook', 'src/gone.jpnov');
+  // Saved, the missing chapter is line 0; a blank line typed above it and left unsaved makes it line 1.
+  const readers: readonly [ReadText, number][] = [[nodeReader(), 0], [unsaved('vol1.jpbook', '\nsrc/gone.jpnov'), 1]];
+
+  for (const [reader, line] of readers) {
+    const conn = makeFakeConnection();
+    await handleBuild(makeContext(conn, reader), { format: 'txt', settings: SETTINGS, projectDirs: projectsFor(ws.uri) });
+    assert.deepEqual(
+      conn.published.map((p) => [p.uri, p.diagnostics.map((d) => [d.code, d.range.start.line])]),
+      [[`${ws.uri}/vol1.jpbook`, [['jpbook.fileNotFound', line]]]],
+    );
+  }
+});
