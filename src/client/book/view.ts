@@ -63,6 +63,17 @@ const BUILD_REQUEST_TIMEOUT_MS = 120_000;
 /** Hard cap on the enumeration round-trip: a directory walk, so a reply this late means a stuck server. */
 const LIST_REQUEST_TIMEOUT_MS = 30_000;
 
+/**
+ * Opens a file URI in the OS. VS Code rebuilds a `Uri` target as `encodeURI(uri.toString(true))`,
+ * which lets `#` and `?` through as fragment and query; a string target equal to its own
+ * `Uri.toString()` is used as written, so the encoded form goes in despite the `Uri`-only type.
+ * https://github.com/japanese-novel/vscode-jpnov/issues/111
+ */
+function openExternally(uri: string): void {
+  // openExternal resolves to false on failure rather than rejecting, so void is safe.
+  void vscode.env.openExternal(vscode.Uri.parse(uri).toString() as unknown as vscode.Uri);
+}
+
 /** The book's display label: its front-matter title, else the last segment of the output name. */
 function bookTitle(entry: BookEntry): string {
   return entry.title ?? splitRelPath(entry.outRel).name;
@@ -683,7 +694,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     for (const dir of outDirs) {
       // openExternal opens the folder's contents; revealFileInOS would only select it in its parent.
-      void vscode.env.openExternal(vscode.Uri.parse(dir));
+      openExternally(dir);
     }
   }
 
@@ -806,7 +817,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           // folder reveal below.
           if (action === 'print') {
             for (const file of written) {
-              void vscode.env.openExternal(vscode.Uri.parse(file));
+              openExternally(file);
             }
           }
           // One artifact per book now (a single format), so the file count IS the book count.

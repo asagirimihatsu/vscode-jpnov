@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { CancellationTokenSource } from 'vscode-languageserver/node';
 
 import { META_KEYS } from '../../src/shared/book/jpbook.ts';
+import { encodePathSegment } from '../../src/shared/uri.ts';
 import {
   buildVscode,
   createFakeWebviewView,
@@ -413,6 +414,29 @@ test('a failed build toasts every error, then opens the FIRST failing book with 
   assert.equal(ctx.at(-1)?.args[1], true);
   assert.equal(state.infoMessages.length, 0); // no success toast
   assert.equal(state.openedExternal.length, 0);
+});
+
+test('`#`, `?` and `%` in an output path reach the OS percent-encoded, for the folder and for print', async () => {
+  const root = 'file:///ws';
+  const dir = `${root}/${encodePathSegment('出力#1')}`;
+  const files = ['a#b', 'a?b', '100%'].map((name) => `${dir}/${encodePathSegment(name)}.html`);
+  const cases = [
+    { format: 'txt', opened: [dir] },
+    { format: 'print', opened: files },
+  ] as const;
+  for (const { format, opened } of cases) {
+    resetMockState(state);
+    const { view } = await setup([entry(root, 'a')], {
+      ok: true,
+      outDirs: [dir],
+      // The view writes whatever kind arrives; the paths are what this test is about.
+      artifacts: files.map((path) => ({ kind: 'html', path, content: '<p>a</p>' })),
+      errors: [],
+    });
+    view.webview.receive({ type: 'build', format });
+    await tick();
+    assert.deepEqual(state.openedExternal, opened);
+  }
 });
 
 test('a partial batch keeps the success flow intact and still opens the failing book', async () => {

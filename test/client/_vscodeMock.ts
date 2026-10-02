@@ -695,8 +695,12 @@ export function buildVscode(state: MockState): Record<string, unknown> {
     l10n,
     env: {
       language: 'en',
-      openExternal(target: { toString(): string }): Promise<boolean> {
-        state.openedExternal.push(String(target));
+      // As VS Code does: a string (taken to be canonical already) is opened as written, a Uri
+      // as `encodeURI(uri.toString(true))`.
+      openExternal(target: string | Uri): Promise<boolean> {
+        state.openedExternal.push(
+          typeof target === 'string' ? target : encodeURI(decodeURIComponent(target.toString())),
+        );
         return Promise.resolve(true);
       },
     },
