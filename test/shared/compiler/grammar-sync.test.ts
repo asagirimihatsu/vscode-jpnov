@@ -130,8 +130,8 @@ test('the .jpbook item rule accepts exactly the parser cover markers, before the
   // to win over the generic `key: value` rule.
   const book = JSON.parse(
     readFileSync(new URL('../../../syntaxes/jpbook.tmLanguage.json', import.meta.url), 'utf8'),
-  ) as { patterns: { patterns?: { match?: string }[] }[] };
-  const frontMatter = book.patterns[0]?.patterns ?? [];
+  ) as { repository: Record<string, { patterns: { match?: string }[] } | undefined> };
+  const frontMatter = book.repository['frontmatter-body']?.patterns ?? [];
   const item = frontMatter.findIndex((p) => p.match?.includes('.jpnov') === true);
   const keyValue = frontMatter.findIndex((p) => p.match?.includes(':：') === true);
   const needle = `[${COVER_ITEM_MARKS.join('')}]`;
@@ -142,6 +142,29 @@ test('the .jpbook item rule accepts exactly the parser cover markers, before the
     frontMatter[item]?.match?.includes(needle) === true,
     `stale cover-marker class in:\n${frontMatter[item]?.match ?? ''}\nPASTE:\n${needle}`,
   );
+});
+
+test('the .jpbook front matter opens at the document start and after leading blank lines alike', () => {
+  interface Rule {
+    name?: string;
+    begin?: string;
+    beginCaptures?: unknown;
+    endCaptures?: unknown;
+    patterns?: Rule[];
+    include?: string;
+  }
+  const book = JSON.parse(
+    readFileSync(new URL('../../../syntaxes/jpbook.tmLanguage.json', import.meta.url), 'utf8'),
+  ) as { patterns: Rule[] };
+  const atStart = book.patterns.find((p) => p.name === 'meta.frontmatter.jpbook');
+  const afterBlank = book.patterns
+    .find((p) => p.name === undefined && p.begin?.startsWith('\\A') === true)
+    ?.patterns?.find((p) => p.name === 'meta.frontmatter.jpbook');
+  assert.ok(atStart, 'document-start front-matter rule not found');
+  assert.ok(afterBlank, 'front-matter rule inside the leading-blank-lines rule not found');
+  const painted = (rule: Rule): unknown => [rule.beginCaptures, rule.endCaptures, rule.patterns];
+  assert.deepEqual(painted(afterBlank), painted(atStart));
+  assert.deepEqual(atStart.patterns, [{ include: '#frontmatter-body' }]);
 });
 
 test('the single-line 字下げ rule is line-head anchored and full-width-only', () => {
