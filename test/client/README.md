@@ -24,6 +24,11 @@ Every test script passes `--import ./test/register.mjs`, which registers
   `mock.module('vscode', { namedExports: buildVscode(state) })` layers the behavioral
   mock on top per test.
 
+`extension.test.ts` loads the entry module, the one module that value-imports
+`vscode-languageclient/node` (a CommonJS package that requires `vscode` on load). The suite
+replaces that package through `mock.module('vscode-languageclient/node', …)` with a fake
+client.
+
 No `node_modules/` shim and no esbuild pre-bundling are needed; any suite can be run
 directly as long as the register flag rides along:
 

@@ -51,6 +51,11 @@ export class Disposable {
   }
 }
 
+/** A registration-only hook: it accepts the listener and never calls it. */
+export function registrationOnly(): Disposable {
+  return new Disposable(() => { /* no-op */ });
+}
+
 /** Just enough of vscode.Uri: parse/file + toString + path/scheme/authority. */
 export class Uri {
   readonly scheme: string;
@@ -197,6 +202,17 @@ export interface FakeSelectionChange {
   selections: readonly FakeSelection[];
 }
 
+/** `ConfigurationChangeEvent`: the one method the listeners call. */
+export interface FakeConfigurationChange {
+  affectsConfiguration(section: string): boolean;
+}
+
+/** `WorkspaceFoldersChangeEvent`. */
+export interface FakeWorkspaceFoldersChange {
+  added: readonly { uri: Uri }[];
+  removed: readonly { uri: Uri }[];
+}
+
 export interface FakeWebviewPanel {
   viewType: string;
   title: string;
@@ -242,6 +258,10 @@ export interface MockState {
   /** Editors the preview's cursor-follow consults via `window.visibleTextEditors`. */
   visibleEditors: FakeTextEditor[];
   onDidChangeSelection: EventEmitter<FakeSelectionChange>;
+  /** `workspace.onDidChangeConfiguration`: a test sets the values in `config` / `scopedConfig`, then fires this. */
+  onDidChangeConfig: EventEmitter<FakeConfigurationChange>;
+  /** `workspace.onDidChangeWorkspaceFolders`: a test edits `workspaceFolders`, then fires this. */
+  onDidChangeFolders: EventEmitter<FakeWorkspaceFoldersChange>;
   /** Programmed `showQuickPick` responses (FIFO; undefined = Esc/cancel). */
   quickPickQueue: unknown[];
   quickPickCalls: { items: unknown; options: unknown }[];
@@ -310,6 +330,8 @@ export function createMockState(): MockState {
     activeEditor: undefined,
     visibleEditors: [],
     onDidChangeSelection: new EventEmitter<FakeSelectionChange>(),
+    onDidChangeConfig: new EventEmitter<FakeConfigurationChange>(),
+    onDidChangeFolders: new EventEmitter<FakeWorkspaceFoldersChange>(),
     quickPickQueue: [],
     quickPickCalls: [],
     inputBoxQueue: [],
@@ -359,6 +381,8 @@ export function resetMockState(s: MockState): void {
   s.onDidChangeSelection.dispose();
   s.onDidChangeDoc.dispose();
   s.onDidChangeActiveEditor.dispose();
+  s.onDidChangeConfig.dispose();
+  s.onDidChangeFolders.dispose();
   s.quickPickQueue.length = 0;
   s.quickPickCalls.length = 0;
   s.inputBoxQueue.length = 0;
@@ -421,6 +445,8 @@ export function buildVscode(state: MockState): Record<string, unknown> {
       state.registeredViewProviders.set(viewId, provider);
       return new Disposable(() => state.registeredViewProviders.delete(viewId));
     },
+    // The preview's revival hook (tests hand a panel to `Preview.adopt()` themselves).
+    registerWebviewPanelSerializer: registrationOnly,
     showErrorMessage(...args: unknown[]): Promise<undefined> {
       if (typeof args[0] === 'string') {
         state.errorMessages.push(args[0]);
@@ -546,15 +572,14 @@ export function buildVscode(state: MockState): Record<string, unknown> {
       return { onDidCreate: on, onDidDelete: on, onDidChange: on, dispose() { /* no-op */ } };
     },
     onDidChangeTextDocument: state.onDidChangeDoc.event,
+    onDidChangeConfiguration: state.onDidChangeConfig.event,
+    onDidChangeWorkspaceFolders: state.onDidChangeFolders.event,
     // File-operation events (Explorer gestures): registration-only, like the watcher above.
-    onDidCreateFiles(listener: Listener<unknown>): Disposable {
-      void listener;
-      return new Disposable(() => { /* no-op */ });
-    },
-    onDidDeleteFiles(listener: Listener<unknown>): Disposable {
-      void listener;
-      return new Disposable(() => { /* no-op */ });
-    },
+    onDidCreateFiles: registrationOnly,
+    onDidDeleteFiles: registrationOnly,
+    onDidRenameFiles: registrationOnly,
+    // Documents opened after activation (tests seed `textDocuments` up front).
+    onDidOpenTextDocument: registrationOnly,
     // Settings reads. Bare getConfiguration() + full keys (renderConfig.ts) resolves from
     // `state.config` as before; the section/scope form (highlightConfig.ts, probe.ts)
     // consults `state.scopedConfig` first — keyed `${scopeUri}|${section ? section + '.' : ''}${key}`
@@ -578,7 +603,7 @@ export function buildVscode(state: MockState): Record<string, unknown> {
           return state.inspectResults.get(`${scopeKey}|${fullKey(key)}`);
         },
         // Recorded, and applied to `state.config` so a later `get` reads the written value (no
-        // change event fires: the mock has no onDidChangeConfiguration).
+        // change event fires: a test fires `state.onDidChangeConfig` itself).
         update(key: string, value: unknown, target: unknown): Promise<void> {
           state.configUpdates.push({ key: fullKey(key), value, target });
           state.config[fullKey(key)] = value;
