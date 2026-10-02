@@ -1,13 +1,27 @@
 import assert from 'node:assert/strict';
 
-/** The only self-closed voids the reflow/EPUB XHTML output may contain. */
-const VOIDS = new Set(['br', 'link']);
+/** The only self-closed elements an EPUB member may contain. */
+const VOIDS = new Set(['br', 'link', 'item', 'itemref', 'rootfile']);
+
+/** Char of XML 1.0 (https://www.w3.org/TR/xml/#charsets), written from the production. */
+export function isXmlChar(cp: number): boolean {
+  return cp === 0x9 || cp === 0xa || cp === 0xd || (cp >= 0x20 && cp <= 0xd7ff) || (cp >= 0xe000 && cp <= 0xfffd) || (cp >= 0x10000 && cp <= 0x10ffff);
+}
+
+/** Every character of `doc` is an XML 1.0 Char; a lone surrogate fails too. */
+export function assertXmlChars(doc: string): void {
+  for (const ch of doc) {
+    const cp = ch.codePointAt(0) ?? 0;
+    assert.ok(isXmlChar(cp), `U+${cp.toString(16)} is not an XML Char`);
+  }
+}
 
 /**
- * Strict-enough XML well-formedness walk for the emitted XHTML: balanced tags, double-quoted
- * attributes, legal comment bodies, only the declared voids self-closed, no unescaped
- * text-level `<`/`>`/`&`. Not a full parser — no CDATA/PI/DTD, which the emitters never
- * produce (the leading XML declaration and doctype are stripped before the walk).
+ * Strict-enough XML well-formedness walk for the emitted XHTML, OPF and container.xml: balanced
+ * tags (prefixed names too), double-quoted attributes, legal comment bodies, only the declared
+ * voids self-closed, no unescaped text-level `<`/`>`/`&`. Not a full parser — no CDATA/PI/DTD,
+ * which the emitters never produce (the leading XML declaration and doctype are stripped before
+ * the walk).
  */
 export function assertWellFormedXml(doc: string): void {
   const s = doc
@@ -43,7 +57,7 @@ export function assertWellFormedXml(doc: string): void {
       assert.equal(stack.pop(), tag.slice(1).trim(), `mismatched </${tag.slice(1)}>`);
     } else {
       const selfClosed = tag.endsWith('/');
-      const m = /^([a-z][a-z0-9]*)((?:\s+[a-z:-]+="[^"<>]*")*)\s*$/.exec(
+      const m = /^([a-z][a-z0-9]*(?::[a-z][a-z0-9]*)?)((?:\s+[a-z:-]+="[^"<>]*")*)\s*$/.exec(
         selfClosed ? tag.slice(0, -1) : tag,
       );
       assert.ok(m, `malformed tag <${tag}>`);

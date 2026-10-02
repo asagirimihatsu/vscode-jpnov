@@ -9,12 +9,14 @@ import assert from 'node:assert/strict';
 
 import { CompletionItemKind, DiagnosticSeverity } from 'vscode-languageserver/node';
 
+import { INDENT_MAX, indentAnnotation } from '../../src/shared/ast/notation.ts';
 import { parseJpbook } from '../../src/shared/book/jpbook.ts';
 import {
   completeJpbook,
   diagnoseJpbook,
   documentLinksForJpbook,
 } from '../../src/server/jpbook.ts';
+import { INDENT_TOO_LARGE } from '../../src/server/syntax.ts';
 import { makeTmpWorkspace, writeUnder } from './helpers.ts';
 
 /** Single-line completion helper: the parse and the line are the same one-liner. */
@@ -217,6 +219,23 @@ test('diagnoseJpbook flags a hand-edited divider Shift JIS cannot hold, on the c
   );
   // The flagged span is exactly the offending character.
   assert.equal(text.split('\n')[1]?.slice(9, 11), '😀');
+});
+
+test('diagnoseJpbook warns on a divider 字下げ above INDENT_MAX, over the annotation', async () => {
+  const over = indentAnnotation(INDENT_MAX + 1);
+  const line = `divider: ${over}＊`;
+  const diags = await diagnoseJpbook(null, parseJpbook(`---\n${line}\n---\na.jpnov`));
+  const start = line.indexOf(over);
+  assert.deepEqual(
+    diags.map((d) => ({ data: d.data as unknown, range: d.range, severity: d.severity })),
+    [{
+      data: INDENT_TOO_LARGE,
+      range: { start: { line: 1, character: start }, end: { line: 1, character: start + over.length } },
+      severity: DiagnosticSeverity.Warning,
+    }],
+  );
+  const atMax = `---\ndivider: ${indentAnnotation(INDENT_MAX)}＊\n---\na.jpnov`;
+  assert.deepEqual(await diagnoseJpbook(null, parseJpbook(atMax)), []);
 });
 
 test('diagnoseJpbook leaves an encodable divider and the HTML-only metadata alone', async () => {

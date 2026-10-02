@@ -124,7 +124,7 @@ export interface PageBreakNode extends AnnotationBase {
   readonly kind: 'pageBreak';
 }
 
-/** ［＃○字下げ］ at a line head; anywhere else it is a comment. */
+/** ［＃○字下げ］ at a line head, ○ up to the notation's maximum; anything else is a comment. */
 export interface IndentNode extends AnnotationBase {
   readonly kind: 'indent';
   readonly amount: number;
@@ -240,8 +240,9 @@ export interface Chars {
   readonly text: string;
   readonly span: Span;
   /**
-   * Where each character of `text` was written, when kana were composed in its source (a composed
-   * kana covers its kana and mark); without it, each sits at `span.start` plus its offset in `text`.
+   * Where each character of `text` was written, when its source had a kana composed or a character
+   * dropped (a composed kana covers its kana and mark); without it, each sits at `span.start` plus
+   * its offset in `text`.
    * A value's characters have no place of their own: they all come from `span`, its annotation.
    */
   readonly starts?: readonly number[];
@@ -267,7 +268,7 @@ export interface Tcy {
   readonly marks: Marks;
 }
 
-/** An annotation that takes no effect: zero-width, undecorated. */
+/** An annotation that takes no effect: zero-width, undecorated. `inner` is a display string. */
 export interface CommentInline {
   readonly kind: 'comment';
   readonly inner: string;
@@ -281,6 +282,8 @@ export type Inline = Chars | Ruby | Tcy | CommentInline;
 /** What the scan alone can tell. */
 export type ScanIssue =
   | { readonly kind: 'unclosedAnnotation'; readonly span: Span }
+  // `span`: the whole annotation, which is left a comment.
+  | { readonly kind: 'indentTooLarge'; readonly span: Span }
   // `span`: the 《…》 left as text, from its ｜ when one opened it.
   | { readonly kind: 'rubyBaseMissing'; readonly span: Span; readonly reading: string }
   | { readonly kind: 'rubyReadingEmpty'; readonly span: Span };

@@ -8,9 +8,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { HEADING_LITERALS } from '../../../src/shared/ast/notation.ts';
+import { HEADING_LITERALS, INDENT, INDENT_MAX, indentAmount, indentAnnotation } from '../../../src/shared/ast/notation.ts';
 import { COVER_ITEM_MARKS } from '../../../src/shared/book/jpbook.ts';
-import { variantsByChannel } from '../ast/_shape.ts';
+import { blockOf, innerOf, variantsByChannel } from '../ast/_shape.ts';
 
 const canonical = (vs: readonly string[]): string =>
   [...new Set(vs)].sort((a, b) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0)).join('|');
@@ -172,4 +172,26 @@ test('the single-line 字下げ rule is line-head anchored and full-width-only',
   assert.ok(m, 'single-line 字下げ rule not found');
   assert.ok(m.startsWith('^'), 'must anchor ^ (a mid-line 字下げ degrades to comment — zero-fight)');
   assert.ok(m.includes('[０-９]') && !m.includes('[0-9'), 'full-width digits only (locked spec)');
+});
+
+test('both 字下げ rules read exactly what indentAmount reads: a value up to INDENT_MAX, any leading zeros', () => {
+  // A digit count can spell the limit only while it is all nines.
+  const width = String(INDENT_MAX).length;
+  assert.equal(INDENT_MAX, 10 ** width - 1);
+  const digits = `０*[０-９]{1,${String(width)}}`;
+  const single = `^(［＃)(${digits}${INDENT})(］)`;
+  const block = `(［＃)(ここから)(${digits}${INDENT}|太字|斜体)(］)`;
+  assert.ok(matches.includes(single), `PASTE into the single-line 字下げ rule: ${single}`);
+  assert.ok(matches.includes(block), `PASTE into the block-start rule: ${block}`);
+
+  const rules = [single, block].map((m) => new RegExp(m.startsWith('^') ? `${m}$` : `^${m}$`));
+  const spelled = Array.from({ length: INDENT_MAX + 21 }, (_, n) => indentAnnotation(n))
+    .flatMap((a) => ['', '０', '０００'].map((zeros) => `［＃${zeros}${innerOf(a)}］`));
+  for (const a of [...spelled, `［＃${'０'.repeat(400)}${INDENT}］`, `［＃${'９'.repeat(400)}${INDENT}］`, `［＃3${INDENT}］`, `［＃${INDENT}］`]) {
+    const read = typeof indentAmount(innerOf(a)) === 'number';
+    const label = a.length > 20 ? `${a.slice(0, 4)}…${a.slice(-6)}` : a;
+    for (const [rule, src] of [[rules[0], a], [rules[1], blockOf(a)]] as const) {
+      assert.equal(rule?.test(src), read, label);
+    }
+  }
 });

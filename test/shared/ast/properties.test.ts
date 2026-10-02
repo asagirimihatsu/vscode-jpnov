@@ -12,7 +12,7 @@ import { parse } from '../../../src/shared/ast/parse.ts';
 import { printLine, printSource } from '../../../src/shared/ast/print.ts';
 import { resolve } from '../../../src/shared/ast/resolve.ts';
 import { scan } from '../../../src/shared/ast/scan.ts';
-import { composeKana } from '../../../src/shared/chars.ts';
+import { displayText } from '../../../src/shared/chars.ts';
 
 import { manuscripts, withEol } from './_fuzz.ts';
 import { charStarts, isPostfix, nodesIn } from './_shape.ts';
@@ -131,14 +131,14 @@ test('what is open at the end is what the findings call unterminated; every find
   }
 });
 
-test('the content stays inside its line, is never empty, and is composed', () => {
+test('the content stays inside its line, is never empty, and is a display string', () => {
   for (const src of ALL) {
     for (const line of parse(src).lines) {
       for (const item of line.content) {
         assert.ok(item.span.start >= line.span.start && item.span.end <= line.span.end, JSON.stringify(src));
         const shown = item.kind === 'chars' || item.kind === 'tcy' ? item.text : item.kind === 'ruby' ? item.base : 'x';
         assert.ok(shown !== '', `an empty ${item.kind} in ${JSON.stringify(src)}`);
-        assert.equal(composeKana(shown), shown);
+        assert.equal(displayText(shown), shown);
       }
     }
   }
@@ -160,7 +160,7 @@ test('every character of the content knows where it was written', () => {
           const from = starts[i] ?? -1;
           const to = starts[i + 1] ?? item.span.end;
           assert.ok(item.span.start <= from && from < to && to <= item.span.end, JSON.stringify(src));
-          assert.equal(composeKana(src.slice(from, to)), ch, JSON.stringify(src));
+          assert.equal(displayText(src.slice(from, to)), ch, JSON.stringify(src));
         });
       }
     }

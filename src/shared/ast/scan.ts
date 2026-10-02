@@ -2,6 +2,7 @@
  * The scanner: source text → the syntax layer, line by line. Every pairing is bounded by its
  * line, so broken markup affects that line alone:
  *   - an unclosed ［＃ is one `brokenAnnotation` up to the line end, and is reported;
+ *   - a 字下げ above the notation's maximum is a comment, and is reported;
  *   - a closed 《…》 with no base before it, and an empty 《》, stay text and are reported;
  *   - an unmatched 《, a ｜ that gets no reading and a lone ］ or 》 are text.
  *
@@ -198,7 +199,7 @@ function scanLine(src: string, from: number, to: number, issues: ScanIssue[]): S
         continue;
       }
       const end = close + ANNOTATION_CLOSE.length;
-      const annotation = classifyAnnotation(src, i, end, i === from);
+      const annotation = classifyAnnotation(src, i, end, i === from, issues);
       if (annotation.kind === 'tcySpanStart' || annotation.kind === 'tcySpanEnd') {
         release(); // a 縦中横 span is one cell of its own: a ｜ base never crosses its edge
       }

@@ -1,6 +1,7 @@
 /**
- * The character tables every layer shares: the CJK ideograph and kana blocks, and the kana
- * composition. A leaf: it imports nothing, the AST layer stands on it.
+ * The character tables every layer shares: the CJK ideograph and kana blocks, the kana
+ * composition, and the characters no output can carry. A leaf: it imports nothing, the AST layer
+ * stands on it.
  */
 
 /** A CJK ideograph: Ext A + Unified (U+3400–9FFF), Compatibility (U+F900–FAFF), SIP (U+20000–2FFFF). */
@@ -73,4 +74,61 @@ export function composedChars(text: string): ComposedChar[] {
     out.push({ text: ch, start, end: at });
   }
   return out;
+}
+
+/**
+ * The characters no output can carry: what XML 1.0 leaves out of Char below U+10000, surrogates
+ * aside (https://www.w3.org/TR/xml/#charsets). Tab, LF and CR are Char.
+ */
+const UNSHOWN = /[\0-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g;
+
+/** Whether `cp` is a character no output can carry: the class {@link dropUnshown} removes. */
+export function isUnshown(cp: number): boolean {
+  return cp <= 0x08 || cp === 0x0b || cp === 0x0c || (cp >= 0x0e && cp <= 0x1f) || cp === 0xfffe || cp === 0xffff;
+}
+
+/** `text` without the characters no output can carry; everything else stays as it came. */
+export function dropUnshown(text: string): string {
+  return text.replace(UNSHOWN, '');
+}
+
+/**
+ * {@link dropUnshown} with the way back: `origin` holds, for each UTF-16 unit kept, its offset in
+ * the input, and is null when nothing was dropped.
+ */
+export function dropWithOrigin(text: string): { text: string; origin: number[] | null } {
+  let origin: number[] | null = null;
+  for (let i = 0; i < text.length; i += 1) {
+    if (isUnshown(text.charCodeAt(i))) {
+      origin ??= Array.from({ length: i }, (_, k) => k);
+    } else {
+      origin?.push(i);
+    }
+  }
+  return origin === null ? { text, origin } : { text: dropUnshown(text), origin };
+}
+
+/**
+ * `text` as an output shows it: the characters no output can carry dropped, then its kana
+ * composed ({@link composeKana}), so a kana and its mark compose across a dropped character.
+ */
+export function displayText(text: string): string {
+  return composeKana(dropUnshown(text));
+}
+
+/**
+ * The characters of {@link displayText}, one per code point, each with its range in `text`: a
+ * dropped character belongs to no range, unless it sits inside a composed kana or a surrogate pair.
+ */
+export function displayChars(text: string): ComposedChar[] {
+  const { text: shown, origin } = dropWithOrigin(text);
+  const chars = composedChars(shown);
+  if (origin === null) {
+    return chars;
+  }
+  return chars.map((ch) => ({
+    text: ch.text,
+    start: origin[ch.start] ?? ch.start,
+    end: (origin[ch.end - 1] ?? ch.end - 1) + 1,
+  }));
 }

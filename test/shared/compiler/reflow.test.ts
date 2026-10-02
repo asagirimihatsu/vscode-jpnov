@@ -1,11 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { INDENT_MAX, indentAnnotation } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
+import { CHARS_MIN, LAYOUT_DEFAULT } from '../../../src/shared/config/types.ts';
 import { reflowStylesheet } from '../../../src/shared/compiler/css.ts';
 import { buildRows, type Row } from '../../../src/shared/compiler/layout.ts';
 import { reflowDocument, reflowSegments } from '../../../src/shared/compiler/reflow.ts';
-import { assertWellFormedXml } from '../xml.ts';
-import { D } from '../_kana.ts';
+import { assertWellFormedXml, assertXmlChars } from '../xml.ts';
+import { blockIndent } from '../ast/_shape.ts';
+import { BLANKS, D } from '../_kana.ts';
+
+const CPL = LAYOUT_DEFAULT.charsPerLine;
 
 function rows(src: string): Row[] {
   return buildRows(parse(src), { dash: 'horizontalBar' });
@@ -13,7 +18,7 @@ function rows(src: string): Row[] {
 
 /** Segments with a throwaway sink (most assertions only look at the markup). */
 function segs(src: string): ReturnType<typeof reflowSegments> {
-  return reflowSegments(rows(src), new Set(), 'horizontalBar');
+  return reflowSegments(rows(src), CPL, new Set(), 'horizontalBar');
 }
 
 /** The one segment a plain source produces. */
@@ -49,11 +54,61 @@ test('見出し rows become real hN (大=1→h1), one per row, and feed the segm
   assert.equal(first.heading, '序章');
 });
 
+test('a blank 見出し leaves the segment label to the next one', () => {
+  // Half-width, full-width, and a character no output carries: nothing of the heading shows.
+  for (const blank of BLANKS) {
+    const head = `［＃大見出し］${blank}［＃大見出し終わり］`;
+    assert.equal(segs(`${head}\n本文`)[0]?.heading, null, JSON.stringify(blank));
+    assert.equal(segs(`${head}\n王都［＃「王都」は中見出し］\n本文`)[0]?.heading, '王都', JSON.stringify(blank));
+  }
+});
+
+test('a line of only dropped characters is a blank line', () => {
+  assert.equal(body('あ\n\u0007\uFFFE\nい'), body('あ\n\nい'));
+  assert.equal(body('あ\n\u0007\uFFFE\nい'), '<p>あ</p><p><br/></p><p>い</p>');
+});
+
+test('assertXmlChars follows the XML Char production', () => {
+  // https://www.w3.org/TR/xml/#charsets
+  for (const ok of ['\t\n\r', '　山田　太郎', '神', '�', '\u{10000}\u{10FFFF}', '\u007F\u0085']) {
+    assertXmlChars(ok);
+  }
+  for (const bad of ['\0', '\u0008', '\u000B', '\u000C', '\u000E', '\u001F', '\uFFFE', '\uFFFF', '\uD800']) {
+    assert.throws(() => {
+      assertXmlChars(`あ${bad}い`);
+    }, JSON.stringify(bad));
+  }
+});
+
 test('字下げ becomes the indent-N class and sinks into used', () => {
   const used = new Set<string>();
-  const out = reflowSegments(rows('［＃２字下げ］文だ。'), used);
+  const out = reflowSegments(rows('［＃２字下げ］文だ。'), CPL, used);
   assert.equal(out[0]?.body, '<p class="indent-2">文だ。</p>');
   assert.ok(used.has('indent-2'));
+});
+
+test('字下げ caps at charsPerLine - 1, like the paginated build', () => {
+  const cap = CHARS_MIN - 1;
+  const over = CHARS_MIN + 5;
+  assert.ok(over <= INDENT_MAX);
+  const capped = `class="indent-${String(cap)}"`;
+  const cases: readonly (readonly [name: string, src: string, body: string])[] = [
+    ['inline', `${indentAnnotation(over)}文だ。`, `<p ${capped}>文だ。</p>`],
+    ['block', `${blockIndent(over)}\n一\n二\n［＃ここで字下げ終わり］`, `<p ${capped}>一</p><p ${capped}>二</p>`],
+    ['見出し', `${indentAnnotation(over)}序章［＃「序章」は大見出し］`, `<h1 ${capped}>序章</h1>`],
+    ['at the cap', `${indentAnnotation(cap)}文だ。`, `<p ${capped}>文だ。</p>`],
+  ];
+  for (const [name, src, want] of cases) {
+    const used = new Set<string>();
+    assert.equal(reflowSegments(rows(src), CHARS_MIN, used)[0]?.body, want, name);
+    assert.deepEqual([...used], [`indent-${String(cap)}`], name);
+  }
+});
+
+test('charsPerLine 1 leaves no indent class', () => {
+  const used = new Set<string>();
+  assert.equal(reflowSegments(rows('［＃２字下げ］文'), 1, used)[0]?.body, '<p>文</p>');
+  assert.deepEqual([...used], []);
 });
 
 test('改ページ splits segments; leading/trailing/consecutive breaks collapse', () => {
@@ -63,7 +118,7 @@ test('改ページ splits segments; leading/trailing/consecutive breaks collapse
 
 test('right-only ruby is native <ruby> — no lane spans, no rr class sunk', () => {
   const used = new Set<string>();
-  const out = reflowSegments(rows('青空《あおぞら》文庫'), used);
+  const out = reflowSegments(rows('青空《あおぞら》文庫'), CPL, used);
   assert.equal(out[0]?.body, '<p><ruby>青空<rt>あおぞら</rt></ruby>文庫</p>');
   assert.ok(!used.has('rr'));
 });
@@ -72,6 +127,7 @@ test('left/both-side ruby are NATIVE nested ruby under .ru, class sunk', () => {
   const used = new Set<string>();
   const both = reflowSegments(
     rows('英雄《えいゆう》［＃「英雄」の左に「ひーろー」のルビ］'),
+    CPL,
     used,
   );
   // The both-side form nests: inner ruby carries the right reading, the outer <rt> is the left.
@@ -89,7 +145,7 @@ test('left/both-side ruby are NATIVE nested ruby under .ru, class sunk', () => {
 
 test('a dash run binds under .insep nowrap and carries the translated em dash', () => {
   const used = new Set<string>();
-  const out = reflowSegments(rows('間――だ'), used, 'horizontalBar');
+  const out = reflowSegments(rows('間――だ'), CPL, used, 'horizontalBar');
   // The run html joins the MEMBER html (already translated) — rebuilding from `text` would
   // smuggle the source glyphs back into the EPUB.
   assert.equal(out[0]?.body, '<p>間<span class="insep">——</span>だ</p>');
@@ -114,7 +170,7 @@ test('an emphasis boundary splits an insep run (equal channels required)', () =>
 
 test('縦中横 and emphasis channel runs ride through emitUnits unchanged', () => {
   const used = new Set<string>();
-  const out = reflowSegments(rows('12［＃「12」は縦中横］だ、そうだ［＃「そうだ」に傍点］'), used);
+  const out = reflowSegments(rows('12［＃「12」は縦中横］だ、そうだ［＃「そうだ」に傍点］'), CPL, used);
   const b = out[0]?.body ?? '';
   assert.match(b, /<span class="tcy">12<\/span>/);
   assert.match(b, /<span class="emph-fs">そうだ<\/span>/);
@@ -149,7 +205,7 @@ test('the kitchen sink emits well-formed XML end to end', () => {
     'すえ。',
   ].join('\n');
   const used = new Set<string>();
-  const out = reflowSegments(rows(src), used);
+  const out = reflowSegments(rows(src), CPL, used);
   assert.equal(out.length, 2);
   for (const seg of out) {
     const doc = reflowDocument(seg.heading ?? '無題', seg.body, '../styles.css');

@@ -5,12 +5,12 @@
  *
  * Recovery is lenient and total: a span open at the end of input runs to the end, a dangling end
  * does nothing, a postfix whose target is absent or cuts into an atomic cell takes no effect.
- * Content strings are display strings — kana composed, values substituted — while the syntax
- * nodes stay verbatim.
+ * Content strings are display strings — kana composed, values substituted, the characters no
+ * output can carry dropped — while the syntax nodes stay verbatim.
  *
  * Pure + vscode-free.
  */
-import { composeKana } from '../chars.ts';
+import { displayText } from '../chars.ts';
 
 import { charsCell, contentOf, matchTarget, spanOf, textOf, withMark, withMarksOf } from './cells.ts';
 import type { Cell } from './cells.ts';
@@ -230,7 +230,7 @@ class LineResolver {
         this.pageBreak = true;
         break;
       case 'comment':
-        this.cells.push({ kind: 'comment', inner: node.inner.text, span: node.span });
+        this.cells.push({ kind: 'comment', inner: displayText(node.inner.text), span: node.span });
         break;
       case 'brokenAnnotation':
         this.chars(node, node.text, 'broken');
@@ -260,8 +260,8 @@ class LineResolver {
   private implicitRuby(node: RubyReadingNode, at: number): void {
     this.cells.push({
       kind: 'ruby',
-      base: composeKana(this.line.syntax[at - 1]?.text ?? ''),
-      right: composeKana(node.reading.text),
+      base: displayText(this.line.syntax[at - 1]?.text ?? ''),
+      right: displayText(node.reading.text),
       span: { start: node.base.start, end: node.span.end },
       marks: this.flow.marks,
     });
@@ -274,7 +274,7 @@ class LineResolver {
     }
     this.base = null;
     const inside = this.cells.splice(open.start);
-    const base = composeKana(inside.map(textOf).join(''));
+    const base = displayText(inside.map(textOf).join(''));
     if (base === '') {
       // Nothing visible (an empty value): the markup prints as typed.
       this.chars(open.mark, open.mark.text, 'markup');
@@ -283,7 +283,7 @@ class LineResolver {
       this.cells.push({
         kind: 'ruby',
         base,
-        right: composeKana(node.reading.text),
+        right: displayText(node.reading.text),
         span: { start: open.mark.span.start, end: node.span.end },
         // The state at the 《, plus what a span closed inside the base had set.
         marks: withMarksOf(this.flow.marks, inside),
@@ -307,7 +307,7 @@ class LineResolver {
   /** Binds a corner-target postfix to the cells built so far; a miss takes no effect. */
   private bind(node: PostfixNode, judged: boolean): void {
     const { cells } = this;
-    const target = composeKana(node.target.text);
+    const target = displayText(node.target.text);
     const m = matchTarget(cells, target);
     const first = m === null ? undefined : cells[m.first];
     const last = m === null ? undefined : cells[m.last];
@@ -315,7 +315,7 @@ class LineResolver {
       if (judged) {
         this.ledger.issues.push({ kind: 'postfixTargetMissing', span: node.target.span, target: node.target.text });
       }
-      cells.push({ kind: 'comment', inner: innerOf(node), span: node.span });
+      cells.push({ kind: 'comment', inner: displayText(innerOf(node)), span: node.span });
     };
     if (m === null || first === undefined || last === undefined) {
       miss();
@@ -341,7 +341,7 @@ class LineResolver {
       case 'rubyLeftPostfix': {
         const real = range.filter((cell) => cell.kind !== 'comment');
         const single = real.length === 1 ? real[0] : undefined;
-        const left = composeKana(node.reading.text);
+        const left = displayText(node.reading.text);
         if (single?.kind === 'ruby') {
           cells[cells.indexOf(single, m.first)] = { ...single, left }; // 両側ルビ
         } else if (real.every((cell) => cell.kind === 'chars')) {
@@ -417,7 +417,7 @@ class LineResolver {
     } else {
       pair(this.ledger.pairs, tcy.opener, closer);
     }
-    const text = composeKana(tcy.text);
+    const text = displayText(tcy.text);
     this.ledger.held.set(tcy.opener, { text, span: { start: tcy.contentStart, end: tcy.contentEnd } });
     if (text !== '') {
       this.cells.push({

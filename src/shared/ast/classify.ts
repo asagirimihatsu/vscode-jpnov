@@ -5,7 +5,7 @@
  *
  * Pure + vscode-free.
  */
-import type { AnnotationNode, Part, RolePart } from './nodes.ts';
+import type { AnnotationNode, Part, RolePart, ScanIssue } from './nodes.ts';
 import {
   ANNOTATION_CLOSE,
   ANNOTATION_OPEN,
@@ -55,9 +55,15 @@ function blockStyle(name: string): VariantStyle | null {
 /**
  * The annotation at `[start, end)` of `src` (`［＃` … `］` inclusive). `atLineStart` is true iff
  * the ［ opens its line: the single-line ［＃○字下げ］ exists only there, matching the grammar's
- * `^` anchor.
+ * `^` anchor. A 字下げ above the notation's maximum is a comment, and is reported to `issues`.
  */
-export function classifyAnnotation(src: string, start: number, end: number, atLineStart: boolean): AnnotationNode {
+export function classifyAnnotation(
+  src: string,
+  start: number,
+  end: number,
+  atLineStart: boolean,
+  issues: ScanIssue[],
+): AnnotationNode {
   const span = { start, end };
   const text = src.slice(start, end);
   const inner = src.slice(start + ANNOTATION_OPEN.length, end - ANNOTATION_CLOSE.length);
@@ -74,6 +80,15 @@ export function classifyAnnotation(src: string, start: number, end: number, atLi
   const comment = (): AnnotationNode => {
     const part = cut.take('inner', inner.length);
     return { kind: 'comment', span, text, parts: close(), inner: part };
+  };
+  /** The indent count `s` spells; one above the maximum is reported and is none. */
+  const indentOf = (s: string): number | null => {
+    const amount = indentAmount(s);
+    if (amount === 'tooLarge') {
+      issues.push({ kind: 'indentTooLarge', span });
+      return null;
+    }
+    return amount;
   };
 
   if (inner === PAGE_BREAK) {
@@ -197,7 +212,7 @@ export function classifyAnnotation(src: string, start: number, end: number, atLi
       cut.take('keyword', body.length);
       return close();
     };
-    const amount = indentAmount(body);
+    const amount = indentOf(body);
     if (amount !== null) {
       return { kind: 'indentBlockStart', span, text, parts: parts(), amount };
     }
@@ -237,11 +252,8 @@ export function classifyAnnotation(src: string, start: number, end: number, atLi
   }
 
   // Single-line indent ［＃○字下げ］ — LINE-HEAD only.
-  const amount = indentAmount(inner);
+  const amount = atLineStart ? indentOf(inner) : null;
   if (amount !== null) {
-    if (!atLineStart) {
-      return comment();
-    }
     cut.take('keyword', inner.length);
     return { kind: 'indent', span, text, parts: close(), amount };
   }

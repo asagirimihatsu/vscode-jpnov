@@ -12,6 +12,7 @@
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { INDENT_MAX, fullWidthDigits } from '../../src/shared/ast/notation.ts';
 import { FRONT_MATTER_KEYS } from '../../src/shared/book/jpbook.ts';
 import { FURNITURE_ALIGNS } from '../../src/shared/compiler/chrome.ts';
 import { renderEnglish } from '../../src/shared/messages.ts';
@@ -60,6 +61,7 @@ const ARGS: Record<MsgCode, readonly (string | number)[]> = {
   'syntax.tcyTooLong': [],
   'syntax.rubyBaseMissing': ['よみ'],
   'syntax.rubyReadingEmpty': [],
+  'syntax.indentTooLarge': [fullWidthDigits(INDENT_MAX)],
   'lint.common.sentenceLength': [],
   'lint.common.maxTen': [],
   'lint.common.maxKanjiRun': [],

@@ -9,11 +9,13 @@ import type { SpanOpenerNode } from '../../../src/shared/ast/nodes.ts';
 import {
   EMPHASIS_VARIANTS,
   HEADING_LITERALS,
+  INDENT_MAX,
   VALUE_DEFAULTS,
   VALUE_NAMES,
   closingAnnotations,
   headingLevelOf,
   headingLiteralOf,
+  indentAmount,
   indentAnnotation,
   tcyAnnotation,
   valueAnnotation,
@@ -22,13 +24,35 @@ import {
 } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
 
-import { at, issuesOf, nodeOf, pairsOf } from './_shape.ts';
+import { at, innerOf, issuesOf, nodeOf, pairsOf } from './_shape.ts';
 
 test('indentAnnotation spells full-width digits, the only form the scanner reads', () => {
   assert.equal(indentAnnotation(3), '［＃３字下げ］');
   assert.equal(indentAnnotation(12), '［＃１２字下げ］');
-  for (const n of [0, 1, 9, 10, 40, 100]) {
+  for (const n of [0, 1, 9, 10, 40, INDENT_MAX]) {
     assert.equal(nodeOf(indentAnnotation(n), 'indent').amount, n);
+  }
+});
+
+test('indentAmount reads a count up to INDENT_MAX; a larger one is too large, anything else is none', () => {
+  /** What indentAnnotation(n) holds between ［＃ and ］. */
+  const inner = (n: number): string => innerOf(indentAnnotation(n));
+  const cases: readonly [s: string, amount: ReturnType<typeof indentAmount>][] = [
+    [inner(0), 0],
+    [inner(INDENT_MAX), INDENT_MAX],
+    [inner(INDENT_MAX + 1), 'tooLarge'],
+    [`${'０'.repeat(2)}${inner(3)}`, 3], // leading zeros do not count
+    [`${'０'.repeat(400)}${inner(INDENT_MAX)}`, INDENT_MAX],
+    [`${'０'.repeat(400)}${inner(INDENT_MAX + 1)}`, 'tooLarge'],
+    [`${'９'.repeat(400)}字下げ`, 'tooLarge'], // never overflows
+    [`${'９'.repeat(400)}3字下げ`, null], // a half-width digit after the limit is passed
+    ['3字下げ', null],
+    ['三字下げ', null],
+    ['字下げ', null],
+    ['３字下', null],
+  ];
+  for (const [s, amount] of cases) {
+    assert.equal(indentAmount(s), amount, s.length > 20 ? `${s.slice(0, 3)}…${s.slice(-6)}` : s);
   }
 });
 

@@ -5,10 +5,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { Held, Issue } from '../../../src/shared/ast/nodes.ts';
-import { VALUE_NAMES, valueAnnotation, valueOf } from '../../../src/shared/ast/notation.ts';
+import { INDENT_MAX, VALUE_NAMES, indentAnnotation, valueAnnotation, valueOf } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
 
-import { at, boundOf, heldOf, issuesOf, pairsOf } from './_shape.ts';
+import { at, blockOf, boundOf, heldOf, issuesOf, pairsOf } from './_shape.ts';
 import { D } from '../_kana.ts';
 
 // --------------------------------------------------------------- unclosed ［＃
@@ -23,6 +23,31 @@ test('an unclosed ［＃ is reported over the broken annotation, never its termi
   ]);
   assert.deepEqual(unclosed('［＃注\r\n次'), [{ kind: 'unclosedAnnotation', span: { start: 0, end: 3 } }]);
   assert.deepEqual(unclosed('［＃注\r次'), [{ kind: 'unclosedAnnotation', span: { start: 0, end: 3 } }]);
+});
+
+// --------------------------------------------------------------- 字下げ above the maximum
+
+test('a 字下げ above INDENT_MAX is reported over the annotation, at a line head and as a block opener', () => {
+  const over = indentAnnotation(INDENT_MAX + 1);
+  const head = `${over}本文`;
+  assert.deepEqual(issuesOf(head), [{ kind: 'indentTooLarge', span: at(head, over) }]);
+  assert.equal(parse(head).lines[0]?.indent, 0);
+
+  // The opener is a comment, so nothing is open and its end dangles.
+  const opener = blockOf(over);
+  const block = `${opener}\nA\n［＃ここで字下げ終わり］`;
+  assert.deepEqual(issuesOf(block), [
+    { kind: 'indentTooLarge', span: at(block, opener) },
+    { kind: 'danglingSpanEnd', span: at(block, '［＃ここで字下げ終わり］'), block: true },
+  ]);
+  assert.deepEqual(parse(block).lines.map((line) => line.indent), [0, 0, 0]);
+  assert.deepEqual(parse(`${opener}\nA`).openAtEnd, []);
+
+  // A mid-line one is a comment like any mid-line 字下げ; the maximum itself is read.
+  const max = indentAnnotation(INDENT_MAX);
+  for (const clean of [`本文${over}`, `${max}本文`, `${blockOf(max)}\nA\n［＃ここで字下げ終わり］`]) {
+    assert.deepEqual(issuesOf(clean), [], clean);
+  }
 });
 
 // --------------------------------------------------------------- spans

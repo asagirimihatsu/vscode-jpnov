@@ -137,7 +137,7 @@ function hexCodePoint(cp: number): string {
 
 /**
  * Flags each character Shift JIS cannot hold; a built `.txt` writes 〓 in its place. Runs on the RAW
- * source (`kind: 'raw'`) because annotations reach the `.txt` verbatim — a 左ルビ reading lives only
+ * source (`kind: 'raw'`) because annotations reach the `.txt` — a 左ルビ reading lives only
  * inside its annotation and appears in no stream. No fix: the substitutes are semantic (𠮟 -> 叱),
  * and `source.fixAll` would scatter them through a manuscript on save.
  */

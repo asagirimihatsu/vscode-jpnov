@@ -6,10 +6,10 @@
  *
  * `JPNOV_FUZZ_SEED` / `JPNOV_FUZZ_COUNT` override the run for a local soak.
  */
-import { HEADING_LITERALS, VALUE_NAMES } from '../../../src/shared/ast/notation.ts';
+import { HEADING_LITERALS, INDENT_MAX, VALUE_NAMES, indentAnnotation } from '../../../src/shared/ast/notation.ts';
 import { D, H } from '../_kana.ts';
 
-import { variantsByChannel } from './_shape.ts';
+import { blockOf, variantsByChannel } from './_shape.ts';
 
 // The notation's own tables, in table order: a variant added there is generated here.
 const { emph: EMPH, line: LINE, weight, style } = variantsByChannel();
@@ -25,10 +25,12 @@ const WORDS = [
   '。', '、', '・', '—', '―', '——', '…', '……', '!', '?', '!!', '!?', '?!', '!!!', '！？', '（', '）', '　', ' ', '＊',
 ];
 const READINGS = ['やまだ', 'たろう', 'おうと', 'ヤマダ', 'よみ', 'r', `か${D}らす`, 'い ち', 'ながいよみがなです', ''];
+const TOO_LARGE = indentAnnotation(INDENT_MAX + 1);
 const NEAR_MISSES = [
   '［＃メモ］', '［＃］', '［＃改丁］', '［＃ここから罫囲み］', '［＃「」に傍点］', '［＃「語」は傍点］', '［＃「語」に太字］',
   '［＃「語」にの左に傍点］', '［＃ここから傍点］', '［＃の左に傍点］', '［＃3字下げ］', '［＃ここに「」の値を表示］',
   '［＃「語」の左に「」のルビ］', '［＃見出し］', `［＃５字下け${D}］`, '［＃縦中横 ］',
+  TOO_LARGE, blockOf(TOO_LARGE),
 ];
 const BROKEN = ['［＃', '［＃こわれ', '［＃「未', '［＃あ［＃い'];
 const DEGENERATE = ['｜', '｜｜', '｜《よみ》', '《》', '｜漢字《》', '《よみ》', '。《よみ》', '《a《b》', '》《ab》', '《', '》', 'a｜b｜c《r》', '。《!?》'];

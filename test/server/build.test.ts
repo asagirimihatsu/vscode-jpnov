@@ -20,7 +20,8 @@ import {
 } from './helpers.ts';
 import type { ReadText, ServerContext } from '../../src/server/context.ts';
 import { BUILD_CHROME_DEFAULT, BUILD_PAPER_DEFAULT } from '../../src/shared/config/settings.ts';
-import { LAYOUT_DEFAULT } from '../../src/shared/config/types.ts';
+import { INDENT_MAX, indentAnnotation } from '../../src/shared/ast/notation.ts';
+import { CHARS_MIN, LAYOUT_DEFAULT } from '../../src/shared/config/types.ts';
 import { MANUSCRIPT_SHEET } from '../../src/shared/compiler/document.ts';
 import { encodeTxt } from '../../src/shared/encoding.ts';
 import type {
@@ -937,6 +938,23 @@ test('build format "epub" returns one kind:"epub" artifact of member files per b
   );
 });
 
+test('build caps the EPUB 字下げ by charsPerLine from the settings snapshot', async () => {
+  await using ws = await makeTmpWorkspace();
+  const { ctx } = boot();
+  await writeUnder(ws.dir, 'vol1/index.jpbook', 'vol1/a.jpnov');
+  await writeUnder(ws.dir, 'vol1/a.jpnov', `${indentAnnotation(INDENT_MAX)}本文。`);
+
+  const result = await handleBuild(ctx, {
+    format: 'epub',
+    settings: { ...SETTINGS, charsPerLine: CHARS_MIN },
+    projectDirs: projectsFor(ws.uri),
+  });
+  const epub = result.artifacts[0];
+  assert.ok(epub?.kind === 'epub');
+  const doc = epub.members.find((m) => m.name === 'OEBPS/text/ch001.xhtml')?.content ?? '';
+  assert.ok(doc.includes(`<p class="indent-${String(CHARS_MIN - 1)}">本文。</p>`));
+});
+
 test('results never carry a legacy epubs key; epub rides the collision check too', async () => {
   await using ws = await makeTmpWorkspace();
   const { ctx } = boot();
@@ -1045,8 +1063,8 @@ test('build: the header and footer take the value annotations, filled per page',
 });
 
 test('build: a title-less book takes the STEM of its outRel as its title, in every format that shows one', async () => {
-  // A title and an author left empty read as not written.
-  for (const keys of ['', 'title:\nauthor:\n']) {
+  // A title and an author left empty, or showing nothing, read as not written.
+  for (const keys of ['', 'title:\nauthor:\n', 'title: \u0007\nauthor: \u0007\n']) {
     await using ws = await makeTmpWorkspace();
     const { ctx } = boot();
     // Nested on purpose: outRel is `part1/vol2` but its stem is `vol2`, so the two differ.

@@ -22,11 +22,13 @@ import { fileURLToPath } from 'node:url';
 
 import type { CancellationToken, WorkDoneProgressReporter } from 'vscode-languageserver/node';
 
+import { displayText } from '#/shared/chars.ts';
 import { composeBookChrome, coverPathOf, firstErrorOf, jpbookOutRel, parseJpbook } from '#/shared/book/jpbook.ts';
 import type { JpbookMeta, ParsedLine } from '#/shared/book/jpbook.ts';
 import { concatBookText, renderBook } from '#/shared/compiler/document.ts';
 import type { BookInput, TitledBook } from '#/shared/compiler/document.ts';
 import { chapterStem, epubMembers } from '#/shared/compiler/epub.ts';
+import { nonBlank } from '#/shared/compiler/reflow.ts';
 import { errorText } from '#/shared/errors.ts';
 import { LocalizedError } from '#/shared/messages.ts';
 import { resolveHtmlSettings } from '#/shared/config/settings.ts';
@@ -275,6 +277,7 @@ function emitArtifact(
           outRel,
           kinsoku: selection.settings.kinsoku,
           dash: selection.settings.dash,
+          charsPerLine: selection.settings.charsPerLine,
           // dcterms:modified wants CCYY-MM-DDThh:mm:ssZ — second precision, no milliseconds.
           modified: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
         }),
@@ -284,6 +287,11 @@ function emitArtifact(
       throw new Error(`emitArtifact: unhandled format ${JSON.stringify(exhaustive)}`);
     }
   }
+}
+
+/** Whether a title or an author is written and shows something in an output. */
+function shows(value: string | undefined): value is string {
+  return value !== undefined && nonBlank(displayText(value)) !== null;
 }
 
 /**
@@ -343,17 +351,19 @@ async function* buildRoot(
         continue;
       }
       // The divider and the タイトル／ペンネーム values are BODY-side inputs and ride the
-      // BookInput (a book without a title takes the stem of its output name, decided here for
-      // every format); composeBookChrome carries only the page furniture. Covers are html-only,
-      // so a missing cover file cannot fail a txt/epub build; chapters read first, so a book
-      // missing both reports the same error whichever format is built.
+      // BookInput (a title that is missing or shows nothing gives way to the stem of the output
+      // name, and such an author counts as unset, decided here for every format);
+      // composeBookChrome carries only the page furniture. Covers are html-only, so a missing
+      // cover file cannot fail a txt/epub build; chapters read first, so a book missing both
+      // reports the same error whichever format is built.
+      const { title, author } = parsed.meta;
       const bookFiles = await readBookFiles(ctx, target.rootUri, parsed.lines, token);
       const coverFiles = selection.format === 'html' ? await readCoverFiles(ctx, target.rootUri, parsed.lines, token) : [];
       const input: TitledBook = {
         ...bookFiles,
         divider: parsed.meta.divider,
-        title: parsed.meta.title ?? chapterStem(outRel),
-        author: parsed.meta.author ?? '',
+        title: shows(title) ? title : chapterStem(outRel),
+        author: shows(author) ? author : undefined,
         ...(coverFiles.length > 0 ? { cover: { files: coverFiles } } : {}),
       };
       yield { kind: 'artifact', outDir: target.outDirUri, artifact: emitArtifact(target.outDirUri, selection, outRel, input, parsed.meta) };
