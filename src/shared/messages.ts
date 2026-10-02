@@ -87,6 +87,8 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return `ruby reading 《${a(0)}》 has no base text before it (it prints as typed)`;
     case 'syntax.rubyReadingEmpty':
       return 'empty ruby reading 《》 (it prints as typed)';
+    case 'syntax.indentTooLarge':
+      return `字下げ is too large (keep it to ${a(0)} or less for it to take effect)`;
     // prose lint (one code per (scope, rule); see lint/catalog.ts).
     // `common` rules run on both 地の文 + セリフ under one code; JA lives in bundle.l10n.ja.json.
     case 'lint.common.sentenceLength':

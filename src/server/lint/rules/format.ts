@@ -13,6 +13,7 @@ import { CLOSERS } from '../sentences.ts';
 import type { LineRule, LintLine, ProseView, RuleContext } from '../types.ts';
 
 import { maxOf, viewFix, viewSpan } from './adapt.ts';
+import { isControlChar } from './chars.ts';
 
 /** Characters allowed to open a paragraph besides the 字下げ space. */
 const LEADING_CHARS = '　「『（【〈';
@@ -105,7 +106,8 @@ export function endPeriodRule(ctx: RuleContext): LineRule {
         return;
       }
       let k = v.text.length - 1;
-      while (k >= 0 && isSpace(v.text.charAt(k))) {
+      // A control character is skipped like a space: noControlChar deletes it.
+      while (k >= 0 && (isSpace(v.text.charAt(k)) || isControlChar(v.text.charCodeAt(k)))) {
         k -= 1;
       }
       if (k < 0 || LINE_TERMINALS.has(v.text.charAt(k))) {

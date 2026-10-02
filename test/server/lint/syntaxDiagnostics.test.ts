@@ -12,10 +12,13 @@ import { DiagnosticSeverity } from 'vscode-languageserver/node';
 import type { Diagnostic } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
-import { annotationDiagnostics as diagnosticsOf } from '../../../src/server/syntax.ts';
+import { INDENT_TOO_LARGE, TCY_MAX, annotationDiagnostics as diagnosticsOf } from '../../../src/server/syntax.ts';
+import { INDENT_MAX, fullWidthDigits, indentAnnotation } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
 import { COVER_TEMPLATE } from '../../../src/shared/book/create.ts';
+import { renderEnglish } from '../../../src/shared/messages.ts';
 import { D } from '../../shared/_kana.ts';
+import { blockOf } from '../../shared/ast/_shape.ts';
 
 const doc = (text: string): TextDocument =>
   TextDocument.create('mem://x.jpnov', 'jpnov', 1, text);
@@ -233,6 +236,14 @@ test('縦中横: the length is counted on the composed text', () => {
   assert.deepEqual(onLine(`［＃縦中横］か${D}きくけ［＃縦中横終わり］`), [['syntax.tcyTooLong', `か${D}きくけ`]]);
 });
 
+test('縦中横: a character no output can carry is not counted, in either form', () => {
+  const fits = `1\u0007${'2'.repeat(TCY_MAX - 1)}\uFFFE`;
+  assert.deepEqual(onLine(`［＃縦中横］${fits}［＃縦中横終わり］`), []);
+  assert.deepEqual(onLine(`${fits}［＃「${fits}」は縦中横］`), []);
+  assert.deepEqual(onLine(`［＃縦中横］${fits}3［＃縦中横終わり］`), [['syntax.tcyTooLong', `${fits}3`]]);
+  assert.deepEqual(onLine(`${fits}3［＃「${fits}3」は縦中横］`), [['syntax.tcyTooLong', `${fits}3`]]);
+});
+
 test('縦中横: a value field counts as what it shows, never as its annotation', () => {
   assert.deepEqual(onLine('［＃縦中横］［＃ここに「総ページ数」の値を表示］［＃縦中横終わり］'), []);
   assert.deepEqual(
@@ -364,4 +375,23 @@ test('a ｜ base holding annotations is a ruby; a ｜ with nothing visible befor
     start: { line: 0, character: 0 },
     end: { line: 0, character: 10 }, // ｜［＃メモ］《よみ》
   });
+});
+
+test('a 字下げ above INDENT_MAX yields one Warning over the annotation, naming the largest count that is read', () => {
+  const over = indentAnnotation(INDENT_MAX + 1);
+  const [d, ...rest] = annotationDiagnostics(doc(`${over}本文`));
+  assert.deepEqual(rest, []);
+  assert.equal(d?.severity, DiagnosticSeverity.Warning);
+  assert.deepEqual(d.data, INDENT_TOO_LARGE);
+  assert.equal(d.message, renderEnglish(INDENT_TOO_LARGE.code, INDENT_TOO_LARGE.args));
+  assert.ok(d.message.includes(fullWidthDigits(INDENT_MAX)));
+  assert.deepEqual(d.range, { start: { line: 0, character: 0 }, end: { line: 0, character: over.length } });
+
+  // The block form: its end no longer has a start.
+  const block = annotationDiagnostics(doc(`${blockOf(over)}\nA\n［＃ここで字下げ終わり］`));
+  assert.deepEqual(block.map((x) => x.range.start.line), [0, 2]);
+  assert.deepEqual(block.map((x): unknown => x.data), [INDENT_TOO_LARGE, { code: 'syntax.danglingBlockEnd' }]);
+
+  assert.deepEqual(annotationDiagnostics(doc(`${indentAnnotation(INDENT_MAX)}本文`)), []);
+  assert.deepEqual(annotationDiagnostics(doc(`本文${over}`)), []); // mid-line: a comment like any other
 });

@@ -1,17 +1,18 @@
 /**
  * Character-hygiene rules and the ruby-reading kana rule. The hygiene scans run on the prose view
  * (地の文 and セリフ alike; annotation interiors stay the raw shiftJisSafe rule's job), except
- * noNfd, which scans every source slice of the line so a ruby reading or an annotation target is
- * composed too. Every fix is a context-free character substitution, safe to apply verbatim
- * anywhere.
+ * noNfd and noControlChar, which scan every source slice of the line: a ruby reading, an
+ * annotation target or a comment is composed, and loses its control characters, in every output
+ * too. Every fix replaces or deletes characters in place; noControlChar withholds its fix for a
+ * ruby base or reading it would empty.
  *
  * Relative imports only (native test loader); vscode-free.
  */
-import { composeKana, isCjkIdeograph, isCombiningKanaMark } from '../../../shared/chars.ts';
+import { composeKana, isCjkIdeograph, isCombiningKanaMark, isUnshown } from '../../../shared/chars.ts';
 
 import { rubyKanaScan } from '../prescan.ts';
 import type { PreScan } from '../prescan.ts';
-import type { LineRule, LintLine, RuleContext } from '../types.ts';
+import type { LineRule, LintLine, RuleContext, SourceSlice } from '../types.ts';
 
 import { viewScan } from './adapt.ts';
 
@@ -78,18 +79,49 @@ const zeroWidthScan: PreScan = (text) => {
   return out;
 };
 
-/** 制御文字 (C0/C1 except \t — terminators never reach a view): each one is deleted. */
-const controlCharScan: PreScan = (text) => {
-  const out: { start: number; end: number; fix: string }[] = [];
-  for (let i = 0; i < text.length; i += 1) {
-    const cp = text.charCodeAt(i);
-    const isControl = cp <= 0x1f || (cp >= 0x7f && cp <= 0x9f);
-    if (isControl && cp !== 0x09) {
-      out.push({ start: i, end: i + 1, fix: '' });
+/** A character noControlChar reports: C0 except tab, U+007F–009F, U+FFFE and U+FFFF. */
+export function isControlChar(cp: number): boolean {
+  return cp !== 0x09 && (cp <= 0x1f || (cp >= 0x7f && cp <= 0x9f) || isUnshown(cp));
+}
+
+/** True when `slice` holds nothing but control characters and U+200B, so deleting them leaves
+ *  nothing shown. */
+function wouldEmpty(slice: SourceSlice): boolean {
+  for (let i = 0; i < slice.text.length; i += 1) {
+    const cp = slice.text.charCodeAt(i);
+    if (!isControlChar(cp) && cp !== 0x200b) {
+      return false;
     }
   }
-  return out;
-};
+  return true;
+}
+
+/** 制御文字 (C0/C1 except \t — terminators never reach a line) and the noncharacters U+FFFE and
+ *  U+FFFF, anywhere on the line — prose, ruby readings, annotations and comments alike, since no
+ *  output carries the ones `dropUnshown` drops. Each one is deleted, unless the deletes would
+ *  empty a ruby base or a ruby reading (the stranded ｜《…》 or 《》 would print literally). */
+export function controlCharRule(ctx: RuleContext): LineRule {
+  return {
+    line(line: LintLine): void {
+      let emptied: SourceSlice[] | undefined;
+      for (const slice of line.source) {
+        const { text, srcStart } = slice;
+        for (let i = 0; i < text.length; i += 1) {
+          if (!isControlChar(text.charCodeAt(i))) {
+            continue;
+          }
+          const at = srcStart + i;
+          emptied ??= [...line.pieces.filter((p) => p.rubyBase), ...line.rubies].filter(wouldEmpty);
+          const withheld = emptied.some((s) => s.srcStart <= at && at < s.srcStart + s.text.length);
+          ctx.report(
+            { start: at, end: at + 1 },
+            withheld ? undefined : { fix: { replace: { slice, start: i, end: i + 1 }, text: '' } },
+          );
+        }
+      }
+    },
+  };
+}
 
 /** Kana or a CJK ideograph. */
 const isJa = (ch: string): boolean => {
@@ -124,7 +156,6 @@ const unnaturalAlphabetScan: PreScan = (text) => {
 
 export const hankakuKanaRule = viewScan(hankakuKanaScan, 'prose');
 export const zeroWidthRule = viewScan(zeroWidthScan, 'prose');
-export const controlCharRule = viewScan(controlCharScan, 'prose');
 export const unnaturalAlphabetRule = viewScan(unnaturalAlphabetScan, 'prose');
 
 /** ルビの読みの仮名種: each reading must be entirely the chosen kana type. */

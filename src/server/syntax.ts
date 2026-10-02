@@ -13,14 +13,15 @@ import type { Diagnostic } from 'vscode-languageserver/node';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 
 import type { Ast, Issue, Span } from '../shared/ast/nodes.ts';
+import { INDENT_MAX, fullWidthDigits } from '../shared/ast/notation.ts';
 import { bySource } from '../shared/ast/span.ts';
-import { composeKana } from '../shared/chars.ts';
+import { displayText } from '../shared/chars.ts';
 import type { LocalizableMessage } from '../shared/protocol.ts';
 
 import { diagnostic } from './diagnostics.ts';
 
 /** Combined cells squish visibly beyond this many code points (measured in headless Chrome). */
-const TCY_MAX = 3;
+export const TCY_MAX = 3;
 
 interface Finding {
   readonly span: Span;
@@ -31,10 +32,15 @@ function tooLong(text: string): boolean {
   return Array.from(text).length > TCY_MAX;
 }
 
+/** The message of a 字下げ above {@link INDENT_MAX}: it names the limit in the digits the count is written in. */
+export const INDENT_TOO_LARGE: LocalizableMessage = { code: 'syntax.indentTooLarge', args: [fullWidthDigits(INDENT_MAX)] };
+
 function messageOf(issue: Issue): LocalizableMessage {
   switch (issue.kind) {
     case 'unclosedAnnotation':
       return { code: 'syntax.unclosedAnnotation' };
+    case 'indentTooLarge':
+      return INDENT_TOO_LARGE;
     case 'unterminatedSpan':
       return { code: issue.block ? 'syntax.unterminatedBlock' : 'syntax.unterminatedSpan' };
     case 'danglingSpanEnd':
@@ -64,7 +70,7 @@ function tcyTooLong(ast: Ast): Finding[] {
       const held = node.kind === 'tcySpanStart' ? ast.held.get(node) : undefined;
       if (held !== undefined && tooLong(held.text)) {
         out.push({ span: held.span, message });
-      } else if (node.kind === 'tcyPostfix' && tooLong(composeKana(node.target.text))) {
+      } else if (node.kind === 'tcyPostfix' && tooLong(displayText(node.target.text))) {
         out.push({ span: node.target.span, message });
       }
     }

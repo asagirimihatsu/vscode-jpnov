@@ -1368,3 +1368,20 @@ test('a column of no source line (a glue row) carries no anchor, wrapped or not'
   assert.equal(glue.length, 2);
   assert.doesNotMatch(pagesToHtml(sheets([glue]), undefined, OFF), /data-(line|ch)/);
 });
+
+test('a character no output can carry takes no cell; the columns after it keep their source offset', () => {
+  const src = '王\u0007都へ行く';
+  assert.equal(
+    flow(src, 3),
+    '<div class="book"><div class="segment">' +
+      `<div class="line" data-line="0">王都へ</div><div class="line" data-line="0" data-ch="${String(at(src, '行').start)}">行く</div></div></div>`,
+  );
+  const more = '王\u0007都\uFFFEへ\uFFFF行く';
+  assert.equal(flow(more, 3), flow(src, 3).replace(/data-ch="\d+"/, `data-ch="${String(at(more, '行').start)}"`));
+  // Alone on its line it is a blank column, like an empty line.
+  assert.equal(flow('一\n\u0007\n二'), flow('一\n\n二'));
+});
+
+test('a comment loses the character before it is escaped, so no -- can form around it', () => {
+  assert.match(html('［＃-\u0007-］本'), /<div class="line" data-line="0"><!--- - -->本<\/div>/);
+});

@@ -5,11 +5,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { VALUE_NAMES, valueAnnotation } from '../../../src/shared/ast/notation.ts';
+import { INDENT_MAX, VALUE_NAMES, indentAnnotation, valueAnnotation } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
 import { scan } from '../../../src/shared/ast/scan.ts';
 
-import { at, contentOf, facts, kinds, lineShapes, nodeOf, nodesOf, shape } from './_shape.ts';
+import { at, blockIndent, blockOf, contentOf, facts, kinds, lineShapes, nodeOf, nodesOf, shape } from './_shape.ts';
 import { D } from '../_kana.ts';
 
 // --------------------------------------------------------------- lines
@@ -137,10 +137,18 @@ test('改ページ is a pageBreak', () => {
   assert.deepEqual(shape('前［＃改ページ］後'), ['text 前', 'pageBreak ［＃改ページ］', 'text 後']);
 });
 
-test('a line-head ［＃○字下げ］ is an indent (full-width digits, any number of them)', () => {
+/** ［＃○字下げ］ with `digits` as written. */
+const indentOf = (digits: string): string => `［＃${digits}字下げ］`;
+
+test('a line-head ［＃○字下げ］ is an indent (full-width digits, up to INDENT_MAX)', () => {
   assert.deepEqual(facts(nodeOf('［＃３字下げ］本文', 'indent')), { kind: 'indent', text: '［＃３字下げ］', amount: 3 });
   assert.equal(nodeOf('　まくら\n［＃２字下げ］次', 'indent').amount, 2); // the head of a later line
-  assert.equal(nodeOf('［＃１００字下げ］x', 'indent').amount, 100); // the layout clamps, not the scanner
+  assert.equal(nodeOf(`${indentAnnotation(INDENT_MAX)}x`, 'indent').amount, INDENT_MAX);
+  assert.deepEqual(kinds(`${indentAnnotation(INDENT_MAX + 1)}x`), ['comment', 'text']);
+  // The value decides, not the number of digits.
+  assert.equal(nodeOf(`${indentOf('０'.repeat(400) + '３')}x`, 'indent').amount, 3);
+  assert.deepEqual(kinds(`${indentOf('９'.repeat(400))}x`), ['comment', 'text']);
+  assert.deepEqual(kinds(`${indentOf('９'.repeat(400) + '3')}x`), ['comment', 'text']); // still not digits
   assert.equal(nodeOf('［＃００３字下げ］x', 'indent').amount, 3);
   assert.equal(nodeOf('［＃０字下げ］x', 'indent').amount, 0);
 });
@@ -159,6 +167,9 @@ test('the block 字下げ pair; the 折り返して form is a comment', () => {
   assert.deepEqual(facts(nodeOf(src, 'indentBlockEnd')), { kind: 'indentBlockEnd', text: '［＃ここで字下げ終わり］' });
   assert.deepEqual(kinds('［＃ここから２字下げ、折り返して３字下げ］'), ['comment']);
   assert.deepEqual(kinds('［＃ここから2字下げ］'), ['comment']); // half-width
+  assert.equal(nodeOf(blockIndent(INDENT_MAX), 'indentBlockStart').amount, INDENT_MAX);
+  assert.deepEqual(kinds(blockIndent(INDENT_MAX + 1)), ['comment']);
+  assert.deepEqual(kinds(blockOf(indentOf('９'.repeat(400)))), ['comment']);
 });
 
 test('a decoration span carries its variant, side and channel; the block form its flag', () => {

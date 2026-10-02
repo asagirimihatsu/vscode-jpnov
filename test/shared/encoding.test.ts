@@ -223,3 +223,23 @@ test('the scanner composes kana the same way, so lint and build agree', () => {
   assert.ok(lone);
   assert.equal(lone.offset, 0);
 });
+
+test('an astral character before a dropped one leaves the offsets in UTF-16 units', () => {
+  const src = '\u{20BB7}\u0007\u2764';
+  const hits = unencodableChars(src);
+  assert.deepEqual(hits.map((hit) => hit.offset), [0, src.indexOf('\u2764')]);
+  for (const hit of hits) {
+    assert.equal(src.codePointAt(hit.offset), hit.cp);
+  }
+});
+
+test('a character the text build drops is not reported; the offsets stay those of the text', () => {
+  assert.deepEqual(unencodableChars('\uFFFE'), []);
+  assert.deepEqual(unencodableChars('\u3042\u0007\uFFFF\u3044'), []);
+  assert.deepEqual(unencodableChars('\u304B\uFFFE\u3099'), []); // written が once the character between is gone
+  const src = '\uFFFE\u3042\u0007\u2764\uFFFF\uFE0F\u8FBB\uFFFE\u{E0100}';
+  assert.deepEqual(unencodableChars(src), [
+    { cluster: '\u2764\uFE0F', cp: 0x2764, offset: src.indexOf('\u2764'), length: 1 },
+    { cluster: '\u8FBB\u{E0100}', cp: 0xe0100, offset: src.indexOf('\u{E0100}'), length: 2 },
+  ]);
+});

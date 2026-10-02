@@ -36,12 +36,12 @@ import * as S from './styles/styles.generated.ts';
 /**
  * The CSS rule for one used class name, or '' for an unknown one (keeps the "no stray rules"
  * invariant). These are layout geometry / line furniture, not style-table entries: `indent-N`
- * (字下げ) and `rh-N` (stretched ruby) are generated here (unbounded N); `tcy` (縦中横), `midashi`
+ * (字下げ, N at most the notation's INDENT_MAX and capped by effectiveIndent in both emitters)
+ * and `rh-N` (stretched ruby, unbounded N) are generated here; `tcy` (縦中横), `midashi`
  * (見出し), `hang` (ぶら下げ), `insep` (分離禁止), `emr` (傍点 line compensation) and the ruby
  * classes come from the static `styles/class.*.css` fragments. The indent suffix check is
- * defence in depth (emitLine only ever emits positive N_eff). Every other class
- * (emph-* / dec-* / b / i) is forwarded to emphasis.ts's {@link styleRule}, the single home of
- * the style CSS values.
+ * defence in depth. Every other class (emph-* / dec-* / b / i) is forwarded to emphasis.ts's
+ * {@link styleRule}, the single home of the style CSS values.
  */
 function classRule(name: string): string {
   if (name.startsWith('indent-')) {
@@ -55,7 +55,7 @@ function classRule(name: string): string {
     return /^[1-9][0-9]*$/.test(n) ? `.rh-${n}{min-height:${n}em}` : '';
   }
   // Static, media-independent class rules, authored as `styles/class.*.css` fragments (each
-  // carries its own rationale). Unlike the unbounded `indent-N` / `rh-N` above, these are fixed
+  // carries its own rationale). Unlike the generated `indent-N` / `rh-N` above, these are fixed
   // constants.
   switch (name) {
     case 'tcy':

@@ -11,7 +11,9 @@ import { fileURLToPath } from 'node:url';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { computeLintFindings } from '../../../src/server/lint/engine.ts';
+import { INDENT_MAX, indentAnnotation } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
+import { displayText } from '../../../src/shared/chars.ts';
 import { RULES, settingKey } from '../../../src/shared/lint/catalog.ts';
 import { selectRules } from '../../../src/shared/lint/select.ts';
 import type { RawLintConfigWire } from '../../../src/shared/protocol.ts';
@@ -196,6 +198,13 @@ test('a line opened by ［＃N字下げ］ (N ≥ 1) is not flagged as un-indent
 
 test('［＃０字下げ］ renders un-indented, so the flag (and its insert fix) stays', () => {
   assert.equal(applied('［＃０字下げ］内容だ。\n', INDENT), '［＃０字下げ］　内容だ。\n');
+});
+
+test('a line-head 字下げ above INDENT_MAX is a comment: the line is un-indented, flag and insert fix included', () => {
+  const over = indentAnnotation(INDENT_MAX + 1);
+  assert.deepEqual(lint(`${over}内容だ。\n`, INDENT), [{ code: 'lint.narration.indent', text: '内' }]);
+  assert.equal(applied(`${over}内容だ。\n`, INDENT), `${over}　内容だ。\n`);
+  assert.deepEqual(lint(`${indentAnnotation(INDENT_MAX)}内容だ。\n`, INDENT), []);
 });
 
 test('every line inside a ここから…ここで block is covered; lines after the end are not', () => {
@@ -740,6 +749,48 @@ test('shiftJisSafe stays quiet where an always-on hygiene rule already reports',
   assert.deepEqual(lint('あ\u0085い', shipped), [
     { code: 'lint.common.noControlChar', text: '\u0085' },
   ]);
+});
+
+test('noControlChar reports every character the outputs drop, wherever it sits, and deletes it', () => {
+  const CTRL: RawLintConfigWire = { 'jpnov.lint.common.noControlChar': true };
+  const code = 'lint.common.noControlChar';
+  // Derived from displayText, so the lint's class is proven to cover the dropped one.
+  const dropped = Array.from({ length: 0x10000 }, (_, unit) => String.fromCharCode(unit))
+    .filter((ch) => displayText(ch) === '');
+  assert.ok(dropped.includes('\u0007') && dropped.includes('\uFFFE'));
+  // Prose, a ruby reading, a left ruby reading, a postfix target, a comment, a broken annotation.
+  const PLACES: readonly ((ch: string) => string)[] = [
+    (ch) => `　王${ch}都へ行く。`,
+    (ch) => `山田《やま${ch}だ》`,
+    (ch) => `聖剣［＃「聖剣」の左に「つる${ch}ぎ」のルビ］`,
+    (ch) => `聖剣［＃「聖${ch}剣」に傍点］`,
+    (ch) => `あ［＃-${ch}-］い`,
+    (ch) => `あ［＃メ${ch}モ`,
+  ];
+  for (const ch of [...dropped, '\u007F', '\u0085']) {
+    for (const place of PLACES) {
+      const src = place(ch);
+      assert.deepEqual(lintAll(src, CTRL), [{ code, text: ch, fix: { text: ch, newText: '' } }], JSON.stringify(src));
+      assert.equal(applied(src, CTRL), place(''), JSON.stringify(src));
+    }
+  }
+  // A tab is no finding; a whole ruby base is reported without a fix (｜《…》 would print as typed).
+  assert.deepEqual(lint('あ\tい《\t》［＃\t］', CTRL), []);
+  assert.deepEqual(lintAll('｜\u0007《よみ》', CTRL), [{ code, text: '\u0007' }]);
+  // A base or a reading the deletes would empty keeps every character: none of them has a fix.
+  assert.deepEqual(lintAll('｜\u0007\u0007《よみ》', CTRL), [{ code, text: '\u0007' }, { code, text: '\u0007' }]);
+  assert.deepEqual(lintAll('山田《\u0007》', CTRL), [{ code, text: '\u0007' }]);
+  // An annotation whose KEYWORD holds a control character is unrecognized; deleting it brings it back.
+  assert.equal(applied('［＃\u0007改ページ］', CTRL), '［＃改ページ］');
+});
+
+test('endPeriod looks past a control character for the last prose character', () => {
+  const raw: RawLintConfigWire = { 'jpnov.lint.common.noControlChar': true, 'jpnov.lint.narration.endPeriod': true };
+  const period = 'lint.narration.endPeriod';
+  for (const [src, fixed] of [['　内容だ。\uFFFE', '　内容だ。'], ['「内容だ」\u0007', '「内容だ」']] as const) {
+    assert.equal(applied(src, raw), fixed, JSON.stringify(src));
+    assert.deepEqual(lint(src, raw).filter((h) => h.code === period), [], JSON.stringify(src));
+  }
 });
 
 test('noNfd fixes by composing the base+mark pair', () => {

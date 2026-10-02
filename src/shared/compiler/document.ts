@@ -2,6 +2,7 @@ import type { Ast, Line, SpanChannel, ValueLookup } from '../ast/nodes.ts';
 import { VALUE_NAMES, closingAnnotations, indentAnnotation, spanChannel } from '../ast/notation.ts';
 import { parse } from '../ast/parse.ts';
 import { printLine } from '../ast/print.ts';
+import { dropUnshown } from '../chars.ts';
 import type { DashMode, KinsokuMode, LinePitch } from '../config/types.ts';
 import type { BuildChrome } from './chrome.ts';
 import { emrProbe, stylesheet } from './css.ts';
@@ -304,13 +305,14 @@ export function renderBook(opts: {
 
 /**
  * A chapter as the `.txt` takes it, before the book's line ending is chosen: its lines printed
- * back from the AST and ended by '\n' (a lone '\r' stays as typed), less the final newline.
+ * back from the AST and ended by '\n' (a lone '\r' stays as typed), without the characters no
+ * output can carry, less the final newline.
  */
 function chapterText(ast: Ast): string {
-  return ast.lines
+  const text = ast.lines
     .map((line) => printLine(line) + (line.eol === '\r\n' ? '\n' : line.eol))
-    .join('')
-    .replace(/\n$/, '');
+    .join('');
+  return dropUnshown(text).replace(/\n$/, '');
 }
 
 /**
@@ -318,7 +320,8 @@ function chapterText(ast: Ast): string {
  * each file is printed back from its AST and loses its single trailing newline, then files join
  * with `'\n' + seamClosers(prev) + chapterGlue(...)` (the `'\n'` ends the previous chapter's last
  * line; the closers end the spans it left open; the glue parses into exactly the rows the HTML
- * build inserts at that seam). The output takes the manuscript's line endings: CRLF throughout
+ * build inserts at that seam). The characters no output can carry are removed from each
+ * chapter and from the divider. The output takes the manuscript's line endings: CRLF throughout
  * when any chapter file is CRLF, else LF; a lone `\r` passes through. An empty book -> "" (a
  * wholly-empty middle file adds one extra blank line — benign); a divider that itself opens a span
  * (`［＃太字］＊`) leaks into the next chapter. Pure + vscode-free.
@@ -329,12 +332,13 @@ export function concatBookText(book: BookInput, charsPerLine: number): string {
     return { ast, text: chapterText(ast) };
   });
   const eol = chapters.some(({ ast }) => ast.lines.some((line) => line.eol === '\r\n')) ? '\r\n' : '\n';
+  const divider = dropUnshown(book.divider ?? '');
   const joined = chapters.reduce((acc, { ast, text }, i) => {
     const prev = chapters[i - 1];
     if (prev === undefined) {
       return text;
     }
-    return `${acc}\n${seamClosers(prev.ast)}${chapterGlue(prev.ast, ast, book.divider ?? '', charsPerLine)}${text}`;
+    return `${acc}\n${seamClosers(prev.ast)}${chapterGlue(prev.ast, ast, divider, charsPerLine)}${text}`;
   }, '');
   return eol === '\n' ? joined : joined.replace(/\n/g, eol);
 }

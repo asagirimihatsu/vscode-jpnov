@@ -446,6 +446,8 @@ export interface DividerValue {
  * scanner's own classification, so the GUI and the render can never disagree) yields its
  * amount, a bare value yields `indent: null` = centred at build time. Flush-head is
  * deliberately not expressible — it exists in neither the print nor the web convention.
+ * A 字下げ above INDENT_MAX is not an indent: it stays in the mark, and the `.jpbook` diagnostics
+ * warn about it.
  */
 export function parseDividerValue(value: string): DividerValue {
   const first = scan(value).lines[0]?.syntax[0];
@@ -455,7 +457,10 @@ export function parseDividerValue(value: string): DividerValue {
   return { mark: value, indent: null };
 }
 
-/** The inverse of {@link parseDividerValue}; the 字下げ spelling comes from the notation. */
+/**
+ * The inverse of {@link parseDividerValue} for an `indent` up to INDENT_MAX; the 字下げ spelling
+ * comes from the notation.
+ */
 export function composeDividerValue(mark: string, indent: number | null): string {
   return indent === null ? mark : indentAnnotation(indent) + mark;
 }

@@ -98,7 +98,7 @@ export interface DisplayLine {
   readonly hang?: Unit;
 }
 
-/** An annotation that took no effect: a zero-width HTML comment of its inner text, verbatim. */
+/** An annotation that took no effect: a zero-width HTML comment of its inner text, as the AST shows it. */
 function commentUnit(inner: string, at: number): Unit {
   return { cells: 0, html: `<!--${escapeComment(inner)}-->`, text: '', at };
 }
@@ -558,9 +558,17 @@ function separate(units: readonly Unit[], mode: KinsokuMode): readonly Unit[] {
 }
 
 /**
+ * N_eff: a row's 字下げ clamped to `charsPerLine − 1`, so the line keeps ≥1 content cell. The
+ * paginated wrap and the EPUB reflow share it.
+ */
+export function effectiveIndent(indent: number | undefined, charsPerLine: number): number {
+  return Math.min(indent ?? 0, charsPerLine - 1);
+}
+
+/**
  * Hard-wraps one line row's units into display lines of at most `charsPerLine` cells. A unit
  * is atomic (never split) and an over-wide unit gets its own line. A 字下げ row narrows the
- * budget to `charsPerLine − N_eff` (N_eff = indent clamped to keep ≥1 content cell) and stamps
+ * budget to `charsPerLine − N_eff` (N_eff = {@link effectiveIndent}) and stamps
  * the SAME N_eff onto every display line — the first AND each wrapped continuation are indented
  * alike, and class / CSS padding / wrap budget all derive from this one value so the column can
  * never overflow. When `kinsoku` is not `none`, 分離禁止 runs are first bound into atomic units
@@ -580,7 +588,7 @@ function wrapRow(
 ): DisplayLine[] {
   const { srcLine } = row;
   const units = mode === 'none' ? row.units : separate(row.units, mode);
-  const indent = Math.min(row.indent ?? 0, charsPerLine - 1); // N_eff: keep >=1 content cell
+  const indent = effectiveIndent(row.indent, charsPerLine);
   const budget = charsPerLine - indent;
   // 見出し propagates to every display line (wrapped continuations stay gothic, like indent);
   // conditional for the same absent-key contract the row snapshots rely on.

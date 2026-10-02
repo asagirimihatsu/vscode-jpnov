@@ -181,16 +181,26 @@ export function tcyAnnotation(target: string): string {
   return annotation(`${CORNER_OPEN}${target}${CORNER_CLOSE}${CONNECTOR_HA}${TCY}`);
 }
 
-/** ［＃N字下げ］, its digits full-width: the only form that is read. */
-export function indentAnnotation(amount: number): string {
-  const digits = String(amount).replace(/[0-9]/g, (d) =>
+/** The largest 字下げ that is read; an annotation naming more is a comment. */
+export const INDENT_MAX = 99;
+
+/** `n` in full-width digits ０-９, the digits a 字下げ count is written in. */
+export function fullWidthDigits(n: number): string {
+  return String(n).replace(/[0-9]/g, (d) =>
     String.fromCharCode(0xff10 + d.charCodeAt(0) - 0x30),
   );
-  return annotation(`${digits}${INDENT}`);
 }
 
-/** The indent count of `s` = 「<digits>字下げ」, full-width digits ０-９ only; null otherwise. */
-export function indentAmount(s: string): number | null {
+/** ［＃N字下げ］, its digits full-width: the only form that is read, for N up to {@link INDENT_MAX}. */
+export function indentAnnotation(amount: number): string {
+  return annotation(`${fullWidthDigits(amount)}${INDENT}`);
+}
+
+/**
+ * The indent count of `s` = 「<digits>字下げ」, full-width digits ０-９ only; null otherwise. A
+ * count above {@link INDENT_MAX} is 'tooLarge' whatever its length; leading zeros do not count.
+ */
+export function indentAmount(s: string): number | 'tooLarge' | null {
   if (!s.endsWith(INDENT)) {
     return null;
   }
@@ -204,9 +214,9 @@ export function indentAmount(s: string): number | null {
     if (cp < 0xff10 || cp > 0xff19) {
       return null;
     }
-    n = n * 10 + (cp - 0xff10);
+    n = Math.min(n * 10 + (cp - 0xff10), INDENT_MAX + 1);
   }
-  return n;
+  return n > INDENT_MAX ? 'tooLarge' : n;
 }
 
 export type ClosingAnnotations =

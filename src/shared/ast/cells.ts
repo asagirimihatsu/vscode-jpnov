@@ -2,7 +2,7 @@
  * The cells of a line while it is being resolved: what a corner-target postfix is matched
  * against and rewrites, and what becomes the line's content.
  */
-import { composeKana, composedChars } from '../chars.ts';
+import { displayChars, displayText } from '../chars.ts';
 import type { ComposedChar } from '../chars.ts';
 
 import type { CharsOrigin, CommentInline, Inline, Mark, Marks, Ruby, Span, SyntaxNode, Tcy } from './nodes.ts';
@@ -11,11 +11,11 @@ import type { Channel } from './notation.ts';
 
 /** Where a run of display characters came from, shared by the pieces it is cut into. */
 interface Source {
-  /** Source offset of the text the characters were composed from. */
+  /** Source offset of the text the characters were taken from. */
   readonly start: number;
   /** A substituted value: every piece maps to this one span. */
   readonly fixed: Span | null;
-  /** The display characters with their source ranges, when composing changed the text. */
+  /** The display characters with their source ranges, when showing changed the text. */
   readonly chars: readonly ComposedChar[] | null;
 }
 
@@ -32,14 +32,17 @@ export interface CharsCell {
 
 export type Cell = CharsCell | Ruby | Tcy | CommentInline;
 
-/** The cell of `raw` as `node` shows it, kana composed; null when it shows nothing. */
+/**
+ * The cell of `raw` as `node` shows it ({@link displayText}: characters no output can carry
+ * dropped, kana composed); null when it shows nothing.
+ */
 export function charsCell(node: SyntaxNode, raw: string, origin: CharsOrigin, marks: Marks): CharsCell | null {
-  const text = composeKana(raw);
+  const text = displayText(raw);
   if (text === '') {
     return null;
   }
   const fixed = origin === 'value' ? node.span : null;
-  const chars = fixed !== null || text === raw ? null : composedChars(raw);
+  const chars = fixed !== null || text === raw ? null : displayChars(raw);
   return { kind: 'chars', source: { start: node.span.start, fixed, chars }, origin, text, from: 0, marks };
 }
 
@@ -193,7 +196,7 @@ function sameMarks(a: Marks, b: Marks): boolean {
 }
 
 /**
- * Where each character of `cell` was written, when kana were composed in its source; null when
+ * Where each character of `cell` was written, when its source shows differently; null when
  * each sits at its span start plus its offset. `from` counts the display text, so the walk adds
  * up display lengths.
  */

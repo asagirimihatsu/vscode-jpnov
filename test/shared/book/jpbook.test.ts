@@ -17,6 +17,7 @@ import {
   type CompletionEntry,
   type JpbookLineKind,
 } from '../../../src/shared/book/jpbook.ts';
+import { INDENT_MAX } from '../../../src/shared/ast/notation.ts';
 import { FURNITURE_ALIGNS } from '../../../src/shared/compiler/chrome.ts';
 
 const kinds = (text: string): JpbookLineKind[] => parseJpbook(text).lines.map((l) => l.kind);
@@ -164,6 +165,10 @@ test('divider is a free-string key; parse/composeDividerValue split mark and 字
   assert.equal(composeDividerValue('＊', null), '＊');
   assert.equal(composeDividerValue('＊', 15), '［＃１５字下げ］＊');
   assert.deepEqual(parseDividerValue(composeDividerValue('†', 3)), { mark: '†', indent: 3 });
+  // The scanner's limit: the largest 字下げ splits off, a larger one stays in the mark.
+  assert.deepEqual(parseDividerValue(composeDividerValue('◇', INDENT_MAX)), { mark: '◇', indent: INDENT_MAX });
+  const over = composeDividerValue('◇', INDENT_MAX + 1);
+  assert.deepEqual(parseDividerValue(over), { mark: over, indent: null });
 });
 
 test('parseJpbook: headerAlign and footerAlign take the five alignments and warn on anything else', () => {

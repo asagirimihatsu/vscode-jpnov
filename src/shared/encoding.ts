@@ -11,7 +11,7 @@
  * Decomposed kana (か + U+3099) are composed per grapheme cluster, on both sides, through the
  * shared {@link composeKana} — pair-wise composition only, never whole-text NFC.
  */
-import { composeKana } from './chars.ts';
+import { composeKana, dropWithOrigin } from './chars.ts';
 
 /** `jpnov.layout.txt.encoding` members — the encodings a built `.txt` can be written in. */
 export const TXT_ENCODINGS = ['shiftJis', 'utf8', 'utf8Bom'] as const;
@@ -146,12 +146,16 @@ function holdsWhole(cluster: string, map: Map<number, number>): boolean {
   return true;
 }
 
-/** Every written character of `text` Shift JIS cannot hold whole once its kana are composed, in
- *  order — at most one per cluster. */
+/**
+ * Every written character of `text` Shift JIS cannot hold whole once its kana are composed, in
+ * order — at most one per cluster. The characters the text build drops ({@link dropWithOrigin}) are
+ * left out first; the offsets stay those of `text`.
+ */
 export function unencodableChars(text: string): UnencodableChar[] {
   const map = shiftJisTable();
   const out: UnencodableChar[] = [];
-  for (const { segment, index } of GRAPHEMES.segment(text)) {
+  const { text: shown, origin } = dropWithOrigin(text);
+  for (const { segment, index } of GRAPHEMES.segment(shown)) {
     if (holdsWhole(composeKana(segment), map)) {
       continue;
     }
@@ -161,7 +165,7 @@ export function unencodableChars(text: string): UnencodableChar[] {
     for (const ch of segment) {
       const cp = ch.codePointAt(0) ?? 0;
       if (cp > 0x7f && !map.has(cp)) {
-        out.push({ cluster: segment, cp, offset, length: ch.length });
+        out.push({ cluster: segment, cp, offset: origin?.[offset] ?? offset, length: ch.length });
         break; // one report per written character, however many code points it took
       }
       offset += ch.length;

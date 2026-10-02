@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { CompletionItemKind, DiagnosticSeverity } from 'vscode-languageserver/node';
 import type { CompletionItem, Diagnostic, DocumentLink, Range } from 'vscode-languageserver/node';
 
+import { scan } from '#/shared/ast/scan.ts';
 import {
   colonIndex,
   completeEntryLine,
@@ -41,6 +42,7 @@ import { unencodableChars } from '#/shared/encoding.ts';
 
 import { diagnostic } from './diagnostics.ts';
 import { isFileScheme } from './fsUri.ts';
+import { INDENT_TOO_LARGE } from './syntax.ts';
 
 /** A column span on `line` as an LSP {@link Range}. */
 function charRange(line: number, span: JpbookRange): Range {
@@ -61,23 +63,31 @@ function lineRange(pl: ParsedLine): Range {
  * chapter seam. This is manifest validation like every other `jpbook.*` diagnostic, NOT the
  * `shiftJisSafe` prose rule — that one never sees a `.jpbook`, and a divider is a symbol rather
  * than a character an author mistyped.
+ *
+ * A 字下げ above the notation's maximum warns too, as it does in a manuscript: the value is not
+ * indented by it and the annotation prints as a comment at every seam.
  */
-function dividerEncodingWarnings(pl: ParsedLine): Diagnostic[] {
+function dividerWarnings(pl: ParsedLine): Diagnostic[] {
   if (metaKeyOf(pl.value) !== 'divider') {
     return [];
   }
   const afterColon = pl.value.slice(colonIndex(pl.value) + 1);
+  const value = afterColon.trim();
   // Offset of the trimmed value within the line, so each range lands on the character itself.
   const base = pl.range.startChar + (pl.value.length - afterColon.length) +
     (afterColon.length - afterColon.trimStart().length);
-  return unencodableChars(afterColon.trim()).map(({ cluster, offset, length }) => diagnostic(
-    {
-      start: { line: pl.line, character: base + offset },
-      end: { line: pl.line, character: base + offset + length },
-    },
-    { code: 'jpbook.dividerNotEncodable', args: [cluster] },
-    DiagnosticSeverity.Warning,
-  ));
+  const at = (start: number, end: number): Range =>
+    charRange(pl.line, { startChar: base + start, endChar: base + end });
+  return [
+    ...unencodableChars(value).map(({ cluster, offset, length }) => diagnostic(
+      at(offset, offset + length),
+      { code: 'jpbook.dividerNotEncodable', args: [cluster] },
+      DiagnosticSeverity.Warning,
+    )),
+    ...scan(value).issues
+      .filter((issue) => issue.kind === 'indentTooLarge')
+      .map(({ span }) => diagnostic(at(span.start, span.end), INDENT_TOO_LARGE, DiagnosticSeverity.Warning)),
+  ];
 }
 
 /** Classifies a `file:` URI on disk; any error (incl. ENOENT) is `'missing'`. */
@@ -112,7 +122,7 @@ export async function diagnoseJpbook(rootUri: string | null, parsed: ParsedJpboo
 
   for (const pl of parsed.lines) {
     if (pl.kind === 'meta') {
-      diagnostics.push(...dividerEncodingWarnings(pl));
+      diagnostics.push(...dividerWarnings(pl));
       continue;
     }
     if (pl.kind === 'blank' || pl.kind === 'fence' || pl.kind === 'cover') {

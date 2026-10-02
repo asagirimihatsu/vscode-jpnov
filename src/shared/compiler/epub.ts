@@ -13,12 +13,13 @@
 import { createHash } from 'node:crypto';
 
 import { parse } from '../ast/parse.ts';
+import { displayText } from '../chars.ts';
 import type { DashMode, KinsokuMode } from '../config/types.ts';
 import { reflowStylesheet } from './css.ts';
 import type { TitledBook } from './document.ts';
 import { escapeHtml } from './escape.ts';
 import { buildRows } from './layout.ts';
-import { reflowDocument, reflowSegments } from './reflow.ts';
+import { nonBlank, reflowDocument, reflowSegments } from './reflow.ts';
 
 /** One text member of an EPUB container: its path inside the archive + full content. */
 export interface EpubMember {
@@ -41,11 +42,21 @@ function bookIdentifier(outRel: string): string {
   return `urn:uuid:${parts.join('-')}`;
 }
 
-/** The chapter file's own name (no directories, no `.jpnov`) — the nav label of last resort. */
+/** The chapter file's own name (no directories, no `.jpnov`) — the nav label when the chapter
+ *  has no 見出し; a blank one gives way to the spine id. */
 export function chapterStem(fileName: string): string {
   const base = fileName.split('/').pop() ?? fileName;
   return base.endsWith('.jpnov') ? base.slice(0, -'.jpnov'.length) : base;
 }
+
+/** `s` as the package shows it, or null when nothing of it would show. Metadata never passes
+ *  the AST, so the characters XML cannot carry are dropped here. */
+function shown(s: string): string | null {
+  return nonBlank(displayText(s));
+}
+
+/** The manifest id and file stem of the chapter at `index`: `ch001` onward. */
+const spineStem = (index: number): string => `ch${String(index + 1).padStart(3, '0')}`;
 
 const CONTAINER_XML =
   '<?xml version="1.0" encoding="utf-8"?>\n' +
@@ -64,45 +75,50 @@ interface SpineDoc {
 }
 
 export function epubMembers(opts: {
-  /** Its `title` and `author` are the package's dc:title and dc:creator. */
+  /** Its `title` and `author` are the package's dc:title and dc:creator. A blank title takes the
+   *  first nav label; a blank author leaves dc:creator out. */
   readonly book: TitledBook;
   /** The book's output stem (`jpbookOutRel`) — identity for dc:identifier. */
   readonly outRel: string;
   readonly kinsoku: KinsokuMode;
   readonly dash: DashMode;
+  /** Caps the 字下げ, as in the paginated build. */
+  readonly charsPerLine: number;
   /** Build timestamp for `dcterms:modified`, CCYY-MM-DDThh:mm:ssZ — injected (the determinism seam). */
   readonly modified: string;
 }): EpubMember[] {
-  const { title } = opts.book;
   const used = new Set<string>();
   // One entry per non-empty chapter: its spine docs plus its one nav row (an empty chapter
   // source contributes neither). reflowSegments feeds the shared `used` class sink, so
   // chapters must be processed in file order.
   const chapters = opts.book.files.flatMap((file, index) => {
     const rows = buildRows(parse(file.src), { dash: opts.dash });
-    const segments = reflowSegments(rows, used, opts.dash);
+    const segments = reflowSegments(rows, opts.charsPerLine, used, opts.dash);
     if (segments.length === 0) {
       return [];
     }
-    const stem = `ch${String(index + 1).padStart(3, '0')}`;
-    const label = segments.find((s) => s.heading !== null)?.heading ?? chapterStem(file.name);
+    const stem = spineStem(index);
+    const label = segments.find((s) => s.heading !== null)?.heading ?? shown(chapterStem(file.name)) ?? stem;
     const chapterDocs = segments.map((seg, si): SpineDoc => {
       const id = si === 0 ? stem : `${stem}-${String(si + 1)}`;
       return { id, href: `text/${id}.xhtml`, title: seg.heading ?? label, body: seg.body };
     });
     return [{ docs: chapterDocs, nav: { href: `text/${stem}.xhtml`, label } }];
   });
+  const first = spineStem(0);
+  const title = shown(opts.book.title) ?? chapters[0]?.nav.label ?? first;
+  const href = `text/${first}.xhtml`;
   // A book whose chapters are all empty still needs a non-empty spine to be an EPUB at all.
   const effective = chapters.length > 0
     ? chapters
     : [{
-        docs: [{ id: 'ch001', href: 'text/ch001.xhtml', title, body: '<p><br/></p>' }],
-        nav: { href: 'text/ch001.xhtml', label: title },
+        docs: [{ id: first, href, title, body: '<p><br/></p>' }],
+        nav: { href, label: title },
       }];
   const docs = effective.flatMap((c) => c.docs);
 
-  const author = opts.book.author ?? '';
-  const creator = author === '' ? '' : `<dc:creator>${escapeHtml(author)}</dc:creator>`;
+  const author = shown(opts.book.author ?? '');
+  const creator = author === null ? '' : `<dc:creator>${escapeHtml(author)}</dc:creator>`;
   const manifest = [
     '<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>',
     '<item id="css" href="styles.css" media-type="text/css"/>',

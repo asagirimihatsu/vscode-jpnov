@@ -68,7 +68,7 @@ The text build prints the nodes.
 | Stage | Produces | Holds |
 | --- | --- | --- |
 | **Scanner** | Per line, the nodes in source order: text, annotations, ruby marks and readings. Each is a verbatim slice with its position; an annotation also carries the position of every part inside it. | Lossless: printing the nodes gives the source back. Every pairing the scanner makes is bounded by its line, so broken markup affects that line alone. |
-| **AST** | Per line, the content in paint order with its decoration marks, and the line's state (字下げ, 見出し, 改ページ). Beside the lines: which span start pairs with which end, what each annotation bound to, and every structural finding. | Total: it always yields a result. Content strings are display strings (kana composed, values substituted); the nodes stay verbatim. |
+| **AST** | Per line, the content in paint order with its decoration marks, and the line's state (字下げ, 見出し, 改ページ). Beside the lines: which span start pairs with which end, what each annotation bound to, and every structural finding. | Total: it always yields a result. Content strings are display strings (kana composed, values substituted, the characters no output can carry dropped); the nodes stay verbatim. |
 | **Output** | Rows of units, a unit being one glyph group with its advance in cells. From the rows: the preview, the paginated HTML, the EPUB. | The only stage that takes layout settings. |
 
 `parse` is `scan` followed by `resolve`.
@@ -84,8 +84,8 @@ The outputs:
 | --- | --- | --- |
 | Preview | `renderPreview` | the rows, as one continuous flow |
 | Book HTML | `renderBook` | the rows, paginated in the compiler so the printed page is what the screen showed |
-| EPUB | `epubMembers` | the rows, reflowed: the reading system breaks the lines and the pages |
-| Text | `concatBookText` | the nodes, printed back |
+| EPUB | `epubMembers` | the rows, reflowed: the reading system breaks the lines and the pages; 字下げ keeps the paginated cap |
+| Text | `concatBookText` | the nodes, printed back; the characters no output can carry removed |
 
 Preview and builds run the same layout engine. No output has a rule the others
 lack, error states included: an unclosed annotation prints as the characters it
@@ -122,7 +122,9 @@ Decide the stage first. The rules:
 
 5. **The text build bypasses the rows.** It prints the nodes, to stay faithful to
    what was typed. What Output decides reaches the text as insertions at
-   positions of the source, and in no other way.
+   positions of the source. The text build's one own edit is removing the
+   characters no output can carry, from each chapter and from the divider
+   (`concatBookText`).
 
 6. **A stage is a boundary, not a module.** Do not split a module to make the
    stages look complete.
@@ -132,9 +134,11 @@ Where things live today:
 | Logic | Stage | Reason |
 | --- | --- | --- |
 | Which characters before a `《…》` are its base | Scanner | a rule of the notation |
+| The largest 字下げ that is read | Scanner | a rule of the notation |
 | Pairing ［＃傍点］ with ［＃傍点終わり］; finding what ［＃「…」に傍点］ names | AST | what the notation means |
 | Composing a decomposed kana for display | AST | content is what is shown |
-| Where each character shown was written in the source | AST | kana are composed and values substituted there; Output does not read the source |
+| Dropping a character no output can carry (a C0 control other than tab and the line ends, U+FFFE, U+FFFF) | AST | content is what is shown; the nodes keep it, so the lint reports it |
+| Where each character shown was written in the source | AST | kana are composed, characters dropped and values substituted there; Output does not read the source |
 | The ダッシュ glyph, 禁則, 分離禁止, ぶら下げ, ruby overhang, wrapping, pagination | Output | typesetting, driven by layout settings |
 | A 縦中横 too long to fit its cell | editor | a threshold, judged on what the AST holds |
 | A half-width pair (`!?`) with no 縦中横 annotation | editor | a manuscript convention, judged on what the AST holds; the fix writes the annotation |

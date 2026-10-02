@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 
 import type { Ast, Chars, Held, Inline, Issue, PairedNode, PostfixNode, Span, SyntaxNode, ValueLookup } from '../../../src/shared/ast/nodes.ts';
-import { EMPHASIS_VARIANTS } from '../../../src/shared/ast/notation.ts';
+import { ANNOTATION_CLOSE, ANNOTATION_OPEN, BLOCK_FROM, EMPHASIS_VARIANTS, indentAnnotation } from '../../../src/shared/ast/notation.ts';
 import type { Channel } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
 import { scan } from '../../../src/shared/ast/scan.ts';
@@ -17,6 +17,21 @@ export function variantsByChannel(): Record<Channel, readonly string[]> {
     out[channel].push(name);
   }
   return out;
+}
+
+/** What `annotation` holds between ［＃ and ］. */
+export function innerOf(annotation: string): string {
+  return annotation.slice(ANNOTATION_OPEN.length, -ANNOTATION_CLOSE.length);
+}
+
+/** `annotation` as a block opener: ［＃…］ as ［＃ここから…］. */
+export function blockOf(annotation: string): string {
+  return `${ANNOTATION_OPEN}${BLOCK_FROM}${annotation.slice(ANNOTATION_OPEN.length)}`;
+}
+
+/** The block opener of a 字下げ of `amount`. */
+export function blockIndent(amount: number): string {
+  return blockOf(indentAnnotation(amount));
 }
 
 /** Every syntax node of `src`, the lines flattened. */

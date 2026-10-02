@@ -4,9 +4,10 @@ import type { BuildChrome, FurnitureAlign } from '../../../src/shared/compiler/c
 import { FURNITURE_ALIGNS } from '../../../src/shared/compiler/chrome.ts';
 import { chapterGlue, concatBookText, MANUSCRIPT_SHEET, renderBook, type BookInput } from '../../../src/shared/compiler/document.ts';
 import { FOOTER_BAND, HEADER_BAND, SIDE_PAD } from '../../../src/shared/compiler/geometry.ts';
-import { VALUE_DEFAULTS, indentAnnotation } from '../../../src/shared/ast/notation.ts';
+import { INDENT_MAX, VALUE_DEFAULTS, indentAnnotation } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
-import { D } from '../_kana.ts';
+import { blockIndent } from '../ast/_shape.ts';
+import { D, UNSHOWN } from '../_kana.ts';
 
 /** {@link chapterGlue} between two chapter sources. */
 const glue = (prev: string, next: string, divider: string, charsPerLine: number | null): string =>
@@ -291,6 +292,14 @@ test('concatBookText interleaves the divider; author edge blanks stack literally
   );
 });
 
+test('concatBookText drops from the divider the characters no output can carry', () => {
+  const clean = concatBookText(two('あ', 'か', '＊　＊'), 8);
+  assert.equal(concatBookText(two('あ', 'か', '＊\u0007　\uFFFE＊'), 8), clean);
+});
+
+/** A block opener the scanner does not read: its 字下げ is above the maximum. */
+const OVER_MAX_BLOCK = blockIndent(INDENT_MAX + 1);
+
 /** Chapters that leave a span open, with the exact `.txt` each concatenates to (cpl 8: a ＊ divider
  *  centres as ［＃３字下げ］＊). The dual-invariant test re-renders every one of these. */
 const SEAM_CASES: readonly [book: BookInput, txt: string][] = [
@@ -318,12 +327,24 @@ const SEAM_CASES: readonly [book: BookInput, txt: string][] = [
   [two('［＃傍点］一［＃白ゴマ傍点］二', '三'), '［＃傍点］一［＃白ゴマ傍点］二\n［＃白ゴマ傍点終わり］\n三'], // the surviving variant
   [two('［＃ここから太字］', '二'), '［＃ここから太字］\n［＃ここで太字終わり］\n\n二'],
   [two('［＃太字］一［＃太字終わり］', '二'), '［＃太字］一［＃太字終わり］\n\n二'], // closed: untouched
+  [two(`${OVER_MAX_BLOCK}\n一`, '二'), `${OVER_MAX_BLOCK}\n一\n\n二`], // a 字下げ above the maximum opens nothing
   [two('［＃太字］一\r\n', '二\r\n'), '［＃太字］一\r\n［＃ここで太字終わり］\r\n\r\n二'],
   [
     book({ files: [{ name: 'a.jpnov', src: '［＃太字］一' }, { name: 'b.jpnov', src: '二' }, { name: 'c.jpnov', src: '［＃斜体］三' }] }),
     '［＃太字］一\n［＃ここで太字終わり］\n\n二\n\n［＃斜体］三', // the last chapter ends the book, not a seam
   ],
 ];
+
+/** A chapter with `c` in its prose, a ruby, a comment, between a kana and its mark, and alone on a line. */
+const withUnshown = (c: string): string =>
+  `王${c}都へ｜聖${c}剣《せい${c}けん》［＃メ${c}モ］\t行く\r\nか${c}${D}\r\n${c}\r\n山田　太郎`;
+
+test('concatBookText leaves out the characters no output can carry, and nothing else', () => {
+  for (const c of UNSHOWN) {
+    // Tab and the line ends stay, and no kana is composed.
+    assert.equal(concatBookText(two(withUnshown(c), `か${c}`), 40), `${withUnshown('')}\r\n\r\nか`, JSON.stringify(c));
+  }
+});
 
 test('concatBookText closes the spans a chapter leaves open at the seam (txt follows HTML)', () => {
   for (const [b, txt] of SEAM_CASES) {
@@ -381,6 +402,7 @@ test('dual invariant: per-file render + glue == rendering the concatenated .txt'
     two('あ', 'か', '［＃３字下げ］◇'), // indented divider
     two('あ\r\n\r\nい\r\n', 'か\r\n', '＊'), // CRLF chapters
     PAIRS, // a pair with its 縦中横 annotation and without
+    ...UNSHOWN.map((c) => two(`王${c}都へ\n${c}\n［＃太字］聖${c}剣\n${c}`, `${c}\nか${c}`, '＊')), // dropped from the text, shown by neither
     ...SEAM_CASES.map(([b]) => b), // spans left open at a seam (closed by concatBookText)
   ];
   for (const b of matrix) {

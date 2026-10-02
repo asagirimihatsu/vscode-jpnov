@@ -170,8 +170,9 @@ paste it into a `.jpnov` to try:
 Notes: 傍点/傍線 take a left-side variant spelled differently in each form — the
 **forward-ref** form uses `の左に` (`［＃「対象」の左に傍点］`), the **start / end**
 form uses bare `左に` (`［＃左に傍点］…［＃左に傍点終わり］`); bold/italic use the
-connector **は**. Indent counts (`○`) are **full-width digits** (２, １０); the block indent
-also indents wrapped continuation lines. An unclosed start / end or block annotation
+connector **は**. Indent counts (`○`) are **full-width digits** (２, １０), ９９ at most; a larger
+one is left unapplied and raises an editor **Warning**. The block indent also indents wrapped
+continuation lines. An unclosed start / end or block annotation
 (`［＃太字］` or `ここから…` with no `…終わり`) still renders to the end of the file but
 raises an editor **Warning**, as does a `…終わり` with nothing open and a `《…》` reading
 with no base text before it or an empty `《》` (both print as typed); an unclosed `［＃`

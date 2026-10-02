@@ -12,7 +12,8 @@ import { test } from 'node:test';
 
 import { createRecognizer } from '../../../src/server/highlight/recognizer.ts';
 import { tokenTypeIndex } from '../../../src/server/semanticTokens.ts';
-import { VALUE_NAMES, valueAnnotation } from '../../../src/shared/ast/notation.ts';
+import { INDENT_MAX, VALUE_NAMES, indentAnnotation, valueAnnotation } from '../../../src/shared/ast/notation.ts';
+import { blockOf, innerOf } from '../../shared/ast/_shape.ts';
 import { at, buildSemanticTokens, covers, decode, doc } from './tokens.ts';
 
 // A small project: 山田 太郎 as cast, 聖剣 as a coined keyword.
@@ -311,6 +312,18 @@ test('unrecognised forms grey whole: 折り返して indent and half-width digit
   assert.ok(!hang.some((t) => t.type === tokenTypeIndex('directive')));
   const half = decode(buildSemanticTokens(doc('［＃ここから2字下げ］'), rec).data);
   assert.deepEqual(at(half, 0, 0), { line: 0, char: 0, len: 11, type: MARKER });
+});
+
+test('a 字下げ above INDENT_MAX greys whole in both forms; leading zeros keep the directive', () => {
+  const DIRECTIVE = tokenTypeIndex('directive');
+  const over = indentAnnotation(INDENT_MAX + 1);
+  for (const src of [over, blockOf(over)]) {
+    const toks = decode(buildSemanticTokens(doc(src), rec).data);
+    assert.deepEqual(toks, [{ line: 0, char: 0, len: src.length, type: MARKER }], src);
+  }
+  const zeros = `［＃００${innerOf(indentAnnotation(INDENT_MAX))}］`;
+  const toks = decode(buildSemanticTokens(doc(zeros), rec).data);
+  assert.deepEqual(at(toks, 0, 2), { line: 0, char: 2, len: zeros.length - 3, type: DIRECTIVE });
 });
 
 test('a multi-line block keeps its body lines free of markup colouring', () => {

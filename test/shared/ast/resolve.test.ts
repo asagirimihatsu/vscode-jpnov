@@ -7,9 +7,11 @@ import assert from 'node:assert/strict';
 
 import { VALUE_DEFAULTS, VALUE_NAMES, valueAnnotation } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
+import { printSource } from '../../../src/shared/ast/print.ts';
+import { scan } from '../../../src/shared/ast/scan.ts';
 
-import { at, boundOf, charStarts, contentOf } from './_shape.ts';
-import { D } from '../_kana.ts';
+import { at, boundOf, charStarts, contentOf, heldOf, issuesOf } from './_shape.ts';
+import { BEL, D, UNSHOWN } from '../_kana.ts';
 
 /** The content of a one-line source. */
 const content = (src: string, values?: ReadonlyMap<string, string>): string[] => contentOf(src, values)[0] ?? [];
@@ -170,6 +172,59 @@ test('NFD: a pair split by markup outside a cell stays two characters', () => {
   assert.deepEqual(content(`か［＃x］${D}`), ['chars か', 'comment x', `chars ${D}`]);
   // Two runs never rejoin across nodes, so nothing composes behind the resolver's back.
   assert.deepEqual(content(`か［＃ここから２字下げ］${D}`), ['chars か', `chars ${D}`]);
+});
+
+test('unshown: a character no output can carry leaves the content, wherever it is written', () => {
+  for (const c of UNSHOWN) {
+    const cases: readonly [src: string, content: string[]][] = [
+      [`王${c}都`, ['chars 王都']],
+      [c, []],
+      [`${c}王都${c}`, ['chars 王都']],
+      [`か${c}${D}`, ['chars が']], // dropped first, so the pair composes
+      [`漢字《か${c}んじ》`, ['ruby 漢字《かんじ》']],
+      [`｜王${c}都《おうと》`, ['ruby 王都《おうと》']],
+      [`｜${c}《よみ》`, ['markup ｜', 'markup 《よみ》']], // nothing visible: the markup prints as typed
+      [`序［＃縦中横］1${c}2［＃縦中横終わり］`, ['chars 序', 'tcy 12']],
+      [`［＃縦中横］${c}［＃縦中横終わり］`, []],
+      [`聖剣［＃「聖剣」の左に「つる${c}ぎ」のルビ］`, ['ruby 聖剣〈つるぎ〉']],
+      [`前［＃-${c}-］`, ['chars 前', 'comment --']],
+      [`これは［＃壊${c}れた`, ['chars これは', 'broken ［＃壊れた']],
+    ];
+    for (const [src, expected] of cases) {
+      assert.deepEqual(content(src), expected, JSON.stringify(src));
+      assert.equal(printSource(scan(src)), src, JSON.stringify(src)); // the nodes keep it
+    }
+  }
+});
+
+test('unshown: a postfix target is matched as shown, on both sides', () => {
+  const inText = `聖${BEL}剣［＃「聖剣」に傍点］`;
+  assert.deepEqual(content(inText), ['chars 聖剣 emph=傍点']);
+  assert.deepEqual(boundOf(inText), [at(inText, `聖${BEL}剣`)]);
+  assert.deepEqual(issuesOf(inText), []);
+  const inTarget = `1${BEL}2［＃「${BEL}12」は縦中横］`;
+  assert.deepEqual(content(inTarget), ['tcy 12']);
+  assert.deepEqual(issuesOf(inTarget), []);
+  // A target of nothing but such characters names nothing; the comment shows what is left of it.
+  const empty = `聖剣［＃「${BEL}」に傍点］`;
+  assert.deepEqual(content(empty), ['chars 聖剣', 'comment 「」に傍点']);
+  assert.deepEqual(issuesOf(empty), [{ kind: 'postfixTargetMissing', span: at(empty, BEL), target: BEL }]);
+});
+
+test('unshown: a 縦中横 span holds what it shows, over what was written', () => {
+  const src = `［＃縦中横］${BEL}1${BEL}［＃縦中横終わり］`;
+  assert.deepEqual(heldOf(src), [{ text: '1', span: at(src, `${BEL}1${BEL}`) }]);
+  const none = `［＃縦中横］${BEL}［＃縦中横終わり］`;
+  assert.deepEqual(heldOf(none), [{ text: '', span: at(none, BEL) }]);
+});
+
+test('unshown: a run spans its kept characters, each knowing where it was written', () => {
+  const src = `${BEL}王${BEL}都か${BEL}${D}${BEL}`;
+  const [run] = parse(src).lines[0]?.content ?? [];
+  assert.ok(run?.kind === 'chars');
+  assert.equal(run.text, '王都が');
+  assert.deepEqual(run.span, at(src, `王${BEL}都か${BEL}${D}`));
+  assert.deepEqual(charStarts(run), [at(src, '王').start, at(src, '都').start, at(src, 'か').start]);
 });
 
 test('a run maps back to the source it came from', () => {

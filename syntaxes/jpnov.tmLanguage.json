@@ -42,8 +42,8 @@
           }
         },
         {
-          "comment": "Block START ［＃ここから(○字下げ|太字|斜体)］ (○ = full-width digits ONLY, kept INSIDE the keyword). Only the style keyword (○字下げ/太字/斜体) is a directive; the structural ここから is demoted to comment (mirrors the semantic layer, which emits `marker` over it — like the connector に). The hanging-indent 折り返して form has extra text before ］ so it falls through to the generic comment rule, exactly like the scanner.",
-          "match": "(［＃)(ここから)([０-９]+字下げ|太字|斜体)(］)",
+          "comment": "Block START ［＃ここから(○字下げ|太字|斜体)］ (○ = full-width digits ONLY, value up to 99 with any leading zeros, kept INSIDE the keyword). Only the style keyword (○字下げ/太字/斜体) is a directive; the structural ここから is demoted to comment (mirrors the semantic layer, which emits `marker` over it — like the connector に). The hanging-indent 折り返して form has extra text before ］ so it falls through to the generic comment rule, exactly like the scanner.",
+          "match": "(［＃)(ここから)(０*[０-９]{1,2}字下げ|太字|斜体)(］)",
           "captures": {
             "1": { "name": "comment.block.annotation.jpnov" },
             "2": { "name": "comment.other.annotation.jpnov" },
@@ -52,8 +52,8 @@
           }
         },
         {
-          "comment": "Single-line ［＃○字下げ］ — LINE-HEAD ONLY (^). A mid-line one is inert (the scanner degrades it to a comment) → it must fall through to the generic comment rule and stay grey in BOTH layers. Full-width digits only.",
-          "match": "^(［＃)([０-９]+字下げ)(］)",
+          "comment": "Single-line ［＃○字下げ］ — LINE-HEAD ONLY (^). A mid-line one is inert (the scanner degrades it to a comment) → it must fall through to the generic comment rule and stay grey in BOTH layers. Full-width digits only, value up to 99 with any leading zeros; a larger one falls through the same way.",
+          "match": "^(［＃)(０*[０-９]{1,2}字下げ)(］)",
           "captures": {
             "1": { "name": "comment.block.annotation.jpnov" },
             "2": { "name": "keyword.other.directive.jpnov" },
@@ -223,7 +223,7 @@
           }
         },
         {
-          "comment": "Any other ［＃…］ (block layout, the 折り返して indent form, a mid-line 字下げ, a half-width digit, a mis-paired connector, unknown) — whole annotation greyed, matching the server's `comment` classification. Single-line, so an unclosed ［＃ never runs away.",
+          "comment": "Any other ［＃…］ (block layout, the 折り返して indent form, a mid-line 字下げ, a 字下げ above 99, a half-width digit, a mis-paired connector, unknown) — whole annotation greyed, matching the server's `comment` classification. Single-line, so an unclosed ［＃ never runs away.",
           "match": "(［＃)([^］]*)(］)",
           "name": "comment.block.annotation.jpnov"
         },

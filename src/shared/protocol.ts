@@ -87,6 +87,7 @@ export type MsgCode =
   | 'syntax.tcyTooLong' // args: [] — combined 縦中横 content over 3 code points (renders but squishes); range = the content (span form) / the target inside 「」 (postfix form)
   | 'syntax.rubyBaseMissing' // args: [reading] — a closed 《…》 with no base text before it (line start; after punctuation, a space or an annotation; a ｜ with nothing visible before the 《), printed as typed; range = the 《…》 run, from the ｜ when one opened it
   | 'syntax.rubyReadingEmpty' // args: [] — an empty 《》 (no reading to set), printed as typed; range = the 《》
+  | 'syntax.indentTooLarge' // args: [limit] — a line-head ［＃○字下げ］ or a ［＃ここから○字下げ］ above the notation's maximum, left a comment; `limit` is the largest count that is read, in full-width digits; range = the annotation
   | LintCode // one prose-lint code per (scope, rule); see lint/catalog.ts
   | 'lint.common.dash.parity' // args: [] — the `dash` rule's second fault: right glyph, odd count
   | 'lint.common.ellipsis.parity' // args: [] — the `ellipsis` rule's second fault: real …, odd count

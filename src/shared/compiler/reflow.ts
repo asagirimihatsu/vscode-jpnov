@@ -3,7 +3,8 @@
  * owns line breaking, pagination and page chrome, so everything the paginated build decides
  * downstream of {@link buildRows} (wrapping, 禁則, ぶら下げ, page furniture) is absent here —
  * one logical source line becomes one `<p>` (or `<hN>`), and ［＃改ページ］ becomes a segment
- * boundary the container turns into a spine-level file split.
+ * boundary the container turns into a spine-level file split. 字下げ is the one layout value
+ * carried over: it is capped at `charsPerLine − 1`, like the paginated build.
  *
  * Inline markup differences against the paginated build:
  * - ruby is native `<ruby>` in every form ({@link reflowRubyHtml} — the reader owns spacing;
@@ -16,6 +17,7 @@ import type { DashMode } from '../config/types.ts';
 import { DASH_BY_MODE, DASH_GLYPH } from '../dash.ts';
 import { escapeHtml } from './escape.ts';
 import {
+  effectiveIndent,
   emitUnits,
   insepClass,
   reflowRubyHtml,
@@ -24,7 +26,13 @@ import {
   type Unit,
 } from './layout.ts';
 
-/** One spine-level piece of a chapter: its body markup and its first 見出し (nav label). */
+/** `text`, or null when it is empty or all whitespace. */
+export function nonBlank(text: string): string | null {
+  return text.trim() === '' ? null : text;
+}
+
+/** One spine-level piece of a chapter: its body markup and its first 見出し that is not blank
+ *  (nav label). */
 export interface ReflowSegment {
   readonly body: string;
   readonly heading: string | null;
@@ -93,11 +101,17 @@ function bindInsepRuns(units: readonly Unit[]): Unit[] {
  * row becomes `<p>` — or `<hN>` for a 見出し row (大=1→h1; one hN PER ROW: a block-form
  * heading spans rows, but Row carries no form, and merging could fuse two adjacent independent
  * headings). A row with no real cells (blank or comment-only line) becomes `<p>…<br/></p>` so
- * the blank column survives reader margin handling. `used` is the on-demand class sink.
+ * the blank column survives reader margin handling. `charsPerLine` caps the 字下げ
+ * ({@link effectiveIndent}). `used` is the on-demand class sink.
  * `dash` translates the configured dash inside nav labels too — the body units arrive already
  * translated from {@link buildRows}.
  */
-export function reflowSegments(rows: readonly Row[], used: Set<string>, dash?: DashMode): ReflowSegment[] {
+export function reflowSegments(
+  rows: readonly Row[],
+  charsPerLine: number,
+  used: Set<string>,
+  dash?: DashMode,
+): ReflowSegment[] {
   const want = dash === undefined ? undefined : DASH_BY_MODE[dash];
   const segments: ReflowSegment[] = [];
   let body = '';
@@ -116,7 +130,7 @@ export function reflowSegments(rows: readonly Row[], used: Set<string>, dash?: D
       close();
       continue;
     }
-    const indent = row.indent ?? 0;
+    const indent = effectiveIndent(row.indent, charsPerLine);
     const classAttr = indent > 0 ? ` class="indent-${String(indent)}"` : '';
     if (indent > 0) {
       used.add(`indent-${String(indent)}`);
@@ -126,7 +140,7 @@ export function reflowSegments(rows: readonly Row[], used: Set<string>, dash?: D
       if (heading === null) {
         const raw = row.units.map((u) => u.text).join('');
         const text = want === undefined ? raw : raw.replaceAll(want, DASH_GLYPH);
-        heading = text === '' ? null : text;
+        heading = nonBlank(text);
       }
       const tag = `h${String(row.heading)}`;
       body += `<${tag}${classAttr}>${inner}</${tag}>`;
