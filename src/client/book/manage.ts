@@ -40,7 +40,7 @@ import type { BookEntry } from '#/shared/protocol.ts';
 
 import { command } from '../commands.ts';
 import { renderMessage } from '../messages.ts';
-import { chapterUri, FIND_FILES_EXCLUDE, splitRelPath } from '../paths.ts';
+import { chapterUri, FIND_FILES_EXCLUDE, lastPathSegment, splitRelPath } from '../paths.ts';
 import { normalizeFsPath } from './rename.ts';
 import type { BookNode, EntryNode } from './nodes.ts';
 import type { BooksViewProvider } from './view.ts';
@@ -105,15 +105,20 @@ export function metaValueParts(key: MetaKey, value: string | undefined): { value
     : { value: display(fallback), note: vscode.l10n.t('(default)') };
 }
 
-/** Applies planned replaces and saves — the panel's watcher does the refresh. */
+/** Applies planned replaces and saves — the panel's watcher does the refresh. A refused edit or save is toasted. */
 export async function applyBookEdits(uri: vscode.Uri, replaces: readonly TextReplace[]): Promise<void> {
   const edit = new vscode.WorkspaceEdit();
   for (const r of replaces) {
     edit.replace(uri, new vscode.Range(r.start.line, r.start.character, r.end.line, r.end.character), r.newText);
   }
-  if (await vscode.workspace.applyEdit(edit)) {
-    const doc = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
-    await doc?.save();
+  const name = lastPathSegment(uri.toString());
+  if (!(await vscode.workspace.applyEdit(edit))) {
+    void vscode.window.showErrorMessage(vscode.l10n.t("Japanese Novel: couldn't edit {0}.", name));
+    return;
+  }
+  const doc = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
+  if ((await doc?.save()) === false) {
+    void vscode.window.showErrorMessage(vscode.l10n.t("Japanese Novel: couldn't save {0}.", name));
   }
 }
 

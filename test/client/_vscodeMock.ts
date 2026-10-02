@@ -10,6 +10,7 @@
  * Suites using this mock run in CI via `npm run test:integration`; for direct runs see
  * test/client/README.md.
  */
+import { CancellationTokenSource } from 'vscode-languageserver/node';
 
 export type Listener<T> = (e: T) => unknown;
 
@@ -252,6 +253,8 @@ export interface MockState {
    * Recorded only — document text never mutates, so multi-step flows must reseed their docs.
    */
   appliedEdits: { uri: string; range: [number, number, number, number]; newText: string }[];
+  /** What `workspace.applyEdit` resolves to (false = the editor refused the edit). */
+  applyEditResult: boolean;
   onDidChangeDoc: EventEmitter<{ document: FakeTextDocument }>;
   onDidChangeActiveEditor: EventEmitter<{ document: FakeTextDocument } | undefined>;
   activeEditor: { document: FakeTextDocument; viewColumn?: number } | undefined;
@@ -304,6 +307,8 @@ export interface MockState {
   createdDirs: string[];
   openedDocs: string[];
   errorMessages: string[];
+  /** The button `showErrorMessage` resolves to (undefined = dismissed). */
+  errorMessagePick: string | undefined;
   infoMessages: string[];
   /** `env.openExternal` targets (uri strings), e.g. the post-build output-folder opens. */
   openedExternal: string[];
@@ -323,6 +328,7 @@ export function createMockState(): MockState {
     registeredViewProviders: new Map(),
     writtenFiles: [],
     appliedEdits: [],
+    applyEditResult: true,
     onDidChangeDoc: new EventEmitter<{ document: FakeTextDocument }>(),
     onDidChangeActiveEditor: new EventEmitter<
       { document: FakeTextDocument } | undefined
@@ -355,6 +361,7 @@ export function createMockState(): MockState {
     createdDirs: [],
     openedDocs: [],
     errorMessages: [],
+    errorMessagePick: undefined,
     infoMessages: [],
     openedExternal: [],
     progressOptions: [],
@@ -376,6 +383,7 @@ export function resetMockState(s: MockState): void {
   s.registeredViewProviders.clear();
   s.writtenFiles.length = 0;
   s.appliedEdits.length = 0;
+  s.applyEditResult = true;
   s.activeEditor = undefined;
   s.visibleEditors.length = 0;
   s.onDidChangeSelection.dispose();
@@ -406,6 +414,7 @@ export function resetMockState(s: MockState): void {
   s.createdDirs.length = 0;
   s.openedDocs.length = 0;
   s.errorMessages.length = 0;
+  s.errorMessagePick = undefined;
   s.infoMessages.length = 0;
   s.openedExternal.length = 0;
   s.progressOptions.length = 0;
@@ -447,11 +456,11 @@ export function buildVscode(state: MockState): Record<string, unknown> {
     },
     // The preview's revival hook (tests hand a panel to `Preview.adopt()` themselves).
     registerWebviewPanelSerializer: registrationOnly,
-    showErrorMessage(...args: unknown[]): Promise<undefined> {
+    showErrorMessage(...args: unknown[]): Promise<string | undefined> {
       if (typeof args[0] === 'string') {
         state.errorMessages.push(args[0]);
       }
-      return Promise.resolve(undefined);
+      return Promise.resolve(state.errorMessagePick);
     },
     showInformationMessage(...args: unknown[]): Promise<undefined> {
       if (typeof args[0] === 'string') {
@@ -619,7 +628,7 @@ export function buildVscode(state: MockState): Record<string, unknown> {
           newText: r.newText,
         });
       }
-      return Promise.resolve(true);
+      return Promise.resolve(state.applyEditResult);
     },
     openTextDocument(uri: Uri): Promise<FakeTextDocument> {
       state.openedDocs.push(uri.toString());
@@ -701,6 +710,7 @@ export function buildVscode(state: MockState): Record<string, unknown> {
     MarkdownString,
     Disposable,
     EventEmitter,
+    CancellationTokenSource,
     ViewColumn,
     ProgressLocation,
     ConfigurationTarget,

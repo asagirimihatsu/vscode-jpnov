@@ -21,6 +21,7 @@ import { BOOKS_CSS, BOOKS_JS } from './webviewBundle.generated.ts';
 function labels(): Labels {
   return {
     loading: vscode.l10n.t('Loading…'),
+    loadingHint: vscode.l10n.t("If the books don't appear, press Refresh Books in the title bar."),
     selectAll: vscode.l10n.t('Select all'),
     deselectAll: vscode.l10n.t('Deselect all'),
     selectBook: vscode.l10n.t('Include in build'),

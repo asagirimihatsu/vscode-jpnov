@@ -150,6 +150,7 @@ export type BooksOutbound =
  */
 export interface Labels {
   readonly loading: string;
+  readonly loadingHint: string;
   readonly selectAll: string;
   readonly deselectAll: string;
   readonly selectBook: string;
