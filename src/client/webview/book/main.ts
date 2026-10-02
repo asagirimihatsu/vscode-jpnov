@@ -293,7 +293,7 @@ function renderList(): void {
   // Before the first enumeration lands (server still starting) show a neutral placeholder, NOT the
   // "no books yet" welcome — the books may well exist and that copy would misleadingly say create one.
   if (state?.loading) {
-    app.replaceChildren(scrollPane(h('div', { class: 'empty' }, L.loading)));
+    app.replaceChildren(scrollPane(h('div', { class: 'empty' }, L.loading), h('div', { class: 'empty' }, L.loadingHint)));
     return;
   }
   if (state?.noFolder) {
@@ -674,6 +674,9 @@ window.addEventListener('message', (e: MessageEvent) => {
       // Precedes the list re-push that drops a vanished book (view.ts refresh()), so its row is still
       // here to take focus; the next `state` then moves focus on through the row's fallback keys.
       detailWanted = false;
+      if (screen === 'list') {
+        break; // the book never opened: focus stays on the clicked row
+      }
       screen = 'list';
       detail = null;
       render();

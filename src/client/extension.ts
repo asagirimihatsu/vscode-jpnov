@@ -310,7 +310,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // any command is a start trigger. The Books panel's build and selection actions are webview
   // messages handled in view.ts, not commands.
   context.subscriptions.push(
-    serverCommand('jpbook.refresh', () => booksView?.refresh()),
+    serverCommand('jpbook.refresh', () => booksView?.refresh(true)),
     serverCommand('jpbook.createFile', (arg?: unknown) => createFile(booksView, arg)),
     serverCommand('jpnov.preview', () => preview?.open(false)),
     serverCommand('jpnov.previewToSide', () => preview?.open(true)),

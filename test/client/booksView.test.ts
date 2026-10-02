@@ -874,3 +874,93 @@ test('raceRequest passes a settling request straight through', async () => {
     /server boom/,
   );
 });
+
+// --- failures that used to stay silent (#90) --------------------------------
+
+test('a failed refresh toasts only when the user asked for it, and the panel stays loading', async () => {
+  const client = { sendRequest: () => Promise.reject(new Error('Client is not running')) };
+  const provider = new BooksViewProvider(client as never, EXT as never);
+  const view = createFakeWebviewView();
+  provider.resolveWebviewView(view as never);
+  await provider.refresh();
+  assert.deepEqual(state.errorMessages, []);
+  await provider.refresh(true);
+  assert.deepEqual(state.errorMessages, ["Japanese Novel: couldn't load the books. Client is not running"]);
+  view.webview.receive({ type: 'ready' });
+  await tick();
+  assert.equal(lastState(view).loading, true);
+  const reloads = (): number => state.executedCommands.filter((c) => c.command === 'workbench.action.reloadWindow').length;
+  assert.equal(reloads(), 0); // the toast was dismissed
+  state.errorMessagePick = 'Reload Window';
+  await provider.refresh(true);
+  await tick();
+  assert.equal(reloads(), 1);
+});
+
+test('a refresh the server never answers gives up at the cap and cancels the request', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let token: { isCancellationRequested: boolean } | undefined;
+  const client = {
+    sendRequest: (_type: string, _params: unknown, tok: { isCancellationRequested: boolean }) => {
+      token = tok;
+      return new Promise(() => undefined);
+    },
+  };
+  const provider = new BooksViewProvider(client as never, EXT as never);
+  const done = provider.refresh(true);
+  t.mock.timers.runAll();
+  await done;
+  assert.equal(token?.isCancellationRequested, true);
+  assert.equal(state.errorMessages.length, 1);
+  assert.match(state.errorMessages[0] ?? '', /^Japanese Novel: couldn't load the books\. no reply from the language server within \d+s$/);
+});
+
+test('a book that cannot be opened returns the view to the list with a toast and a re-list', async () => {
+  const root = 'file:///ws';
+  const bookUri = `${root}/src/a.jpbook`;
+  const { view, client } = await setup([entry(root, 'a', 'A')]);
+  let lists = 0;
+  const send = client.sendRequest.bind(client);
+  client.sendRequest = (type: string, params: unknown, token?: unknown): Promise<unknown> => {
+    lists += type === ListBooksRequest ? 1 : 0;
+    return send(type, params, token);
+  };
+  state.unopenableDocs.add(bookUri);
+  view.webview.receive({ type: 'openDetail', uri: bookUri });
+  await tick();
+  assert.ok(posts(view).some((m) => m.type === 'closeDetail'));
+  assert.equal(posts(view).some((m) => m.type === 'detail'), false);
+  assert.deepEqual(state.errorMessages, ["Japanese Novel: couldn't open a.jpbook."]);
+  assert.equal((view as { title?: string }).title, undefined);
+  const ctx = state.executedCommands.filter((c) => c.command === 'setContext' && c.args[0] === 'jpnov.booksDetail');
+  assert.equal(ctx.at(-1)?.args[1], false);
+  assert.equal(lists, 1);
+});
+
+test('a row whose book left the list is refused the same way', async () => {
+  const { view } = await setup([entry('file:///ws', 'a')]);
+  view.webview.receive({ type: 'openDetail', uri: 'file:///ws/src/gone.jpbook' });
+  await tick();
+  assert.ok(posts(view).some((m) => m.type === 'closeDetail'));
+  assert.deepEqual(state.errorMessages, ["Japanese Novel: couldn't open gone.jpbook."]);
+});
+
+test('the open detail follows its buffer: a change to the book re-pushes it, another document does not', async (t) => {
+  const root = 'file:///ws';
+  const bookUri = `${root}/src/a.jpbook`;
+  const book = doc(bookUri, 'jpbook', 'ch1.jpnov\n');
+  state.textDocuments.push(book);
+  const { view } = await setup([entry(root, 'a')]);
+  view.webview.receive({ type: 'openDetail', uri: bookUri });
+  await tick();
+  const base = detailCount(view);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  state.onDidChangeDoc.fire({ document: doc(`${root}/ch1.jpnov`, 'jpnov') });
+  t.mock.timers.runAll();
+  state.onDidChangeDoc.fire({ document: book });
+  state.onDidChangeDoc.fire({ document: book }); // one burst, one re-push
+  t.mock.timers.runAll();
+  t.mock.timers.reset();
+  await tick();
+  assert.equal(detailCount(view), base + 1);
+});

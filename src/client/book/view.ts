@@ -60,6 +60,9 @@ const REPOST_DEBOUNCE_MS = 120;
  *  means a stuck server. */
 const BUILD_REQUEST_TIMEOUT_MS = 120_000;
 
+/** Hard cap on the enumeration round-trip: a directory walk, so a reply this late means a stuck server. */
+const LIST_REQUEST_TIMEOUT_MS = 30_000;
+
 /** The book's display label: its front-matter title, else the last segment of the output name. */
 function bookTitle(entry: BookEntry): string {
   return entry.title ?? splitRelPath(entry.outRel).name;
@@ -154,6 +157,13 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       // match — so Explorer-driven folder operations re-stat through the workspace events.
       vscode.workspace.onDidCreateFiles(repostDetail),
       vscode.workspace.onDidDeleteFiles(repostDetail),
+      // The detail renders the live buffer, so it follows the buffer: an edit whose save failed
+      // (or a hand edit, an undo) fires no watcher event.
+      vscode.workspace.onDidChangeTextDocument((e) => {
+        if (e.document.uri.toString() === this.openDetailUri) {
+          repostDetail();
+        }
+      }),
     );
   }
 
@@ -217,16 +227,35 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
    * `jpbook.refresh` (and the file watcher / folder changes): re-enumerate books and reconcile
    * the checkbox set — drop ticks for books that vanished, default any newly-discovered book to
    * CHECKED — then re-push the list (and the open detail, if any). Leaves the current list in
-   * place if the request fails (e.g. server not yet started).
+   * place if the request fails or times out (e.g. server not yet started); `report` (the user's
+   * own refresh) says so in a toast that offers the window reload, the one way back from a
+   * server that will not start.
    */
-  async refresh(): Promise<void> {
+  async refresh(report = false): Promise<void> {
     const seq = ++this.refreshSeq;
     const params: ListBooksParams = { projectDirs: buildProjectDirs() };
     let result: ListBooksResult;
+    const cancel = new vscode.CancellationTokenSource();
     try {
-      result = await this.client.sendRequest<ListBooksResult>(ListBooksRequest, params);
-    } catch {
+      result = await raceRequest(
+        this.client.sendRequest<ListBooksResult>(ListBooksRequest, params, cancel.token),
+        cancel.token,
+        LIST_REQUEST_TIMEOUT_MS,
+      );
+    } catch (err) {
+      cancel.cancel(); // a timed-out request stops on the server too
+      if (report) {
+        const reload = vscode.l10n.t('Reload Window');
+        const message = vscode.l10n.t("Japanese Novel: couldn't load the books. {0}", errorText(err));
+        void vscode.window.showErrorMessage(message, reload).then((pick) => {
+          if (pick === reload) {
+            void vscode.commands.executeCommand('workbench.action.reloadWindow');
+          }
+        });
+      }
       return;
+    } finally {
+      cancel.dispose();
     }
     if (seq !== this.refreshSeq) {
       return; // a newer refresh already superseded this one
@@ -249,8 +278,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
     // A vanished open book returns the webview to the list; otherwise re-push its (possibly edited) detail.
     if (this.openDetailUri !== undefined && !next.has(this.openDetailUri)) {
-      this.openDetailUri = undefined;
-      void this.view?.webview.postMessage({ type: 'closeDetail' });
+      this.closeOpenDetail();
     }
     this.applyDetailChrome(); // also refreshes the title after a front-matter title edit
     this.postState();
@@ -360,6 +388,10 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         break;
       case 'openDetail':
         if (typeof msg.uri === 'string') {
+          if (this.entryOf(msg.uri) === undefined) {
+            this.failDetail(msg.uri); // the row outlived its book
+            break;
+          }
           this.openDetailUri = msg.uri;
           this.applyDetailChrome();
           await this.postDetail(msg.uri);
@@ -445,6 +477,23 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     };
     this.entryChain = this.entryChain.then(run, run);
     return this.entryChain;
+  }
+
+  /** Forgets the open detail and returns the webview to the list; the caller re-applies the chrome. */
+  private closeOpenDetail(): void {
+    this.openDetailUri = undefined;
+    void this.view?.webview.postMessage({ type: 'closeDetail' });
+  }
+
+  /**
+   * A book that cannot be read (deleted under the panel): back to the list with a toast, and a
+   * re-list so the dead row goes now.
+   */
+  private failDetail(uri: string): void {
+    this.closeOpenDetail();
+    this.applyDetailChrome();
+    void vscode.window.showErrorMessage(vscode.l10n.t("Japanese Novel: couldn't open {0}.", lastPathSegment(uri)));
+    void this.refresh();
   }
 
   /** Dispatch an entry command (remove / move) with a synthesized node — `manage.ts` checks the row against the live text. */
@@ -565,6 +614,9 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       text = doc.getText();
       version = doc.version;
     } catch {
+      if (this.openDetailUri === uri) {
+        this.failDetail(uri);
+      }
       return;
     }
     if (this.openDetailUri !== uri) {

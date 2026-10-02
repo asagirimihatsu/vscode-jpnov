@@ -401,3 +401,33 @@ test('editMeta with nothing to change applies nothing and saves nothing', async 
     assert.equal(saves, 0, name);
   }
 });
+
+test('a refused edit or a failed save is toasted (#90)', async () => {
+  const run = async (): Promise<void> => {
+    const handler = state.registeredCommands.get('jpbook.removeEntry');
+    assert.ok(handler, 'jpbook.removeEntry must be registered');
+    await handler({ kind: 'entry', list: 'chapters', entry: ENTRY, line: 0, path: 'a.jpnov', version: 1 });
+  };
+
+  let saves = 0;
+  const book = (save: boolean): void => {
+    state.textDocuments.push({ ...doc(BOOK, 'jpbook', 'a.jpnov\n'), save: () => {
+      saves += 1;
+      return Promise.resolve(save);
+    } });
+  };
+
+  book(true);
+  state.applyEditResult = false;
+  await run();
+  assert.deepEqual(state.errorMessages, ["Japanese Novel: couldn't edit book.jpbook."]);
+  assert.equal(saves, 0);
+
+  resetMockState(state);
+  registerBookCommands();
+  book(false);
+  await run();
+  assert.equal(state.appliedEdits.length, 1);
+  assert.equal(saves, 1);
+  assert.deepEqual(state.errorMessages, ["Japanese Novel: couldn't save book.jpbook."]);
+});
