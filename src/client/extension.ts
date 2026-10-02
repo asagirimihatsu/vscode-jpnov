@@ -82,6 +82,21 @@ async function startIfProjectPresent(
 }
 
 /**
+ * Sends the current `jpnov.lint.*` snapshot. Only while the client is Running: the send rejects
+ * once it has stopped.
+ */
+function pushLint(): void {
+  const params: LintConfigChangedParams = { lintConfig: buildLintSnapshot() };
+  void client?.sendNotification(LintConfigChangedNotification, params);
+}
+
+/** Sends every folder's highlight vocabulary. Only while Running, like `pushLint()`. */
+function pushHighlight(): void {
+  const params: HighlightChangedParams = { highlight: buildHighlightSnapshot() };
+  void client?.sendNotification(HighlightChangedNotification, params);
+}
+
+/**
  * Phase 2: construct the LanguageClient + UI singletons and start the server.
  * Idempotent and synchronous through construction, so `preview`/`booksView` exist the
  * instant any caller returns; `client.start()` is fire-and-forget — vscode-languageclient
@@ -178,21 +193,19 @@ function ensureStarted(): void {
   // Push jpnov.lint.* changes so the server re-lints open files live; re-render the preview
   // when any jpnov.layout.* setting changes (the txt/outDir members only feed
   // on-demand builds, but the extra refresh is idempotent and settings edits are rare);
-  // re-enumerate books when the out dir moves. Gated on Running: a change during start/stop
-  // is dropped (the next start re-seeds lint via initializationOptions; the preview/books
-  // re-read their snapshots on the next request anyway).
+  // re-enumerate books when the out dir moves. Gated on Running: the state listener below
+  // re-sends lint and highlight when the server next comes up, and the preview/books re-read
+  // their snapshots on the next request anyway.
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (client?.state !== State.Running) {
         return;
       }
       if (e.affectsConfiguration('jpnov.lint')) {
-        const params: LintConfigChangedParams = { lintConfig: buildLintSnapshot() };
-        void client.sendNotification(LintConfigChangedNotification, params);
+        pushLint();
       }
       if (e.affectsConfiguration('jpnov.editor.highlight')) {
-        const params: HighlightChangedParams = { highlight: buildHighlightSnapshot() };
-        void client.sendNotification(HighlightChangedNotification, params);
+        pushHighlight();
       }
       if (e.affectsConfiguration('jpnov.layout') || e.affectsConfiguration('jpnov.lint.common.dash')) {
         // The dash choice is the one lint key the render snapshot also carries.
@@ -223,16 +236,29 @@ function ensureStarted(): void {
 
   // Folder add/remove while running: re-push the FULL highlight map (replacement semantics —
   // this is also how a removed root's vocabulary is dropped) and re-enumerate books. Gated on
-  // Running like the settings pushes above; a change inside the startup window is folded into
-  // the initialize snapshot / the post-start refresh below.
+  // Running like the settings pushes above; a change inside the startup window is covered by
+  // the state listener (the map) and, on the first start, the post-start refresh (the books)
+  // below.
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
       if (client?.state !== State.Running) {
         return;
       }
-      const params: HighlightChangedParams = { highlight: buildHighlightSnapshot() };
-      void client.sendNotification(HighlightChangedNotification, params);
+      pushHighlight();
       void booksView?.refresh();
+    }),
+  );
+
+  // The server holds the snapshots `initializationOptions` carried when the client was built,
+  // and the two Running-gated listeners above skip a change that arrives while it is starting.
+  // So send both again each time it comes up: after the first start, and after the restart
+  // vscode-languageclient makes when the server process dies.
+  context.subscriptions.push(
+    client.onDidChangeState((e) => {
+      if (e.newState === State.Running) {
+        pushLint();
+        pushHighlight();
+      }
     }),
   );
 

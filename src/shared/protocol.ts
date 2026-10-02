@@ -32,7 +32,8 @@ export type RawLintConfigWire = Readonly<Record<string, boolean | number | strin
  * Carried on the standard LSP `initialize` request as `initializationOptions`.
  * `lintConfig` seeds the prose-lint selection at startup (omitted = no rules enabled);
  * `highlight` seeds the per-root narration vocabulary the same way (omitted = no
- * vocabulary anywhere).
+ * vocabulary anywhere). The client builds the value once and sends each field again by its own
+ * notification whenever the server comes up: a field added here needs that push too.
  */
 export interface InitializationOptions {
   readonly lintConfig?: RawLintConfigWire;
@@ -119,7 +120,7 @@ export interface ServerErrorParams {
 export const LintConfigChangedNotification = 'jpnov/lintConfigChanged';
 
 /**
- * Pushed when the user edits any `jpnov.lint.*` setting (mirrors the workspace-trust push). The
+ * Pushed when the user edits any `jpnov.lint.*` setting, and each time the server comes up. The
  * server keeps a vscode-free `RuleSelection`; this carries a fresh full snapshot, which the server
  * re-resolves and then re-lints all open `.jpnov` documents against.
  */
@@ -151,8 +152,8 @@ export interface HighlightVocabulary {
 export type HighlightVocabularyMap = Readonly<Record<string, HighlightVocabulary>>;
 
 /**
- * Pushed when the user edits any `jpnov.editor.highlight.*` setting, and re-pushed in full when
- * workspace folders change while the client is running (mirrors the lint push).
+ * Pushed when the user edits any `jpnov.editor.highlight.*` setting, when workspace folders
+ * change while the client is running, and each time the server comes up.
  */
 export interface HighlightChangedParams {
   readonly highlight: HighlightVocabularyMap;
