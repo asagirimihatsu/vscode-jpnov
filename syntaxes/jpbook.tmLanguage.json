@@ -1,7 +1,7 @@
 {
   "name": "Japanese Novel Book",
   "scopeName": "text.jpbook",
-  "comment": "An optional ----fenced front-matter block (key: value metadata), then one relative .jpnov source path per line. Deliberately error-agnostic: backslashes, non-.jpnov paths, missing files, and unknown/duplicate metadata keys are the language server's diagnostics to report — the grammar must not second-guess them (any key: value line inside the fences is painted as metadata). The front-matter region anchors on a fence at the very start of the document (\\A); a fence after leading blank lines still parses server-side, it just goes unpainted. There is no semantic-token layer for book files, so nothing can repaint over this.",
+  "comment": "An optional ----fenced front-matter block (key: value metadata), then one relative .jpnov source path per line. Deliberately error-agnostic: backslashes, non-.jpnov paths, missing files, and unknown/duplicate metadata keys are the language server's diagnostics to report — the grammar must not second-guess them (any key: value line inside the fences is painted as metadata). Like the parser, the front-matter region opens on a fence that is the first non-blank line: either at the very start of the document (\\A), or inside the leading-blank-lines rule. There is no semantic-token layer for book files, so nothing can repaint over this.",
   "patterns": [
     {
       "name": "meta.frontmatter.jpbook",
@@ -13,6 +13,42 @@
       "endCaptures": {
         "1": { "name": "punctuation.section.frontmatter.end.jpbook" }
       },
+      "patterns": [
+        { "include": "#frontmatter-body" }
+      ]
+    },
+    {
+      "comment": "Leading blank lines. Opens zero-width on a blank first line and closes at the first non-blank line, unless that line is a fence: the front matter then opens inside (applyEndPatternLast) and its closing fence, which leaves the line end unconsumed, closes this rule too, so a later `---` in the body cannot reopen it.",
+      "begin": "\\A(?=[ \\t　]*$)",
+      "end": "(?<=---)(?=[ \\t　]*$)|^(?=[ \\t　]*[^ \\t　\\n])",
+      "applyEndPatternLast": 1,
+      "patterns": [
+        {
+          "name": "meta.frontmatter.jpbook",
+          "begin": "^[ \\t　]*(---)[ \\t　]*$",
+          "end": "^[ \\t　]*(---)(?=[ \\t　]*$)",
+          "beginCaptures": {
+            "1": { "name": "punctuation.section.frontmatter.begin.jpbook" }
+          },
+          "endCaptures": {
+            "1": { "name": "punctuation.section.frontmatter.end.jpbook" }
+          },
+          "patterns": [
+            { "include": "#frontmatter-body" }
+          ]
+        }
+      ]
+    },
+    {
+      "match": "^\\s*(\\S.*?)(\\.jpnov)\\s*$",
+      "captures": {
+        "1": { "name": "string.unquoted.path.jpbook" },
+        "2": { "name": "keyword.other.extension.jpbook" }
+      }
+    }
+  ],
+  "repository": {
+    "frontmatter-body": {
       "patterns": [
         {
           "comment": "A cover list item `- path.jpnov` (full-width － tolerated like the parser). Error-agnostic: whether the item is orphaned, duplicated, or missing is the server's diagnostic; a non-.jpnov item goes unpainted exactly like a non-.jpnov chapter line. Must precede the key-value rule (a path may contain a colon).",
@@ -32,13 +68,6 @@
           }
         }
       ]
-    },
-    {
-      "match": "^\\s*(\\S.*?)(\\.jpnov)\\s*$",
-      "captures": {
-        "1": { "name": "string.unquoted.path.jpbook" },
-        "2": { "name": "keyword.other.extension.jpbook" }
-      }
     }
-  ]
+  }
 }
