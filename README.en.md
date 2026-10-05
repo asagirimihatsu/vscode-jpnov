@@ -107,6 +107,8 @@ but not Japanese typesetting:
   opening brackets never end a line; closing punctuation, middle dots, repetition
   marks, small kana and `ー` never start one; `――` and `……` runs never split; and a
   trailing `、`/`。` hangs into the margin (ぶら下げ) instead of pushing text down.
+  The full-width space after a `？` or `！` that ends a line is dropped, not carried
+  to the head of the next line.
   `relaxed` lets small kana and `ー` start a line and may break a long symbol run
   between pairs (Word's standard level); `none` is a bare wrap at the column width.
 

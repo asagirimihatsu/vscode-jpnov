@@ -346,6 +346,56 @@ test('ぶら下げ: a decorated hung 句読点 keeps its channel span around the
   assert.match(out, /<span class="emph-fs"><span class="hang">。<\/span><\/span>/);
 });
 
+// --- the space after a 区切り約物 (#171) ----------------------------------------------------
+// https://www.w3.org/TR/jlreq/#positioning_of_dividing_punctuation_marks
+
+test('区切り約物: a line that ends on the mark drops the full-width space after it', () => {
+  // cpl 5: the mark fills the fifth cell, so its space would head the next column.
+  const tcy = '!?［＃「!?」は縦中横］';
+  const cases: readonly (readonly [src: string, kinsoku: KinsokuMode, columns: readonly string[]])[] = [
+    ['　一二三？　六七八', 'strict', ['　一二三？', '六七八']],
+    ['　一二三！　六七八', 'relaxed', ['　一二三！', '六七八']],
+    ['　一二三？　六七八', 'none', ['　一二三？', '　六七八']], // bare wrap
+    ['　一二！　六七八', 'strict', ['　一二！　', '六七八']], // the space fits: it stays at the line end
+    ['　一二三？　', 'strict', ['　一二三？']], // no column of the space alone
+    ['　一二三？　［＃謎の注記］', 'strict', ['　一二三？']], // nor of a comment alone
+    ['　一二三？［＃謎の注記］　六七八', 'strict', ['　一二三？', '六七八']], // read through a comment
+    ['　一二三？　　六七', 'strict', ['　一二三？', '　六七']], // the first space only
+    ['［＃１字下げ］一二三？　六七八九', 'strict', ['一二三？', '六七八九']],
+    [`　一二三${tcy}　六七八`, 'strict', ['　一二三!?', '六七八']],
+    ['　一二!?　六七八', 'strict', ['　一二!?', '六七八']], // the bound half-width pair
+    ['　一二三⁉　六七八', 'strict', ['　一二三⁉', '六七八']],
+    [`　一二三${gaijiOf('‼')}　六七八`, 'strict', ['　一二三‼', '六七八']],
+    // Any other full-width space stays where the wrap puts it.
+    ['　一二三。　六七八', 'strict', ['　一二三。', '　六七八']],
+    ['一二三山田　太郎', 'strict', ['一二三山田', '　太郎']],
+    ['　一二三¿　六七八', 'strict', ['　一二三¿', '　六七八']], // cl-27, not a 区切り約物
+    ['　一二三？｜　《よみ》六七', 'strict', ['　一二三？', '　六七']], // a ruby base is not the space
+  ];
+  for (const [src, kinsoku, columns] of cases) {
+    assert.deepEqual(klines(src, 5, kinsoku), columns, `${src} (${kinsoku})`);
+  }
+});
+
+test('区切り約物: no line starts with the space — 追い出し when a 行頭禁則 char follows it', () => {
+  // cpl 5, strict: っ may not head a line, so the space cannot go; え？ moves down with it.
+  assert.deepEqual(klines('一二三え？　って顔', 5), ['一二三', 'え？　って', '顔']);
+  assert.deepEqual(klines('一二三え？［＃謎の注記］　って顔', 5), ['一二三', 'え？　って', '顔']);
+  // The space in the last cell and っ overflowing: the same boundary, reached by 追い出し.
+  assert.deepEqual(klines('二三え？　って顔', 5), ['二三', 'え？　って', '顔']);
+  // relaxed lets っ head the line, so the space goes.
+  assert.deepEqual(klines('一二三え？　って顔', 5, 'relaxed'), ['一二三え？', 'って顔']);
+});
+
+test('区切り約物: the column after a dropped space starts at the character after it', () => {
+  assert.equal(
+    flow('　一二三？　一行は五字だけ。', 5, 'strict'),
+    '<div class="book"><div class="segment"><div class="line" data-line="0">　一二三？</div>' +
+      '<div class="line" data-line="0" data-ch="6">一行は五字</div>' +
+      '<div class="line" data-line="0" data-ch="11">だけ。</div></div></div>',
+  );
+});
+
 // --- flowToHtml: the continuous preview flow over the shared engine -------------------
 
 test('flowToHtml: continuous .line columns in one .segment, each anchored like the build, no .page', () => {

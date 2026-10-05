@@ -85,7 +85,7 @@
   "jpnov.layout.linePitch.2.25.label": "2.25×",
   "jpnov.layout.linePitch.2.25.description": "Extra room between lines. Ruled lines stay clear of ruby readings.",
   "jpnov.layout.fontFamily.description": "The body font, as a CSS font-family list (for example: \"Yu Mincho\", serif). Applies to both the preview and the built HTML. Leave empty to use a built-in Mincho stack.",
-  "jpnov.layout.kinsoku.description": "Japanese line-breaking rules: keep forbidden characters off line starts and ends, never split ―― or ……, and hang a trailing 、。 into the margin. Applies to both the preview and the built book.",
+  "jpnov.layout.kinsoku.description": "Japanese line-breaking rules: keep forbidden characters off line starts and ends, never split ―― or ……, hang a trailing 、。 into the margin, and drop the full-width space after a ？ or ！ that ends a line. Applies to both the preview and the built book.",
   "jpnov.layout.kinsoku.none.label": "Off",
   "jpnov.layout.kinsoku.none.description": "No line-breaking rules — bare wrap at the column width.",
   "jpnov.layout.kinsoku.relaxed.label": "Relaxed",

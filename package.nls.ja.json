@@ -85,7 +85,7 @@
   "jpnov.layout.linePitch.2.25.label": "2.25 倍",
   "jpnov.layout.linePitch.2.25.description": "行間にゆとりのある行送り。罫線とルビの間にすき間ができます。",
   "jpnov.layout.fontFamily.description": "本文のフォント。CSS の font-family と同じ形式で指定します（例: \"Yu Mincho\", serif）。プレビューと HTML 出力の両方に適用されます。空欄にすると OS 付属の明朝体を使います。",
-  "jpnov.layout.kinsoku.description": "禁則処理: 行頭・行末禁則と分離禁止（――・……）を行い、行末の句読点をぶら下げます。プレビューと出力の両方に適用されます。",
+  "jpnov.layout.kinsoku.description": "禁則処理: 行頭・行末禁則と分離禁止（――・……）を行い、行末の句読点をぶら下げます。行末の ？ ！ の後ろの全角スペースは取り除きます。プレビューと出力の両方に適用されます。",
   "jpnov.layout.kinsoku.none.label": "なし",
   "jpnov.layout.kinsoku.none.description": "禁則を行わず、行の幅でそのまま折り返します。",
   "jpnov.layout.kinsoku.relaxed.label": "緩め",
