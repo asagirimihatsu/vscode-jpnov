@@ -10,7 +10,8 @@
  * whole cells when that is longer — and is atomic, a 縦中横 cell = ALWAYS 1 cell however many
  * chars it combines, emphasis adds no cells, comments are zero-width). 禁則処理 is selected
  * by the `kinsoku` mode (`none` = bare wrap) and lives in {@link wrapRow}: 分離禁止 binding,
- * ぶら下げ of a trailing 句読点, then the leftward 追い出し nudge of the break point.
+ * ぶら下げ of a trailing 句読点, the space dropped after a line-end 区切り約物, then the leftward
+ * 追い出し nudge of the break point.
  * ［＃改ページ］ forces a new page.
  *
  * What the notation MEANS is the AST's call (ast/resolve.ts): this module reads a line's content
@@ -344,6 +345,9 @@ export function buildRows(ast: Ast, opts?: { readonly dash?: DashMode | undefine
  * 始め括弧 (cl-01, https://www.w3.org/TR/jlreq/#character_classes).
  */
 const KINSOKU_OPEN = new Set('「『（〔［｛〈《【〘〖｟〝');
+/** 区切り約物 (cl-04): full-width, half-width, single-codepoint. */
+const DIVIDING = '！？!?‼⁇⁈⁉';
+const KINSOKU_DIVIDING = new Set(DIVIDING);
 /**
  * Chars forbidden at line START (pull the preceding char down) — 行頭禁則, the relaxed tier:
  * 終わり括弧・句読点・区切り約物・中点類・繰り返し記号 (cl-02/04/05/06/07/09,
@@ -352,7 +356,7 @@ const KINSOKU_OPEN = new Set('「『（〔［｛〈《【〘〖｟〝');
 const KINSOKU_CLOSE = new Set(
   '」』）〕］｝〉》】〙〗｠〟' + // 終わり括弧
     '、。，．' + // 句読点
-    '！？!?‼⁇⁈⁉' + // 区切り約物 (full-width, half-width, single-codepoint)
+    DIVIDING + // 区切り約物
     '・：；' + // 中点類
     '々〻ゝゞヽヾ', // 繰り返し記号
 );
@@ -421,8 +425,24 @@ function canHang(units: readonly Unit[], start: number, i: number, close: Set<st
   if (p >= 0 && everyCharIn(units[p], KINSOKU_OPEN)) {
     return false;
   }
-  const n = nextReal(units, i + 1);
+  return freeHead(units, i + 1, close);
+}
+
+/** A column opening at `units[from]` would not start on a 行頭禁則 char; no real unit left is fine. */
+function freeHead(units: readonly Unit[], from: number, close: Set<string>): boolean {
+  const n = nextReal(units, from);
   return n < 0 || !everyCharIn(units[n], close);
+}
+
+/**
+ * `units[i]` is the full-width space a 区切り約物 takes after it. A line that ends on the mark
+ * drops the space, and no line starts with it
+ * (https://www.w3.org/TR/jlreq/#positioning_of_dividing_punctuation_marks).
+ */
+function isDividingSpace(units: readonly Unit[], i: number): boolean {
+  const u = units[i];
+  return u?.text === '　' && u.cssClass === undefined &&
+    everyCharIn(units[lastReal(units, 0, i)], KINSOKU_DIVIDING);
 }
 
 /** The hung unit: zero cells (outside the budget), its glyph wrapped for the `.hang` rule. */
@@ -573,9 +593,10 @@ export function effectiveIndent(indent: number | undefined, charsPerLine: number
  * alike, and class / CSS padding / wrap budget all derive from this one value so the column can
  * never overflow. When `kinsoku` is not `none`, 分離禁止 runs are first bound into atomic units
  * (see {@link separate}); at each overflowing break a trailing 句読点 hangs as a zero cell when
- * that alone resolves the boundary (ぶら下げ, see {@link canHang}), and otherwise 禁則処理
+ * that alone resolves the boundary (ぶら下げ, see {@link canHang}), the space after a 区切り約物
+ * that ends the line is dropped (see {@link isDividingSpace}), and otherwise 禁則処理
  * nudges the break point LEFTWARD so a line never ENDS on an opening bracket (「『【（) nor
- * STARTS with a 行頭禁則 char (」』】）、。！？) — 追い出し. The walk re-tests the new
+ * STARTS with a 行頭禁則 char (」』】）、。！？) or with that space — 追い出し. The walk re-tests the new
  * boundary, so cascades and the resulting reflow fall out naturally; the `> floor` guard keeps
  * a line's first real unit, so no line ever empties and a lone-char row stays as-is. Every
  * boundary test looks through zero-width units to the nearest real one. (禁則 walks unit text
@@ -609,24 +630,27 @@ function wrapRow(
       let brk = i; // break BEFORE units[brk]
       if (mode !== 'none') {
         const close = closeFor(mode);
-        if (canHang(units, start, i, close)) {
-          // ぶら下げ: the 句読点 hangs off the full column as a zero cell. Trailing
-          // zero-width units ride along so they never open a units-less column.
+        const hang = canHang(units, start, i, close);
+        if (hang || (isDividingSpace(units, i) && freeHead(units, i + 1, close))) {
+          // `u` leaves the flow: a 句読点 hangs off the full column as a zero cell (ぶら下げ),
+          // the space after a 区切り約物 is dropped. Trailing zero-width units ride along so
+          // they never open a units-less column.
           let ns = i + 1;
           while (ns < units.length && (units[ns]?.cells ?? 0) === 0) {
             ns += 1;
           }
           const kept = [...units.slice(start, i), ...units.slice(i + 1, ns)];
-          lines.push({ srcLine, at: columnAt(units, start), units: kept, indent, hang: makeHangUnit(u), ...hs });
+          lines.push({ srcLine, at: columnAt(units, start), units: kept, indent, ...(hang ? { hang: makeHangUnit(u) } : {}), ...hs });
           start = ns;
           cells = 0;
-          continue; // u is consumed as the hang — it must not count into the next column
+          continue; // u is consumed — it must not count into the next column
         }
         // 追い出し: find the last acceptable break point; the line keeps its first real unit.
         const floor = nextReal(units, start) + 1;
         while (
           brk > floor &&
           (everyCharIn(units[nextReal(units, brk)], close) ||
+            isDividingSpace(units, nextReal(units, brk)) ||
             everyCharIn(units[lastReal(units, start, brk)], KINSOKU_OPEN))
         ) {
           brk -= 1;
@@ -642,7 +666,7 @@ function wrapRow(
     cells += u.cells;
   }
   if (start < units.length) {
-    // A hang can consume the row's very last unit; only a non-empty tail becomes a column.
+    // A hung or dropped unit can be the row's very last; only a non-empty tail becomes a column.
     lines.push({ srcLine, at: columnAt(units, start), units: units.slice(start), indent, ...hs });
   }
   return lines;
