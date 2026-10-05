@@ -327,6 +327,15 @@ test('a value field is rendered text: it extends the piece before it, like a pos
   assert.deepEqual(outer(`［＃傍点］${field}本文［＃傍点終わり］`), [['本文', `［＃傍点］${field}本文［＃傍点終わり］`]]);
 });
 
+test('a 外字注記 is an annotation to the lint: no prose, and it extends the piece before it', () => {
+  const mark = '※［＃感嘆符疑問符、1-8-78］';
+  const [l] = lines(`なに${mark}次`);
+  assert.ok(l);
+  assert.equal(l.prose().text, 'なに次');
+  assert.deepEqual(outer(`なに${mark}次`), [['なに', `なに${mark}`], ['次', '次']]);
+  assert.equal(lines(mark)[0]?.directiveOnly, true);
+});
+
 test('a depth change inside a span splits the extents across the corner pieces', () => {
   assert.deepEqual(outer('［＃傍点］「山田」［＃傍点終わり］'), [
     ['「', '［＃傍点］「'],

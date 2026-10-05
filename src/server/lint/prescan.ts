@@ -12,6 +12,7 @@ import { composeKana, isHiragana, isKatakana } from '../../shared/chars.ts';
 import { isDashMode } from '../../shared/config/types.ts';
 import { DASH_BY_MODE, DASH_CHARS } from '../../shared/dash.ts';
 import { unencodableChars } from '../../shared/encoding.ts';
+import { modeOf } from '../../shared/lint/select.ts';
 import type { ActiveRule } from '../../shared/lint/select.ts';
 import type { LocalizableMessage } from '../../shared/protocol.ts';
 
@@ -65,7 +66,7 @@ export const minusPositionScan: PreScan = (text) => {
 /** Flags a maximal run of dash characters (mixed spellings included) unless it is an even-length
  *  run of the chosen glyph; the fix rewrites the run in that glyph, rounding an odd length up. */
 export const dashScan: PreScan = (text, options) => {
-  const mode = typeof options === 'object' && 'mode' in options ? options.mode : undefined;
+  const mode = modeOf(options);
   const want = mode !== undefined && isDashMode(mode) ? DASH_BY_MODE[mode] : undefined;
   if (want === undefined) {
     return [];
@@ -169,7 +170,7 @@ function isAllKana(reading: string, mode: string): boolean {
  * first and left to noNfd, which owns that report and its fix.
  */
 export const rubyKanaScan: PreScan = (text, options) => {
-  const mode = typeof options === 'object' && 'mode' in options ? options.mode : undefined;
+  const mode = modeOf(options);
   if (mode === undefined || text === '' || isAllKana(composeKana(text), mode)) {
     return [];
   }

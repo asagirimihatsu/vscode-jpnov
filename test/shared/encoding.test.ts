@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 
+import { GAIJI } from '../../src/shared/ast/notation.ts';
 import {
   encodeTxt,
   isShiftJisEncodable,
@@ -16,6 +17,8 @@ import {
   unencodableChars,
   type TxtEncoding,
 } from '../../src/shared/encoding.ts';
+
+import { gaijiOf } from './ast/_shape.ts';
 
 /** The bytes one string encodes to, as lower-case hex — the shape every assertion reads in. */
 function hex(text: string, encoding: TxtEncoding = 'shiftJis'): string {
@@ -96,6 +99,24 @@ test('an unencodable character becomes one 〓 and is counted', () => {
   }
   assert.equal(encodeTxt('あ😀い😀', 'shiftJis').substitutions, 2);
   assert.equal(encodeTxt('あいう', 'shiftJis').substitutions, 0);
+});
+
+test('the six characters with a 外字注記 are written as it, and are not counted', () => {
+  const decoder = new TextDecoder('shift_jis');
+  for (const char of Object.values(GAIJI)) {
+    const annotation = gaijiOf(char);
+    const { bytes, substitutions } = encodeTxt(`なに${char}［＃「なに${char}」に傍点］`, 'shiftJis');
+    assert.equal(decoder.decode(bytes), `なに${annotation}［＃「なに${annotation}」に傍点］`, char);
+    assert.equal(substitutions, 0, char);
+    assert.equal(isShiftJisEncodable(char.codePointAt(0) ?? 0), false, char); // the table holds no cell for it
+    assert.deepEqual(unencodableChars(`あ${char}い`), [], char);
+    for (const encoding of ['utf8', 'utf8Bom'] as const) {
+      assert.ok(new TextDecoder().decode(encodeTxt(char, encoding).bytes).endsWith(char), `${char} in ${encoding}`);
+    }
+  }
+  // The emoji spelling: the character is written, its selector is what Shift JIS lacks.
+  assert.equal(decoder.decode(encodeTxt('\u2049\uFE0F', 'shiftJis').bytes), '※［＃感嘆符疑問符、1-8-78］');
+  assert.deepEqual(unencodableChars('あ\u2049\uFE0F'), [{ cluster: '\u2049\uFE0F', cp: 0xfe0f, offset: 2, length: 1 }]);
 });
 
 test('characters with no Shift JIS cell stay unencodable', () => {

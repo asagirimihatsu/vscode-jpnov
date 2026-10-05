@@ -123,7 +123,7 @@ test('a half-width pair is flagged, fixed by the code action, and then set in on
     (await conn().request<RenderFileResult>('jpnov/renderFile', { uri, text: src, settings: PREVIEW_SETTINGS })).html;
   assert.ok(!(await render(text)).includes('class="tcy"'), 'a pair with no annotation stays two characters');
 
-  conn().notify('jpnov/lintConfigChanged', { lintConfig: { 'jpnov.lint.common.exclamationTcy': true } });
+  conn().notify('jpnov/lintConfigChanged', { lintConfig: { 'jpnov.lint.common.questionExclamationMarks': 'tcy' } });
   conn().notify('textDocument/didOpen', { textDocument: { uri, languageId: 'jpnov', version: 1, text } });
   const actions = await conn().request<CodeAction[]>('textDocument/codeAction', {
     textDocument: { uri },

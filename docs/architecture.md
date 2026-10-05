@@ -68,7 +68,7 @@ The text build prints the nodes.
 | Stage | Produces | Holds |
 | --- | --- | --- |
 | **Scanner** | Per line, the nodes in source order: text, annotations, ruby marks and readings. Each is a verbatim slice with its position; an annotation also carries the position of every part inside it. | Lossless: printing the nodes gives the source back. Every pairing the scanner makes is bounded by its line, so broken markup affects that line alone. |
-| **AST** | Per line, the content in paint order with its decoration marks, and the line's state (字下げ, 見出し, 改ページ). Beside the lines: which span start pairs with which end, what each annotation bound to, and every structural finding. | Total: it always yields a result. Content strings are display strings (kana composed, values substituted, the characters no output can carry dropped); the nodes stay verbatim. |
+| **AST** | Per line, the content in paint order with its decoration marks, and the line's state (字下げ, 見出し, 改ページ). Beside the lines: which span start pairs with which end, what each annotation bound to, and every structural finding. | Total: it always yields a result. Content strings are display strings (kana composed, values substituted, a 外字注記 as its character, the characters no output can carry dropped); the nodes stay verbatim. |
 | **Output** | Rows of units, a unit being one glyph group with its advance in cells. From the rows: the preview, the paginated HTML, the EPUB. | The only stage that takes layout settings. |
 
 `parse` is `scan` followed by `resolve`.
@@ -136,12 +136,15 @@ Where things live today:
 | Which characters before a `《…》` are its base | Scanner | a rule of the notation |
 | The largest 字下げ that is read | Scanner | a rule of the notation |
 | Pairing ［＃傍点］ with ［＃傍点終わり］; finding what ［＃「…」に傍点］ names | AST | what the notation means |
+| Which `※［＃…］` is a 外字注記 | Scanner | a rule of the notation: the annotation directly follows its `※` |
+| Showing a 外字注記 as its character | AST | content is what is shown |
 | Composing a decomposed kana for display | AST | content is what is shown |
 | Dropping a character no output can carry (a C0 control other than tab and the line ends, U+FFFE, U+FFFF) | AST | content is what is shown; the nodes keep it, so the lint reports it |
-| Where each character shown was written in the source | AST | kana are composed, characters dropped and values substituted there; Output does not read the source |
+| Where each character shown was written in the source | AST | kana are composed, characters dropped, values and 外字注記 substituted there; Output does not read the source |
 | The ダッシュ glyph, 禁則, 分離禁止, ぶら下げ, ruby overhang, wrapping, pagination | Output | typesetting, driven by layout settings |
 | A 縦中横 too long to fit its cell | editor | a threshold, judged on what the AST holds |
-| A half-width pair (`!?`) with no 縦中横 annotation | editor | a manuscript convention, judged on what the AST holds; the fix writes the annotation |
+| A half-width pair (`!?`) with no 縦中横 annotation | editor | a manuscript convention, judged on what the AST holds; the fix replaces the pair with its character or writes the annotation, as the lint setting says |
+| Writing `‼` `⁇` `⁈` `⁉` `¡` `¿` as 外字注記 in a Shift JIS text | client (`encodeTxt`) | the encoding is a client setting; the Scanner and the AST take none |
 
 ## The full pipeline, and why ours is shorter
 

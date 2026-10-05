@@ -125,7 +125,7 @@ const { activate, deactivate } = await import('../../src/client/extension.ts');
 const A = 'file:///ws/a';
 const B = 'file:///ws/b';
 const C = 'file:///ws/c';
-const LINT = 'jpnov.lint.common.exclamationTcy';
+const LINT = 'jpnov.lint.common.questionExclamationMarks';
 const NONE = { characters: [], keywords: [] };
 
 function folder(uri: string, index: number): { uri: Uri; name: string; index: number } {
@@ -182,10 +182,10 @@ const CHANGES: readonly Change[] = [
   {
     name: 'a jpnov.lint.* setting',
     apply() {
-      state.config[LINT] = true;
+      state.config[LINT] = 'tcy';
       configChanged(LINT);
     },
-    holds: { lintConfig: { [LINT]: true }, highlight: { [A]: NONE, [B]: NONE } },
+    holds: { lintConfig: { [LINT]: 'tcy' }, highlight: { [A]: NONE, [B]: NONE } },
   },
   {
     name: 'a jpnov.editor.highlight.* setting',

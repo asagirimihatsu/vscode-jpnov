@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import type { PairedNode } from '../../../src/shared/ast/nodes.ts';
+import { gaijiAnnotation } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
 import { printLine, printSource } from '../../../src/shared/ast/print.ts';
 import { resolve } from '../../../src/shared/ast/resolve.ts';
@@ -153,6 +154,11 @@ test('every character of the content knows where it was written', () => {
         }
         if (item.origin === 'value') {
           assert.equal(item.starts, undefined, JSON.stringify(src)); // a value has no place of its own
+          continue;
+        }
+        if (item.origin === 'gaiji') {
+          assert.equal(item.starts, undefined, JSON.stringify(src));
+          assert.equal(src.slice(item.span.start, item.span.end), gaijiAnnotation(item.text), JSON.stringify(src));
           continue;
         }
         const starts = charStarts(item);

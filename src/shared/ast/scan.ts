@@ -6,6 +6,9 @@
  *   - a closed 《…》 with no base before it, and an empty 《》, stay text and are reported;
  *   - an unmatched 《, a ｜ that gets no reading and a lone ］ or 》 are text.
  *
+ * A 外字注記 is read where its annotation directly follows its ※, spelled as the notation lists it
+ * (https://www.aozora.gr.jp/annotation/external_character.html); any other ※ is text.
+ *
  * An explicit ｜ base runs up to its 《 whatever sits inside it
  * (https://www.aozora.gr.jp/annotation/etc.html#ruby); only the edge of a 縦中横 span ends it.
  *
@@ -13,10 +16,10 @@
  */
 import { composeKana, isCjkIdeograph, isCombiningKanaMark, isHiragana, isKatakana } from '../chars.ts';
 
-import { classifyAnnotation } from './classify.ts';
+import { classifyAnnotation, gaijiNode } from './classify.ts';
 import { append } from './lists.ts';
 import type { Eol, RubyReadingNode, ScanIssue, Span, Syntax, SyntaxLine, SyntaxNode, TextNode } from './nodes.ts';
-import { ANNOTATION_CLOSE, ANNOTATION_OPEN, BASE_MARK, RUBY_CLOSE, RUBY_OPEN } from './notation.ts';
+import { ANNOTATION_CLOSE, ANNOTATION_OPEN, BASE_MARK, GAIJI_MARK, RUBY_CLOSE, RUBY_OPEN, gaijiChar } from './notation.ts';
 import { Cutter } from './parts.ts';
 
 // Implicit ruby-base detection
@@ -199,13 +202,18 @@ function scanLine(src: string, from: number, to: number, issues: ScanIssue[]): S
         continue;
       }
       const end = close + ANNOTATION_CLOSE.length;
-      const annotation = classifyAnnotation(src, i, end, i === from, issues);
+      // A 外字注記 takes the ※ the pending text ends with.
+      const marked = i > runStart && src.startsWith(GAIJI_MARK, i - GAIJI_MARK.length);
+      const char = marked ? gaijiChar(src.slice(i + ANNOTATION_OPEN.length, close)) : undefined;
+      const annotation = char === undefined
+        ? classifyAnnotation(src, i, end, i === from, issues)
+        : gaijiNode(src, i - GAIJI_MARK.length, end, char);
       if (annotation.kind === 'tcySpanStart' || annotation.kind === 'tcySpanEnd') {
         release(); // a 縦中横 span is one cell of its own: a ｜ base never crosses its edge
       }
       // Inside a ｜ base the annotation is part of it (｜山田［＃「山田」に傍点］《やまだ》).
       const into = held === null ? nodes : held.nodes;
-      flush(into, i);
+      flush(into, annotation.span.start);
       into.push(annotation);
       runStart = end;
       i = end;
@@ -246,7 +254,7 @@ function scanLine(src: string, from: number, to: number, issues: ScanIssue[]): S
       };
 
       if (held !== null) {
-        const visible = i > runStart || held.nodes.some((n) => n.kind === 'text' || n.kind === 'valueField');
+        const visible = i > runStart || held.nodes.some((n) => n.kind === 'text' || n.kind === 'valueField' || n.kind === 'gaiji');
         if (!visible) {
           // Nothing between the ｜ and the 《 that a reading could sit on: no base.
           issues.push({ kind: 'rubyBaseMissing', span: { start: held.at, end }, reading });

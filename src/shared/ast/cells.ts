@@ -13,7 +13,7 @@ import type { Channel } from './notation.ts';
 interface Source {
   /** Source offset of the text the characters were taken from. */
   readonly start: number;
-  /** A substituted value: every piece maps to this one span. */
+  /** A substituted value or a 外字注記: every piece maps to this one span. */
   readonly fixed: Span | null;
   /** The display characters with their source ranges, when showing changed the text. */
   readonly chars: readonly ComposedChar[] | null;
@@ -41,7 +41,7 @@ export function charsCell(node: SyntaxNode, raw: string, origin: CharsOrigin, ma
   if (text === '') {
     return null;
   }
-  const fixed = origin === 'value' ? node.span : null;
+  const fixed = origin === 'value' || origin === 'gaiji' ? node.span : null;
   const chars = fixed !== null || text === raw ? null : displayChars(raw);
   return { kind: 'chars', source: { start: node.span.start, fixed, chars }, origin, text, from: 0, marks };
 }

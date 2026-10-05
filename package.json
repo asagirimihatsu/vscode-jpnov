@@ -401,11 +401,26 @@
             "order": 7,
             "markdownDescription": "%jpnov.lint.common.exclamationRun.description%"
           },
-          "jpnov.lint.common.exclamationTcy": {
-            "type": "boolean",
-            "default": true,
+          "jpnov.lint.common.questionExclamationMarks": {
+            "type": "string",
+            "enum": [
+              "off",
+              "fullWidth",
+              "tcy"
+            ],
+            "default": "fullWidth",
+            "enumItemLabels": [
+              "%jpnov.lint.common.questionExclamationMarks.off.label%",
+              "%jpnov.lint.common.questionExclamationMarks.fullWidth.label%",
+              "%jpnov.lint.common.questionExclamationMarks.tcy.label%"
+            ],
+            "enumDescriptions": [
+              "%jpnov.lint.common.questionExclamationMarks.off.description%",
+              "%jpnov.lint.common.questionExclamationMarks.fullWidth.description%",
+              "%jpnov.lint.common.questionExclamationMarks.tcy.description%"
+            ],
             "order": 8,
-            "markdownDescription": "%jpnov.lint.common.exclamationTcy.description%"
+            "markdownDescription": "%jpnov.lint.common.questionExclamationMarks.description%"
           },
           "jpnov.lint.common.arabicDigits": {
             "type": [

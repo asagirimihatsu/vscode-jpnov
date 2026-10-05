@@ -37,20 +37,20 @@ function shippedLintDefaults(): RawLintConfigWire {
 
 test('shipped defaults enable exactly the hygiene rules, ダッシュ, and the format rules', () => {
   const selection = selectRules(shippedLintDefaults());
-  // Alphabetically sorted; the format rules (ellipsis, exclamationSpace, exclamationTcy, indent,
+  // Alphabetically sorted; the format rules (ellipsis, exclamationSpace, questionExclamationMarks, indent,
   // endPeriod, closingPunct, noIndent) and the bracket matcher ship ON — the discrete successors of the
   // retired general-novel-style bundle plus the 和文 conventions ruled default-worthy.
   const shipped = [
     'lint.common.dash',
     'lint.common.ellipsis',
     'lint.common.exclamationSpace',
-    'lint.common.exclamationTcy',
     'lint.common.noControlChar',
     'lint.common.noHankakuKana',
     'lint.common.noNfd',
     'lint.common.noTrailingSpace',
     'lint.common.noUnmatchedPair',
     'lint.common.noZeroWidth',
+    'lint.common.questionExclamationMarks',
     'lint.common.shiftJisSafe',
     'lint.dialogue.closingPunct',
     'lint.dialogue.noIndent',

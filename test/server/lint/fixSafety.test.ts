@@ -7,13 +7,14 @@
  * modulo the control characters it deletes. A corpus whose fix changes what the markup MEANS (a
  * decomposed keyword becoming a real annotation) belongs in engine.test.ts, not here.
  *
- * A fix may WRITE markup of its own (exclamationTcy writes the 縦中横 annotation): what it wrote
+ * A fix may WRITE markup of its own (questionExclamationMarks writes the 縦中横 annotation in
+ * its `tcy` mode): what it wrote
  * is set aside by where it landed, must read back as the markup it is, and counts as an insert
  * where it sits in the edit.
  *
  * `FIX_CORPUS` is a `Record<CatalogId, …>`, so adding a catalog rule without deciding its entry is
  * a COMPILE error: list at least one corpus that produces a fix, or declare `null` (rule has no
- * fix). For every corpus the guard (a) asserts the plain text yields ≥ 1 fix (a dead corpus would
+ * fix). An enum rule runs once per value that enables it. For every corpus the guard (a) asserts the plain text yields ≥ 1 fix (a dead corpus would
  * guard nothing), then (b) slips a stand-alone annotation between EVERY adjacent character pair,
  * line ends included, and (c) wraps EVERY single character in a ruby / a span; after every fix is
  * applied, each variant must keep its markup nodes and every insert outside the wedge.
@@ -27,7 +28,7 @@ import { composeKana } from '../../../src/shared/chars.ts';
 import { RULES, settingKey } from '../../../src/shared/lint/catalog.ts';
 import type { CatalogId } from '../../../src/shared/lint/catalog.ts';
 import type { RawLintConfigWire } from '../../../src/shared/protocol.ts';
-import { nodesOf } from '../../shared/ast/_shape.ts';
+import { gaijiOf, nodesOf } from '../../shared/ast/_shape.ts';
 import { applyLintFixes } from '../helpers.ts';
 import type { LintEdit } from '../helpers.ts';
 
@@ -40,7 +41,7 @@ const FIX_CORPUS: Record<CatalogId, readonly string[] | null> = {
   ellipsis: ['　沈黙…だ。', '　沈黙。。。だ。', '　えっ、、だ。', '　中黒・・・だ。', '　二点‥だ。'],
   exclamationSpace: ['　驚いた！そのまま。', '「なに？と続く」'],
   exclamationRun: ['　なに！？だ。', '「うそ！！」', '　だめだ!と。'],
-  exclamationTcy: ['　えっ!?次の文。', '「何だと!?」', '　彼は叫んだ!!'],
+  questionExclamationMarks: ['　えっ!?次の文。', '「何だと!?」', '　彼は叫んだ!!'],
   arabicDigits: null,
   noTrailingSpace: ['好き　', '　　'],
   blankRun: ['あ。\n\n\nい。'],
@@ -72,20 +73,15 @@ const FIX_CORPUS: Record<CatalogId, readonly string[] | null> = {
   kana: null,
 };
 
-/** The enabling snapshot for one rule. */
-function enable(id: CatalogId): RawLintConfigWire {
-  const rule = RULES.find((r) => r.id === id);
-  if (rule === undefined) {
-    throw new Error(`no catalog rule ${id}`);
-  }
+/** The values that enable `rule`: one, or every value of an enum but `off`. */
+function enabling(rule: (typeof RULES)[number]): readonly (boolean | number | string)[] {
   if (rule.kind === 'boolean') {
-    return { [settingKey(rule)]: true };
+    return [true];
   }
   if (rule.kind === 'threshold') {
-    return { [settingKey(rule)]: rule.suggested };
+    return [rule.suggested];
   }
-  const value = rule.values.find((v) => v !== 'off') ?? '';
-  return { [settingKey(rule)]: value };
+  return rule.values.filter((v) => v !== 'off');
 }
 
 /** A markup node: what it is, and where it sits. */
@@ -133,11 +129,12 @@ interface Wedge {
   readonly wraps: number;
 }
 
-/** Between two characters: a postfix (its target is never in the corpora) and a comment. Around
- *  one: an explicit ruby, and the 縦中横 / 傍点 / 丸傍点 / block 太字 spans. */
+/** Between two characters: a postfix (its target is never in the corpora), a comment and a
+ *  外字注記. Around one: an explicit ruby, and the 縦中横 / 傍点 / 丸傍点 / block 太字 spans. */
 const WEDGES: readonly Wedge[] = [
   { open: '［＃「z」に傍点］', close: '', wraps: 0 },
   { open: '［＃メモ］', close: '', wraps: 0 },
+  { open: gaijiOf('⁉'), close: '', wraps: 0 },
   { open: '｜', close: '《z》', wraps: 1 },
   { open: '｜', close: '［＃メモ］《z》', wraps: 1 }, // a ｜ base holding an annotation
   { open: '｜［＃メモ］', close: '《z》', wraps: 1 },
@@ -167,42 +164,44 @@ for (const rule of RULES) {
   if (corpora === null) {
     continue;
   }
-  test(`fix safety: ${rule.id}`, () => {
-    const raw = enable(rule.id);
-    const normalize = NORMALIZE[rule.id] ?? composeKana;
-    const shape = (src: string): string[] => markup(src, normalize).map((node) => node.label);
-    for (const corpus of corpora) {
-      // (a) the corpus is alive: the plain text yields at least one fix
-      assert.ok(applyLintFixes(corpus, raw).edits.length >= 1, `dead corpus for ${rule.id}: ${corpus}`);
-      // (b)+(c) markup wedged anywhere survives every fix, and no insert lands inside it
-      for (const wedge of WEDGES) {
-        for (const { variant, start, end } of variants(corpus, wedge)) {
-          const { out, edits } = applyLintFixes(variant, raw);
-          const label = `${rule.id}: ${variant}`;
-          const landed = landings(edits);
-          const written = ({ span }: Markup): boolean =>
-            landed.some((at) => at.span.start <= span.start && span.end <= at.span.end);
-          const after = markup(out, normalize);
-          assert.deepEqual(
-            after.filter((node) => !written(node)).map((node) => node.label),
-            shape(variant),
-            `${label} — markup changed`,
-          );
-          assert.deepEqual(
-            after.filter(written).map((node) => node.label),
-            landed.flatMap(({ edit }) => shape(edit.t)),
-            `${label} — what a fix wrote does not read back as the markup it is`,
-          );
-          for (const ed of edits) {
-            // What an edit adds, in source offsets: an insert at its own, written markup where it
-            // sits in the edit.
-            const adds = ed.s === ed.e ? [ed.s] : markup(ed.t, normalize).map(({ span }) => ed.s + Math.min(span.start, ed.e - ed.s));
-            for (const at of adds) {
-              assert.ok(at <= start || at >= end, `${label} — insert at ${String(at)} lands inside the wedge`);
+  for (const value of enabling(rule)) {
+    test(`fix safety: ${rule.id} = ${String(value)}`, () => {
+      const raw: RawLintConfigWire = { [settingKey(rule)]: value };
+      const normalize = NORMALIZE[rule.id] ?? composeKana;
+      const shape = (src: string): string[] => markup(src, normalize).map((node) => node.label);
+      for (const corpus of corpora) {
+        // (a) the corpus is alive: the plain text yields at least one fix
+        assert.ok(applyLintFixes(corpus, raw).edits.length >= 1, `dead corpus for ${rule.id}: ${corpus}`);
+        // (b)+(c) markup wedged anywhere survives every fix, and no insert lands inside it
+        for (const wedge of WEDGES) {
+          for (const { variant, start, end } of variants(corpus, wedge)) {
+            const { out, edits } = applyLintFixes(variant, raw);
+            const label = `${rule.id}: ${variant}`;
+            const landed = landings(edits);
+            const written = ({ span }: Markup): boolean =>
+              landed.some((at) => at.span.start <= span.start && span.end <= at.span.end);
+            const after = markup(out, normalize);
+            assert.deepEqual(
+              after.filter((node) => !written(node)).map((node) => node.label),
+              shape(variant),
+              `${label} — markup changed`,
+            );
+            assert.deepEqual(
+              after.filter(written).map((node) => node.label),
+              landed.flatMap(({ edit }) => shape(edit.t)),
+              `${label} — what a fix wrote does not read back as the markup it is`,
+            );
+            for (const ed of edits) {
+              // What an edit adds, in source offsets: an insert at its own, written markup where it
+              // sits in the edit.
+              const adds = ed.s === ed.e ? [ed.s] : markup(ed.t, normalize).map(({ span }) => ed.s + Math.min(span.start, ed.e - ed.s));
+              for (const at of adds) {
+                assert.ok(at <= start || at >= end, `${label} — insert at ${String(at)} lands inside the wedge`);
+              }
             }
           }
         }
       }
-    }
-  });
+    });
+  }
 }

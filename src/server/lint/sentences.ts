@@ -3,7 +3,7 @@
  * shared by every sentence-based rule (sentenceLength, maxTen), so their reported positions can
  * never drift apart.
  *
- * A sentence ends at a run of terminators 。！？ (half-width !? included — the 縦中横 pair form),
+ * A sentence ends at a run of terminators 。！？ (half-width !? and ‼⁇⁈⁉ included),
  * absorbing any closing brackets right after it, or at the end of the view (a line IS a paragraph;
  * nothing continues across a line break). The '\n' separator unit of a dialogue view is a hard
  * boundary. Leading whitespace is not part of a sentence; … and dashes do not terminate (a
@@ -19,7 +19,11 @@ interface SentenceSpan {
   readonly end: number;
 }
 
-const TERMINATORS = new Set(['。', '！', '？', '!', '?']);
+/** The ！？ marks that end a sentence: either width, and the characters that hold two of them. */
+export const SENTENCE_MARKS = new Set(['！', '？', '!', '?', '‼', '⁇', '⁈', '⁉']);
+/** What ends a sentence. Exported with {@link SENTENCE_MARKS} so format.ts derives its sets from
+ *  the same marks. */
+export const TERMINATORS = new Set(['。', ...SENTENCE_MARKS]);
 /** Closers absorbed into the sentence right after its terminator run (〜。」 stays one sentence).
  *  Exported as THE closing-bracket set of the rule layer — format.ts derives its line-end and
  *  after-！？ sets from it, so the three closer sets can never drift apart again. */

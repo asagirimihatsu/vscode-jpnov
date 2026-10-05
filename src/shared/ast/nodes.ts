@@ -5,7 +5,8 @@
  *     slice with its span; an annotation also carries the span of every part inside it. The
  *     nodes tile their line, so printing them gives the source back.
  *   - The CONTENT layer is what it means: per line, the inlines in paint order, as display
- *     strings (kana composed, values substituted) with their decoration marks.
+ *     strings (kana composed, values substituted, a 外字注記 as its character) with their
+ *     decoration marks.
  *
  * What a node relates to (the end a start pairs with, what a postfix bound to) is the
  * resolver's finding: it sits beside the lines, keyed by the node.
@@ -30,10 +31,11 @@ export interface Part {
 }
 
 /**
- * What a part of an annotation is: `bracket` ［＃ ］ ｜ 《 》; `scaffold` ここから ここで 終わり
- * ここに の値を表示; `connector` に は; `corner` 「 」; `direction` の左に 左に; `keyword` the
- * command word (a variant, 改ページ, ３字下げ, 縦中横, a heading literal, のルビ); `name` a value
- * name; `target` a 対象文字列; `reading` a reading; `inner` the text of an unrecognized annotation.
+ * What a part of an annotation is: `bracket` ［＃ ］ ｜ 《 》 and the ※ of a 外字注記; `scaffold`
+ * ここから ここで 終わり ここに の値を表示; `connector` に は; `corner` 「 」; `direction` の左に 左に;
+ * `keyword` the command word (a variant, 改ページ, ３字下げ, 縦中横, a heading literal, のルビ, what
+ * a 外字注記 holds); `name` a value name; `target` a 対象文字列; `reading` a reading; `inner` the
+ * text of an unrecognized annotation.
  */
 export type PartRole =
   | 'bracket'
@@ -194,6 +196,13 @@ export interface ValueFieldNode extends AnnotationBase {
   readonly name: Part;
 }
 
+/** A 外字注記 that is read, its ※ included: one character (https://www.aozora.gr.jp/annotation/external_character.html). */
+export interface GaijiNode extends AnnotationBase {
+  readonly kind: 'gaiji';
+  /** The character it stands for. */
+  readonly char: string;
+}
+
 export type SpanOpenerNode = IndentBlockStartNode | EmphasisSpanStartNode | HeadingSpanStartNode;
 export type SpanCloserNode = IndentBlockEndNode | EmphasisSpanEndNode | HeadingSpanEndNode;
 /** Every node that starts or ends a span, the 縦中横 ones included. */
@@ -221,6 +230,7 @@ export type SyntaxNode =
   | RubyMarkNode
   | RubyReadingNode
   | BrokenAnnotationNode
+  | GaijiNode
   | AnnotationNode;
 
 // Content layer
@@ -229,10 +239,10 @@ export type SyntaxNode =
 export type Marks = Readonly<Partial<Record<Channel, Mark>>>;
 
 /**
- * Where a run's characters come from: `prose` typed text; `value` a substituted value; `markup`
- * ruby markup printed as typed (its base came out empty); `broken` an unclosed ［＃.
+ * Where a run's characters come from: `prose` typed text; `value` a substituted value; `gaiji` a
+ * 外字注記; `markup` ruby markup printed as typed (its base came out empty); `broken` an unclosed ［＃.
  */
-export type CharsOrigin = 'prose' | 'value' | 'markup' | 'broken';
+export type CharsOrigin = 'prose' | 'value' | 'gaiji' | 'markup' | 'broken';
 
 /** A run of characters laid out one per cell; a slice of ONE syntax node with uniform marks. */
 export interface Chars {
@@ -243,7 +253,8 @@ export interface Chars {
    * Where each character of `text` was written, when its source had a kana composed or a character
    * dropped (a composed kana covers its kana and mark); without it, each sits at `span.start` plus
    * its offset in `text`.
-   * A value's characters have no place of their own: they all come from `span`, its annotation.
+   * The characters of a value and of a 外字注記 have no place of their own: they all come from
+   * `span`, the annotation.
    */
   readonly starts?: readonly number[];
   readonly origin: CharsOrigin;

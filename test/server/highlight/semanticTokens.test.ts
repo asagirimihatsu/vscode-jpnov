@@ -114,6 +114,18 @@ test('［＃ここに「…」の値を表示］: the name is a directive, known
   assert.ok(!empty.some((t) => t.type === tokenTypeIndex('directive')));
 });
 
+test('a 外字注記: ※ and the brackets are markers, what it holds a directive; any other ※ is body text', () => {
+  const toks = decode(buildSemanticTokens(doc('※［＃感嘆符疑問符、1-8-78］'), rec).data);
+  assert.deepEqual(toks, [
+    { line: 0, char: 0, len: 1, type: MARKER }, // ※
+    { line: 0, char: 1, len: 2, type: MARKER }, // ［＃
+    { line: 0, char: 3, len: 13, type: tokenTypeIndex('directive') },
+    { line: 0, char: 16, len: 1, type: MARKER }, // ］
+  ]);
+  const other = decode(buildSemanticTokens(doc('※［＃二の字点、1-2-22］'), rec).data);
+  assert.deepEqual(other, [{ line: 0, char: 1, len: 14, type: MARKER }]);
+});
+
 test('emphasis span: variant -> directive, 左に -> direction', () => {
   const left = decode(buildSemanticTokens(doc('［＃左に傍点］'), rec).data);
   assert.deepEqual(at(left, 0, 2), { line: 0, char: 2, len: 2, type: tokenTypeIndex('direction') }); // 左に

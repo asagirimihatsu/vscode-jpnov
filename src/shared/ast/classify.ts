@@ -5,7 +5,7 @@
  *
  * Pure + vscode-free.
  */
-import type { AnnotationNode, Part, RolePart, ScanIssue } from './nodes.ts';
+import type { AnnotationNode, GaijiNode, Part, RolePart, ScanIssue } from './nodes.ts';
 import {
   ANNOTATION_CLOSE,
   ANNOTATION_OPEN,
@@ -15,6 +15,7 @@ import {
   CONNECTOR_NI,
   CORNER_CLOSE,
   CORNER_OPEN,
+  GAIJI_MARK,
   INDENT,
   LEFT_LONG,
   LEFT_RUBY,
@@ -50,6 +51,16 @@ function styled({ variant, left, channel }: VariantStyle): Omit<VariantStyle, 'p
 /** The style a ここから／ここで form names: a variant that has a block form, or null. */
 function blockStyle(name: string): VariantStyle | null {
   return hasBlockForm(name) ? variantStyle(name) : null;
+}
+
+/** The 外字注記 at `[start, end)` of `src`, from its ※ to its ］, standing for `char`. */
+export function gaijiNode(src: string, start: number, end: number, char: string): GaijiNode {
+  const cut = new Cutter(src, start);
+  cut.take('bracket', GAIJI_MARK.length);
+  cut.take('bracket', ANNOTATION_OPEN.length);
+  cut.take('keyword', end - start - GAIJI_MARK.length - ANNOTATION_OPEN.length - ANNOTATION_CLOSE.length);
+  cut.take('bracket', ANNOTATION_CLOSE.length);
+  return { kind: 'gaiji', span: { start, end }, text: src.slice(start, end), parts: cut.parts, char };
 }
 
 /**

@@ -29,9 +29,9 @@ import {
   endPeriodRule,
   exclamationRunRule,
   exclamationSpaceRule,
-  exclamationTcyRule,
   indentRule,
   noIndentRule,
+  questionExclamationMarksRule,
   trailingSpaceRule,
 } from './rules/format.ts';
 import {
@@ -71,7 +71,7 @@ export const RULE_IMPL: Record<CatalogId, RuleImpl> = {
   ellipsis: line(ellipsisRule),
   exclamationSpace: line(exclamationSpaceRule),
   exclamationRun: line(exclamationRunRule),
-  exclamationTcy: line(exclamationTcyRule),
+  questionExclamationMarks: line(questionExclamationMarksRule),
   arabicDigits: line(arabicDigitsRule),
   noTrailingSpace: line(trailingSpaceRule),
   blankRun: line(blankRunRule),

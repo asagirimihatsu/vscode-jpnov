@@ -181,6 +181,36 @@ export function tcyAnnotation(target: string): string {
   return annotation(`${CORNER_OPEN}${target}${CORNER_CLOSE}${CONNECTOR_HA}${TCY}`);
 }
 
+/** The mark a 外字注記 follows: the two together are one character
+ *  (https://www.aozora.gr.jp/annotation/external_character.html). */
+export const GAIJI_MARK = '※';
+
+/** The 外字注記 that are read, by what the annotation holds, each with its character
+ *  (https://www.aozora.gr.jp/gaiji_chuki/sonota.html). */
+export const GAIJI = {
+  '感嘆符二つ、1-8-75': '‼',
+  '疑問符二つ、1-8-76': '⁇',
+  '疑問符感嘆符、1-8-77': '⁈',
+  '感嘆符疑問符、1-8-78': '⁉',
+  '逆感嘆符、1-9-3': '¡',
+  '逆疑問符、1-9-22': '¿',
+} as const;
+
+// Maps, not the object: both keys come from the document.
+const CHAR_BY_GAIJI: ReadonlyMap<string, string> = new Map(Object.entries(GAIJI));
+const GAIJI_BY_CHAR: ReadonlyMap<string, string> = new Map(Object.entries(GAIJI).map(([inner, char]) => [char, inner]));
+
+/** The character the 外字注記 holding `inner` stands for; undefined when it is not one of {@link GAIJI}. */
+export function gaijiChar(inner: string): string | undefined {
+  return CHAR_BY_GAIJI.get(inner);
+}
+
+/** The 外字注記 of `char`, its ※ included; undefined when {@link GAIJI} has none. */
+export function gaijiAnnotation(char: string): string | undefined {
+  const inner = GAIJI_BY_CHAR.get(char);
+  return inner === undefined ? undefined : `${GAIJI_MARK}${annotation(inner)}`;
+}
+
 /** The largest 字下げ that is read; an annotation naming more is a comment. */
 export const INDENT_MAX = 99;
 
