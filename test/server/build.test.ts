@@ -1187,7 +1187,7 @@ test('build: a missing chapter outranks a missing cover, so every format reports
   }
 });
 
-test('build: CRLF chapters — the txt keeps CRLF, the html equals the LF build', async () => {
+test('build: CRLF chapters — the txt keeps CRLF, the html equals the LF build; CR chapters build as LF', async () => {
   await using ws = await makeTmpWorkspace();
   await writeUnder(ws.dir, 'vol1.jpbook', 'src/a.jpnov\nsrc/b.jpnov');
   const build = async (eol: string, format: 'txt' | 'html'): Promise<string> => {
@@ -1206,6 +1206,8 @@ test('build: CRLF chapters — the txt keeps CRLF, the html equals the LF build'
   assert.equal(await build('\r\n', 'txt'), 'あいう\r\n\r\nかきく');
   assert.equal(await build('\n', 'txt'), 'あいう\n\nかきく');
   assert.equal(await build('\r\n', 'html'), await build('\n', 'html'));
+  assert.equal(await build('\r', 'txt'), 'あいう\n\nかきく');
+  assert.equal(await build('\r', 'html'), await build('\n', 'html'));
 });
 
 // --- manuscript encoding (issue #81): the server never decodes bytes, the context's reader does ---

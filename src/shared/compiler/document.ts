@@ -305,14 +305,11 @@ export function renderBook(opts: {
 
 /**
  * A chapter as the `.txt` takes it, before the book's line ending is chosen: its lines printed
- * back from the AST and ended by '\n' (a lone '\r' stays as typed), without the characters no
- * output can carry, less the final newline.
+ * back from the AST and ended by '\n' whatever ended them in the source, without the characters
+ * no output can carry, less the final newline.
  */
 function chapterText(ast: Ast): string {
-  const text = ast.lines
-    .map((line) => printLine(line) + (line.eol === '\r\n' ? '\n' : line.eol))
-    .join('');
-  return dropUnshown(text).replace(/\n$/, '');
+  return dropUnshown(ast.lines.map(printLine).join('\n')).replace(/\n$/, '');
 }
 
 /**
@@ -322,9 +319,9 @@ function chapterText(ast: Ast): string {
  * line; the closers end the spans it left open; the glue parses into exactly the rows the HTML
  * build inserts at that seam). The characters no output can carry are removed from each
  * chapter and from the divider. The output takes the manuscript's line endings: CRLF throughout
- * when any chapter file is CRLF, else LF; a lone `\r` passes through. An empty book -> "" (a
- * wholly-empty middle file adds one extra blank line — benign); a divider that itself opens a span
- * (`［＃太字］＊`) leaks into the next chapter. Pure + vscode-free.
+ * when any chapter file is CRLF, else LF; a lone `\r` ends a line like the others and has no say
+ * in that choice. An empty book -> ""; a divider that itself opens a span (`［＃太字］＊`) leaks
+ * into the next chapter. Pure + vscode-free.
  */
 export function concatBookText(book: BookInput, charsPerLine: number): string {
   const chapters = book.files.map((file) => {
