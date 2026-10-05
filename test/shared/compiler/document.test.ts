@@ -210,10 +210,24 @@ test('concatBookText follows the manuscript EOL: CRLF throughout when any chapte
   );
   // any CRLF chapter decides; an all-LF book stays LF
   assert.equal(concatBookText(files('あ\r\n', 'か\n'), 40), 'あ\r\n\r\nか');
-  // A lone \r is no line ending of the output: it passes through as typed, in either mode.
-  assert.equal(concatBookText(files('あ\rい\n', 'か\n'), 40), 'あ\rい\n\nか');
-  assert.equal(concatBookText(files('あ\rい\r\n', 'か\n'), 40), 'あ\rい\r\n\r\nか');
   assert.equal(concatBookText(files('あ\n', 'か\n'), 40), 'あ\n\nか');
+});
+
+test('concatBookText ends a lone-CR line with the book EOL, and a lone CR decides nothing (#136)', () => {
+  const cases: readonly [string, string, string][] = [
+    ['あ\rい\n', 'か\n', 'あ\nい\n\nか'],
+    ['あ\rい\r\n', 'か\n', 'あ\r\nい\r\n\r\nか'],
+    ['あ\rい\r', 'か\n', 'あ\nい\n\nか'], // the chapter's final CR is its trailing newline
+    ['あ\rい\r', 'か\r', 'あ\nい\n\nか'], // CR throughout: LF
+    ['あ\rい\r', 'か\r\n', 'あ\r\nい\r\n\r\nか'],
+  ];
+  for (const [a, b, txt] of cases) {
+    assert.equal(
+      concatBookText(book({ files: [{ name: 'a.jpnov', src: a }, { name: 'b.jpnov', src: b }] }), 40),
+      txt,
+      JSON.stringify([a, b]),
+    );
+  }
 });
 
 test('renderBook: a CRLF chapter paginates exactly like its LF twin', () => {
@@ -401,6 +415,7 @@ test('dual invariant: per-file render + glue == rendering the concatenated .txt'
     two('あ', 'か'), // no divider configured
     two('あ', 'か', '［＃３字下げ］◇'), // indented divider
     two('あ\r\n\r\nい\r\n', 'か\r\n', '＊'), // CRLF chapters
+    two('あ\r\rい\r', 'か\r', '＊'), // CR chapters
     PAIRS, // a pair with its 縦中横 annotation and without
     ...UNSHOWN.map((c) => two(`王${c}都へ\n${c}\n［＃太字］聖${c}剣\n${c}`, `${c}\nか${c}`, '＊')), // dropped from the text, shown by neither
     ...SEAM_CASES.map(([b]) => b), // spans left open at a seam (closed by concatBookText)
