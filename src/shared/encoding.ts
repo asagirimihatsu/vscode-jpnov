@@ -10,7 +10,11 @@
  *
  * Decomposed kana (か + U+3099) are composed per grapheme cluster, on both sides, through the
  * shared {@link composeKana} — pair-wise composition only, never whole-text NFC.
+ *
+ * The characters of {@link GAIJI} have no cell: Shift JIS writes each as its 外字注記
+ * (https://www.aozora.gr.jp/annotation/external_character.html), so both sides count them as held.
  */
+import { GAIJI, gaijiAnnotation } from './ast/notation.ts';
 import { composeKana, dropWithOrigin } from './chars.ts';
 
 /** `jpnov.layout.txt.encoding` members — the encodings a built `.txt` can be written in. */
@@ -136,10 +140,18 @@ export interface UnencodableChar {
 
 const GRAPHEMES = new Intl.Segmenter('ja', { granularity: 'grapheme' });
 
-/** True when every code point of `cluster` has a Shift JIS cell. */
+/** The characters Shift JIS writes as their 外字注記. */
+const GAIJI_CHARS = new RegExp(`[${Object.values(GAIJI).join('')}]`, 'g');
+
+/** True when Shift JIS can write `ch`: in its cell, or as its 外字注記. */
+function holds(ch: string, map: Map<number, number>): boolean {
+  return map.has(ch.codePointAt(0) ?? 0) || gaijiAnnotation(ch) !== undefined;
+}
+
+/** True when Shift JIS can write every code point of `cluster`. */
 function holdsWhole(cluster: string, map: Map<number, number>): boolean {
   for (const ch of cluster) {
-    if (!map.has(ch.codePointAt(0) ?? 0)) {
+    if (!holds(ch, map)) {
       return false;
     }
   }
@@ -164,7 +176,7 @@ export function unencodableChars(text: string): UnencodableChar[] {
     let offset = index;
     for (const ch of segment) {
       const cp = ch.codePointAt(0) ?? 0;
-      if (cp > 0x7f && !map.has(cp)) {
+      if (cp > 0x7f && !holds(ch, map)) {
         out.push({ cluster: segment, cp, offset: origin?.[offset] ?? offset, length: ch.length });
         break; // one report per written character, however many code points it took
       }
@@ -183,8 +195,9 @@ export interface EncodedTxt {
 const UTF8 = new TextEncoder();
 
 /**
- * Encodes one `.txt` artifact. Shift JIS writes 〓 for anything it cannot hold and counts it —
- * the build always produces a file, and the caller reports the count. UTF-8 holds everything.
+ * Encodes one `.txt` artifact. Shift JIS writes the characters of {@link GAIJI} as their 外字注記,
+ * and 〓 for anything else it cannot hold, which it counts — the build always produces a file, and
+ * the caller reports the count. UTF-8 holds everything.
  */
 export function encodeTxt(text: string, encoding: TxtEncoding): EncodedTxt {
   if (encoding !== 'shiftJis') {
@@ -201,7 +214,8 @@ export function encodeTxt(text: string, encoding: TxtEncoding): EncodedTxt {
   // ❤️ and 👨‍👩‍👦 are 2 and 5 code points but one square each. The cluster's kana are composed first
   // (か + U+3099 writes が); whatever else can be written is written (辻 survives when only its
   // variation selector is unrepresentable), and a cluster that yields nothing becomes one 〓.
-  for (const { segment } of GRAPHEMES.segment(text)) {
+  const written = text.replace(GAIJI_CHARS, (ch) => gaijiAnnotation(ch) ?? ch);
+  for (const { segment } of GRAPHEMES.segment(written)) {
     const before = bytes.length;
     for (const ch of composeKana(segment)) {
       const packed = map.get(ch.codePointAt(0) ?? 0);

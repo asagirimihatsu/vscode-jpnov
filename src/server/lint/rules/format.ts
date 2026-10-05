@@ -8,8 +8,9 @@
 import type { Span } from '../../../shared/ast/nodes.ts';
 import { tcyAnnotation } from '../../../shared/ast/notation.ts';
 import { DASH_CHARS } from '../../../shared/dash.ts';
+import { modeOf } from '../../../shared/lint/select.ts';
 
-import { CLOSERS } from '../sentences.ts';
+import { CLOSERS, SENTENCE_MARKS, TERMINATORS } from '../sentences.ts';
 import type { LineRule, LintLine, ProseView, RuleContext } from '../types.ts';
 
 import { maxOf, viewFix, viewSpan } from './adapt.ts';
@@ -20,10 +21,10 @@ const LEADING_CHARS = '　「『（【〈';
 
 /** Line-end characters that close 地の文: the real sentence enders plus EVERY closing bracket
  *  (a line ending on 】 or 〉 — a status line — ended as an inset, exactly like 」). Derived from
- *  the shared {@link CLOSERS} so the closer sets cannot drift. Deliberately WITHOUT … and the
+ *  the shared {@link TERMINATORS} and {@link CLOSERS} so the sets cannot drift. Deliberately WITHOUT … and the
  *  dashes — they trail a sentence but do not end it, so 「彼は黙った……」 in narration still
  *  wants its 。 (the fix appends one right after the run). */
-const LINE_TERMINALS = new Set(['。', '！', '？', '!', '?', ...CLOSERS]);
+const LINE_TERMINALS = new Set([...TERMINATORS, ...CLOSERS]);
 
 /** What may follow a ！？ run without a full-width space: the closers (the quote ends), their
  *  ASCII/bracket kin, and a trailing …/dash run (！……、！―― set solid in practice). */
@@ -31,6 +32,7 @@ const AFTER_MARKS = new Set([
   '　', ...CLOSERS, '"', "'", ']', '〕', '｝', '}', '＞', '>', '…', '‥', ...DASH_CHARS,
 ]);
 
+/** The marks exclamationRun counts; {@link SENTENCE_MARKS} adds the characters that hold two. */
 const EXCLAMATIONS = new Set(['！', '？', '!', '?']);
 const FULL_TO_HALF: Record<string, string> = { '！': '!', '？': '?' };
 const HALF_TO_FULL: Record<string, string> = { '!': '！', '?': '？' };
@@ -151,22 +153,23 @@ export function closingPunctRule(ctx: RuleContext): LineRule {
   };
 }
 
-/** Feeds every maximal ！？!? run of the view to `visit` as `[a, b)` plus whether any mark in it
- *  is full-width. */
+/** Feeds every maximal run of `marks` in the view to `visit` as `[a, b)` plus whether any mark in
+ *  it is full-width. */
 function eachMarkRun(
   view: ProseView,
+  marks: ReadonlySet<string>,
   visit: (a: number, b: number, anyFull: boolean) => void,
 ): void {
   let i = 0;
   while (i < view.text.length) {
-    if (!EXCLAMATIONS.has(view.text.charAt(i))) {
+    if (!marks.has(view.text.charAt(i))) {
       i += 1;
       continue;
     }
     const a = i;
     let anyFull = false;
-    while (i < view.text.length && EXCLAMATIONS.has(view.text.charAt(i))) {
-      anyFull ||= view.text.charAt(i) === '！' || view.text.charAt(i) === '？';
+    while (i < view.text.length && marks.has(view.text.charAt(i))) {
+      anyFull ||= view.text.charAt(i) !== '!' && view.text.charAt(i) !== '?';
       i += 1;
     }
     visit(a, i, anyFull);
@@ -179,7 +182,7 @@ export function exclamationSpaceRule(ctx: RuleContext): LineRule {
   return {
     line(line: LintLine): void {
       const v = line.prose();
-      eachMarkRun(v, (a, b, anyFull) => {
+      eachMarkRun(v, SENTENCE_MARKS, (a, b, anyFull) => {
         if (!anyFull && b - a < 2) {
           return; // a lone half-width mark is not the sentence-ender form
         }
@@ -202,14 +205,14 @@ export function exclamationSpaceRule(ctx: RuleContext): LineRule {
 }
 
 /** ！？の幅と連続: one mark is full-width; a double with a full-width mark should be the
- *  half-width pair (the one exclamationTcy sets in one cell); three or more is its own finding
- *  (`.long` — no pair can set that in one cell). A lone half-width mark lies on its side in
- *  vertical text (`.single`). */
+ *  half-width pair (the one questionExclamationMarks sets in one cell); three or more is its own
+ *  finding (`.long` — no pair can set that in one cell). A lone half-width mark lies on its side
+ *  in vertical text (`.single`). */
 export function exclamationRunRule(ctx: RuleContext): LineRule {
   return {
     line(line: LintLine): void {
       const v = line.prose();
-      eachMarkRun(v, (a, b, anyFull) => {
+      eachMarkRun(v, EXCLAMATIONS, (a, b, anyFull) => {
         const len = b - a;
         if (len >= 3) {
           ctx.report(viewSpan(v, a, b), { message: { code: 'lint.common.exclamationRun.long' } });
@@ -250,25 +253,31 @@ function holderAt<T extends { readonly span: Span }>(items: readonly T[]): (pos:
   };
 }
 
+/** The character that holds a half-width pair in one cell. */
+const PAIR_CHAR: Record<string, string> = { '!!': '‼', '??': '⁇', '?!': '⁈', '!?': '⁉' };
+
 /**
- * 半角のペアの縦中横: a half-width pair with no 縦中横 annotation lies on its side, two cells long.
- * The fix writes the annotation after it (https://www.aozora.gr.jp/annotation/etc.html#tatechu_yoko).
- * A pair is read inside its piece, so markup between two marks ends the run: `!［＃太字］!?`
- * holds the pair `!?`.
+ * 半角のペア: a half-width pair with no 縦中横 annotation lies on its side, two cells long. The
+ * `fullWidth` fix replaces it with the character that holds both marks; the `tcy` fix writes the
+ * annotation after it (https://www.aozora.gr.jp/annotation/etc.html#tatechu_yoko). A pair is read
+ * inside its piece, so markup between two marks ends the run: `!［＃太字］!?` holds the pair `!?`.
  *
  * Nothing is reported where a 縦中横 holds the pair whole, where a ruby does (an annotation
  * written there leaves the pair on its side, or stops a left ruby), nor inside a 《…》 that made
- * no ruby (an annotation there prints as characters). A pair that an annotation takes one mark
- * of is reported without a fix (`.cut`): the fix would stop that annotation.
+ * no ruby (an annotation there prints as characters). In `tcy`, a pair that an annotation takes
+ * one mark of is reported without a fix (`.cut`): the fix would stop that annotation.
  */
-export function exclamationTcyRule(ctx: RuleContext): LineRule {
+export function questionExclamationMarksRule(ctx: RuleContext): LineRule {
   const { ast } = ctx;
+  const fullWidth = modeOf(ctx.options) === 'fullWidth';
   const baselessAt = holderAt(ast.issues.filter((issue) => issue.kind === 'rubyBaseMissing'));
   /** Where a bound range starts or ends -> the 対象文字列 of the annotation bound to it. */
   const edges = new Map<number, string>();
-  for (const [node, span] of ast.bound) {
-    edges.set(span.start, node.target.text);
-    edges.set(span.end, node.target.text);
+  if (!fullWidth) {
+    for (const [node, span] of ast.bound) {
+      edges.set(span.start, node.target.text);
+      edges.set(span.end, node.target.text);
+    }
   }
   return {
     line(line: LintLine): void {
@@ -286,13 +295,22 @@ export function exclamationTcyRule(ctx: RuleContext): LineRule {
             continue; // a ruby or a 縦中横 holds the pair
           }
           const span = { start, end: start + m[0].length };
+          const replace = { slice: piece, start: m.index, end: m.index + m[0].length };
+          const char = PAIR_CHAR[m[0]];
+          if (fullWidth && char !== undefined) {
+            ctx.report(span, {
+              message: { code: 'lint.common.questionExclamationMarks', args: [m[0], char] },
+              fix: { replace, text: char },
+            });
+            continue;
+          }
           const cutBy = edges.get(start + 1);
           if (cutBy !== undefined) {
-            ctx.report(span, { message: { code: 'lint.common.exclamationTcy.cut', args: [cutBy, m[0]] } });
+            ctx.report(span, { message: { code: 'lint.common.questionExclamationMarks.cut', args: [cutBy, m[0]] } });
           } else if (first === second) { // what splits a pair is a bound range: the case above
             ctx.report(span, {
-              message: { code: 'lint.common.exclamationTcy', args: [m[0]] },
-              fix: { replace: { slice: piece, start: m.index, end: m.index + m[0].length }, text: m[0] + tcyAnnotation(m[0]) },
+              message: { code: 'lint.common.questionExclamationMarks.tcy', args: [m[0]] },
+              fix: { replace, text: m[0] + tcyAnnotation(m[0]) },
             });
           }
         }

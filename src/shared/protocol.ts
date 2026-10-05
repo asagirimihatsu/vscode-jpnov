@@ -93,7 +93,8 @@ export type MsgCode =
   | 'lint.common.ellipsis.parity' // args: [] — the `ellipsis` rule's second fault: real …, odd count
   | 'lint.common.exclamationRun.long' // args: [] — the `exclamationRun` rule's second fault: 3+ marks
   | 'lint.common.exclamationRun.single' // args: [] — its third fault: a lone half-width ! or ?
-  | 'lint.common.exclamationTcy.cut' // args: [target, pair] — the `exclamationTcy` rule's second fault: the annotation naming `target` takes one mark of `pair`
+  | 'lint.common.questionExclamationMarks.tcy' // args: [pair] — the `questionExclamationMarks` rule in its `tcy` mode: `pair` has no 縦中横 annotation (the bare code, args: [pair, char], is the `fullWidth` mode)
+  | 'lint.common.questionExclamationMarks.cut' // args: [target, pair] — the `tcy` mode's second fault: the annotation naming `target` takes one mark of `pair`
   | 'server.unexpected'; // args: [detail]  (detail = raw unexpected server error, untranslatable)
 
 /** A server-produced message: a code plus the positional args its template substitutes. */

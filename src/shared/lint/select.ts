@@ -26,6 +26,11 @@ export interface ActiveRule {
   readonly code: LintCode;
 }
 
+/** The `mode` of an enum rule's options; undefined for any other kind. */
+export function modeOf(options: ActiveRule['options']): string | undefined {
+  return typeof options === 'object' && 'mode' in options ? options.mode : undefined;
+}
+
 /** The enabled rules, in catalog order. */
 export type RuleSelection = readonly ActiveRule[];
 

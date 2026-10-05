@@ -5,11 +5,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { INDENT_MAX, VALUE_NAMES, indentAnnotation, valueAnnotation } from '../../../src/shared/ast/notation.ts';
+import { GAIJI, INDENT_MAX, VALUE_NAMES, indentAnnotation, valueAnnotation } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
 import { scan } from '../../../src/shared/ast/scan.ts';
 
-import { at, blockIndent, blockOf, contentOf, facts, kinds, lineShapes, nodeOf, nodesOf, shape } from './_shape.ts';
+import { at, blockIndent, blockOf, contentOf, facts, gaijiOf, kinds, lineShapes, nodeOf, nodesOf, shape } from './_shape.ts';
 import { D } from '../_kana.ts';
 
 // --------------------------------------------------------------- lines
@@ -120,6 +120,35 @@ test('a closed ［＃…］ nothing recognizes is a comment; the FIRST ］ close
   assert.deepEqual(shape(src), ['comment ［＃注 ［＃ネスト］', 'text あと］']);
   assert.deepEqual(nodeOf(src, 'comment').inner, { span: at(src, '注 ［＃ネスト'), text: '注 ［＃ネスト' });
   assert.deepEqual(shape('閉じ括弧だけの］行'), ['text 閉じ括弧だけの］行']);
+});
+
+test('a 外字注記 is one node from its ※ to its ］, standing for its character', () => {
+  for (const [inner, char] of Object.entries(GAIJI)) {
+    const src = `前※［＃${inner}］後`;
+    assert.deepEqual(shape(src), ['text 前', `gaiji ※［＃${inner}］`, 'text 後'], src);
+    assert.equal(nodeOf(src, 'gaiji').char, char, src);
+  }
+  const mark = gaijiOf('⁉');
+  assert.deepEqual(shape(mark), [`gaiji ${mark}`]); // at a line head
+  assert.deepEqual(shape(`※${mark}${mark}`), ['text ※', `gaiji ${mark}`, `gaiji ${mark}`]);
+  assert.deepEqual(shape(`［＃３字下げ］${mark}`), ['indent ［＃３字下げ］', `gaiji ${mark}`]);
+});
+
+test('any other ※ is text, and what follows it is what it was', () => {
+  const cases: readonly [src: string, shape: string[]][] = [
+    ['［＃感嘆符疑問符、1-8-78］', ['comment ［＃感嘆符疑問符、1-8-78］']], // no ※
+    ['※　［＃感嘆符疑問符、1-8-78］', ['text ※　', 'comment ［＃感嘆符疑問符、1-8-78］']], // not directly after it
+    ['※［＃感嘆符疑問符］', ['text ※', 'comment ［＃感嘆符疑問符］']],
+    ['※［＃感嘆符疑問符、1-8-79］', ['text ※', 'comment ［＃感嘆符疑問符、1-8-79］']],
+    ['※［＃感嘆符疑問符、１－８－７８］', ['text ※', 'comment ［＃感嘆符疑問符、１－８－７８］']],
+    ['※［＃二の字点、1-2-22］', ['text ※', 'comment ［＃二の字点、1-2-22］']], // a 外字注記 the notation does not list
+    ['※［＃改ページ］', ['text ※', 'pageBreak ［＃改ページ］']],
+    ['※［＃感嘆符疑問符、1-8-78', ['text ※', 'brokenAnnotation ［＃感嘆符疑問符、1-8-78']],
+    ['※', ['text ※']],
+  ];
+  for (const [src, expected] of cases) {
+    assert.deepEqual(shape(src), expected, src);
+  }
 });
 
 test('an unclosed ［＃ is one brokenAnnotation up to its line end', () => {
@@ -349,6 +378,7 @@ const PART_CASES: readonly [string, string[]][] = [
   ['［＃ここで小見出し終わり］', ['bracket ［＃', 'scaffold ここで', 'keyword 小見出し', 'scaffold 終わり', 'bracket ］']],
   ['［＃ここに「タイトル」の値を表示］', ['bracket ［＃', 'scaffold ここに', 'corner 「', 'name タイトル', 'corner 」', 'scaffold の値を表示', 'bracket ］']],
   ['［＃メモ］', ['bracket ［＃', 'inner メモ', 'bracket ］']],
+  ['※［＃感嘆符疑問符、1-8-78］', ['bracket ※', 'bracket ［＃', 'keyword 感嘆符疑問符、1-8-78', 'bracket ］']],
   ['［＃］', ['bracket ［＃', 'bracket ］']], // an empty part is not listed
   ['漢字《かんじ》', ['bracket 《', 'reading かんじ', 'bracket 》']],
 ];

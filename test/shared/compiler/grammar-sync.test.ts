@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { HEADING_LITERALS, INDENT, INDENT_MAX, indentAmount, indentAnnotation } from '../../../src/shared/ast/notation.ts';
+import { GAIJI, GAIJI_MARK, HEADING_LITERALS, INDENT, INDENT_MAX, indentAmount, indentAnnotation } from '../../../src/shared/ast/notation.ts';
 import { COVER_ITEM_MARKS } from '../../../src/shared/book/jpbook.ts';
 import { blockOf, innerOf, variantsByChannel } from '../ast/_shape.ts';
 
@@ -122,6 +122,12 @@ test('value display rule takes any non-empty name up to ］, before the generic 
   const generic = matches.findIndex((m) => m === '(［＃)([^］]*)(］)');
   assert.ok(generic >= 0, 'generic comment rule not found');
   assert.ok(value >= 0 && value < generic, `value display rule missing/stale/after-generic. PASTE:\n${rule}`);
+});
+
+test('the 外字注記 rule lists exactly the notation\'s six, its ※ in the frame (canonical order)', () => {
+  // The rule starts one character before the generic one, so it wins wherever it sits.
+  const rule = `(${GAIJI_MARK}［＃)(${canonical(Object.keys(GAIJI))})(］)`;
+  assert.ok(matches.includes(rule), `外字注記 rule missing/stale. PASTE:\n${rule}`);
 });
 
 test('the .jpbook item rule accepts exactly the parser cover markers, before the key-value rule', () => {

@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 
 import type { Ast, Chars, Held, Inline, Issue, PairedNode, PostfixNode, Span, SyntaxNode, ValueLookup } from '../../../src/shared/ast/nodes.ts';
-import { ANNOTATION_CLOSE, ANNOTATION_OPEN, BLOCK_FROM, EMPHASIS_VARIANTS, indentAnnotation } from '../../../src/shared/ast/notation.ts';
+import { ANNOTATION_CLOSE, ANNOTATION_OPEN, BLOCK_FROM, EMPHASIS_VARIANTS, gaijiAnnotation, indentAnnotation } from '../../../src/shared/ast/notation.ts';
 import type { Channel } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
 import { scan } from '../../../src/shared/ast/scan.ts';
@@ -32,6 +32,13 @@ export function blockOf(annotation: string): string {
 /** The block opener of a 字下げ of `amount`. */
 export function blockIndent(amount: number): string {
   return blockOf(indentAnnotation(amount));
+}
+
+/** The 外字注記 of `char`, which must be one the notation lists. */
+export function gaijiOf(char: string): string {
+  const annotation = gaijiAnnotation(char);
+  assert.ok(annotation, `no 外字注記 for ${JSON.stringify(char)}`);
+  return annotation;
 }
 
 /** Every syntax node of `src`, the lines flattened. */

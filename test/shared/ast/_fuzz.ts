@@ -1,15 +1,15 @@
 /**
  * A deterministic manuscript generator for the property tests: prose, punctuation, dialogue,
  * every ruby form with its degenerate spellings, every annotation with its near misses, broken
- * ［＃, decomposed kana, astral and invisible characters, in LF, CRLF or mixed lines. Sample
+ * ［＃, 外字注記, decomposed kana, astral and invisible characters, in LF, CRLF or mixed lines. Sample
  * names are the generic placeholders only.
  *
  * `JPNOV_FUZZ_SEED` / `JPNOV_FUZZ_COUNT` override the run for a local soak.
  */
-import { HEADING_LITERALS, INDENT_MAX, VALUE_NAMES, indentAnnotation } from '../../../src/shared/ast/notation.ts';
+import { GAIJI, GAIJI_MARK, HEADING_LITERALS, INDENT_MAX, VALUE_NAMES, indentAnnotation } from '../../../src/shared/ast/notation.ts';
 import { D, H } from '../_kana.ts';
 
-import { blockOf, variantsByChannel } from './_shape.ts';
+import { blockOf, gaijiOf, variantsByChannel } from './_shape.ts';
 
 // The notation's own tables, in table order: a variant added there is generated here.
 const { emph: EMPH, line: LINE, weight, style } = variantsByChannel();
@@ -23,6 +23,8 @@ const WORDS = [
   'あ', 'か', 'が', 'と', 'は', 'です', 'ため', 'ア', 'ガラス', 'ー', 'ヶ', 'a', 'Z', 'John Smith', '12', '1234', 'Ａ', '１２',
   `か${D}`, `た${D}め`, `は${H}`, `あ${D}`, D, '𠮷', '辻\u{E0100}', '​', '\u0007', 'ｶﾞ',
   '。', '、', '・', '—', '―', '——', '…', '……', '!', '?', '!!', '!?', '?!', '!!!', '！？', '（', '）', '　', ' ', '＊',
+  // Each 外字注記 whole, its character typed as it is, and a ※ that may meet any annotation.
+  ...Object.values(GAIJI).flatMap((char) => [gaijiOf(char), char]), GAIJI_MARK,
 ];
 const READINGS = ['やまだ', 'たろう', 'おうと', 'ヤマダ', 'よみ', 'r', `か${D}らす`, 'い ち', 'ながいよみがなです', ''];
 const TOO_LARGE = indentAnnotation(INDENT_MAX + 1);
@@ -31,6 +33,7 @@ const NEAR_MISSES = [
   '［＃「語」にの左に傍点］', '［＃ここから傍点］', '［＃の左に傍点］', '［＃3字下げ］', '［＃ここに「」の値を表示］',
   '［＃「語」の左に「」のルビ］', '［＃見出し］', `［＃５字下け${D}］`, '［＃縦中横 ］',
   TOO_LARGE, blockOf(TOO_LARGE),
+  ...Object.keys(GAIJI).map((inner) => `［＃${inner}］`), '［＃感嘆符疑問符］', '［＃感嘆符疑問符、1-8-79］',
 ];
 const BROKEN = ['［＃', '［＃こわれ', '［＃「未', '［＃あ［＃い'];
 const DEGENERATE = ['｜', '｜｜', '｜《よみ》', '《》', '｜漢字《》', '《よみ》', '。《よみ》', '《a《b》', '》《ab》', '《', '》', 'a｜b｜c《r》', '。《!?》'];

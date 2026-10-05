@@ -230,9 +230,10 @@ test('endPeriod fix appends 。 at the end WITHOUT eating the trailing newline',
 });
 
 test('endPeriod allows 「」-final lines, ！？ endings, and blank lines', () => {
-  for (const src of ['「そうだ」', '（そうか）', '好き！', 'なぜ?', '文。\n\n文。']) {
+  for (const src of ['「そうだ」', '（そうか）', '好き！', 'なぜ?', '好き‼', 'なぜ⁇', 'まさか⁈', 'なに⁉', '文。\n\n文。']) {
     assert.deepEqual(lint(src, PERIOD), [], src);
   }
+  assert.equal(applied('　¿だめ¡', PERIOD), '　¿だめ¡。'); // ¡ and ¿ end nothing
 });
 
 test('endPeriod flags … and dashes — 和文 keeps its 。 after a trailing run', () => {
@@ -338,6 +339,15 @@ test('exclamationSpace treats the half-width !? pair as the sentence-ender form'
   assert.deepEqual(lint('　km/h だ。', EXCL_SPACE), []); // a lone half-width mark is not
 });
 
+test('exclamationSpace takes ‼ ⁇ ⁈ ⁉ for the marks they hold', () => {
+  for (const mark of ['‼', '⁇', '⁈', '⁉']) {
+    assert.equal(applied(`　え${mark}続く。`, EXCL_SPACE), `　え${mark}　続く。`, mark);
+    assert.deepEqual(lint(`「まさか${mark}」と`, EXCL_SPACE), [], mark);
+  }
+  assert.deepEqual(lint('　え!⁉続く。', EXCL_SPACE), [{ code: 'lint.common.exclamationSpace', text: '⁉' }]); // one run
+  assert.deepEqual(lint('　¡Hola!', EXCL_SPACE), []);
+});
+
 test('exclamationSpace lets a trailing …/dash run follow ！ solid, as set in practice', () => {
   for (const src of ['　助けて！……誰か。', '　行け！――と、そのとき。']) {
     assert.deepEqual(lint(src, EXCL_SPACE), [], src);
@@ -367,6 +377,13 @@ test('exclamationRun: a lone half-width mark lies on its side — the fix widens
   ]);
   assert.equal(applied('　なぜ?と思う。', EXCL_RUN), '　なぜ？と思う。');
   assert.deepEqual(lint('　もうだめだ！', EXCL_RUN), []); // full-width single is the right form
+});
+
+test('exclamationRun counts ！？!? only: ‼ ⁇ ⁈ ⁉ are no part of a run', () => {
+  for (const src of ['「なに⁉」', '「なに‼‼」', '「なに⁉！」', '「なに！⁇」']) {
+    assert.deepEqual(lint(src, EXCL_RUN), [], src);
+  }
+  assert.equal(applied('「なに!⁈」', EXCL_RUN), '「なに！⁈」'); // the ! beside it is a lone mark
 });
 
 const ELLIPSIS: RawLintConfigWire = { 'jpnov.lint.common.ellipsis': true };
@@ -704,6 +721,11 @@ test('shiftJisSafe flags a character Shift JIS lacks, once, over its whole code 
 test('shiftJisSafe leaves encodable prose alone, aliases included', () => {
   // — 〜 − 髙 ① all reach Shift JIS through the table's alias overlay or the CP932 blocks.
   assert.deepEqual(lint('――〜−髙①ｱ。', SJIS), []);
+});
+
+test('shiftJisSafe leaves the six characters a Shift JIS text writes as 外字注記', () => {
+  assert.deepEqual(lint('なに‼⁇⁈⁉¡¿《‼》［＃「に⁉」に傍点］', SJIS), []);
+  assert.deepEqual(lint('なに※［＃感嘆符疑問符、1-8-78］', SJIS), []);
 });
 
 test('shiftJisSafe sees inside annotations, which the views drop', () => {

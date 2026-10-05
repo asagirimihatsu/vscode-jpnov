@@ -62,7 +62,7 @@ test('the only-filter selects quick-fix vs fix-all', () => {
 
 test('fix-all keeps the edits that only touch: an insert before a replaced range and one after it', () => {
   const before = finding(range(0, 2, 0, 2), 'lint.narration.indent', '　');
-  const pair = finding(range(0, 2, 0, 4), 'lint.common.exclamationTcy', '!?［＃「!?」は縦中横］');
+  const pair = finding(range(0, 2, 0, 4), 'lint.common.questionExclamationMarks.tcy', '!?［＃「!?」は縦中横］');
   const after = finding(range(0, 4, 0, 4), 'lint.common.exclamationSpace', '　');
   const all = buildCodeActions(URI, [after, pair, before], range(0, 0, 0, 10), [CodeActionKind.SourceFixAll]);
   assert.deepEqual(all.flatMap(editsOf), [

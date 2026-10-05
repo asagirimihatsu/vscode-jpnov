@@ -10,11 +10,11 @@
  *   - A broken ［＃ (unclosed) contributes no prose; only a scan of the source slices (noNfd) sees
  *     inside it.
  *   - Outer extents: an opener (［＃傍点］, ［＃縦中横］, a ruby's ｜) pulls the next piece's
- *     `outerStart` before it; a postfix, a value field, a ruby's 《reading》 or a span end pushes
- *     the open piece's `outerEnd` past it. Openers and span ends pair per channel (one slot each
- *     for 傍点, 傍線, 太字, 斜体, 見出し and 縦中横), as the AST pairs them; a span end whose own
- *     opener is still pending is an empty span, unless the channel was open before that opener.
- *     Extents are per line.
+ *     `outerStart` before it; a postfix, a value field, a 外字注記, a ruby's 《reading》 or a span
+ *     end pushes the open piece's `outerEnd` past it. Openers and span ends pair per channel (one
+ *     slot each for 傍点, 傍線, 太字, 斜体, 見出し and 縦中横), as the AST pairs them; a span end
+ *     whose own opener is still pending is an empty span, unless the channel was open before that
+ *     opener. Extents are per line.
  *   - Offsets are per UTF-16 unit (astral chars = two consecutive units), matching
  *     `TextDocument.positionAt`.
  *
@@ -34,7 +34,7 @@ import type { LintLine, Piece, ProseUnit, ProseView, SourceSlice } from './types
 const SENTINEL = '〇';
 
 /** What a node does to the outer extents: `open` wraps the piece after it (a span start, a
- *  ruby's ｜); `attach` (a postfix, a value field) extends the piece before it; `close` (a span end)
+ *  ruby's ｜); `attach` (a postfix, a value field, a 外字注記) extends the piece before it; `close` (a span end)
  *  does too unless its own opener is still pending; `reading` (a ruby's 《…》) extends it and marks
  *  a ruby base; `neutral` binds nothing (a line-head ［＃N字下げ］ must stay at the head).
  *  Exhaustive: a new node kind is a compile error. */
@@ -60,6 +60,7 @@ const EXTENT_ROLE: Record<SyntaxNode['kind'], ExtentRole> = {
   indentBlockStart: 'neutral',
   indentBlockEnd: 'neutral',
   valueField: 'attach',
+  gaiji: 'attach',
 };
 
 /** The dialogue corners: the only characters that change the depth. */
@@ -358,8 +359,8 @@ export function* walkLines(ast: Ast): Generator<LintLine, void, undefined> {
           break;
         default:
           // An annotation contributes no prose (a 左ルビ reading lives only inside its annotation;
-          // a value field's substituted text is never author prose); the gap it leaves alone
-          // breaks piece contiguity.
+          // a value field's substituted text is never author prose; a 外字注記 is not the
+          // character it shows); the gap it leaves alone breaks piece contiguity.
           builder.sawAnnotation = true;
           break;
       }

@@ -8,11 +8,14 @@ import assert from 'node:assert/strict';
 import type { SpanOpenerNode } from '../../../src/shared/ast/nodes.ts';
 import {
   EMPHASIS_VARIANTS,
+  GAIJI,
   HEADING_LITERALS,
   INDENT_MAX,
   VALUE_DEFAULTS,
   VALUE_NAMES,
   closingAnnotations,
+  gaijiAnnotation,
+  gaijiChar,
   headingLevelOf,
   headingLiteralOf,
   indentAmount,
@@ -90,6 +93,26 @@ test('valueAnnotation reads back as the value field of its name', () => {
 test('tcyAnnotation reads back as the 縦中横 of its target', () => {
   assert.equal(tcyAnnotation('!?'), '［＃「!?」は縦中横］');
   assert.equal(nodeOf(tcyAnnotation('12'), 'tcyPostfix').target.text, '12');
+});
+
+test('the 外字注記 are the six of 外字注記辞書, and each reads back as its character', () => {
+  // https://www.aozora.gr.jp/gaiji_chuki/sonota.html
+  const listed: readonly [annotation: string, char: string][] = [
+    ['※［＃感嘆符二つ、1-8-75］', '\u203C'],
+    ['※［＃疑問符二つ、1-8-76］', '\u2047'],
+    ['※［＃疑問符感嘆符、1-8-77］', '\u2048'],
+    ['※［＃感嘆符疑問符、1-8-78］', '\u2049'],
+    ['※［＃逆感嘆符、1-9-3］', '\u00A1'],
+    ['※［＃逆疑問符、1-9-22］', '\u00BF'],
+  ];
+  assert.deepEqual(Object.entries(GAIJI).map(([inner, char]) => [gaijiAnnotation(char), gaijiChar(inner)]), listed);
+  for (const [annotation, char] of listed) {
+    assert.equal(nodeOf(annotation, 'gaiji').char, char);
+  }
+  for (const other of ['！', '!?', '', 'toString']) {
+    assert.equal(gaijiAnnotation(other), undefined, other);
+    assert.equal(gaijiChar(other), undefined, other);
+  }
 });
 
 test('the heading literals and their levels are inverses', () => {

@@ -29,6 +29,7 @@ test('。 ends a sentence; the terminator stays inside', () => {
 
 test('a terminator run (！？) is one ending; closers right after are absorbed', () => {
   assert.deepEqual(sentencesOf('なんだと！？次だ。'), ['なんだと！？', '次だ。']);
+  assert.deepEqual(sentencesOf('なんだと⁉次だ‼まだ⁇ある⁈'), ['なんだと⁉', '次だ‼', 'まだ⁇', 'ある⁈']);
   assert.deepEqual(sentencesOf('「〇」だ。'), ['「〇」だ。']);
 });
 

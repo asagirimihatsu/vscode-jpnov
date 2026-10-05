@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import type { BuildChrome } from '../../../src/shared/compiler/chrome.ts';
 import type { DashMode, KinsokuMode } from '../../../src/shared/config/types.ts';
 import type { ValueLookup } from '../../../src/shared/ast/nodes.ts';
-import { VALUE_DEFAULTS, VALUE_NAMES, valueAnnotation, valueOf } from '../../../src/shared/ast/notation.ts';
+import { GAIJI, VALUE_DEFAULTS, VALUE_NAMES, valueAnnotation, valueOf } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
 import {
   buildRows,
@@ -15,7 +15,7 @@ import {
   type Row,
 } from '../../../src/shared/compiler/layout.ts';
 import { DASH_GLYPH } from '../../../src/shared/dash.ts';
-import { at, issuesOf } from '../ast/_shape.ts';
+import { at, gaijiOf, issuesOf } from '../ast/_shape.ts';
 import { D } from '../_kana.ts';
 
 /** The rows of `src`: parsed (with the cover's `values`, when given), then laid out. */
@@ -1296,6 +1296,18 @@ test('NFD: 縦中横 content, a value, a broken ［＃ and the empty-base litera
 test('NFD: a pair that composes nothing, or is split by markup, keeps its two cells', () => {
   for (const src of [`あ${D}`, `\uFF76${D}`, `か［＃x］${D}`]) {
     assert.equal(unitsOf(src).filter((u) => u.text !== '').length, 2, src);
+  }
+});
+
+// --------------------------------------------------------------- 外字注記 (#169)
+
+test('a 外字注記 lays out exactly like its character typed as it is, and says where its ※ is', () => {
+  for (const char of Object.values(GAIJI)) {
+    const mark = gaijiOf(char);
+    const [noted, typed] = [`　なに${mark}と叫んだ。`, `　なに${char}と叫んだ。`];
+    assert.deepEqual(layoutOf(noted), layoutOf(typed), char);
+    assert.equal(html(noted), html(typed), char);
+    assert.deepEqual(unitsOf(noted).map((u) => u.at).slice(3, 5), [at(noted, mark).start, at(noted, 'と').start], char);
   }
 });
 

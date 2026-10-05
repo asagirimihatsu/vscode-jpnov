@@ -10,7 +10,7 @@ import { parse } from '../../../src/shared/ast/parse.ts';
 import { printSource } from '../../../src/shared/ast/print.ts';
 import { scan } from '../../../src/shared/ast/scan.ts';
 
-import { at, boundOf, charStarts, contentOf, heldOf, issuesOf } from './_shape.ts';
+import { at, boundOf, charStarts, contentOf, gaijiOf, heldOf, issuesOf } from './_shape.ts';
 import { BEL, D, UNSHOWN } from '../_kana.ts';
 
 /** The content of a one-line source. */
@@ -160,6 +160,20 @@ test('a value joins a 縦中横 cell and a ｜ base; an empty base prints its ma
 
 // --------------------------------------------------------------- display strings
 
+test('a 外字注記 is the character it stands for: a cell of its own, named by a target as that character', () => {
+  const mark = gaijiOf('⁉');
+  assert.deepEqual(content(`なに${mark}と`), ['chars なに', 'gaiji ⁉', 'chars と']);
+  assert.deepEqual(content(`［＃傍点］${mark}［＃傍点終わり］`), ['gaiji ⁉ emph=傍点']);
+  assert.deepEqual(content(`［＃縦中横］${mark}${gaijiOf('‼')}［＃縦中横終わり］`), ['tcy ⁉‼']);
+  assert.deepEqual(content(`なに${mark}［＃「に⁉」に傍点］`), ['chars な', 'chars に emph=傍点', 'gaiji ⁉ emph=傍点']);
+  assert.deepEqual(content(`なに${mark}［＃「に⁉」は縦中横］`), ['chars な', 'tcy に⁉']);
+  assert.deepEqual(content(`なに${mark}［＃「なに⁉」の左に「よみ」のルビ］`), ['ruby なに⁉〈よみ〉']);
+  assert.deepEqual(content(`なに${mark}［＃「なに⁉」は大見出し］`), ['chars なに', 'gaiji ⁉']);
+  assert.deepEqual(issuesOf(`なに${mark}［＃「に⁉」に傍点］${mark}［＃「⁉」は縦中横］`), []);
+  // A ※ that starts none is a character, and its annotation a comment.
+  assert.deepEqual(content('※［＃二の字点、1-2-22］'), ['chars ※', 'comment 二の字点、1-2-22']);
+});
+
 test('NFD: content is composed, whatever the source spelling', () => {
   assert.deepEqual(content(`　｜カ${D}ラス戸《か${D}らすと${D}》か${D}開いた。`), content('　｜ガラス戸《がらすど》が開いた。'));
   assert.deepEqual(content(`た${D}め［＃「だめ」に傍点］`), ['chars だめ emph=傍点']);
@@ -239,6 +253,12 @@ test('a run maps back to the source it came from', () => {
     at(`前${field}`, '前'),
     at(`前${field}`, field), // a value stands where its annotation is
   ]);
+  const mark = gaijiOf('⁉');
+  assert.deepEqual(parse(`前${mark}後`).lines[0]?.content.map((item) => item.span), [
+    at(`前${mark}後`, '前'),
+    at(`前${mark}後`, mark), // and so does the character of a 外字注記, its ※ included
+    at(`前${mark}後`, '後'),
+  ]);
 });
 
 test('each character of a run maps back to where it was written', () => {
@@ -257,11 +277,13 @@ test('each character of a run maps back to where it was written', () => {
   const start = (needle: string): number => at(nfd, needle).start;
   assert.deepEqual(written(nfd), [['𠮷', 0], ['が', start(`か${D}`)], ['き', start('き')], ['く', start('く')]]);
 
-  // Only a run cut from a source with composed kana carries `starts`; plain text and a value never do.
+  // Only a run cut from a source with composed kana carries `starts`; plain text, a value and a
+  // 外字注記 never do.
   const carries = (src: string, values?: ReadonlyMap<string, string>): boolean[] =>
     (parse(src, values).lines[0]?.content ?? []).flatMap((item) => (item.kind === 'chars' ? ['starts' in item] : []));
   assert.deepEqual(carries(nfd), [true, true]);
   assert.deepEqual(carries(`前${valueAnnotation(VALUE_NAMES.title)}`, REAL), [false, false]);
+  assert.deepEqual(carries(`前${gaijiOf('⁉')}`), [false, false]);
 });
 
 // --------------------------------------------------------------- line state

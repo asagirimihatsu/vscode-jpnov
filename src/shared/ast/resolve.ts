@@ -5,8 +5,8 @@
  *
  * Recovery is lenient and total: a span open at the end of input runs to the end, a dangling end
  * does nothing, a postfix whose target is absent or cuts into an atomic cell takes no effect.
- * Content strings are display strings — kana composed, values substituted, the characters no
- * output can carry dropped — while the syntax nodes stay verbatim.
+ * Content strings are display strings — kana composed, values substituted, a 外字注記 as its
+ * character, the characters no output can carry dropped — while the syntax nodes stay verbatim.
  *
  * Pure + vscode-free.
  */
@@ -155,7 +155,7 @@ class LineResolver {
 
   /**
    * Nothing nests inside an open 縦中横: text, ruby markup and a broken ［＃ join the cell as
-   * typed, a value field as what it shows. False when `node` does not join.
+   * typed, a value field and a 外字注記 as what they show. False when `node` does not join.
    */
   private intoTcy(node: SyntaxNode): boolean {
     const tcy = this.tcy;
@@ -171,6 +171,9 @@ class LineResolver {
         break;
       case 'valueField':
         tcy.text += this.value(node);
+        break;
+      case 'gaiji':
+        tcy.text += node.char;
         break;
       default:
         return false;
@@ -237,6 +240,9 @@ class LineResolver {
         break;
       case 'valueField':
         this.chars(node, this.value(node), 'value');
+        break;
+      case 'gaiji':
+        this.chars(node, node.char, 'gaiji');
         break;
       default: {
         const exhaustive: never = node;

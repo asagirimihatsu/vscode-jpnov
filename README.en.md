@@ -99,7 +99,9 @@ but not Japanese typesetting:
 - **Tate-chū-yoko (縦中横)** — a short horizontal run ("42", "!?") stood upright
   in a single character cell within vertical text. The run is marked with an
   annotation written after it. A lint rule flags a half-width pair (`!!` `!?`
-  `?!` `??`) that has no such annotation, and its quick fix writes one.
+  `?!` `??`) that has no such annotation; its quick fix replaces the pair with
+  the one character that holds both marks (`‼` `⁉` `⁈` `⁇`), or writes the
+  annotation when set to `tcy`.
 - **Kinsoku (禁則処理)** — Japanese line-breaking prohibitions, applied at every
   wrap in preview and builds alike (`jpnov.layout.kinsoku`, default `strict`):
   opening brackets never end a line; closing punctuation, middle dots, repetition
@@ -191,13 +193,27 @@ overlaps the neighbouring line. **縦中横** stands a short run upright in one
 square — keep it to 3 characters or fewer (a longer run is squeezed to fit
 and raises a Warning). A half-width pair (`!!` `!?` `?!` `??`) takes the same
 annotation (`!?［＃「!?」は縦中横］`); without it the pair lies on its side, two
-squares long. A lint rule flags a pair that lacks it, and its quick fix writes
-the annotation (`jpnov.lint.common.exclamationTcy`, on by default). The rule
-skips a run of three or more marks, and a pair inside a ruby (its base, its
-reading, the base of a left ruby) or inside a `《…》` that made no ruby. Where
-another annotation's target takes only one mark of a pair, the rule flags the
-pair and offers no fix: once annotated, the pair is one character, and that
-annotation would have no effect.
+squares long. A lint rule flags a pair that lacks it
+(`jpnov.lint.common.questionExclamationMarks`). Its quick fix depends on the
+setting: `fullWidth`, the default, replaces the pair with the one character
+that holds both marks (`!!` → `‼`, `??` → `⁇`, `?!` → `⁈`, `!?` → `⁉`); `tcy`
+writes the annotation. The rule skips a run of three or more marks, and a pair
+inside a ruby (its base, its reading, the base of a left ruby) or inside a
+`《…》` that made no ruby. Under `fullWidth`, an annotation that names the pair
+(`［＃「なに!?」に傍点］`) no longer finds its target once the pair is replaced,
+and the editor reports that annotation. Under `tcy`, where another annotation's
+target takes only one mark of a pair, the rule flags the pair and offers no
+fix: once annotated, the pair is one character, and the other annotation would
+have no effect.
+
+**外字注記** (external-character annotations) are recognised for six characters. In
+body text, `※` directly followed by one of these annotations is one character:
+`※［＃感嘆符二つ、1-8-75］` (`‼`), `※［＃疑問符二つ、1-8-76］` (`⁇`),
+`※［＃疑問符感嘆符、1-8-77］` (`⁈`), `※［＃感嘆符疑問符、1-8-78］` (`⁉`),
+`※［＃逆感嘆符、1-9-3］` (`¡`) and `※［＃逆疑問符、1-9-22］` (`¿`). Any other
+`※［＃…］` is a `※` and a comment. The six characters can also be typed as they
+are. Shift JIS has no code for them, so a Shift JIS `.txt` build writes each as
+its annotation.
 
 ## Auto indent
 
@@ -484,7 +500,7 @@ counts as one run — the checks see the text the way a reader will.
   wants its `。`), no punctuation right before a closing bracket
   (`dialogue.closingPunct`), no leading space on a dialogue line
   (`dialogue.noIndent`), a space after `！`/`？` (`common.exclamationSpace`),
-  the 縦中横 annotation on a half-width `!?` pair (`common.exclamationTcy`),
+  a half-width `!?` pair set in one square (`common.questionExclamationMarks`),
   even-count ellipses (`common.ellipsis`), and bracket pairing
   (`noUnmatchedPair`). All but the bracket matcher auto-fixable; a
   symbol-only scene-break line (`＊`) is exempt from the paragraph rules.
@@ -537,11 +553,11 @@ form, and `ruby.kana` to ruby readings.
 | `jpnov.lint.common.noZeroWidth` | `true` | Zero-width spaces (U+200B) (auto-fix) |
 | `jpnov.lint.common.noControlChar` | `true` | Invalid control characters (auto-fix) |
 | `jpnov.lint.common.noTrailingSpace` | `true` | Trailing spaces, space-only lines included (auto-fix) |
-| `jpnov.lint.common.shiftJisSafe` | `true` | Characters Shift JIS lacks, written as 〓 in a Shift JIS `.txt` build |
+| `jpnov.lint.common.shiftJisSafe` | `true` | Characters Shift JIS lacks, written as 〓 in a Shift JIS `.txt` build (`‼` `⁇` `⁈` `⁉` `¡` `¿` are written as their 外字注記) |
 | `jpnov.lint.common.dash` | `horizontalBar` | One dash character throughout, always in pairs (auto-fix) |
 | `jpnov.lint.common.ellipsis` | `true` | Even-count `…` runs; `。。`/`、、`/`・・` stand-ins (auto-fix) |
 | `jpnov.lint.common.exclamationSpace` | `true` | A full-width space after `！`/`？` when text continues (auto-fix) |
-| `jpnov.lint.common.exclamationTcy` | `true` | The 縦中横 annotation on half-width pairs `!!` `!?` `?!` `??` (auto-fix) |
+| `jpnov.lint.common.questionExclamationMarks` | `fullWidth` | Half-width pairs `!!` `!?` `?!` `??` set in one square (auto-fix): `fullWidth` (one character, `⁉`) / `tcy` (the 縦中横 annotation) / `off` |
 | `jpnov.lint.narration.indent` | `true` | Narration lines start with `　` or an opening bracket (auto-fix) |
 | `jpnov.lint.narration.endPeriod` | `true` | Narration lines end with `。` (auto-fix) |
 | `jpnov.lint.dialogue.closingPunct` | `true` | No `。`/`、` right before a closing `」` (auto-fix) |
