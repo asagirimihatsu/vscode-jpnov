@@ -68,7 +68,7 @@ The text build prints the nodes.
 | Stage | Produces | Holds |
 | --- | --- | --- |
 | **Scanner** | Per line, the nodes in source order: text, annotations, ruby marks and readings. Each is a verbatim slice with its position; an annotation also carries the position of every part inside it. | Lossless: printing the nodes gives the source back. Every pairing the scanner makes is bounded by its line, so broken markup affects that line alone. |
-| **AST** | Per line, the content in paint order with its decoration marks, and the line's state (字下げ, 見出し, 改ページ). Beside the lines: which span start pairs with which end, what each annotation bound to, and every structural finding. | Total: it always yields a result. Content strings are display strings (kana composed, values substituted, a 外字注記 as its character, the characters no output can carry dropped); the nodes stay verbatim. |
+| **AST** | Per line, the content in paint order with its decoration marks, and the line's state (字下げ, 見出し, 改ページ). Beside the lines: which span start pairs with which end, what each annotation bound to, and every structural finding. | Total: it always yields a result. Content strings are display strings (kana composed, values substituted, a 外字注記 as its character, the characters no output can carry dropped), a character being one grapheme cluster; the nodes stay verbatim. |
 | **Output** | Rows of units, a unit being one glyph group with its advance in cells. From the rows: the preview, the paginated HTML, the EPUB. | The only stage that takes layout settings. |
 
 `parse` is `scan` followed by `resolve`.
@@ -133,15 +133,16 @@ Where things live today:
 
 | Logic | Stage | Reason |
 | --- | --- | --- |
-| Which characters before a `《…》` are its base | Scanner | a rule of the notation |
+| Which characters before a `《…》` are its base | Scanner | a rule of the notation; a grapheme cluster is one character, classed by its first code point |
 | The largest 字下げ that is read | Scanner | a rule of the notation |
 | Pairing ［＃傍点］ with ［＃傍点終わり］; finding what ［＃「…」に傍点］ names | AST | what the notation means |
 | Which `※［＃…］` is a 外字注記 | Scanner | a rule of the notation: the annotation directly follows its `※` |
 | Showing a 外字注記 as its character | AST | content is what is shown |
-| Composing a decomposed kana for display | AST | content is what is shown |
+| What one character shown is: a grapheme cluster, its kana composed | AST | content is what is shown; a target cannot cut one |
 | Dropping a character no output can carry (a C0 control other than tab and the line ends, U+FFFE, U+FFFF) | AST | content is what is shown; the nodes keep it, so the lint reports it |
 | Where each character shown was written in the source | AST | kana are composed, characters dropped, values and 外字注記 substituted there; Output does not read the source |
 | The ダッシュ glyph, 禁則, 分離禁止, ぶら下げ, the space dropped after a line-end 区切り約物, ruby overhang, wrapping, pagination | Output | typesetting, driven by layout settings |
+| The class of a character under 禁則: its first code point's | Output | a rule of typesetting |
 | A 縦中横 too long to fit its cell | editor | a threshold, judged on what the AST holds |
 | A half-width pair (`!?`) with no 縦中横 annotation | editor | a manuscript convention, judged on what the AST holds; the fix replaces the pair with its character or writes the annotation, as the lint setting says |
 | Writing `‼` `⁇` `⁈` `⁉` `¡` `¿` as 外字注記 in a Shift JIS text | client (`encodeTxt`) | the encoding is a client setting; the Scanner and the AST take none |
@@ -201,7 +202,8 @@ chapter.
 
 - **Import rules** (`eslint.config.mjs`): `src/shared/` and `src/server/` may not
   import `vscode`; `src/shared/ast/` may import only its own modules and
-  `src/shared/chars.ts`; `chars.ts` imports nothing. The AST cannot see the
+  `src/shared/chars.ts`; `chars.ts` imports nothing, and holds the character
+  tables the stages share, the grapheme clusters among them. The AST cannot see the
   settings types, so it cannot take a setting by accident. In `src/server/`,
   only the preview (`server.ts`) and the builds (`build.ts`) may import
   `src/shared/compiler/`: the editor side reads the nodes and the AST.

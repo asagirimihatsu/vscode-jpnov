@@ -14,7 +14,7 @@
  *
  * Pure + vscode-free.
  */
-import { composeKana, isCjkIdeograph, isCombiningKanaMark, isHiragana, isKatakana } from '../chars.ts';
+import { graphemes, isCjkIdeograph, isHiragana, isKatakana } from '../chars.ts';
 
 import { classifyAnnotation, gaijiNode } from './classify.ts';
 import { append } from './lists.ts';
@@ -60,59 +60,28 @@ function classOf(cp: number): CharClass {
   return isAlnum(cp) ? 'alnum' : null;
 }
 
-/** The code point ending just before `end`, never reaching below `floor`; null when none. */
-function codePointBefore(src: string, end: number, floor: number): { cp: number; start: number } | null {
-  if (end <= floor) {
-    return null;
-  }
-  const low = src.charCodeAt(end - 1);
-  if (low >= 0xdc00 && low <= 0xdfff && end - 2 >= floor) {
-    const high = src.charCodeAt(end - 2);
-    if (high >= 0xd800 && high <= 0xdbff) {
-      return { cp: (high - 0xd800) * 0x400 + (low - 0xdc00) + 0x10000, start: end - 2 };
-    }
-  }
-  return { cp: low, start: end - 1 };
-}
-
-/**
- * The class of the character ending at `end`: its own, except that a combining 濁点/半濁点 takes
- * the class of the kana before it when the two compose (an NFD が is one kana).
- */
-function classBefore(src: string, end: number, floor: number): { cls: CharClass; start: number } | null {
-  const ch = codePointBefore(src, end, floor);
-  if (ch === null) {
-    return null;
-  }
-  if (isCombiningKanaMark(ch.cp)) {
-    const prev = codePointBefore(src, ch.start, floor);
-    if (prev !== null) {
-      const cls = classOf(prev.cp);
-      const joins = (cls === 'hiragana' || cls === 'katakana') && composeKana(src.slice(prev.start, end)).length === 1;
-      return { cls: joins ? cls : classOf(ch.cp), start: ch.start };
-    }
-  }
-  return { cls: classOf(ch.cp), start: ch.start };
-}
-
 /**
  * Where the implicit ruby base ending at `end` starts, looking no further back than `floor`:
  * the MAXIMAL run of ONE character class — kanji, hiragana, katakana, or alnum of either width.
- * The last character fixes the class; anything else ends the run. `end` itself means no base.
+ * A character is a grapheme cluster, classed by its first code point (an NFD が, a kanji with its
+ * variation selector). The last character fixes the class; anything else ends the run. `end`
+ * itself means no base.
  */
 function implicitBaseStart(src: string, floor: number, end: number): number {
-  const last = classBefore(src, end, floor);
-  if (last?.cls == null) {
+  const clusters = graphemes(src.slice(floor, end)).reverse();
+  const classOfHead = (cluster: string): CharClass => classOf(cluster.codePointAt(0) ?? 0);
+  const cls = classOfHead(clusters[0] ?? '');
+  if (cls === null) {
     return end;
   }
-  let start = last.start;
-  for (;;) {
-    const prev = classBefore(src, start, floor);
-    if (prev?.cls !== last.cls) {
-      return start;
+  let start = end;
+  for (const cluster of clusters) {
+    if (classOfHead(cluster) !== cls) {
+      break;
     }
-    start = prev.start;
+    start -= cluster.length;
   }
+  return start;
 }
 
 // Lines

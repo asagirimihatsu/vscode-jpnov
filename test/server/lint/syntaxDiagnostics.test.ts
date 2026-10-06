@@ -217,6 +217,7 @@ const onLine = (src: string): unknown[] =>
 test('縦中横: a span holding too much warns over what it holds, whatever closes it', () => {
   assert.deepEqual(onLine('［＃縦中横］1234［＃縦中横終わり］'), [['syntax.tcyTooLong', '1234']]);
   assert.deepEqual(onLine('［＃縦中横］123［＃縦中横終わり］'), []); // three render cleanly
+  assert.deepEqual(onLine('［＃縦中横］12辻\u{E0100}［＃縦中横終わり］'), []); // a variation selector is no character of its own
   // Ruby markup inside joins the cell as typed; a comment adds nothing.
   assert.deepEqual(onLine('［＃縦中横］漢《かん》［＃縦中横終わり］'), [['syntax.tcyTooLong', '漢《かん》']]);
   assert.deepEqual(onLine('［＃縦中横］12［＃x］3［＃縦中横終わり］'), []);

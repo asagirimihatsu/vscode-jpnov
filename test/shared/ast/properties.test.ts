@@ -13,7 +13,7 @@ import { parse } from '../../../src/shared/ast/parse.ts';
 import { printLine, printSource } from '../../../src/shared/ast/print.ts';
 import { resolve } from '../../../src/shared/ast/resolve.ts';
 import { scan } from '../../../src/shared/ast/scan.ts';
-import { displayText } from '../../../src/shared/chars.ts';
+import { displayText, graphemes } from '../../../src/shared/chars.ts';
 
 import { manuscripts, withEol } from './_fuzz.ts';
 import { charStarts, isPostfix, nodesIn } from './_shape.ts';
@@ -162,7 +162,7 @@ test('every character of the content knows where it was written', () => {
           continue;
         }
         const starts = charStarts(item);
-        Array.from(item.text).forEach((ch, i) => {
+        graphemes(item.text).forEach((ch, i) => {
           const from = starts[i] ?? -1;
           const to = starts[i + 1] ?? item.span.end;
           assert.ok(item.span.start <= from && from < to && to <= item.span.end, JSON.stringify(src));

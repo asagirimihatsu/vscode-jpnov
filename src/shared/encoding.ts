@@ -15,7 +15,7 @@
  * (https://www.aozora.gr.jp/annotation/external_character.html), so both sides count them as held.
  */
 import { GAIJI, gaijiAnnotation } from './ast/notation.ts';
-import { composeKana, dropWithOrigin } from './chars.ts';
+import { composeKana, dropWithOrigin, graphemes } from './chars.ts';
 
 /** `jpnov.layout.txt.encoding` members — the encodings a built `.txt` can be written in. */
 export const TXT_ENCODINGS = ['shiftJis', 'utf8', 'utf8Bom'] as const;
@@ -138,8 +138,6 @@ export interface UnencodableChar {
   readonly length: number;
 }
 
-const GRAPHEMES = new Intl.Segmenter('ja', { granularity: 'grapheme' });
-
 /** The characters Shift JIS writes as their 外字注記. */
 const GAIJI_CHARS = new RegExp(`[${Object.values(GAIJI).join('')}]`, 'g');
 
@@ -167,21 +165,22 @@ export function unencodableChars(text: string): UnencodableChar[] {
   const map = shiftJisTable();
   const out: UnencodableChar[] = [];
   const { text: shown, origin } = dropWithOrigin(text);
-  for (const { segment, index } of GRAPHEMES.segment(shown)) {
-    if (holdsWhole(composeKana(segment), map)) {
-      continue;
-    }
-    // Reported on the RAW code point: the mark itself has no cell, so a cluster whose composition
-    // lacks one always lands here — the offset noNfd reports too, which lets the engine de-duplicate.
-    let offset = index;
-    for (const ch of segment) {
-      const cp = ch.codePointAt(0) ?? 0;
-      if (cp > 0x7f && !holds(ch, map)) {
-        out.push({ cluster: segment, cp, offset: origin?.[offset] ?? offset, length: ch.length });
-        break; // one report per written character, however many code points it took
+  let index = 0;
+  for (const segment of graphemes(shown)) {
+    if (!holdsWhole(composeKana(segment), map)) {
+      // Reported on the RAW code point: the mark itself has no cell, so a cluster whose composition
+      // lacks one always lands here — the offset noNfd reports too, which lets the engine de-duplicate.
+      let offset = index;
+      for (const ch of segment) {
+        const cp = ch.codePointAt(0) ?? 0;
+        if (cp > 0x7f && !holds(ch, map)) {
+          out.push({ cluster: segment, cp, offset: origin?.[offset] ?? offset, length: ch.length });
+          break; // one report per written character, however many code points it took
+        }
+        offset += ch.length;
       }
-      offset += ch.length;
     }
+    index += segment.length;
   }
   return out;
 }
@@ -215,7 +214,7 @@ export function encodeTxt(text: string, encoding: TxtEncoding): EncodedTxt {
   // (か + U+3099 writes が); whatever else can be written is written (辻 survives when only its
   // variation selector is unrepresentable), and a cluster that yields nothing becomes one 〓.
   const written = text.replace(GAIJI_CHARS, (ch) => gaijiAnnotation(ch) ?? ch);
-  for (const { segment } of GRAPHEMES.segment(written)) {
+  for (const segment of graphemes(written)) {
     const before = bytes.length;
     for (const ch of composeKana(segment)) {
       const packed = map.get(ch.codePointAt(0) ?? 0);

@@ -251,8 +251,8 @@ export interface Chars {
   readonly span: Span;
   /**
    * Where each character of `text` was written, when its source had a kana composed or a character
-   * dropped (a composed kana covers its kana and mark); without it, each sits at `span.start` plus
-   * its offset in `text`.
+   * dropped; without it, each sits at `span.start` plus its offset in `text`. A character is a
+   * grapheme cluster: a composed kana covers its kana and mark, a kanji its variation selector.
    * The characters of a value and of a 外字注記 have no place of their own: they all come from
    * `span`, the annotation.
    */

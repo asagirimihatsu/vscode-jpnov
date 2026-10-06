@@ -9,6 +9,7 @@ import { ANNOTATION_CLOSE, ANNOTATION_OPEN, BLOCK_FROM, EMPHASIS_VARIANTS, gaiji
 import type { Channel } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
 import { scan } from '../../../src/shared/ast/scan.ts';
+import { graphemes } from '../../../src/shared/chars.ts';
 
 /** The variant names of the notation per channel, in table order. */
 export function variantsByChannel(): Record<Channel, readonly string[]> {
@@ -158,7 +159,7 @@ export function contentOf(src: string, values?: ValueLookup): string[][] {
  */
 export function charStarts(item: Chars): number[] {
   let offset = 0;
-  return Array.from(item.text, (ch, i) => {
+  return graphemes(item.text).map((ch, i) => {
     const start = item.starts?.[i] ?? item.span.start + offset;
     offset += ch.length;
     return start;
