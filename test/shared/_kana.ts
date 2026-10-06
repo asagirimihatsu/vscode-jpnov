@@ -14,3 +14,13 @@ export const BEL = UNSHOWN[0];
 /** Values of which nothing shows: half-width and full-width space, a character no output
  *  carries, and a mix. */
 export const BLANKS = [' ', '　', '\u0007', ' \uFFFE　'] as const;
+
+/** 辻 with an ideographic variation selector: one character of two code points. */
+export const TSUJI = '辻\u{E0100}';
+
+/**
+ * One cluster each, of several code points: the selector, an emoji under its presentation
+ * selector, a mark that composes nothing, a half-width kana and its mark, a ZWJ family, a flag, a
+ * decomposed Latin letter.
+ */
+export const CLUSTERS = [TSUJI, '\u2764\uFE0F', `あ${D}`, '\uFF76\uFF9E', '\u{1F468}\u200D\u{1F469}\u200D\u{1F466}', '\u{1F1EF}\u{1F1F5}', 'e\u0301'] as const;

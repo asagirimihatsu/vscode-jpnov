@@ -2,7 +2,7 @@
  * The cells of a line while it is being resolved: what a corner-target postfix is matched
  * against and rewrites, and what becomes the line's content.
  */
-import { displayChars, displayText } from '../chars.ts';
+import { displayChars, displayText, graphemes } from '../chars.ts';
 import type { ComposedChar } from '../chars.ts';
 
 import type { CharsOrigin, CommentInline, Inline, Mark, Marks, Ruby, Span, SyntaxNode, Tcy } from './nodes.ts';
@@ -84,11 +84,16 @@ export function textOf(cell: Cell): string {
   }
 }
 
-/** True iff `text` may be cut at `at`: never between the halves of a surrogate pair. */
+/** True iff `text` may be cut at `at`: only between two characters, never inside a grapheme cluster. */
 function isCharBoundary(text: string, at: number): boolean {
-  const high = text.charCodeAt(at - 1);
-  const low = text.charCodeAt(at);
-  return !(high >= 0xd800 && high <= 0xdbff && low >= 0xdc00 && low <= 0xdfff);
+  let shown = 0;
+  for (const ch of graphemes(text)) {
+    if (shown >= at) {
+      break;
+    }
+    shown += ch.length;
+  }
+  return shown === at;
 }
 
 function cut(cell: CharsCell, at: number): [CharsCell, CharsCell] {

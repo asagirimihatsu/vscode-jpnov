@@ -16,7 +16,7 @@ import {
 } from '../../../src/shared/compiler/layout.ts';
 import { DASH_GLYPH } from '../../../src/shared/dash.ts';
 import { at, gaijiOf, issuesOf } from '../ast/_shape.ts';
-import { D } from '../_kana.ts';
+import { CLUSTERS, D, TSUJI } from '../_kana.ts';
 
 /** The rows of `src`: parsed (with the cover's `values`, when given), then laid out. */
 const rowsOf = (src: string, opts?: { dash?: DashMode; values?: ValueLookup | undefined }): Row[] =>
@@ -287,6 +287,9 @@ test('ぶら下げ: a trailing 句読点 hangs as a zero cell instead of 追い�
   // none never hangs (bare wrap), and non-句読点 行頭禁則 chars still 追い出し.
   assert.deepEqual(klines('文だ。', 2, 'none'), ['文だ', '。']);
   assert.deepEqual(klines('いあー', 2), ['い', 'あー']);
+  // A 縦中横 cell is not a character: it never hangs, nor binds as 分離禁止.
+  assert.deepEqual(klines('文だ［＃縦中横］、［＃縦中横終わり］', 2), ['文', 'だ、']);
+  assert.deepEqual(klines('あ―［＃縦中横］―［＃縦中横終わり］', 2), ['あ―', '―']);
 });
 
 test('ぶら下げ: the hung unit is zero cells and the column stays at budget', () => {
@@ -1343,10 +1346,59 @@ test('NFD: 縦中横 content, a value, a broken ［＃ and the empty-base litera
   );
 });
 
-test('NFD: a pair that composes nothing, or is split by markup, keeps its two cells', () => {
-  for (const src of [`あ${D}`, `\uFF76${D}`, `か［＃x］${D}`]) {
-    assert.equal(unitsOf(src).filter((u) => u.text !== '').length, 2, src);
+test('NFD: a pair that composes nothing is one cell of its two code points; one split by markup stays two', () => {
+  for (const src of [`あ${D}`, `\uFF76${D}`]) {
+    assert.deepEqual(unitsOf(src).map((u) => [u.text, u.cells]), [[src, 1]], src);
   }
+  assert.equal(unitsOf(`か［＃x］${D}`).filter((u) => u.text !== '').length, 2);
+});
+
+// --------------------------------------------------------------- grapheme clusters (#158)
+
+test('a grapheme cluster is one cell: a variation selector, an emoji sequence, a mark that composes nothing', () => {
+  for (const s of CLUSTERS) {
+    assert.deepEqual(unitsOf(s).map((u) => [u.text, u.cells, u.html]), [[s, 1, s]], JSON.stringify(s));
+  }
+  assert.deepEqual(unitsOf('か\u309B').map((u) => u.text), ['か', '\u309B']); // a spacing 濁点 is a character of its own
+  // A postfix target that cuts into a cluster binds nothing: the cluster stays one cell, unmarked.
+  const cut = `${TSUJI}［＃「辻」に傍点］`;
+  assert.deepEqual(unitsOf(cut).map((u) => [u.text, u.cells, u.emph]), [[TSUJI, 1, undefined], ['', 0, undefined]]);
+  assert.deepEqual(missedTargets(cut), ['辻']);
+  assert.deepEqual(unitsOf(`${TSUJI}［＃「${TSUJI}」に傍点］`).map((u) => [u.text, u.emph]), [[TSUJI, 'emph-fs']]);
+});
+
+test('a cluster wraps whole, and the column after it starts where the next character was written', () => {
+  const src = `　あいうえおかきくけこさしすせ${TSUJI}を曲がる。`;
+  assert.deepEqual(klines(src, 16), [`　あいうえおかきくけこさしすせ${TSUJI}`, 'を曲がる。']);
+  const [first, second] = paginate(rowsOf(src), 16, 34, 'strict').flat();
+  assert.equal(first?.units.at(-1)?.at, at(src, '辻').start);
+  assert.equal(second?.at, at(src, 'を').start);
+  assert.ok(flow(src, 16).includes(`data-ch="${String(at(src, 'を').start)}"`));
+  // The source offsets hold through a composed kana before the cluster.
+  const mixed = `か${D}${TSUJI}い`;
+  assert.deepEqual(unitsOf(mixed).map((u) => [u.text, u.at]), [['が', 0], [TSUJI, at(mixed, '辻').start], ['い', at(mixed, 'い').start]]);
+});
+
+test('a ruby measures its base and its readings in clusters', () => {
+  // A one-cluster base under a five-kana reading: the box outgrows the base, so it stretches.
+  for (const src of [`｜${TSUJI}《つじのみち》`, `${TSUJI}《つじのみち》`]) {
+    const [u] = unitsOf(src);
+    assert.deepEqual([u?.cells, u?.cssClass, u?.ruby], [2, 'rr rh-2', { base: TSUJI, right: 'つじのみち' }], src);
+  }
+  assert.deepEqual(unitsOf(`｜${TSUJI}《つじ》`).map((u) => [u.cells, u.cssClass]), [[1, 'rr']]);
+  // A reading of four clusters (five code points) between rubies, where no overhang settles: two cells.
+  const reading = '｜一《いち》｜山《や\uFE00まみち》｜二《に》';
+  assert.deepEqual(unitsOf(reading).map((u) => u.cells), [1, 2, 1]);
+  assert.match(html(reading), /<rt><span><span>や\uFE00<\/span><span>ま<\/span><span>み<\/span><span>ち<\/span><\/span><\/rt>/);
+});
+
+test('禁則 classes a cluster by its first character', () => {
+  const bang = '\u203C\uFE0F'; // ‼ under the emoji selector is still a 区切り約物
+  assert.deepEqual(klines(`あい${bang}う`, 2), ['あ', `い${bang}`, 'う']);
+  assert.deepEqual(klines(`あい${bang}　う`, 3), [`あい${bang}`, 'う']); // and drops the dividing space after it
+  assert.deepEqual(klines('あいう、\uFE00え', 3), ['あいう⟪、\uFE00⟫', 'え']); // a 句読点 hangs with its selector
+  const dash = 'あ―\uFE0E―い';
+  assert.deepEqual(klines(dash, 2), ['あ', '―\uFE0E―', 'い']); // a 分離禁止 run binds, selector and all
 });
 
 // --------------------------------------------------------------- 外字注記 (#169)

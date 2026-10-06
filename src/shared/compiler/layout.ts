@@ -5,7 +5,7 @@
  * WYSIWYG and the page furniture (header, footer, line numbers, 原稿用紙 grid) has real
  * elements to hang off. Pure + vscode-free.
  *
- * Line breaking is a simple hard wrap at `charsPerLine` cells (full-width char = 1 cell,
+ * Line breaking is a simple hard wrap at `charsPerLine` cells (a character = 1 cell,
  * a ruby unit = its TRUE advance — the base char count, or the longest reading's extent in
  * whole cells when that is longer — and is atomic, a 縦中横 cell = ALWAYS 1 cell however many
  * chars it combines, emphasis adds no cells, comments are zero-width). 禁則処理 is selected
@@ -19,6 +19,7 @@
  */
 import type { Ast, HeadingLevel, Inline, Line, Mark, Marks, ValueLookup } from '../ast/nodes.ts';
 import type { DashMode, KinsokuMode } from '../config/types.ts';
+import { graphemes, headChar } from '../chars.ts';
 import { DASH_BY_MODE, DASH_CHARS, DASH_GLYPH } from '../dash.ts';
 import type { BuildChrome } from './chrome.ts';
 import { markClass } from './emphasis.ts';
@@ -33,13 +34,13 @@ export interface RubyText {
 }
 
 /**
- * One laid-out glyph group: a char (1 cell), a ruby unit (base char count, atomic), or a
- * 縦中横 cell (ALWAYS 1 cell however many half-width chars it combines, atomic).
+ * One laid-out glyph group: a character (1 cell, one grapheme cluster), a ruby unit (base char
+ * count, atomic), or a 縦中横 cell (ALWAYS 1 cell however many half-width chars it combines, atomic).
  */
 export interface Unit {
   cells: number;
   html: string;
-  /** The displayed text the 禁則 classes read; '' for zero-width units (comments). */
+  /** The displayed text the 禁則 classes read, a cluster classed by its first code point; '' for zero-width units (comments). */
   text: string;
   /**
    * Where the unit was written: its UTF-16 offset in its source line. A value's characters come
@@ -112,6 +113,9 @@ function commentUnit(inner: string, at: number): Unit {
  */
 const RUBY_OVERHANG_QUARTERS = 2;
 
+/** A reading unit that is a rotated half-width run: printable ASCII at its head. */
+const HALF_WIDTH_RUN = /^[\x20-\x7e]/;
+
 /**
  * Justification units for a ruby-lane run (a reading or a base): one per CJK glyph (U+3000
  * included — it paints as its own full-width blank), one per half-width run with its U+0020s
@@ -121,8 +125,8 @@ const RUBY_OVERHANG_QUARTERS = 2;
 function readingUnits(reading: string): string[] {
   const units: string[] = [];
   let word = '';
-  for (const ch of reading) {
-    if (/[\x20-\x7e]/.test(ch)) {
+  for (const ch of graphemes(reading)) {
+    if (HALF_WIDTH_RUN.test(ch)) {
       word += ch; // a rotated half-width run must not split — U+0020 stays inside it
     } else {
       if (word !== '') {
@@ -150,11 +154,11 @@ function rubyCells(r: RubyText, overhang = 0): number {
     for (const u of readingUnits(s ?? '')) {
       // Painted width, not source length: CSS collapses a U+0020 run to one space and trims a
       // unit's edges, so counting raw chars would stretch the base under phantom spaces.
-      quarters += /^[\x20-\x7e]/.test(u) ? u.replace(/ +/g, ' ').trim().length : 2;
+      quarters += HALF_WIDTH_RUN.test(u) ? u.replace(/ +/g, ' ').trim().length : 2;
     }
     return Math.ceil(Math.max(0, quarters - overhang) / 4);
   };
-  return Math.max(Array.from(r.base).length, advance(r.right), advance(r.left));
+  return Math.max(graphemes(r.base).length, advance(r.right), advance(r.left));
 }
 
 /** The lane markup for a run: its {@link readingUnits}, HTML-escaped, one `<span>` each. */
@@ -182,7 +186,7 @@ function rubyHtml(r: RubyText, cells: number): string {
  * pass so class attribute, used-sink and cell accounting never drift apart.
  */
 function rubyLane(r: RubyText, cells: number): string {
-  const stretch = cells > Array.from(r.base).length ? ` rh-${String(cells)}` : '';
+  const stretch = cells > graphemes(r.base).length ? ` rh-${String(cells)}` : '';
   const side = r.left === undefined ? 'rr' : r.right === undefined ? 'lr' : 'br';
   return side + stretch;
 }
@@ -238,7 +242,7 @@ function unitsOf(item: Inline, want: string | undefined, lineStart: number): Uni
       const translate = item.origin !== 'broken';
       const units: Unit[] = [];
       let offset = item.span.start;
-      for (const ch of item.text) {
+      for (const ch of graphemes(item.text)) {
         const written = item.origin === 'value' ? item.span.end : (item.starts?.[units.length] ?? offset);
         units.push(mk(1, translate && ch === want ? DASH_GLYPH : escapeHtml(ch), ch, item.marks, written - lineStart));
         offset += ch.length;
@@ -374,7 +378,7 @@ function closeFor(mode: KinsokuMode): Set<string> {
 }
 
 /**
- * EVERY char of a real (cells>0) unit is in `set` — so a 縦中横 約物 pair (text "!?") counts
+ * EVERY character of a real (cells>0) unit is in `set` — so a 縦中横 約物 pair (text "!?") counts
  * whole, while a digit tcy or a ruby base stays free. The cells guard keeps zero-width
  * comments (text '') out of the vacuously-true empty iteration.
  */
@@ -382,12 +386,17 @@ function everyCharIn(u: Unit | undefined, set: Set<string>): boolean {
   if (u === undefined || u.cells === 0 || u.text.length === 0) {
     return false;
   }
-  for (const c of u.text) {
-    if (!set.has(c)) {
+  for (const c of graphemes(u.text)) {
+    if (!set.has(headChar(c))) {
       return false;
     }
   }
   return true;
+}
+
+/** A unit of one character: a cell of {@link unitsOf}'s `chars` case, neither 縦中横 nor ルビ nor merged. */
+function isCharUnit(u: Unit | undefined): u is Unit {
+  return u?.cells === 1 && u.cssClass === undefined && u.ruby === undefined;
 }
 
 /**
@@ -418,7 +427,7 @@ function nextReal(units: readonly Unit[], from: number): number {
  */
 function canHang(units: readonly Unit[], start: number, i: number, close: Set<string>): boolean {
   const h = units[i];
-  if (h === undefined || h.cells === 0 || h.text.length !== 1 || !HANGABLE.has(h.text)) {
+  if (!isCharUnit(h) || !HANGABLE.has(headChar(h.text))) {
     return false;
   }
   const p = lastReal(units, start, i);
@@ -485,16 +494,17 @@ const INSEP_BANG = new Set('!?'); // half-width; exactly-2 runs only
  * `bang: false` leaves the half-width `!?` class out (the reflow emitter — the reader wraps there).
  */
 export function insepClass(u: Unit | undefined, { bang = true }: { bang?: boolean } = {}): Set<string> | undefined {
-  if (u?.cells !== 1 || u.text.length !== 1 || u.cssClass !== undefined || u.ruby !== undefined) {
+  if (!isCharUnit(u)) {
     return undefined;
   }
-  if (DASH_CHARS.has(u.text)) {
+  const head = headChar(u.text);
+  if (DASH_CHARS.has(head)) {
     return DASH_CHARS;
   }
-  if (INSEP_LEADER.has(u.text)) {
+  if (INSEP_LEADER.has(head)) {
     return INSEP_LEADER;
   }
-  return bang && INSEP_BANG.has(u.text) ? INSEP_BANG : undefined;
+  return bang && INSEP_BANG.has(head) ? INSEP_BANG : undefined;
 }
 
 /** One atomic unit from `units[start..end)`; channels are `head`'s (the run requires them equal). */

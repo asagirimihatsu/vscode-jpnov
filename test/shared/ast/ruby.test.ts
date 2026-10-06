@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { nodesOf, shape } from './_shape.ts';
-import { D, H } from '../_kana.ts';
+import { D, H, TSUJI } from '../_kana.ts';
 
 /** The base a reading written right after `textBefore` takes, and what precedes it. */
 function implicitBase(textBefore: string): { base: string; rest: string } {
@@ -95,9 +95,27 @@ test('NFD: a combining mark that composes with the kana before it joins that kan
   assert.deepEqual(implicitBase(`ウ${D}`), { base: `ウ${D}`, rest: '' });
 });
 
-test('NFD: a mark that composes nothing is no base character, exactly as before', () => {
-  const marks = [D, `あ${D}`, `ー${D}`, `カー${D}`, `ヶ${D}`, `々${D}`, `Ａ${D}`, `\uFF76${D}`, `か${D}${D}`, `が${D}`, `ゝ${D}`];
-  for (const s of marks) {
+test('NFD: a mark that composes nothing still belongs to the character before it, which keeps its class', () => {
+  for (const s of [`あ${D}`, `ー${D}`, `カー${D}`, `ヶ${D}`, `々${D}`, `Ａ${D}`, `か${D}${D}`, `が${D}`]) {
+    assert.deepEqual(implicitBase(s), { base: s, rest: '' }, JSON.stringify(s));
+  }
+  assert.deepEqual(implicitBase(`王都あ${D}`), { base: `あ${D}`, rest: '王都' });
+  // A mark with nothing before it, or after a character of no class, is no base.
+  for (const s of [D, `\uFF76${D}`, `ゝ${D}`]) {
+    assert.deepEqual(implicitBase(s), { base: '', rest: s }, JSON.stringify(s));
+  }
+});
+
+// --------------------------------------------------------- grapheme clusters (#158)
+
+test('a character keeps its variation selector in the run, classed by the character itself', () => {
+  assert.deepEqual(implicitBase(TSUJI), { base: TSUJI, rest: '' });
+  assert.deepEqual(implicitBase(`山田${TSUJI}`), { base: `山田${TSUJI}`, rest: '' });
+  assert.deepEqual(implicitBase(`は${TSUJI}`), { base: TSUJI, rest: 'は' });
+  assert.deepEqual(implicitBase(`${TSUJI}は`), { base: 'は', rest: TSUJI });
+  assert.deepEqual(shape(`${TSUJI}《つじ》`), [`base ${TSUJI}`, 'rubyReading 《つじ》']);
+  // A cluster whose first character has no class is no base: an emoji, a half-width kana.
+  for (const s of ['\u2764\uFE0F', '\uFF76\uFF9E']) {
     assert.deepEqual(implicitBase(s), { base: '', rest: s }, JSON.stringify(s));
   }
 });

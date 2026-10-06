@@ -6,8 +6,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { composeKana, composedChars, displayChars, displayText, dropUnshown, isCombiningKanaMark } from '../../src/shared/chars.ts';
-import { BEL } from './_kana.ts';
+import {
+  SINGLETONS,
+  composeKana,
+  composedChars,
+  displayChars,
+  displayText,
+  dropUnshown,
+  graphemes,
+  headChar,
+  isCombiningKanaMark,
+} from '../../src/shared/chars.ts';
+import { BEL, CLUSTERS, D } from './_kana.ts';
 import { isXmlChar } from './xml.ts';
 
 const MARKS = ['\u3099', '\u309A'] as const;
@@ -123,4 +133,41 @@ test('the kana composition itself drops nothing', () => {
     assert.equal(composeKana(s), s, JSON.stringify(s));
     assert.equal(composedChars(s).map((ch) => ch.text).join(''), s, JSON.stringify(s));
   }
+});
+
+// --------------------------------------------------------------- grapheme clusters (#158)
+
+test('graphemes: one cluster per written character, as the segmenter cuts them', () => {
+  const clusters = [...CLUSTERS, '\u{20BB7}'];
+  assert.deepEqual(graphemes(clusters.join('')), clusters);
+  assert.deepEqual(graphemes('か\u309B'), ['か', '\u309B']); // the spacing 濁点 is a character of its own
+  assert.deepEqual(graphemes(`か${D}`), [`か${D}`]); // composition is not this function's job
+  assert.deepEqual(graphemes(''), []);
+  assert.deepEqual(graphemes('　吾輩は猫である。'), Array.from('　吾輩は猫である。'));
+});
+
+test('graphemes: no code point of the fast path ever joins a cluster', () => {
+  const segmenter = new Intl.Segmenter('ja', { granularity: 'grapheme' });
+  for (let cp = 0; cp <= 0xffff; cp += 1) {
+    const ch = String.fromCodePoint(cp);
+    if (SINGLETONS.test(ch)) {
+      assert.equal(Array.from(segmenter.segment(`${ch}a${ch}${ch}`)).length, 4, `U+${cp.toString(16)}`);
+    }
+  }
+});
+
+test('displayChars: one entry per cluster, composed, with its range in the source', () => {
+  const src = `か${D}${CLUSTERS[0]}${BEL}い`;
+  assert.deepEqual(displayChars(src), [
+    { text: 'が', start: 0, end: 2 },
+    { text: CLUSTERS[0], start: 2, end: 5 },
+    { text: 'い', start: 6, end: 7 },
+  ]);
+  assert.deepEqual(displayChars(CLUSTERS.join('')).map((ch) => ch.text), [...CLUSTERS]);
+});
+
+test('headChar: the first code point, astral or not', () => {
+  assert.equal(headChar(CLUSTERS[0]), '辻');
+  assert.equal(headChar('\u{20BB7}\u{E0100}'), '\u{20BB7}');
+  assert.equal(headChar('a'), 'a');
 });

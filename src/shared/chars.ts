@@ -1,7 +1,7 @@
 /**
  * The character tables every layer shares: the CJK ideograph and kana blocks, the kana
- * composition, and the characters no output can carry. A leaf: it imports nothing, the AST layer
- * stands on it.
+ * composition, the grapheme clusters, and the characters no output can carry. A leaf: it imports
+ * nothing, the AST layer stands on it.
  */
 
 /** A CJK ideograph: Ext A + Unified (U+3400–9FFF), Compatibility (U+F900–FAFF), SIP (U+20000–2FFFF). */
@@ -76,6 +76,29 @@ export function composedChars(text: string): ComposedChar[] {
   return out;
 }
 
+const GRAPHEMES = new Intl.Segmenter('ja', { granularity: 'grapheme' });
+
+/**
+ * The blocks a manuscript is made of, less every code point that joins a cluster
+ * (Grapheme_Cluster_Break=Other, https://www.unicode.org/reports/tr29/): a text of these alone is one
+ * cluster per code point. The holes (U+302A-302F, U+3099-309A, U+FF9E-FF9F, U+200C-200D, the astral
+ * planes) are what the segmenter must still see.
+ */
+export const SINGLETONS = /^[\u0020-\u007E\u00A1-\u00AC\u00AE-\u00FF\u2010-\u2027\u2030-\u205E\u2460-\u2BFF\u3000-\u3029\u3030-\u3098\u309B-\u30FF\u3200-\u33FF\u3400-\u9FFF\uF900-\uFAFF\uFF01-\uFF5E\uFF61-\uFF9D]*$/;
+
+/**
+ * The grapheme clusters of `text` (UAX #29): what one square of the page grid holds. A kanji and
+ * its variation selector, an emoji sequence, a kana and a mark that composes nothing are one each.
+ */
+export function graphemes(text: string): string[] {
+  return SINGLETONS.test(text) ? Array.from(text) : Array.from(GRAPHEMES.segment(text), (s) => s.segment);
+}
+
+/** The first code point of `text` as a string: the character a cluster is classed by. */
+export function headChar(text: string): string {
+  return text.slice(0, (text.codePointAt(0) ?? 0) > 0xffff ? 2 : 1); // slice, not fromCodePoint: this sits under every unit of the wrap
+}
+
 /**
  * The characters no output can carry: what XML 1.0 leaves out of Char below U+10000, surrogates
  * aside (https://www.w3.org/TR/xml/#charsets). Tab, LF and CR are Char.
@@ -117,18 +140,17 @@ export function displayText(text: string): string {
 }
 
 /**
- * The characters of {@link displayText}, one per code point, each with its range in `text`: a
- * dropped character belongs to no range, unless it sits inside a composed kana or a surrogate pair.
+ * The characters of {@link displayText}, one per grapheme cluster with its kana composed, each with
+ * its range in `text`: a dropped character belongs to no range, unless it sits inside a cluster.
  */
 export function displayChars(text: string): ComposedChar[] {
   const { text: shown, origin } = dropWithOrigin(text);
-  const chars = composedChars(shown);
-  if (origin === null) {
-    return chars;
+  const chars: ComposedChar[] = [];
+  let at = 0;
+  for (const cluster of graphemes(shown)) {
+    const start = at;
+    at += cluster.length;
+    chars.push({ text: composeKana(cluster), start: origin?.[start] ?? start, end: (origin?.[at - 1] ?? at - 1) + 1 });
   }
-  return chars.map((ch) => ({
-    text: ch.text,
-    start: origin[ch.start] ?? ch.start,
-    end: (origin[ch.end - 1] ?? ch.end - 1) + 1,
-  }));
+  return chars;
 }

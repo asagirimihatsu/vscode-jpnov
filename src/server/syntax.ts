@@ -15,12 +15,12 @@ import type { TextDocument } from 'vscode-languageserver-textdocument';
 import type { Ast, Issue, Span } from '../shared/ast/nodes.ts';
 import { INDENT_MAX, fullWidthDigits } from '../shared/ast/notation.ts';
 import { bySource } from '../shared/ast/span.ts';
-import { displayText } from '../shared/chars.ts';
+import { displayText, graphemes } from '../shared/chars.ts';
 import type { LocalizableMessage } from '../shared/protocol.ts';
 
 import { diagnostic } from './diagnostics.ts';
 
-/** Combined cells squish visibly beyond this many code points (measured in headless Chrome). */
+/** Combined cells squish visibly beyond this many characters (measured in headless Chrome). */
 export const TCY_MAX = 3;
 
 interface Finding {
@@ -29,7 +29,7 @@ interface Finding {
 }
 
 function tooLong(text: string): boolean {
-  return Array.from(text).length > TCY_MAX;
+  return graphemes(text).length > TCY_MAX;
 }
 
 /** The message of a 字下げ above {@link INDENT_MAX}: it names the limit in the digits the count is written in. */
