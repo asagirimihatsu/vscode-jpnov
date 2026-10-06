@@ -27,7 +27,7 @@ const rows = pending === undefined ? chapters : [...chapters, pending];
       <div class="jp-shead"><span class="jp-sectoggle"><Icon name="chevron-right" class="jp-caret" /><span class="jp-stitle">{UI.covers}</span></span></div>
     </div>
     <div class="jp-section jp-toc" data-t="toc">
-      <div class="jp-shead"><span class="jp-stitle">{UI.chapters}</span><span class="jp-iconbtn" data-t="toc-add" title={UI.addChapters}><Icon name="checklist" /></span></div>
+      <div class="jp-shead"><span class="jp-stitle">{UI.chapters}</span></div>
       {rows.map((name, i) => (
         <div class:list={['jp-row', 'jp-entry', { 'jp-st-none': name === pending }]} data-t={`row-${String(i + 1)}`}>
           <Icon name="gripper" class="jp-grip" />
@@ -39,7 +39,7 @@ const rows = pending === undefined ? chapters : [...chapters, pending];
           </span>
         </div>
       ))}
-      <div class="jp-row jp-action"><Icon name="new-file" /><span>{UI.newChapter}</span></div>
+      <div class="jp-row jp-action" data-t="toc-add"><Icon name="new-file" /><span>{UI.addChapters}</span></div>
     </div>
   </div>
   <div class="jp-footer">
