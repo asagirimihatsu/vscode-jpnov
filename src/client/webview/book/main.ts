@@ -34,7 +34,7 @@ import { svgGlyph } from '../svg.ts';
 
 /** Every glyph the panel draws; `cbOff`/`cbOn` are the selection checkbox's two states. */
 type IconName =
-  | 'chevR' | 'chevL' | 'up' | 'down' | 'err' | 'pick' | 'newFile' | 'close' | 'edit' | 'cbOff' | 'cbOn';
+  | 'chevR' | 'chevL' | 'up' | 'down' | 'err' | 'add' | 'close' | 'edit' | 'cbOff' | 'cbOn';
 
 /** Codicon suffix per icon; the element gets `class="codicon codicon-<suffix>"`. */
 const CODICON: Record<IconName, string> = {
@@ -43,8 +43,7 @@ const CODICON: Record<IconName, string> = {
   up: 'chevron-up',
   down: 'chevron-down',
   err: 'error',
-  pick: 'checklist',
-  newFile: 'new-file',
+  add: 'add',
   close: 'close',
   edit: 'edit',
   cbOff: 'circle-large-outline',
@@ -65,9 +64,9 @@ function poster(m: BooksOutbound): () => void {
 const L = (window.__INIT as BooksInit).labels;
 
 /** Per-list strings: the two entry sections render identically, only the words differ. */
-const LIST_TEXT: Record<EntryList, { title: string; add: string; create: string; empty: string }> = {
-  chapters: { title: L.chapters, add: L.addChapters, create: L.newChapter, empty: L.noChapters },
-  covers: { title: L.covers, add: L.addCovers, create: L.newCover, empty: L.noCovers },
+const LIST_TEXT: Record<EntryList, { title: string; add: string; empty: string }> = {
+  chapters: { title: L.chapters, add: L.addChapters, empty: L.noChapters },
+  covers: { title: L.covers, add: L.addCovers, empty: L.noCovers },
 };
 
 /** The root element, guaranteed present (the shell always emits `<div id="app">`). Returning a
@@ -679,15 +678,13 @@ function listSection(d: DetailMessage, list: EntryList): HTMLElement {
         ...rows.map(([, row]) => row)),
       h('button', {
         class: 'row action',
-        'data-fk': list + ':new',
-        onClick: poster({ type: 'createEntry', uri: d.uri, list }),
-      }, icon('newFile'), text.create),
+        'data-fk': list + ':add',
+        onClick: poster({ type: 'addEntries', uri: d.uri, list }),
+      }, icon('add'), text.add),
     );
   }
   const section = h('div', { class: 'section', 'data-list': list },
-    h('div', { class: 'shead' },
-      h('h2', { class: 'stitle' }, title),
-      open && iconBtn('pick', text.add, poster({ type: 'addEntries', uri: d.uri, list }), { 'data-fk': list + ':add' })),
+    h('div', { class: 'shead' }, h('h2', { class: 'stitle' }, title)),
     ...body);
   sectionDnD(section, d, list, rows);
   return section;

@@ -1,8 +1,8 @@
 /**
  * Unit tests for the Books panel's management commands (manage.ts), driven through the
- * registered `jpbook.*` handlers against the mocked `vscode`. Covers the QuickPick add-
- * chapters flow end to end (candidate enumeration → pick → the applied `.jpbook` edit),
- * `createFile`'s chapter mode (prompt → write → append → open), and the Book Info edits.
+ * registered `jpbook.*` handlers against the mocked `vscode`. Covers the add-files picker end
+ * to end (candidate enumeration → ticks and typed names → the files written and the applied
+ * `.jpbook` edit) and the Book Info edits.
  *
  * Runs in CI via `npm run test:integration`; directly (see test/client/README.md):
  *   node --import ./test/register.mjs --test --experimental-test-module-mocks "test/client/bookManage.test.ts"
@@ -11,12 +11,12 @@ import { test, mock, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { FURNITURE_ALIGNS } from '../../src/shared/compiler/chrome.ts';
-import { buildVscode, createMockState, doc, FileType, resetMockState, Uri } from './_vscodeMock.ts';
+import { buildVscode, createMockState, doc, FakeQuickPick, FileType, resetMockState, Uri } from './_vscodeMock.ts';
 
 const state = createMockState();
 mock.module('vscode', { namedExports: buildVscode(state) });
 
-const { createFile, registerBookCommands } = await import('../../src/client/book/manage.ts');
+const { registerBookCommands } = await import('../../src/client/book/manage.ts');
 const { COVER_TEMPLATE } = await import('../../src/shared/book/create.ts');
 
 const ROOT = 'file:///ws';
@@ -39,8 +39,27 @@ async function runAddFiles(list: List = 'chapters'): Promise<void> {
   const handler = state.registeredCommands.get('jpbook.addFiles');
   assert.ok(handler, 'jpbook.addFiles must be registered');
   await handler(listNode(list));
-  assert.deepEqual(state.errorMessages, []);
 }
+
+/** The one picker the run opened. */
+function picker(): FakeQuickPick<{ label: string; description?: string }> {
+  const qp = state.quickPicks[0];
+  assert.ok(qp, 'expected one QuickPick');
+  assert.equal(state.quickPicks.length, 1);
+  return qp;
+}
+
+function opened(): string[] {
+  return state.executedCommands.filter((c) => c.command === 'vscode.open').map((c) => String(c.args[0]));
+}
+
+function assertNothingWritten(): void {
+  assert.deepEqual(state.writtenFiles, []);
+  assert.deepEqual(state.appliedEdits, []);
+  assert.deepEqual(opened(), []);
+}
+
+const CREATE_CHAPTER = 'Create a new chapter';
 
 beforeEach(() => {
   resetMockState(state);
@@ -49,98 +68,69 @@ beforeEach(() => {
 
 test('addFiles(chapters) offers unlisted .jpnov files sorted, split into label/description', async () => {
   seed('ichi.jpnov\n', ['zoku/ni.jpnov', 'ichi.jpnov', '第三章.jpnov']);
-  state.quickPickQueue.push([{ label: '第三章.jpnov', rel: '第三章.jpnov' }]);
+  state.quickPickQueue.push([{ toggle: '第三章.jpnov' }, 'accept']);
   await runAddFiles();
 
-  const call = state.quickPickCalls[0];
-  assert.ok(call, 'expected one QuickPick');
-  assert.deepEqual(call.items, [
-    { label: 'ni.jpnov', description: 'zoku', rel: 'zoku/ni.jpnov' },
-    { label: '第三章.jpnov', rel: '第三章.jpnov' },
+  const qp = picker();
+  assert.deepEqual(qp.items, [
+    { label: 'ni.jpnov', description: 'zoku', role: 'existing', rel: 'zoku/ni.jpnov' },
+    { label: '第三章.jpnov', role: 'existing', rel: '第三章.jpnov' },
   ]);
-  assert.deepEqual(call.options, {
-    canPickMany: true,
-    matchOnDescription: true,
-    placeHolder: 'Select chapter files to add',
-  });
+  assert.equal(qp.canSelectMany, true);
+  assert.equal(qp.matchOnDescription, true);
+  assert.equal(qp.ignoreFocusOut, true);
+  assert.equal(qp.placeholder, 'Pick chapter files to add, or type a name to create a new one');
 
+  assert.deepEqual(state.errorMessages, []);
   const edit = state.appliedEdits[0];
   assert.ok(edit, 'expected the appended chapter to be applied');
   assert.equal(edit.uri, BOOK);
   assert.match(edit.newText, /第三章\.jpnov/);
+  assert.deepEqual(state.writtenFiles, []);
+  assert.deepEqual(opened(), []);
 });
 
-test('addFiles with no .jpnov files informs and never opens a picker', async () => {
+test('addFiles with no .jpnov files still opens the picker for a typed name', async () => {
   seed('', []);
   await runAddFiles();
-
-  assert.deepEqual(state.quickPickCalls, []);
-  assert.deepEqual(state.infoMessages, ['Japanese Novel: no .jpnov files found in this workspace folder.']);
-  assert.deepEqual(state.appliedEdits, []);
+  assert.deepEqual(picker().items, []);
+  assert.deepEqual(state.infoMessages, []);
 });
 
-test('addFiles(chapters) with every candidate already listed informs and never opens a picker', async () => {
+test('addFiles with every file listed still opens the picker for a typed name', async () => {
   seed('a.jpnov\nzoku/b.jpnov\n', ['a.jpnov', 'zoku/b.jpnov']);
   await runAddFiles();
-
-  assert.deepEqual(state.quickPickCalls, []);
-  assert.deepEqual(state.infoMessages, ['Japanese Novel: no chapter files left to add.']);
-  assert.deepEqual(state.appliedEdits, []);
+  assert.deepEqual(picker().items, []);
+  assert.deepEqual(state.infoMessages, []);
+  assertNothingWritten();
 });
 
-test('addFiles dismissed picker applies nothing', async () => {
+test('a dismissed picker, or Enter with nothing ticked, applies nothing', async () => {
   seed('', ['a.jpnov']);
-  // Empty quickPickQueue -> showQuickPick resolves undefined (Esc).
+  // Empty quickPickQueue -> Esc.
+  await runAddFiles();
+  state.quickPickQueue.push(['accept']);
   await runAddFiles();
 
-  assert.equal(state.quickPickCalls.length, 1);
+  assert.equal(state.quickPicks.length, 2);
   assert.deepEqual(state.infoMessages, []);
-  assert.deepEqual(state.appliedEdits, []);
+  assertNothingWritten();
 });
 
-// --- createFile (list mode: invoked with a list node) --------------------------
+// --- typed names: creating files from the same picker ------------------------------
 
-async function runCreateEntry(list: List = 'chapters'): Promise<void> {
-  await createFile(undefined, listNode(list));
-}
+test('a typed name that is no file yet rides as a create row; ticking it parks it and clears the input', async () => {
+  seed('ichi.jpnov\n', ['ichi.jpnov']);
+  // Backslash separator and a missing suffix: both normalized while typing.
+  state.quickPickQueue.push([{ type: 'src\\my-chapter' }, { toggle: 'src/my-chapter.jpnov' }, 'accept']);
+  await runAddFiles();
 
-test('createFile with a list node parks the .jpnov suffix after the caret', async () => {
-  seed('', []);
-  // Empty inputBoxQueue -> showInputBox resolves undefined (Esc): nothing happens.
-  await runCreateEntry();
-
-  const options = state.inputBoxCalls[0]?.options;
-  assert.ok(options, 'expected one input box');
-  assert.equal(options.prompt, 'File name of the new chapter');
-  assert.equal(options.value, '.jpnov');
-  assert.deepEqual(options.valueSelection, [0, 0]);
-  assert.equal(options.ignoreFocusOut, true);
-  assert.deepEqual(state.writtenFiles, []);
-  assert.deepEqual(state.appliedEdits, []);
-});
-
-test('the chapter validator rejects empty, unusable, and taken paths', async () => {
-  seed('', []);
-  state.fsEntries.set(`${ROOT}/taken.jpnov`, FileType.File);
-  state.inputBoxQueue.push('fresh');
-  await runCreateEntry();
-
-  // The mock never invokes validateInput; probe the recorded validator directly.
-  const validate = state.inputBoxCalls[0]?.options?.validateInput;
-  assert.ok(validate, 'the chapter prompt must carry a validator');
-  assert.equal(await validate('.jpnov'), 'Enter a file name');
-  assert.equal(await validate('../ch.jpnov'), 'This file name cannot be used');
-  assert.equal(await validate('/abs.jpnov'), 'This file name cannot be used');
-  assert.equal(await validate('a*b.jpnov'), 'This file name cannot be used');
-  assert.equal(await validate('taken.jpnov'), 'taken.jpnov already exists');
-  assert.equal(await validate('another.jpnov'), null);
-});
-
-test('createFile with a chapters node writes the chapter, appends it root-relative, and opens it', async () => {
-  seed('ichi.jpnov\n', []);
-  // Backslash separator and a missing suffix: both normalized on accept.
-  state.inputBoxQueue.push('src\\my-chapter');
-  await runCreateEntry();
+  const qp = picker();
+  assert.equal(qp.value, '');
+  assert.deepEqual(qp.items, [
+    { label: 'src/my-chapter.jpnov', description: CREATE_CHAPTER, role: 'create', rel: 'src/my-chapter.jpnov', alwaysShow: true },
+  ]);
+  assert.deepEqual(qp.selectedItems, qp.items);
 
   assert.deepEqual(state.errorMessages, []);
   assert.deepEqual(state.createdDirs, [`${ROOT}/src`]);
@@ -149,78 +139,131 @@ test('createFile with a chapters node writes the chapter, appends it root-relati
   assert.ok(edit, 'expected the appended chapter to be applied');
   assert.equal(edit.uri, BOOK);
   assert.match(edit.newText, /src\/my-chapter\.jpnov/);
-  assert.deepEqual(
-    state.executedCommands.filter((c) => c.command === 'vscode.open').map((c) => String(c.args[0])),
-    [`${ROOT}/src/my-chapter.jpnov`],
-  );
+  assert.deepEqual(opened(), [`${ROOT}/src/my-chapter.jpnov`]);
 });
 
-test('createFile for an already-listed missing chapter skips the append and opens it', async () => {
+test('ticked files come first and the new names after them, in one edit; the last new file opens', async () => {
+  seed('ichi.jpnov\n', ['ichi.jpnov', 'b.jpnov', 'a.jpnov']);
+  state.quickPickQueue.push([
+    { toggle: 'b.jpnov' },
+    { type: 'new2' },
+    { toggle: 'new2.jpnov' },
+    { type: 'new1' },
+    { toggle: 'new1.jpnov' },
+    { toggle: 'a.jpnov' },
+    'accept',
+  ]);
+  await runAddFiles();
+
+  assert.deepEqual(state.errorMessages, []);
+  assert.deepEqual(picker().items.map((i) => i.label), ['new2.jpnov', 'new1.jpnov', 'a.jpnov', 'b.jpnov']);
+  assert.deepEqual(state.writtenFiles.map((f) => f.uri), [`${ROOT}/new2.jpnov`, `${ROOT}/new1.jpnov`]);
+  assert.deepEqual(state.appliedEdits.map((e) => e.newText), ['a.jpnov\nb.jpnov\nnew2.jpnov\nnew1.jpnov\n']);
+  assert.deepEqual(opened(), [`${ROOT}/new1.jpnov`]);
+});
+
+test('Enter takes the typed name along with the ticks, without a tick on its row', async () => {
+  seed('ichi.jpnov\n', ['ichi.jpnov', 'b.jpnov']);
+  state.quickPickQueue.push([{ toggle: 'b.jpnov' }, { type: '三章' }, 'accept']);
+  await runAddFiles();
+
+  assert.deepEqual(state.errorMessages, []);
+  assert.deepEqual(state.writtenFiles, [{ uri: `${ROOT}/三章.jpnov`, content: '' }]);
+  assert.deepEqual(state.appliedEdits.map((e) => e.newText), ['b.jpnov\n三章.jpnov\n']);
+  assert.deepEqual(opened(), [`${ROOT}/三章.jpnov`]);
+});
+
+test('an unticked parked name stays listed and is not created', async () => {
+  seed('', []);
+  state.quickPickQueue.push([{ type: 'x' }, { toggle: 'x.jpnov' }, { toggle: 'x.jpnov' }, 'accept']);
+  await runAddFiles();
+
+  const qp = picker();
+  assert.deepEqual(qp.items.map((i) => i.label), ['x.jpnov']);
+  assert.deepEqual(qp.selectedItems, []);
+  assertNothingWritten();
+});
+
+test('an unusable name is a row that says so, cannot stay ticked, and is not taken by Enter', async () => {
+  seed('', []);
+  state.quickPickQueue.push([{ type: '../x' }, { toggle: '../x' }, 'accept']);
+  await runAddFiles();
+
+  const qp = picker();
+  assert.deepEqual(qp.items, [
+    { label: '../x', description: 'This file name cannot be used', role: 'info', rel: '../x', alwaysShow: true },
+  ]);
+  assert.deepEqual(qp.selectedItems, []);
+  assertNothingWritten();
+});
+
+test('a typed name of a file on disk is no create row: listed = told so, unlisted = its candidate row', async () => {
+  seed('taken.jpnov\n', ['taken.jpnov', 'zoku/ni.jpnov']);
+  state.quickPickQueue.push([{ type: 'zoku\\ni' }, { type: 'taken' }, { toggle: 'taken.jpnov' }, 'accept']);
+  await runAddFiles();
+
+  const qp = picker();
+  assert.deepEqual(qp.items, [
+    { label: 'taken.jpnov', description: 'Already in this book', role: 'info', rel: 'taken.jpnov', alwaysShow: true },
+    { label: 'ni.jpnov', description: 'zoku', role: 'existing', rel: 'zoku/ni.jpnov' },
+  ]);
+  assert.deepEqual(qp.selectedItems, []);
+  assertNothingWritten();
+});
+
+test('re-creating a listed chapter whose file went missing writes it, appends nothing, and opens it', async () => {
   seed('src/lost.jpnov\n', []);
-  state.inputBoxQueue.push('src/lost.jpnov');
-  await runCreateEntry();
+  state.quickPickQueue.push([{ type: 'src/lost.jpnov' }, { toggle: 'src/lost.jpnov' }, 'accept']);
+  await runAddFiles();
 
   assert.deepEqual(state.errorMessages, []);
   assert.deepEqual(state.writtenFiles, [{ uri: `${ROOT}/src/lost.jpnov`, content: '' }]);
   assert.deepEqual(state.appliedEdits, []);
-  assert.equal(state.executedCommands.filter((c) => c.command === 'vscode.open').length, 1);
+  assert.deepEqual(opened(), [`${ROOT}/src/lost.jpnov`]);
 });
 
-test('createFile never overwrites an existing chapter file', async () => {
+test('a file that appeared on disk after the sweep is never overwritten', async () => {
   seed('', []);
   state.fsEntries.set(`${ROOT}/taken.jpnov`, FileType.File);
-  state.inputBoxQueue.push('taken');
-  await runCreateEntry();
+  state.quickPickQueue.push([{ type: 'taken' }, { toggle: 'taken.jpnov' }, 'accept']);
+  await runAddFiles();
 
   assert.deepEqual(state.errorMessages, ['Japanese Novel: taken.jpnov already exists. Nothing was created.']);
-  assert.deepEqual(state.writtenFiles, []);
-  assert.deepEqual(state.appliedEdits, []);
+  assertNothingWritten();
 });
 
 // --- the cover list ---------------------------------------------------------------
 
 test('addFiles(covers) offers files not yet in the cover list — chapters included — under the cover wording', async () => {
   seed('---\ncover:\n  - c.jpnov\n---\na.jpnov\n', ['a.jpnov', 'c.jpnov', 'd.jpnov']);
-  state.quickPickQueue.push([{ label: 'd.jpnov', rel: 'd.jpnov' }]);
+  state.quickPickQueue.push([{ toggle: 'd.jpnov' }, 'accept']);
   await runAddFiles('covers');
 
-  const call = state.quickPickCalls[0];
-  assert.ok(call, 'expected one QuickPick');
-  assert.deepEqual(call.items, [{ label: 'a.jpnov', rel: 'a.jpnov' }, { label: 'd.jpnov', rel: 'd.jpnov' }]);
-  assert.equal((call.options as { placeHolder: string }).placeHolder, 'Select cover page files to add');
+  const qp = picker();
+  assert.deepEqual(qp.items, [
+    { label: 'a.jpnov', role: 'existing', rel: 'a.jpnov' },
+    { label: 'd.jpnov', role: 'existing', rel: 'd.jpnov' },
+  ]);
+  assert.equal(qp.placeholder, 'Pick cover page files to add, or type a name to create a new one');
   assert.deepEqual(state.appliedEdits, [{ uri: BOOK, range: [2, 11, 2, 11], newText: '\n  - d.jpnov' }]);
 });
 
-test('addFiles(covers) with every candidate listed informs with the cover wording', async () => {
-  seed('---\ncover:\n  - a.jpnov\n---\n', ['a.jpnov']);
+test('a new cover page seeds the sample, opens a cover list, and opens in the editor', async () => {
+  seed('---\ntitle: t\n---\na.jpnov\n', []);
+  state.quickPickQueue.push([{ type: '表紙' }, { toggle: '表紙.jpnov' }, 'accept']);
   await runAddFiles('covers');
 
-  assert.deepEqual(state.quickPickCalls, []);
-  assert.deepEqual(state.infoMessages, ['Japanese Novel: no cover page files left to add.']);
-});
-
-test('createFile with a covers node prompts for a cover page, seeds the sample, and opens a cover list', async () => {
-  seed('---\ntitle: t\n---\na.jpnov\n', []);
-  state.inputBoxQueue.push('表紙');
-  await runCreateEntry('covers');
-
   assert.deepEqual(state.errorMessages, []);
-  const options = state.inputBoxCalls[0]?.options;
-  assert.ok(options, 'expected one input box');
-  assert.equal(options.prompt, 'File name of the new cover page');
-  assert.equal(options.value, '.jpnov');
+  assert.equal(picker().items[0]?.description, 'Create a new cover page');
   assert.deepEqual(state.writtenFiles, [{ uri: `${ROOT}/表紙.jpnov`, content: COVER_TEMPLATE }]);
   assert.deepEqual(state.appliedEdits, [{ uri: BOOK, range: [2, 0, 2, 0], newText: 'cover:\n  - 表紙.jpnov\n' }]);
-  assert.deepEqual(
-    state.executedCommands.filter((c) => c.command === 'vscode.open').map((c) => String(c.args[0])),
-    [`${ROOT}/表紙.jpnov`],
-  );
+  assert.deepEqual(opened(), [`${ROOT}/表紙.jpnov`]);
 });
 
-test('createFile for a cover in a book without front matter creates the block at the top', async () => {
+test('a new cover in a book without front matter creates the block at the top', async () => {
   seed('a.jpnov\n', []);
-  state.inputBoxQueue.push('cover');
-  await runCreateEntry('covers');
+  state.quickPickQueue.push([{ type: 'cover' }, { toggle: 'cover.jpnov' }, 'accept']);
+  await runAddFiles('covers');
 
   assert.deepEqual(state.appliedEdits, [{ uri: BOOK, range: [0, 0, 0, 0], newText: '---\ncover:\n  - cover.jpnov\n---\n' }]);
 });
@@ -326,17 +369,17 @@ test('editMeta edits the lines of ONE key and saves the book', async () => {
     ],
     [
       'the footer pick "No footer" is written as a value',
-      '---\ntitle: 作品名\n---\n', 'footer', { picked: { label: 'No footer' } },
+      '---\ntitle: 作品名\n---\n', 'footer', { picked: [{ pick: 'No footer' }, 'accept'] },
       [{ range: [1, 10, 1, 10], newText: '\nfooter:' }],
     ],
     [
       'the footer pick "Default" deletes the line',
-      '---\ntitle: 作品名\nfooter:\n---\n', 'footer', { picked: { label: 'Default' } },
+      '---\ntitle: 作品名\nfooter:\n---\n', 'footer', { picked: [{ pick: 'Default' }, 'accept'] },
       [{ range: [2, 0, 3, 0], newText: '' }],
     ],
     [
       'a typed footer is the first item, taken as typed',
-      '---\ntitle: 作品名\nfooter:\n---\n', 'footer', { picked: { type: ' ページ番号 ' } },
+      '---\ntitle: 作品名\nfooter:\n---\n', 'footer', { picked: [{ type: ' ページ番号 ' }, 'accept'] },
       [{ range: [2, 0, 2, 7], newText: 'footer: ページ番号' }],
     ],
     [
@@ -390,7 +433,7 @@ test('editMeta with nothing to change applies nothing and saves nothing', async 
   const cases: readonly (readonly [name: string, key: string, given: Answer])[] = [
     ['a cleared key without a line', 'title', { typed: '' }],
     ['a dismissed input box', 'title', { typed: undefined }],
-    ['the footer pick "Default" on an unwritten footer', 'footer', { picked: { label: 'Default' } }],
+    ['the footer pick "Default" on an unwritten footer', 'footer', { picked: [{ pick: 'Default' }, 'accept'] }],
     ['a dismissed footer pick', 'footer', { picked: undefined }],
   ];
   for (const [name, key, given] of cases) {

@@ -86,8 +86,7 @@ h1, h2 { margin: 0; font-size: inherit; font-weight: inherit; }
 .iconbtn:disabled:hover { background: none; }
 
 .section { padding: 0 0 2px; }
-/* One header height with or without an action button (the cover header gains its button only
-   when expanded): the .iconbtn's 14px glyph + 3px padding, plus the header's own padding. */
+/* Section headers share the rows' rhythm: the height of an icon button (14px glyph, 3px padding) plus the header's padding. */
 .shead { display: flex; align-items: center; padding: 4px 8px 2px; min-height: calc(14px + 6px + 6px); }
 .stitle {
   flex: 1 1 auto; font-size: 11px; text-transform: uppercase; letter-spacing: .04em;

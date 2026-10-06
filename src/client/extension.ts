@@ -311,7 +311,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // messages handled in view.ts, not commands.
   context.subscriptions.push(
     serverCommand('jpbook.refresh', () => booksView?.refresh(true)),
-    serverCommand('jpbook.createFile', (arg?: unknown) => createFile(booksView, arg)),
+    serverCommand('jpbook.createFile', () => createFile(booksView)),
     serverCommand('jpnov.preview', () => preview?.open(false)),
     serverCommand('jpnov.previewToSide', () => preview?.open(true)),
     // The preview's layout widget verbs (plain: an override exists only once the preview has

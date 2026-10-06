@@ -18,6 +18,7 @@ import {
   createMockState,
   doc,
   resetMockState,
+  tick,
   Uri,
   FileType,
 } from './_vscodeMock.ts';
@@ -35,11 +36,6 @@ const EXT = Uri.parse('file:///ext');
 beforeEach(() => {
   resetMockState(state);
 });
-
-/** Drain microtasks so fire-and-forget posts settle. */
-function tick(): Promise<void> {
-  return new Promise((r) => setTimeout(r, 0));
-}
 
 /** A BookEntry with the fields the provider reads. */
 function entry(rootUri: string, outRel: string, title?: string) {
@@ -623,14 +619,12 @@ test('entry actions dispatch the matching jpbook command naming the row, and re-
   view.webview.receive({ type: 'moveEntry', ...row, dir: 1 });
   view.webview.receive({ type: 'removeEntry', ...row });
   view.webview.receive({ type: 'addEntries', uri: bookUri, list: 'covers' });
-  view.webview.receive({ type: 'createEntry', uri: bookUri, list: 'chapters' });
   await tick();
   const cmds = state.executedCommands.map((c) => c.command);
   assert.ok(cmds.includes('jpbook.moveEntryUp'));
   assert.ok(cmds.includes('jpbook.moveEntryDown'));
   assert.ok(cmds.includes('jpbook.removeEntry'));
   assert.ok(cmds.includes('jpbook.addFiles'));
-  assert.ok(cmds.includes('jpbook.createFile'));
   const rm = state.executedCommands.find((c) => c.command === 'jpbook.removeEntry');
   assert.ok(rm);
   const node = rm.args[0] as {
@@ -644,15 +638,12 @@ test('entry actions dispatch the matching jpbook command naming the row, and re-
   assert.equal(node.entry.uri, bookUri);
   // The three row verbs — not the list verbs — were each answered with a detail re-push.
   assert.equal(detailCount(view), before + 3);
-  const create = state.executedCommands.find((c) => c.command === 'jpbook.createFile');
-  assert.ok(create);
-  const listArg = create.args[0] as { kind: string; list: string; entry: { uri: string } };
-  assert.equal(listArg.kind, 'list');
-  assert.equal(listArg.list, 'chapters');
-  assert.equal(listArg.entry.uri, bookUri);
   const add = state.executedCommands.find((c) => c.command === 'jpbook.addFiles');
   assert.ok(add);
-  assert.equal((add.args[0] as { list: string }).list, 'covers');
+  const listArg = add.args[0] as { kind: string; list: string; entry: { uri: string } };
+  assert.equal(listArg.kind, 'list');
+  assert.equal(listArg.list, 'covers');
+  assert.equal(listArg.entry.uri, bookUri);
 });
 
 test('an unknown list or a half-named row is ignored (no dispatch)', async () => {

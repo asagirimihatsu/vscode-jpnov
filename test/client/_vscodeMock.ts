@@ -265,9 +265,11 @@ export interface MockState {
   onDidChangeConfig: EventEmitter<FakeConfigurationChange>;
   /** `workspace.onDidChangeWorkspaceFolders`: a test edits `workspaceFolders`, then fires this. */
   onDidChangeFolders: EventEmitter<FakeWorkspaceFoldersChange>;
-  /** Programmed `showQuickPick` responses (FIFO; undefined = Esc/cancel). */
+  /** Programmed `showQuickPick` responses (FIFO; undefined = Esc) and `createQuickPick` step scripts (see `FakeQuickPick`). */
   quickPickQueue: unknown[];
   quickPickCalls: { items: unknown; options: unknown }[];
+  /** Every `createQuickPick()` instance, in creation order, for reading its final rows. */
+  quickPicks: FakeQuickPick<{ label: string; description?: string }>[];
   inputBoxQueue: (string | undefined)[];
   inputBoxCalls: { options: RecordedInputBox | undefined }[];
   /** Folders the init command may scaffold into; undefined = no folder open. */
@@ -340,6 +342,7 @@ export function createMockState(): MockState {
     onDidChangeFolders: new EventEmitter<FakeWorkspaceFoldersChange>(),
     quickPickQueue: [],
     quickPickCalls: [],
+    quickPicks: [],
     inputBoxQueue: [],
     inputBoxCalls: [],
     workspaceFolders: undefined,
@@ -393,6 +396,7 @@ export function resetMockState(s: MockState): void {
   s.onDidChangeFolders.dispose();
   s.quickPickQueue.length = 0;
   s.quickPickCalls.length = 0;
+  s.quickPicks.length = 0;
   s.inputBoxQueue.length = 0;
   s.inputBoxCalls.length = 0;
   s.workspaceFolders = undefined;
@@ -472,8 +476,10 @@ export function buildVscode(state: MockState): Record<string, unknown> {
       state.quickPickCalls.push({ items, options });
       return Promise.resolve(state.quickPickQueue.shift());
     },
-    createQuickPick(): FakeQuickPick<{ label: string }> {
-      return new FakeQuickPick(state);
+    createQuickPick(): FakeQuickPick<{ label: string; description?: string }> {
+      const qp = new FakeQuickPick<{ label: string; description?: string }>(state);
+      state.quickPicks.push(qp);
+      return qp;
     },
     showInputBox(options?: RecordedInputBox): Promise<string | undefined> {
       state.inputBoxCalls.push({ options });
@@ -721,22 +727,35 @@ export function buildVscode(state: MockState): Record<string, unknown> {
   };
 }
 
+/** One scripted action on a `createQuickPick()` fake. */
+type QuickPickStep = { type: string } | { toggle: string } | { pick: string } | 'accept';
+
 /**
- * A `window.createQuickPick()` fake. `show()` takes the next `quickPickQueue` entry: `{ type }` types
- * that text first (the value listeners run), `{ label }` accepts the item so labelled, an object with
- * neither accepts the first item, undefined = Esc.
+ * A `window.createQuickPick()` fake. `show()` takes the next `quickPickQueue` entry, an array of
+ * steps run in order: `{ type }` types that text (the value listeners run), `{ toggle }` flips the
+ * tick of the item so labelled and `{ pick }` makes it the selection (the selection listeners
+ * run), `'accept'` presses Enter — in single-select mode on the first item when none is picked.
+ * A script without `'accept'`, or no entry at all, ends in Esc.
+ *
+ * Like VS Code, setting `items` reports an empty selection, setting `selectedItems` reports
+ * that selection, and setting `value` reports the new value — each on a later turn.
  */
 export class FakeQuickPick<T extends { label: string }> {
-  value = '';
   title: string | undefined;
   placeholder: string | undefined;
-  items: readonly T[] = [];
+  canSelectMany = false;
+  matchOnDescription = false;
+  ignoreFocusOut = false;
   activeItems: readonly T[] = [];
-  selectedItems: readonly T[] = [];
+  private _value = '';
+  private _items: readonly T[] = [];
+  private _selectedItems: readonly T[] = [];
   private readonly valueChanged = new EventEmitter<string>();
+  private readonly selectionChanged = new EventEmitter<readonly T[]>();
   private readonly accepted = new EventEmitter<void>();
   private readonly hidden = new EventEmitter<void>();
   readonly onDidChangeValue = this.valueChanged.event;
+  readonly onDidChangeSelection = this.selectionChanged.event;
   readonly onDidAccept = this.accepted.event;
   readonly onDidHide = this.hidden.event;
   private readonly state: MockState;
@@ -745,21 +764,81 @@ export class FakeQuickPick<T extends { label: string }> {
     this.state = state;
   }
 
-  show(): void {
-    const answer = this.state.quickPickQueue.shift() as { type?: string; label?: string } | undefined;
+  get value(): string {
+    return this._value;
+  }
+
+  set value(text: string) {
+    if (this._value !== text) {
+      this._value = text;
+      queueMicrotask(() => {
+        this.valueChanged.fire(text);
+      });
+    }
+  }
+
+  get items(): readonly T[] {
+    return this._items;
+  }
+
+  set items(items: readonly T[]) {
+    this._items = items;
+    if (this._selectedItems.length > 0) {
+      this._selectedItems = [];
+      queueMicrotask(() => {
+        this.selectionChanged.fire([]);
+      });
+    }
+  }
+
+  get selectedItems(): readonly T[] {
+    return this._selectedItems;
+  }
+
+  set selectedItems(items: readonly T[]) {
+    this._selectedItems = items.filter((i) => this._items.includes(i));
+    const echo = this._selectedItems;
     queueMicrotask(() => {
-      if (answer === undefined) {
-        this.hide();
+      this.selectionChanged.fire(echo);
+    });
+  }
+
+  show(): void {
+    const steps = (this.state.quickPickQueue.shift() ?? []) as readonly QuickPickStep[];
+    void this.run(steps);
+  }
+
+  private async run(steps: readonly QuickPickStep[]): Promise<void> {
+    for (const step of steps) {
+      await tick();
+      if (step === 'accept') {
+        if (!this.canSelectMany && this._selectedItems.length === 0 && this._items[0] !== undefined) {
+          this._selectedItems = [this._items[0]];
+        }
+        this.accepted.fire(undefined);
         return;
       }
-      if (answer.type !== undefined) {
-        this.value = answer.type;
-        this.valueChanged.fire(answer.type);
+      if ('type' in step) {
+        this._value = step.type;
+        this.valueChanged.fire(step.type);
+        continue;
       }
-      const pick = answer.label === undefined ? this.items[0] : this.items.find((i) => i.label === answer.label);
-      this.selectedItems = pick === undefined ? [] : [pick];
-      this.accepted.fire(undefined);
-    });
+      const label = 'pick' in step ? step.pick : step.toggle;
+      const item = this._items.find((i) => i.label === label);
+      if (item === undefined) {
+        throw new Error(`FakeQuickPick: no item labelled ${label}`);
+      }
+      if ('pick' in step) {
+        this._selectedItems = [item];
+      } else {
+        this._selectedItems = this._selectedItems.includes(item)
+          ? this._selectedItems.filter((i) => i !== item)
+          : this._items.filter((i) => i === item || this._selectedItems.includes(i));
+      }
+      this.selectionChanged.fire(this._selectedItems);
+    }
+    await tick();
+    this.hide();
   }
 
   hide(): void {
@@ -768,9 +847,15 @@ export class FakeQuickPick<T extends { label: string }> {
 
   dispose(): void {
     this.valueChanged.dispose();
+    this.selectionChanged.dispose();
     this.accepted.dispose();
     this.hidden.dispose();
   }
+}
+
+/** Lets fire-and-forget posts, renders and the quick pick fake's echoes settle. */
+export function tick(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 export function doc(uri: string, languageId: string, text = '', encoding = 'utf8'): FakeTextDocument {

@@ -205,7 +205,7 @@ const host = {
         break;
       }
       default:
-        break; // build / openFile / addEntries / createEntry / editMeta / …: recorded only
+        break; // build / openFile / addEntries / editMeta / …: recorded only
     }
   },
 };

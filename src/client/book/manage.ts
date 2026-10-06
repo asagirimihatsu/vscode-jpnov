@@ -11,7 +11,7 @@ import { posix } from 'node:path';
 
 import * as vscode from 'vscode';
 
-import { COVER_TEMPLATE, normalizeFileInput } from '#/shared/book/create.ts';
+import { COVER_TEMPLATE, normalizeFileInput, type FileInputError } from '#/shared/book/create.ts';
 import {
   appendEntries,
   entryLines,
@@ -149,21 +149,17 @@ async function fileExists(uri: vscode.Uri): Promise<boolean> {
   }
 }
 
-/** The list-specific wording of the add / create flows; everything else is shared. */
-function listText(list: EntryList): { placeHolder: string; noneLeft: string; alreadyIn: string; prompt: string } {
+/** The list-specific wording of the add-files picker; everything else is shared. */
+function listText(list: EntryList): { placeholder: string; create: string } {
   if (list === 'chapters') {
     return {
-      placeHolder: vscode.l10n.t('Select chapter files to add'),
-      noneLeft: vscode.l10n.t('Japanese Novel: no chapter files left to add.'),
-      alreadyIn: vscode.l10n.t('Japanese Novel: those chapters are already in this book.'),
-      prompt: vscode.l10n.t('File name of the new chapter'),
+      placeholder: vscode.l10n.t('Pick chapter files to add, or type a name to create a new one'),
+      create: vscode.l10n.t('Create a new chapter'),
     };
   }
   return {
-    placeHolder: vscode.l10n.t('Select cover page files to add'),
-    noneLeft: vscode.l10n.t('Japanese Novel: no cover page files left to add.'),
-    alreadyIn: vscode.l10n.t('Japanese Novel: those cover pages are already in this book.'),
-    prompt: vscode.l10n.t('File name of the new cover page'),
+    placeholder: vscode.l10n.t('Pick cover page files to add, or type a name to create a new one'),
+    create: vscode.l10n.t('Create a new cover page'),
   };
 }
 
@@ -174,62 +170,174 @@ async function findJpnovFiles(rootUri: vscode.Uri): Promise<string[]> {
   return found.map((uri) => posix.relative(rootPath, normalizeFsPath(uri.fsPath))).sort();
 }
 
-/**
- * The multi-select file picker (add-files). Preserves the QuickPick distinction:
- * Esc = undefined, OK with none ticked = [].
- */
-async function pickFiles(rels: readonly string[], placeHolder: string): Promise<string[] | undefined> {
-  type FileItem = vscode.QuickPickItem & { rel: string };
-  const items = rels.map((rel): FileItem => {
-    const { name, dir } = splitRelPath(rel);
-    return dir === '' ? { label: name, rel } : { label: name, description: dir, rel };
-  });
-  const picked = await vscode.window.showQuickPick(items, {
-    canPickMany: true,
-    matchOnDescription: true,
-    placeHolder,
-  });
-  return picked?.map((p) => p.rel);
+/** What the picker returns: ticked files on disk, then names to create, both root-relative. */
+interface PickedFiles {
+  readonly existing: readonly string[];
+  readonly created: readonly string[];
 }
 
+/**
+ * The picker's rows: a file on disk not yet listed (`existing`), a typed name that is no file yet
+ * (`create`; the row is parked in the list once ticked), and a typed name that cannot be created
+ * (`info`, never stays ticked).
+ */
+type FileItem = vscode.QuickPickItem & {
+  readonly role: 'existing' | 'create' | 'info';
+  readonly rel: string;
+};
+
+/**
+ * Shows `qp` and resolves with `answerOnAccept()` on Enter, undefined on Esc; the picker is
+ * disposed either way.
+ */
+function runQuickPick<T extends vscode.QuickPickItem, R>(qp: vscode.QuickPick<T>, answerOnAccept: () => R): Promise<R | undefined> {
+  return new Promise((resolve) => {
+    let answer: R | undefined;
+    qp.onDidAccept(() => {
+      answer = answerOnAccept();
+      qp.hide();
+    });
+    qp.onDidHide(() => {
+      qp.dispose();
+      resolve(answer);
+    });
+    qp.show();
+  });
+}
+
+/** The validator's word for a name `normalizeFileInput` refused. */
+function fileNameError(error: FileInputError): string {
+  return error === 'empty' ? vscode.l10n.t('Enter a file name') : vscode.l10n.t('This file name cannot be used');
+}
+
+/**
+ * One multi-select picker for adding files: the `.jpnov` files on disk not yet in the list are
+ * ticked, and a typed name that is no file yet rides as the first row. Enter takes the ticked
+ * rows and that typed name; ticking the typed row instead parks it and clears the input for the
+ * next name. Esc = undefined, Enter with nothing = empty lists.
+ */
+function pickFiles(
+  onDisk: readonly string[],
+  listed: ReadonlySet<string>,
+  wording: { placeholder: string; create: string },
+): Promise<PickedFiles | undefined> {
+  const candidates = onDisk.filter((rel) => !listed.has(rel)).map((rel): FileItem => {
+    const { name, dir } = splitRelPath(rel);
+    return dir === '' ? { label: name, role: 'existing', rel } : { label: name, description: dir, role: 'existing', rel };
+  });
+  const exists = new Set(onDisk);
+  /** Typed rows ticked so far, in that order; they stay listed (ticked or not) until Enter. */
+  const pending: FileItem[] = [];
+  /** The row for what is typed now, null when the input names nothing to add. */
+  let typed: FileItem | null = null;
+
+  const qp = vscode.window.createQuickPick<FileItem>();
+  qp.canSelectMany = true;
+  qp.matchOnDescription = true;
+  qp.ignoreFocusOut = true;
+  qp.placeholder = wording.placeholder;
+
+  const typedRow = (): FileItem | null => {
+    const raw = qp.value.trim();
+    const parsed = normalizeFileInput(raw, '.jpnov');
+    const row = (label: string, role: FileItem['role'], rel: string, description: string): FileItem =>
+      ({ label, description, role, rel, alwaysShow: true });
+    if (!parsed.ok) {
+      return parsed.error === 'empty' ? null : row(raw, 'info', raw, fileNameError(parsed.error));
+    }
+    if (listed.has(parsed.rel) && exists.has(parsed.rel)) {
+      return row(parsed.rel, 'info', parsed.rel, vscode.l10n.t('Already in this book'));
+    }
+    // On disk and unlisted: its candidate row shows through the filter. Parked: listed already.
+    return exists.has(parsed.rel) || pending.some((p) => p.rel === parsed.rel)
+      ? null
+      : row(parsed.rel, 'create', parsed.rel, wording.create);
+  };
+  // Replacing `items` drops every tick, so the rows that stay keep theirs. Nothing is replaced
+  // while the typed row is the same, which also absorbs VS Code's echo of a cleared input.
+  const refresh = (): void => {
+    const next = typedRow();
+    if (next?.role === typed?.role && next?.rel === typed?.rel) {
+      return;
+    }
+    typed = next;
+    const rows = [...(typed === null ? [] : [typed]), ...pending, ...candidates];
+    const ticked = qp.selectedItems;
+    qp.items = rows;
+    qp.selectedItems = rows.filter((r) => ticked.includes(r));
+  };
+  qp.items = candidates;
+  qp.onDidChangeValue(refresh);
+  qp.onDidChangeSelection((selected) => {
+    if (typed !== null && selected.includes(typed)) {
+      pending.push(typed);
+      qp.value = '';
+      refresh();
+      return;
+    }
+    const allowed = selected.filter((i) => i.role !== 'info');
+    if (allowed.length !== selected.length) {
+      qp.selectedItems = allowed;
+    }
+  });
+
+  return runQuickPick(qp, () => {
+    const ticked = qp.selectedItems;
+    return {
+      existing: candidates.filter((c) => ticked.includes(c)).map((c) => c.rel),
+      created: [
+        ...pending.filter((p) => ticked.includes(p)).map((p) => p.rel),
+        ...(typed?.role === 'create' ? [typed.rel] : []),
+      ],
+    };
+  });
+}
+
+/**
+ * `jpbook.addFiles` — the list's one way in: tick files already on disk, type a name to create,
+ * or both. The ticked files are appended first and the new ones after them, as one edit; the
+ * last new file opens in the editor.
+ */
 async function addFiles(arg: unknown): Promise<void> {
   const node = nodeOf(arg);
   if (node?.kind !== 'list') {
     return;
   }
-  const wording = listText(node.list);
   // Entries are root-relative, so candidates come from THIS book's workspace folder only.
-  const candidates = await findJpnovFiles(vscode.Uri.parse(node.entry.rootUri));
-  if (candidates.length === 0) {
-    void vscode.window.showInformationMessage(vscode.l10n.t('Japanese Novel: no .jpnov files found in this workspace folder.'));
-    return;
-  }
-
+  const onDisk = await findJpnovFiles(vscode.Uri.parse(node.entry.rootUri));
   // The lists dedupe independently: a file that is already a chapter may still become a cover.
   const listed = listedEntries(parseJpbook((await bookText(node.entry)).text).lines, node.list);
-  const fresh = candidates.filter((rel) => !listed.has(rel));
-  if (fresh.length === 0) {
-    void vscode.window.showInformationMessage(wording.noneLeft);
+  const picked = await pickFiles(onDisk, listed, listText(node.list));
+  if (picked === undefined) {
     return;
   }
 
-  const picked = await pickFiles(fresh, wording.placeHolder);
-  if (picked === undefined || picked.length === 0) {
+  const rels = [...picked.existing];
+  let last: vscode.Uri | undefined;
+  for (const rel of picked.created) {
+    const target = await writeNewFile(node.entry.rootUri, rel, node.list === 'covers' ? COVER_TEMPLATE : '');
+    if (target !== null) {
+      rels.push(rel);
+      last = target;
+    }
+  }
+  if (rels.length === 0) {
     return;
   }
-
   // Re-read AFTER the pick: the book may have changed while the picker was open, and the
-  // edit must anchor to the live text (appendEntries re-dedupes against it too).
+  // edit must anchor to the live text. appendEntries re-dedupes against it, so re-creating
+  // a listed file whose file went missing appends nothing.
   const { uri, text } = await bookText(node.entry);
-  const edit = appendEntries(text, node.list, picked);
-  if (edit === null) {
-    void vscode.window.showInformationMessage(wording.alreadyIn);
-    return;
+  const edit = appendEntries(text, node.list, rels);
+  if (edit !== null) {
+    await applyBookEdits(uri, [edit]);
   }
-  await applyBookEdits(uri, [edit]);
+  if (last !== undefined) {
+    await vscode.commands.executeCommand('vscode.open', last);
+  }
 }
 
-/** The book-mode target folder: the single workspace folder, or a pick between several. */
+/** The book's target folder: the single workspace folder, or a pick between several. */
 async function pickFolder(): Promise<vscode.WorkspaceFolder | undefined> {
   const folders = vscode.workspace.workspaceFolders ?? [];
   if (folders.length === 1) {
@@ -242,22 +350,21 @@ async function pickFolder(): Promise<vscode.WorkspaceFolder | undefined> {
 }
 
 /**
- * The parked-suffix input box. Caret at 0, `suffix` after it: typing (IME composition
- * included) inserts before the suffix, so the value is never rewritten mid-composition.
- * Returns the normalized root-relative path; undefined = dismissed or unusable.
+ * The parked-suffix input box for a new book. Caret at 0, `.jpbook` after it: typing (IME
+ * composition included) inserts before the suffix, so the value is never rewritten
+ * mid-composition. Returns the normalized root-relative path; undefined = dismissed or unusable.
  */
-async function promptNewFile(rootUri: string, suffix: string, prompt: string): Promise<string | undefined> {
+async function promptNewBook(rootUri: string): Promise<string | undefined> {
+  const suffix = '.jpbook';
   const raw = await vscode.window.showInputBox({
-    prompt,
+    prompt: vscode.l10n.t('File name of the new book'),
     value: suffix,
     valueSelection: [0, 0],
     ignoreFocusOut: true,
     validateInput: async (value) => {
       const parsed = normalizeFileInput(value, suffix);
       if (!parsed.ok) {
-        return parsed.error === 'empty'
-          ? vscode.l10n.t('Enter a file name')
-          : vscode.l10n.t('This file name cannot be used');
+        return fileNameError(parsed.error);
       }
       return (await fileExists(chapterUri(rootUri, parsed.rel)))
         ? vscode.l10n.t('{0} already exists', parsed.rel)
@@ -296,27 +403,12 @@ async function writeNewFile(rootUri: string, rel: string, content = ''): Promise
   return target;
 }
 
-/** List mode: create the typed `.jpnov` under the book's root (a cover starts from the README sample), list it, open it. */
-async function createEntry(entry: BookEntry, list: EntryList): Promise<void> {
-  const rel = await promptNewFile(entry.rootUri, '.jpnov', listText(list).prompt);
-  if (rel === undefined) {
-    return;
-  }
-  const target = await writeNewFile(entry.rootUri, rel, list === 'covers' ? COVER_TEMPLATE : '');
-  if (target === null) {
-    return;
-  }
-  const { uri, text } = await bookText(entry);
-  const edit = appendEntries(text, list, [rel]);
-  if (edit !== null) {
-    // null = already listed (re-creating a missing entry's file) — nothing to append then.
-    await applyBookEdits(uri, [edit]);
-  }
-  await vscode.commands.executeCommand('vscode.open', target);
-}
-
-/** Book mode: create an empty `.jpbook` in the chosen folder and reveal its detail screen. */
-async function createBook(view: BooksViewProvider | undefined): Promise<void> {
+/**
+ * `jpbook.createFile` (title bar, welcome, palette) — one input creates an empty `.jpbook` in the
+ * chosen folder, the parked suffix trailing what's typed, and reveals it in the panel; entries
+ * and metadata are then added right there. Chapters and covers are created from their lists.
+ */
+export async function createFile(view: BooksViewProvider | undefined): Promise<void> {
   if ((vscode.workspace.workspaceFolders ?? []).length === 0) {
     // The `+` and the palette entry hide without a folder (workspaceFolderCount); the
     // walkthrough's command link can still land here, so open the folder picker instead.
@@ -328,28 +420,13 @@ async function createBook(view: BooksViewProvider | undefined): Promise<void> {
     return;
   }
   const root = folder.uri.toString();
-  const rel = await promptNewFile(root, '.jpbook', vscode.l10n.t('File name of the new book'));
+  const rel = await promptNewBook(root);
   if (rel === undefined) {
     return;
   }
   const target = await writeNewFile(root, rel);
   if (target !== null) {
     await view?.revealNewBook(target);
-  }
-}
-
-/**
- * `jpbook.createFile` — one input creates a file, the parked suffix trailing what's typed.
- * A list node makes a `.jpnov` for that list (chapter or cover); no node (title bar, welcome,
- * palette) makes an empty `.jpbook`, revealed in the panel — entries and metadata are then
- * added right there.
- */
-export async function createFile(view: BooksViewProvider | undefined, arg?: unknown): Promise<void> {
-  const node = nodeOf(arg);
-  if (node === null) {
-    await createBook(view);
-  } else if (node.kind === 'list') {
-    await createEntry(node.entry, node.list);
   }
 }
 
@@ -505,20 +582,11 @@ function pickFooter(current: string | undefined): Promise<MetaAnswer> {
   refresh();
   qp.onDidChangeValue(refresh);
 
-  return new Promise((resolve) => {
-    let answer: MetaAnswer;
-    qp.onDidAccept(() => {
-      const item = qp.selectedItems[0];
-      if (item !== undefined) {
-        answer = { value: item.pick === 'typed' ? item.label : item.pick === 'none' ? '' : undefined };
-      }
-      qp.hide();
-    });
-    qp.onDidHide(() => {
-      qp.dispose();
-      resolve(answer);
-    });
-    qp.show();
+  return runQuickPick(qp, (): MetaAnswer => {
+    const item = qp.selectedItems[0];
+    return item === undefined
+      ? undefined
+      : { value: item.pick === 'typed' ? item.label : item.pick === 'none' ? '' : undefined };
   });
 }
 

@@ -9,7 +9,7 @@
 import { test, mock, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildVscode, createFakeWebviewView, createMockState, doc, resetMockState, Uri, FileType } from './_vscodeMock.ts';
+import { buildVscode, createFakeWebviewView, createMockState, doc, resetMockState, tick, Uri, FileType } from './_vscodeMock.ts';
 
 const state = createMockState();
 mock.module('vscode', { namedExports: buildVscode(state) });
@@ -27,10 +27,6 @@ function seedFolder(): void {
 beforeEach(() => {
   resetMockState(state);
 });
-
-function tick(): Promise<void> {
-  return new Promise((r) => setTimeout(r, 0));
-}
 
 /** A fake LanguageClient answering listBooks with `books`. */
 function fakeClient(books: unknown[]): { sendRequest(type: string): Promise<unknown> } {
