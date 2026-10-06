@@ -333,7 +333,9 @@ The Books view edits books, too. Open one to see its **Book Info**,
 **Cover pages** and **Chapters** sections: **New chapter…** creates a chapter
 file and adds it to the book, **Add chapters…** brings in files you already
 have, dragging (or the arrow buttons) reorders them, and **×** takes an entry
-out of the book while keeping the file. **Cover pages** manages the `cover`
+out of the book while keeping the file. From the keyboard, ↑/↓ move between
+entries, Alt+↑/↓ reorder them, Delete takes one out, and Esc returns to the
+list. **Cover pages** manages the `cover`
 list the same way (see [Submission cover sheets and title
 pages](#submission-cover-sheets-and-title-pages)). Expand **Book Info** and
 click a row to edit that value in place; the buttons at the bottom build only

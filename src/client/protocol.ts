@@ -159,7 +159,8 @@ export interface Labels {
   readonly buildEpub: string;
   readonly revealOutput: string;
   readonly back: string;
-  readonly openChapter: string;
+  /** Accessible name of the book list (the grid) when no root heading names it. */
+  readonly books: string;
   readonly chapters: string;
   readonly bookInfo: string;
   readonly addChapters: string;
@@ -172,7 +173,6 @@ export interface Labels {
   readonly covers: string;
   readonly addCovers: string;
   readonly newCover: string;
-  readonly openCover: string;
   readonly noCovers: string;
   readonly noBooksTitle: string;
   readonly noBooksBody: string;

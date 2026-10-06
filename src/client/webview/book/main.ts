@@ -11,6 +11,10 @@
  * declares its `fallback` keys for when it vanishes or goes disabled), and applyControls(), which
  * owns the list footer's disabled state after each list render and optimistic toggle. Localized
  * strings arrive once via the host's `__INIT` bootstrap.
+ *
+ * Every row list is an ARIA grid with a roving tabindex (one Tab stop per list; arrows move among
+ * rows and cells, see onKey): the cell holding `tabindex="0"` is derived state, recomputed by
+ * initRoving() after each rebuild from the remembered cursor and moved by the focusin listener.
  */
 import type {
   BooksInbound,
@@ -30,7 +34,7 @@ import { svgGlyph } from '../svg.ts';
 
 /** Every glyph the panel draws; `cbOff`/`cbOn` are the selection checkbox's two states. */
 type IconName =
-  | 'chevR' | 'chevL' | 'up' | 'down' | 'err' | 'pick' | 'newFile' | 'close' | 'edit' | 'grip' | 'cbOff' | 'cbOn';
+  | 'chevR' | 'chevL' | 'up' | 'down' | 'err' | 'pick' | 'newFile' | 'close' | 'edit' | 'cbOff' | 'cbOn';
 
 /** Codicon suffix per icon; the element gets `class="codicon codicon-<suffix>"`. */
 const CODICON: Record<IconName, string> = {
@@ -43,7 +47,6 @@ const CODICON: Record<IconName, string> = {
   newFile: 'new-file',
   close: 'close',
   edit: 'edit',
-  grip: 'gripper',
   cbOff: 'circle-large-outline',
   cbOn: 'circle-large-filled',
 };
@@ -62,9 +65,9 @@ function poster(m: BooksOutbound): () => void {
 const L = (window.__INIT as BooksInit).labels;
 
 /** Per-list strings: the two entry sections render identically, only the words differ. */
-const LIST_TEXT: Record<EntryList, { title: string; add: string; create: string; open: string; empty: string }> = {
-  chapters: { title: L.chapters, add: L.addChapters, create: L.newChapter, open: L.openChapter, empty: L.noChapters },
-  covers: { title: L.covers, add: L.addCovers, create: L.newCover, open: L.openCover, empty: L.noCovers },
+const LIST_TEXT: Record<EntryList, { title: string; add: string; create: string; empty: string }> = {
+  chapters: { title: L.chapters, add: L.addChapters, create: L.newChapter, empty: L.noChapters },
+  covers: { title: L.covers, add: L.addCovers, create: L.newCover, empty: L.noCovers },
 };
 
 /** The root element, guaranteed present (the shell always emits `<div id="app">`). Returning a
@@ -98,9 +101,16 @@ interface Props {
   readonly 'aria-label'?: string;
   readonly 'aria-expanded'?: boolean;
   readonly 'aria-hidden'?: true;
+  /** The key equivalent of a control, in the attribute's own syntax (space-separated alternatives). */
+  readonly 'aria-keyshortcuts'?: string;
   readonly 'data-fk'?: string;
-  /** Focus keys to try, in order, when this control is gone or disabled after a rebuild; `undefined`
-   * entries (absent neighbours) are dropped. Never a destructive or build action. */
+  /** The grid a row list belongs to; the roving tabindex and the arrow keys address rows by it. */
+  readonly 'data-grid'?: GridId;
+  /** The entry list an entry section holds; the drop zone is found by it. */
+  readonly 'data-list'?: EntryList;
+  /** Focus keys to try, in order, when this control is gone or disabled: after a rebuild (focus
+   * restore, the grid's Tab stop) or when an arrow move lands on it. `undefined` entries (absent
+   * neighbours) are dropped. Never a destructive or build action. */
   readonly fallback?: readonly (string | undefined)[];
   readonly onClick?: () => void;
 }
@@ -108,8 +118,10 @@ interface Props {
 type Child = Node | string | false;
 
 /** The Props keys h() writes with `setAttribute`; booleans serialize as 'true'/'false'. */
-const ATTRS: readonly Exclude<keyof Props, 'onClick' | 'fallback'>[] =
-  ['class', 'title', 'role', 'type', 'aria-label', 'aria-expanded', 'aria-hidden', 'data-fk'];
+const ATTRS: readonly Exclude<keyof Props, 'onClick' | 'fallback'>[] = [
+  'class', 'title', 'role', 'type', 'aria-label', 'aria-expanded', 'aria-hidden', 'aria-keyshortcuts',
+  'data-fk', 'data-grid', 'data-list',
+];
 /** Each control's declared `fallback` keys, read by capture() off the outgoing DOM. */
 const FALLBACK = new WeakMap<Element, readonly string[]>();
 
@@ -173,17 +185,13 @@ function glyph(name: keyof typeof GLYPH): SVGSVGElement {
 }
 
 /** `data-fk` is required — every icon button participates in the focus-restore system. */
-interface BtnExtra {
+interface BtnExtra extends Pick<Props, 'fallback' | 'aria-keyshortcuts'> {
   readonly 'data-fk': string;
-  readonly fallback?: readonly (string | undefined)[];
   readonly disabled?: boolean;
 }
-function iconBtn(name: IconName, aria: string, fn: () => void, extra: BtnExtra): HTMLButtonElement {
-  const b = h('button', {
-    class: 'iconbtn', 'aria-label': aria, title: aria, onClick: fn,
-    'data-fk': extra['data-fk'], fallback: extra.fallback ?? [],
-  }, icon(name));
-  b.disabled = extra.disabled ?? false;
+function iconBtn(name: IconName, aria: string, fn: () => void, { disabled = false, ...extra }: BtnExtra): HTMLButtonElement {
+  const b = h('button', { class: 'iconbtn', 'aria-label': aria, title: aria, onClick: fn, ...extra }, icon(name));
+  b.disabled = disabled;
   return b;
 }
 /** The scrollable pane; `scroller()` (for capture/restore) finds it by this class. */
@@ -192,6 +200,28 @@ function scrollPane(...children: Child[]): HTMLElement {
 }
 function scroller(): Element | null {
   return app.querySelector('.scroll');
+}
+
+/** A control's focus-key chain: its own key, then its declared fallbacks; empty without a key. */
+function keyChain(el: Element): readonly string[] {
+  const key = el.getAttribute('data-fk');
+  return key === null ? [] : [key, ...(FALLBACK.get(el) ?? [])];
+}
+/** The first of `keys` that names an enabled control in `pool` (by `data-fk`). */
+function firstEnabled(keys: readonly string[], pool: readonly HTMLButtonElement[]): HTMLButtonElement | undefined {
+  for (const key of keys) {
+    const el = pool.find((b) => b.getAttribute('data-fk') === key && !b.disabled);
+    if (el !== undefined) {
+      return el;
+    }
+  }
+  return undefined;
+}
+/** The one way this file moves focus: focus, then make a grid cell its grid's Tab stop. A window
+ * without focus moves `activeElement` but fires no focusin, hence the explicit rove. */
+function focusEl(el: HTMLElement): void {
+  el.focus();
+  roveTo(el);
 }
 
 /** The focus keys to try (own key first, then its declared fallbacks) + scroll offset, restored
@@ -203,26 +233,14 @@ interface Capture {
 // Focus + scroll preservation across host-driven re-renders (the detail edit loop rebuilds the DOM).
 function capture(): Capture {
   const a = document.activeElement;
-  const key = a === null ? null : a.getAttribute('data-fk');
-  const keys = a === null || key === null ? [] : [key, ...(FALLBACK.get(a) ?? [])];
   const sc = scroller();
-  return { keys, top: sc ? sc.scrollTop : 0 };
+  return { keys: a === null ? [] : keyChain(a), top: sc ? sc.scrollTop : 0 };
 }
 /** Focuses the first key whose control exists and is enabled; none → focus stays where the rebuild left it. */
 function focusKeys(keys: readonly string[]): void {
-  const byKey = new Map<string, HTMLButtonElement>();
-  for (const el of app.querySelectorAll<HTMLButtonElement>('[data-fk]')) {
-    const k = el.getAttribute('data-fk');
-    if (k !== null) {
-      byKey.set(k, el);
-    }
-  }
-  for (const key of keys) {
-    const el = byKey.get(key);
-    if (el !== undefined && !el.disabled) {
-      el.focus();
-      return;
-    }
+  const el = firstEnabled(keys, [...app.querySelectorAll<HTMLButtonElement>('[data-fk]')]);
+  if (el !== undefined) {
+    focusEl(el);
   }
 }
 function restore(cap: Capture): void {
@@ -269,11 +287,155 @@ function applyControls(): void {
     }
   }
 }
-// The entry after the given one in the current detail's list (null if it is the last) — DnD target.
-function nextEntry(list: EntryList, line: number): EntryVM | null {
-  const entries = detail?.[list] ?? [];
-  const i = entries.findIndex((e) => e.line === line);
-  return i < 0 ? null : entries[i + 1] ?? null;
+
+// Grids: every row list (the book list, the two entry lists, Book Info) is a `role=grid` whose
+// rows hold their controls in `.cell` wrappers (the row's primary control a `rowheader`, the rest
+// `gridcell`s). One Tab stop per grid (roving tabindex); the arrow keys move among rows and cells.
+// A grid may span several containers (one per root group on the list screen, as a heading cannot
+// sit inside a grid); rows are addressed by `data-grid`.
+
+type GridId = 'books' | EntryList | 'meta';
+const GRIDS: readonly GridId[] = ['books', 'meta', 'covers', 'chapters'];
+/** Per grid, the focus-key chain of the cell that last had focus; initRoving() replays it after a
+ * rebuild so the Tab stop follows the row, as focus restore does. */
+const cursor = new Map<GridId, readonly string[]>();
+/** A grid cell's control. */
+const CELL_BTN = '.cell > button';
+
+/** A grid cell: the wrapper that makes `btn` a flex item of its row and takes it out of the Tab
+ * order. `lead` is the row's primary control, its header for assistive tech and where Tab lands
+ * when nothing is remembered; `stretch` is the full-height checkbox segment. */
+function cell(btn: HTMLElement, kind?: 'lead' | 'stretch'): HTMLElement {
+  btn.tabIndex = -1;
+  return h('div', { class: kind === undefined ? 'cell' : 'cell ' + kind, role: kind === 'lead' ? 'rowheader' : 'gridcell' }, btn);
+}
+function gridRows(id: GridId): HTMLElement[] {
+  return [...app.querySelectorAll<HTMLElement>('[data-grid="' + id + '"] [role="row"]')];
+}
+function cellsOf(row: Element): HTMLButtonElement[] {
+  return [...row.querySelectorAll<HTMLButtonElement>(CELL_BTN)];
+}
+/** The grid cell `el` is (or sits in), with its row and grid; null outside every grid. */
+function cellAt(el: Element): { readonly btn: HTMLButtonElement; readonly row: HTMLElement; readonly id: GridId } | null {
+  const btn = el.closest<HTMLButtonElement>(CELL_BTN);
+  const row = btn?.closest<HTMLElement>('[role="row"]') ?? null;
+  const id = row?.closest('[data-grid]')?.getAttribute('data-grid') as GridId | null | undefined;
+  return btn === null || row === null || id === null || id === undefined ? null : { btn, row, id };
+}
+/** A grid cell that took focus becomes its grid's Tab stop, remembered by its key chain. Called by
+ * focusEl and by focusin (Tab, the mouse). */
+function roveTo(el: Element): void {
+  const c = cellAt(el);
+  if (c === null) {
+    return;
+  }
+  for (const other of gridRows(c.id).flatMap(cellsOf)) {
+    other.tabIndex = -1;
+  }
+  c.btn.tabIndex = 0;
+  cursor.set(c.id, keyChain(c.btn));
+}
+/** After a rebuild: the grid's Tab stop is the first remembered key still present and enabled, else
+ * the first row's lead cell (never disabled). Never moves focus; a grid off this screen has no rows. */
+function initRoving(id: GridId): void {
+  const rows = gridRows(id);
+  const head = rows[0];
+  if (head === undefined) {
+    return;
+  }
+  const stop = firstEnabled(cursor.get(id) ?? [], rows.flatMap(cellsOf)) ?? head.querySelector<HTMLButtonElement>('[role="rowheader"] > button');
+  if (stop !== null) {
+    stop.tabIndex = 0;
+  }
+}
+/** The cell of `row` in column `col` (the last cell of a shorter row); a disabled one hands over
+ * along its own fallback keys within the row (an edge arrow to the other arrow, never to Remove). */
+function sameCell(row: Element | undefined, col: number): HTMLButtonElement | undefined {
+  if (row === undefined) {
+    return undefined;
+  }
+  const cells = cellsOf(row);
+  const c = cells[col] ?? cells.at(-1);
+  if (c === undefined) {
+    return undefined;
+  }
+  return c.disabled ? firstEnabled(FALLBACK.get(c) ?? [], cells) : c;
+}
+function onFocusIn(ev: FocusEvent): void {
+  if (ev.target instanceof Element) {
+    roveTo(ev.target);
+  }
+}
+/** The pressed chord in `aria-keyshortcuts` spelling (modifiers in the attribute's order, then the key). */
+function chordOf(ev: KeyboardEvent): string {
+  const mods = [ev.altKey && 'Alt', ev.ctrlKey && 'Control', ev.metaKey && 'Meta', ev.shiftKey && 'Shift'];
+  return [...mods.filter((m): m is string => m !== false), ev.key].join('+');
+}
+/**
+ * Keyboard: Escape on the detail screen is Back. Inside a grid, a chord a button of the row declares
+ * in `aria-keyshortcuts` clicks that button (Alt+ArrowUp/Down move an entry, Delete/Backspace remove
+ * it; a disabled edge arrow is a native no-op). Plain ArrowUp/Down keep the column across rows
+ * (sameCell), Home/End go to the first/last row, ArrowLeft/Right step along the row's enabled cells
+ * (no wrap). Handled keys are consumed so the pane does not scroll; Enter/Space/Tab stay native.
+ */
+function onKey(ev: KeyboardEvent): void {
+  if (ev.key === 'Escape') {
+    if (screen === 'detail' && drag === null) {
+      ev.preventDefault();
+      goBack();
+    }
+    return;
+  }
+  const c = ev.target instanceof Element ? cellAt(ev.target) : null;
+  if (c === null) {
+    return;
+  }
+  const bound = c.row.querySelector<HTMLButtonElement>('[aria-keyshortcuts~="' + CSS.escape(chordOf(ev)) + '"]');
+  if (bound !== null) {
+    ev.preventDefault();
+    bound.click();
+    return;
+  }
+  if (ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey) {
+    return;
+  }
+  const rows = gridRows(c.id);
+  const i = rows.indexOf(c.row);
+  const cells = cellsOf(c.row);
+  const col = cells.indexOf(c.btn);
+  let target: HTMLButtonElement | undefined;
+  switch (ev.key) {
+    case 'ArrowUp':
+      target = sameCell(rows[i - 1], col);
+      break;
+    case 'ArrowDown':
+      target = sameCell(rows[i + 1], col);
+      break;
+    case 'Home':
+      target = sameCell(rows[0], col);
+      break;
+    case 'End':
+      target = sameCell(rows.at(-1), col);
+      break;
+    case 'ArrowLeft':
+      target = cells.findLast((b, j) => j < col && !b.disabled);
+      break;
+    case 'ArrowRight':
+      target = cells.find((b, j) => j > col && !b.disabled);
+      break;
+    default:
+      return;
+  }
+  ev.preventDefault();
+  if (target !== undefined) {
+    focusEl(target);
+  }
+}
+
+/** Dims a row and announces it busy until the host's re-push rebuilds the list. */
+function markPending(row: HTMLElement): void {
+  row.classList.add('pending');
+  row.setAttribute('aria-busy', 'true');
 }
 function clearDrop(): void {
   for (const el of app.querySelectorAll('.drop-before, .drop-after')) {
@@ -286,6 +448,9 @@ function render(): void {
     renderDetail();
   } else {
     renderList();
+  }
+  for (const id of GRIDS) {
+    initRoving(id);
   }
 }
 
@@ -308,14 +473,18 @@ function renderList(): void {
   }
   const groups = state?.groups ?? [];
   const flat = groups.flatMap((g) => g.books); // row neighbours run across group boundaries
+  // One grid container per root group, named as its heading is; a single root's grid is "Books".
   app.replaceChildren(
-    scrollPane(h('div', { class: 'list' }, ...groups.flatMap((g) => [
-      g.rootLabel !== null && h('div', { class: 'group-header' }, g.rootLabel),
-      ...g.books.map((b) => {
+    scrollPane(h('div', { class: 'list' }, ...groups.flatMap((g) => {
+      const rows = g.books.map((b) => {
         const i = flat.indexOf(b);
         return bookRow(b, flat[i + 1], flat[i - 1]);
-      }),
-    ]))),
+      });
+      return [
+        g.rootLabel !== null && h('h2', { class: 'group-header' }, g.rootLabel),
+        h('div', { class: 'grid', role: 'grid', 'data-grid': 'books', 'aria-label': g.rootLabel ?? L.books }, ...rows),
+      ];
+    }))),
     footer(),
   );
   applyControls();
@@ -338,10 +507,12 @@ function bookKey(prefix: 'cb:' | 'book:', b: BookVM | undefined): string | undef
 function bookRow(bk: BookVM, next: BookVM | undefined, prev: BookVM | undefined): HTMLElement {
   // Custom checkbox: a button with role=checkbox. The glyph is always in the DOM (hidden until hover
   // or checked); the .on class tints the tile and swaps the outline circle for the filled one.
+  const cbName = L.selectBook + ': ' + bk.title;
   const cb = h('button', {
     class: 'cbtile',
     role: 'checkbox',
-    'aria-label': L.selectBook + ': ' + bk.title,
+    'aria-label': cbName,
+    title: cbName,
     'data-fk': 'cb:' + bk.uri,
     fallback: [bookKey('cb:', next), bookKey('cb:', prev)],
   });
@@ -356,22 +527,23 @@ function bookRow(bk: BookVM, next: BookVM | undefined, prev: BookVM | undefined)
     applyControls();
     post({ type: 'toggle', uri: bk.uri, checked });
   });
-  return h('div', { class: 'row book' },
-    cb,
-    h('button', {
-      class: 'main',
-      'aria-label': bk.title,
-      'data-fk': 'book:' + bk.uri,
-      fallback: [bookKey('book:', next), bookKey('book:', prev)],
-      onClick: () => {
-        detailWanted = true;
-        post({ type: 'openDetail', uri: bk.uri });
-      },
+  // The tooltip carries both ellipsized lines in full.
+  const main = h('button', {
+    class: 'main',
+    'aria-label': bk.title,
+    title: bk.title + '\n' + bk.fileRel,
+    'data-fk': 'book:' + bk.uri,
+    fallback: [bookKey('book:', next), bookKey('book:', prev)],
+    onClick: () => {
+      detailWanted = true;
+      post({ type: 'openDetail', uri: bk.uri });
     },
-    h('div', { class: 'maincol' },
-      h('div', { class: 'title' }, bk.title),
-      h('div', { class: 'sub' }, bk.fileRel)),
-    icon('chevR', 'chev')));
+  },
+  h('div', { class: 'maincol' },
+    h('div', { class: 'title' }, bk.title),
+    h('div', { class: 'sub' }, bk.fileRel)),
+  icon('chevR', 'chev'));
+  return h('div', { class: 'row book', role: 'row' }, cell(cb, 'stretch'), cell(main, 'lead'));
 }
 
 // Disabled states (list mode only) are applied by applyControls() once the footer is in the DOM.
@@ -424,6 +596,20 @@ function troubledCovers(d: DetailMessage): boolean {
   return d.covers.some((e) => e.missing);
 }
 
+/** The list screen again; focus returns to the row of the book just closed. */
+function showList(): void {
+  detailWanted = false;
+  screen = 'list';
+  detail = null;
+  render();
+  focusKeys(['book:' + (lastDetailUri ?? '')]);
+}
+/** The Back button and Escape. */
+function goBack(): void {
+  post({ type: 'closeDetail' });
+  showList();
+}
+
 function renderDetail(): void {
   if (detail === null) {
     return;
@@ -431,21 +617,15 @@ function renderDetail(): void {
   const d = detail;
   drag = null; // a rebuild mid-drag (e.g. an edit-triggered refresh) cancels the in-progress drag
   const hdr = h('div', { class: 'dhdr' },
-    iconBtn('chevL', L.back, () => {
-      detailWanted = false;
-      screen = 'list';
-      detail = null;
-      post({ type: 'closeDetail' });
-      render();
-      focusKeys(['book:' + (lastDetailUri ?? '')]);
-    }, { 'data-fk': 'back' }),
-    h('div', { class: 'dtitle' }, d.title));
+    iconBtn('chevL', L.back, goBack, { 'data-fk': 'back', 'aria-keyshortcuts': 'Escape' }),
+    h('h1', { class: 'dtitle', title: d.title }, d.title));
   // Book Info: collapsible (collapsed by default), ABOVE the lists.
   const info = h('div', { class: 'section' },
-    h('div', { class: 'shead' }, disclosure(infoOpen, L.bookInfo, 'infohead', () => {
+    h('div', { class: 'shead' }, h('h2', { class: 'stitle' }, disclosure(infoOpen, L.bookInfo, 'infohead', () => {
       infoOpen = !infoOpen;
-    })),
-    ...(infoOpen ? d.meta.map((mi) => metaRow(d, mi)) : []));
+    }))),
+    infoOpen && h('div', { class: 'grid', role: 'grid', 'data-grid': 'meta', 'aria-label': L.bookInfo },
+      ...d.meta.map((mi) => metaRow(d, mi))));
   // Covers precede chapters, as in the printed book. The cover list folds like Book Info; the
   // chapter list is always open.
   app.replaceChildren(scrollPane(hdr, info, listSection(d, 'covers'), listSection(d, 'chapters')), footer(d.uri));
@@ -465,7 +645,7 @@ function disclosure(open: boolean, title: string, fkKey: string, flip: () => voi
     },
   },
   icon(open ? 'down' : 'chevR', 'caret'),
-  h('span', { class: 'stitle' }, title));
+  title);
 }
 
 type EntryPart = 'open' | 'up' | 'down' | 'rm';
@@ -476,26 +656,27 @@ function fk(list: EntryList, part: EntryPart, fileUri: string): string {
 
 /**
  * One entry list: a header with the pick action, the rows (or the empty text), and the create-file
- * tail row. The cover list is collapsible — folded, only its disclosure shows.
+ * tail row. The cover list is collapsible — folded, only its disclosure shows. The whole section is
+ * the drop zone of its own rows (sectionDnD).
  */
 function listSection(d: DetailMessage, list: EntryList): HTMLElement {
   const text = LIST_TEXT[list];
   const entries = d[list];
   const collapsible = list === 'covers';
   const open = !collapsible || coverOpen;
-  let title: HTMLElement;
+  let title: Child = text.title;
   if (collapsible) {
     title = disclosure(coverOpen, text.title, 'coverhead', () => {
       coverOpen = !coverOpen;
     });
-  } else {
-    title = h('span', { class: 'stitle' }, text.title);
   }
   const body: Child[] = [];
+  const rows: readonly EntryRow[] = open ? entries.map((e, i) => [e, entryRow(d, list, e, i, entries)] as const) : [];
   if (open) {
     body.push(
       entries.length === 0 && h('div', { class: 'empty' }, text.empty),
-      ...entries.map((e, i) => entryRow(d, list, e, i, entries)),
+      entries.length > 0 && h('div', { class: 'grid', role: 'grid', 'data-grid': list, 'aria-label': text.title },
+        ...rows.map(([, row]) => row)),
       h('button', {
         class: 'row action',
         'data-fk': list + ':new',
@@ -503,34 +684,98 @@ function listSection(d: DetailMessage, list: EntryList): HTMLElement {
       }, icon('newFile'), text.create),
     );
   }
-  return h('div', { class: 'section' },
+  const section = h('div', { class: 'section', 'data-list': list },
     h('div', { class: 'shead' },
-      title,
+      h('h2', { class: 'stitle' }, title),
       open && iconBtn('pick', text.add, poster({ type: 'addEntries', uri: d.uri, list }), { 'data-fk': list + ':add' })),
     ...body);
+  sectionDnD(section, d, list, rows);
+  return section;
+}
+
+/** An entry with the row rendered for it. */
+type EntryRow = readonly [EntryVM, HTMLElement];
+/** A drop slot: the entry to insert before (null = the tail) and the row to mark. */
+interface Slot {
+  readonly before: EntryVM | null;
+  readonly row: HTMLElement;
+}
+/** Where a drop at pointer height `y` would put the dragged row: before the first other row whose
+ * midpoint lies below the pointer, else after the last one. Null when the list has no other row, or
+ * the slot is the row's present place (before its successor; the tail when it is last). */
+function slotAt(rows: readonly EntryRow[], draggedLine: number, y: number): Slot | null {
+  const i = rows.findIndex(([e]) => e.line === draggedLine);
+  const next = rows[i + 1]?.[0] ?? null;
+  const others = rows.filter(([e]) => e.line !== draggedLine);
+  for (const [e, row] of others) {
+    const r = row.getBoundingClientRect();
+    if (y < r.top + r.height / 2) {
+      return e === next ? null : { before: e, row };
+    }
+  }
+  const last = others.at(-1);
+  return last === undefined || next === null ? null : { before: null, row: last[1] };
+}
+/**
+ * The section is the drop zone of its own list — header, empty text, blank and the tail row all
+ * take the drop, so the end of the list is anywhere below the last row's midpoint. The other
+ * list's section never preventDefaults, so the browser refuses the drop there.
+ */
+function sectionDnD(section: HTMLElement, d: DetailMessage, list: EntryList, rows: readonly EntryRow[]): void {
+  const onDrag = (ev: DragEvent): void => {
+    if (drag?.list !== list) {
+      return;
+    }
+    ev.preventDefault();
+    const slot = slotAt(rows, drag.line, ev.clientY);
+    clearDrop();
+    if (ev.type === 'dragover') {
+      if (ev.dataTransfer) {
+        ev.dataTransfer.dropEffect = 'move';
+      }
+      if (slot !== null) {
+        slot.row.classList.add(slot.before === null ? 'drop-after' : 'drop-before');
+      }
+      return;
+    }
+    const dragged = drag;
+    drag = null;
+    if (slot !== null) {
+      // The dragged row stays dimmed until the host's re-push lands it in its new place.
+      markPending(dragged.row);
+      post({
+        type: 'moveEntryTo', uri: d.uri, list, line: dragged.line, path: dragged.path, version: d.version,
+        before: slot.before === null ? null : slot.before.line, beforePath: slot.before === null ? null : slot.before.path,
+      });
+    }
+  };
+  section.addEventListener('dragover', onDrag);
+  section.addEventListener('drop', onDrag);
 }
 
 function entryRow(d: DetailMessage, list: EntryList, e: EntryVM, idx: number, entries: readonly EntryVM[]): HTMLElement {
-  const grip = icon('grip', 'grip');
   const key = (part: EntryPart): string => fk(list, part, e.fileUri);
   // Once this row is gone (removed, or dropped by an edit) focus goes to the next row, which slides
   // into its place, else the previous, else the list header's add button.
   const openOf = (n: EntryVM | undefined): string | undefined => (n === undefined ? undefined : fk(list, 'open', n.fileUri));
   const vanished = [openOf(entries[idx + 1]), openOf(entries[idx - 1]), list + ':add'];
-  const row = h('div', { class: 'row entry' + (e.missing ? ' missing' : '') });
+  const row = h('div', { class: 'row entry' + (e.missing ? ' missing' : ''), role: 'row' });
   // A row verb names the row as rendered (line, path, the detail's version) and dims the row until
   // the host's re-push rebuilds the list; the host ignores a row the text no longer has.
   const ref = { line: e.line, path: e.path, version: d.version };
   const verb = (m: BooksOutbound): (() => void) => () => {
-    row.classList.add('pending');
+    markPending(row);
     post(m);
   };
+  // The name as written (folder and file), in full, as the accessible name and the tooltip; a
+  // missing file says so in both.
+  const full = e.folder === '' ? e.name : e.folder + '/' + e.name;
+  const name = e.missing ? L.missing + ': ' + full : full;
   row.append(
-    grip,
-    h('button', {
+    cell(h('button', {
       class: 'emain',
-      title: e.missing ? (L.missing + ': ' + e.name) : LIST_TEXT[list].open,
-      'aria-label': e.name,
+      title: name,
+      'aria-label': name,
       'data-fk': key('open'),
       fallback: vanished,
       onClick: poster({ type: 'openFile', uri: e.fileUri }),
@@ -539,20 +784,25 @@ function entryRow(d: DetailMessage, list: EntryList, e: EntryVM, idx: number, en
     h('div', { class: 'maincol' },
       h('div', { class: 'title' },
         e.folder !== '' && h('span', { class: 'dir' }, e.folder + '/'),
-        e.name))),
+        e.name))), 'lead'),
     // Focus keys use the entry's fileUri (stable across a move) so keyboard focus follows the row.
     // An arrow disabled at the list's edge hands focus to the other arrow, then the row — never to Remove.
-    h('div', { class: 'acts' },
-      iconBtn('up', L.moveUp, verb({ type: 'moveEntry', uri: d.uri, list, ...ref, dir: -1 }),
-        { 'data-fk': key('up'), fallback: [key('down'), key('open'), ...vanished], disabled: idx === 0 }),
-      iconBtn('down', L.moveDown, verb({ type: 'moveEntry', uri: d.uri, list, ...ref, dir: 1 }),
-        { 'data-fk': key('down'), fallback: [key('up'), key('open'), ...vanished], disabled: idx === entries.length - 1 }),
-      iconBtn('close', L.remove, verb({ type: 'removeEntry', uri: d.uri, list, ...ref }),
-        { 'data-fk': key('rm'), fallback: vanished })));
+    h('div', { class: 'acts', role: 'presentation' },
+      cell(iconBtn('up', L.moveUp, verb({ type: 'moveEntry', uri: d.uri, list, ...ref, dir: -1 }), {
+        'data-fk': key('up'), fallback: [key('down'), key('open'), ...vanished], disabled: idx === 0,
+        'aria-keyshortcuts': 'Alt+ArrowUp',
+      })),
+      cell(iconBtn('down', L.moveDown, verb({ type: 'moveEntry', uri: d.uri, list, ...ref, dir: 1 }), {
+        'data-fk': key('down'), fallback: [key('up'), key('open'), ...vanished], disabled: idx === entries.length - 1,
+        'aria-keyshortcuts': 'Alt+ArrowDown',
+      })),
+      cell(iconBtn('close', L.remove, verb({ type: 'removeEntry', uri: d.uri, list, ...ref }), {
+        'data-fk': key('rm'), fallback: vanished, 'aria-keyshortcuts': 'Delete Backspace',
+      }))));
 
-  // Drag wiring attaches after construction — the handlers mutate `row` from both elements.
-  grip.draggable = true;
-  grip.addEventListener('dragstart', (ev: DragEvent) => {
+  // The whole row is the drag handle; the section takes the drop.
+  row.draggable = true;
+  row.addEventListener('dragstart', (ev: DragEvent) => {
     drag = { list, line: e.line, path: e.path, row };
     ev.dataTransfer?.setData('text/plain', '');
     if (ev.dataTransfer) {
@@ -560,52 +810,17 @@ function entryRow(d: DetailMessage, list: EntryList, e: EntryVM, idx: number, en
     }
     row.classList.add('dragging');
   });
-  grip.addEventListener('dragend', () => {
+  row.addEventListener('dragend', () => {
     drag = null;
     row.classList.remove('dragging');
     clearDrop();
-  });
-  // Drop target: the pointer in a row's top half inserts before it, bottom half after it (before
-  // next). Rows of the other list never preventDefault, so the browser refuses the drop there.
-  row.addEventListener('dragover', (ev: DragEvent) => {
-    if (drag?.list !== list || drag.line === e.line) {
-      return;
-    }
-    ev.preventDefault();
-    if (ev.dataTransfer) {
-      ev.dataTransfer.dropEffect = 'move';
-    }
-    const r = row.getBoundingClientRect();
-    const after = (ev.clientY - r.top) > r.height / 2;
-    row.classList.toggle('drop-after', after);
-    row.classList.toggle('drop-before', !after);
-  });
-  row.addEventListener('dragleave', () => {
-    row.classList.remove('drop-before', 'drop-after');
-  });
-  row.addEventListener('drop', (ev: DragEvent) => {
-    if (drag?.list !== list) {
-      return;
-    }
-    ev.preventDefault();
-    const r = row.getBoundingClientRect();
-    const after = (ev.clientY - r.top) > r.height / 2;
-    row.classList.remove('drop-before', 'drop-after');
-    // The dragged row stays dimmed until the host's re-push lands it in its new place.
-    const target = after ? nextEntry(list, e.line) : e;
-    drag.row.classList.add('pending');
-    post({
-      type: 'moveEntryTo', uri: d.uri, list, line: drag.line, path: drag.path, version: d.version,
-      before: target === null ? null : target.line, beforePath: target === null ? null : target.path,
-    });
-    drag = null;
   });
   return row;
 }
 
 function metaRow(d: DetailMessage, mi: MetaVM): HTMLElement {
-  return h('button', {
-    class: 'row meta',
+  const btn = h('button', {
+    class: 'meta',
     'aria-label': mi.label + (mi.note ? ' ' + mi.note : '') + (mi.value ? ': ' + mi.value : ''),
     'data-fk': 'meta:' + mi.key,
     onClick: poster({ type: 'editMeta', uri: d.uri, metaKey: mi.key }),
@@ -617,6 +832,7 @@ function metaRow(d: DetailMessage, mi: MetaVM): HTMLElement {
       mi.note !== '' && h('span', { class: 'mnote' }, mi.note)),
     mi.value !== '' && h('div', { class: 'mvalue' }, mi.value)),
   icon('edit', 'pen'));
+  return h('div', { class: 'row metarow', role: 'row' }, cell(btn, 'lead'));
 }
 
 function welcome(title: string, body: string, actions: readonly (readonly [WelcomeAction, string])[]): HTMLElement {
@@ -624,8 +840,17 @@ function welcome(title: string, body: string, actions: readonly (readonly [Welco
     h('div', { class: 'wtitle' }, title),
     h('div', { class: 'wbody' }, body),
     ...actions.map(([action, label]) =>
-      h('button', { class: 'btn welcomebtn', onClick: poster({ type: 'welcome', action }) }, label)));
+      h('button', { class: 'btn welcomebtn', 'data-fk': 'welcome:' + action, onClick: poster({ type: 'welcome', action }) }, label)));
 }
+
+app.addEventListener('keydown', onKey);
+app.addEventListener('focusin', onFocusIn);
+// Leaving the dragging list's section (header, other list, footer) drops the insertion mark.
+app.addEventListener('dragover', (ev: DragEvent) => {
+  if (drag !== null && !(ev.target instanceof Element && ev.target.closest('.section[data-list="' + drag.list + '"]'))) {
+    clearDrop();
+  }
+});
 
 window.addEventListener('message', (e: MessageEvent) => {
   const m: unknown = e.data;
@@ -665,6 +890,7 @@ window.addEventListener('message', (e: MessageEvent) => {
       } else {
         infoOpen = false; // a freshly opened book folds Book Info; the cover list opens only to show an error
         coverOpen = troubled;
+        cursor.clear(); // another book's rows: the Tab stops start afresh
         render();
         focusKeys(['back']);
       }
@@ -677,10 +903,7 @@ window.addEventListener('message', (e: MessageEvent) => {
       if (screen === 'list') {
         break; // the book never opened: focus stays on the clicked row
       }
-      screen = 'list';
-      detail = null;
-      render();
-      focusKeys(['book:' + (lastDetailUri ?? '')]);
+      showList();
       break;
   }
 });
