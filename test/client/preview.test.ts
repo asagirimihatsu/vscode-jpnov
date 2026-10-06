@@ -25,6 +25,7 @@ import {
   createMockState,
   doc,
   resetMockState,
+  tick,
   Uri,
   ViewColumn,
   type FakeWebviewPanel,
@@ -45,11 +46,6 @@ beforeEach(() => {
 /** A fake LanguageClient: only `sendRequest` is used by the preview. */
 function fakeClient(html: string): { sendRequest: () => Promise<{ html: string }> } {
   return { sendRequest: () => Promise.resolve({ html }) };
-}
-
-/** Drain pending microtasks/timers so fire-and-forget renders settle. */
-function tick(): Promise<void> {
-  return new Promise((r) => setTimeout(r, 0));
 }
 
 /** Waits out the render debounce that edits and widget changes share. */

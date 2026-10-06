@@ -1,6 +1,6 @@
 /**
- * Pure input normalization for the panel's create-file command (`jpbook.createFile`):
- * one typed path becomes a root-relative `.jpnov` / `.jpbook` entry. vscode-free.
+ * Pure input normalization for the panel's file-creating dialogs (the add-files picker, the
+ * new-book prompt): one typed path becomes a root-relative `.jpnov` / `.jpbook` entry. vscode-free.
  */
 import { isAbsoluteLocation } from '../config/validate.ts';
 

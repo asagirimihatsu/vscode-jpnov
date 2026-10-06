@@ -1,10 +1,12 @@
 /**
- * E2E for the Books panel's focus restore across host-driven rebuilds (#78) and its row verbs
- * against a stale list (#77): the REAL webview bundle runs in a headless Chromium against a stub
- * host that answers every message synchronously in the provider's order, or, when held, only on
- * release (the DOM lagging the host as across the real round trip). Each scenario focuses a
- * control, acts (Enter on a focused button is a click) and reports where focus landed after the
- * rebuild. Skips without a discoverable browser unless `JPNOV_E2E_REQUIRE_BROWSER=1` (CI).
+ * E2E for the Books panel's focus restore across host-driven rebuilds (#78), its row verbs
+ * against a stale list (#77), and its grid keyboard model + section drop zones (#92): the REAL
+ * webview bundle runs in a headless Chromium against a stub host that answers every message
+ * synchronously in the provider's order, or, when held, only on release (the DOM lagging the host
+ * as across the real round trip). Each scenario focuses a control, acts (Enter on a focused button
+ * is a click; keys are dispatched as keydown events) and reports where focus landed after the
+ * rebuild, plus each grid's single Tab stop. Skips without a discoverable browser unless
+ * `JPNOV_E2E_REQUIRE_BROWSER=1` (CI).
  */
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -188,8 +190,22 @@ const host = {
         this.answer(fresh);
         break;
       }
+      case 'moveEntryTo': {
+        const d = this.details.get(m.uri);
+        const list = d[m.list];
+        const i = m.line - 3;
+        const j = m.before === null ? list.length : m.before - 3;
+        const fresh = m.version === d.version && list[i] === m.path && (m.before === null || list[j] === m.beforePath);
+        if (fresh) {
+          const [e] = list.splice(i, 1);
+          list.splice(j > i ? j - 1 : j, 0, e);
+          d.version += 1;
+        }
+        this.answer(fresh);
+        break;
+      }
       default:
-        break; // build / openFile / addEntries / createEntry / editMeta / …: recorded only
+        break; // build / openFile / addEntries / editMeta / …: recorded only
     }
   },
 };
@@ -200,13 +216,16 @@ window.acquireVsCodeApi = () => ({ postMessage: (m) => host.on(m), getState: () 
 /**
  * The scenarios, run synchronously at parse time (\`--dump-dom\` serializes at load). \`step\`
  * focuses the keyed control, acts (default: click), and records the landing key plus the
- * open book's chapter order, the messages the bundle posted meanwhile, and how many rows are
- * marked pending (a verb posted, the host's re-push not yet rendered).
+ * open book's chapter order, the messages the bundle posted meanwhile, how many rows are
+ * marked pending (a verb posted, the host's re-push not yet rendered), each grid's Tab stop
+ * (the one cell with tabindex=0; 'MULTI' if more), the grid the focused cell belongs to, and
+ * the insertion mark a drag painted before its drop.
  */
 const SCENARIO_SCRIPT = `<script>
 (() => {
   const host = window.__host;
   const results = [];
+  const GRIDS = ['books', 'covers', 'chapters', 'meta'];
   const byKey = (key) => {
     for (const el of document.querySelectorAll('[data-fk]')) {
       if (el.getAttribute('data-fk') === key) {
@@ -219,30 +238,62 @@ const SCENARIO_SCRIPT = `<script>
     const a = document.activeElement;
     return a === null || a === document.body ? null : a.getAttribute('data-fk');
   };
+  const gridOf = () => document.activeElement?.closest('.cell > button')?.closest('[data-grid]')?.getAttribute('data-grid') ?? null;
+  const tabStops = () => Object.fromEntries(GRIDS.map((id) => {
+    const z = document.querySelectorAll('[data-grid="' + id + '"] .cell > button[tabindex="0"]');
+    return [id, z.length === 1 ? z[0].getAttribute('data-fk') : z.length === 0 ? null : 'MULTI'];
+  }));
   function step(name, key, act) {
     const el = byKey(key);
     const from = host.posted.length;
     let pre = false;
+    let drop = null;
     if (el !== null) {
       el.focus();
       pre = document.activeElement === el;
+      // A headless window may lack focus, where focus() moves activeElement but fires no focus
+      // event; the bundle's focusin path is what a focused window would run.
+      el.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
     }
     if (act === undefined) {
       if (el !== null) {
         el.click();
       }
     } else {
-      act();
+      drop = act() ?? null; // only dragTo returns something: the mark painted before the drop
     }
     results.push({
       name, pre, landed: landing(), chapters: host.chapters(),
       posted: host.posted.slice(from).map((m) => m.type),
       pending: document.querySelectorAll('.entry.pending').length,
+      tab0: tabStops(), grid: gridOf(), drop,
     });
   }
   const K = (list, part, n) => list + ':' + part + ':' + U(n);
   const open = (n) => byKey('book:' + U(n)).click();
   const { A, B, C } = FIX.books;
+  // A key pressed on the focused control (the bundle handles keydown by \`key\`).
+  const press = (key, init = {}) => () => {
+    document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }));
+  };
+  const rowOf = (key) => byKey(key).closest('[role="row"]');
+  const rect = (key) => rowOf(key).getBoundingClientRect();
+  const section = (list) => document.querySelector('.section[data-list="' + list + '"]');
+  // Drags the focused row over \`list\`'s section at height \`y\` and drops it there; returns the
+  // mark dragover painted, read before the drop clears it.
+  const dragTo = (list, y) => () => {
+    const row = document.activeElement.closest('[role="row"]');
+    const dt = new DataTransfer();
+    row.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+    const sec = section(list);
+    sec.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, clientY: y, dataTransfer: dt }));
+    const mark = [...document.querySelectorAll('.drop-before, .drop-after')]
+      .map((el) => (el.classList.contains('drop-before') ? 'before ' : 'after ') + el.querySelector('[data-fk]').getAttribute('data-fk'))
+      .join(',') || null;
+    sec.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, clientY: y, dataTransfer: dt }));
+    row.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt }));
+    return mark;
+  };
 
   host.reset();
   step('L1a', 'selall');
@@ -315,6 +366,63 @@ const SCENARIO_SCRIPT = `<script>
   step('D12b', K('chapters', 'rm', '03.jpnov'));
   step('D12c', K('chapters', 'rm', '03.jpnov'), () => host.release());
 
+  // #92: one Tab stop per grid; arrows move among rows and cells, a disabled edge arrow hands over
+  // to the other arrow; Alt+arrows and Delete are the row's own verbs; Escape is Back.
+  host.reset();
+  open(B);
+  step('K1', K('chapters', 'open', '01.jpnov'), press('ArrowDown'));
+  step('K2', K('chapters', 'up', '02.jpnov'), press('ArrowUp'));
+  step('K3', K('chapters', 'down', '02.jpnov'), press('ArrowDown'));
+  step('K4a', K('chapters', 'open', '01.jpnov'), press('End'));
+  step('K4b', K('chapters', 'open', '03.jpnov'), press('Home'));
+  step('K5a', K('chapters', 'open', '01.jpnov'), press('ArrowRight'));
+  step('K5b', K('chapters', 'down', '01.jpnov'), press('ArrowRight'));
+  step('K5c', K('chapters', 'rm', '01.jpnov'), press('ArrowRight'));
+  step('K5d', K('chapters', 'rm', '01.jpnov'), press('ArrowLeft'));
+  step('K5e', K('chapters', 'down', '01.jpnov'), press('ArrowLeft'));
+  step('K5f', K('chapters', 'open', '01.jpnov'), press('ArrowUp'));
+  host.reset();
+  open(B);
+  step('K6a', K('chapters', 'open', '02.jpnov'), press('ArrowDown', { altKey: true }));
+  step('K6b', K('chapters', 'open', '01.jpnov'), press('ArrowUp', { altKey: true }));
+  host.reset();
+  open(B);
+  step('K7a', K('chapters', 'open', '02.jpnov'), press('Delete'));
+  step('K7b', K('chapters', 'open', '03.jpnov'), press('Backspace'));
+  host.reset();
+  open(B);
+  step('K8', K('chapters', 'open', '01.jpnov'), press('Escape'));
+  host.reset();
+  step('K9a', 'cb:' + U(A), press('ArrowRight'));
+  step('K9b', 'book:' + U(A), press('ArrowDown'));
+  step('K9c', 'book:' + U(B), press('ArrowLeft'));
+  step('K9d', 'cb:' + U(B), press('Escape'));
+  host.reset();
+  open(B);
+  step('K10a', K('chapters', 'open', '02.jpnov'), () => host.repush(() => {}));
+  step('K10b', 'bprint', () => host.repush(() => {}));
+  step('K10c', 'infohead');
+  step('K11', K('chapters', 'rm', '02.jpnov'));
+  host.reset({ groups: [[A], [B]] });
+  step('K12', 'book:' + U(A), press('ArrowDown'));
+  host.reset();
+  step('W1', 'book:' + U(A), () => host.reset({ groups: [[]] }));
+  step('W2', 'welcome:createBook', () => host.state());
+
+  // #92: the whole section takes the drop; the slot is the row whose midpoint is below the pointer.
+  host.reset();
+  open(B);
+  step('N1', K('chapters', 'open', '01.jpnov'), dragTo('chapters', rect(K('chapters', 'open', '03.jpnov')).bottom - 1));
+  host.reset();
+  open(B);
+  step('N2', K('chapters', 'open', '03.jpnov'), dragTo('chapters', section('chapters').querySelector('.shead').getBoundingClientRect().top + 2));
+  host.reset();
+  open(B);
+  step('N3', K('chapters', 'open', '01.jpnov'), dragTo('covers', rect(K('chapters', 'open', '03.jpnov')).bottom - 1));
+  host.reset();
+  open(B);
+  step('N4', K('chapters', 'open', '02.jpnov'), dragTo('chapters', rect(K('chapters', 'open', '03.jpnov')).top + 1));
+
   document.documentElement.setAttribute('${MARKER}', JSON.stringify(results));
 })();
 </script>`;
@@ -328,6 +436,12 @@ interface StepResult {
   readonly posted: readonly string[];
   /** Rows dimmed as pending once the step is done (none after a synchronous rebuild). */
   readonly pending: number;
+  /** Per grid, the key of its one `tabindex="0"` cell; null when it has no rows, 'MULTI' when broken. */
+  readonly tab0: Readonly<Record<string, string | null>>;
+  /** The grid the focused cell belongs to, null when focus is outside every grid. */
+  readonly grid: string | null;
+  /** The insertion mark a drag painted ('before <key>' / 'after <key>'), null when none. */
+  readonly drop: string | null;
 }
 
 interface Expected {
@@ -335,10 +449,14 @@ interface Expected {
   readonly chapters?: readonly string[];
   readonly posted?: readonly string[];
   readonly pending?: number;
+  /** Only the grids named are compared. */
+  readonly tab0?: Readonly<Record<string, string | null>>;
+  readonly drop?: string | null;
 }
 
-const { B, C } = FIX.books;
+const { A, B, C } = FIX.books;
 const [C1, C2, C3] = FIX.chapters;
+const ch = (part: 'open' | 'up' | 'down' | 'rm', name: string): string => entry('chapters', part, name);
 
 /** Where focus must land per scenario, in run order (a checkbox stays in the checkbox column). */
 const EXPECT: Readonly<Record<string, Expected>> = {
@@ -376,6 +494,48 @@ const EXPECT: Readonly<Record<string, Expected>> = {
   D12a: { landed: entry('chapters', 'rm', C2), chapters: [C1, C3], posted: ['removeEntry'], pending: 1 },
   D12b: { landed: entry('chapters', 'rm', C3), chapters: [C1, C3], posted: ['removeEntry'], pending: 2 },
   D12c: { landed: entry('chapters', 'rm', C3), chapters: [C1, C3], posted: [], pending: 0 },
+  // Grid keys. A fresh detail's Tab stop is the first row's open cell; the arrows keep the column,
+  // and the first row's disabled "up" (K2) / the last row's disabled "down" (K3) hand over to the
+  // other arrow. Row ends do not wrap (K5c, K5f).
+  K1: { landed: ch('open', C2), posted: [], tab0: { chapters: ch('open', C2), covers: null, meta: null } },
+  K2: { landed: ch('down', C1), posted: [] },
+  K3: { landed: ch('up', C3), posted: [] },
+  K4a: { landed: ch('open', C3), posted: [] },
+  K4b: { landed: ch('open', C1), posted: [] },
+  K5a: { landed: ch('down', C1), posted: [] },
+  K5b: { landed: ch('rm', C1), posted: [] },
+  K5c: { landed: ch('rm', C1), posted: [] },
+  K5d: { landed: ch('down', C1), posted: [] },
+  K5e: { landed: ch('open', C1), posted: [] },
+  K5f: { landed: ch('open', C1), posted: [] },
+  // Alt+arrows move the row through its own buttons (focus follows, as after a click); at the top
+  // the disabled "up" makes Alt+ArrowUp a no-op.
+  K6a: { landed: ch('open', C2), chapters: [C1, C3, C2], posted: ['moveEntry'], pending: 0 },
+  K6b: { landed: ch('open', C1), chapters: [C1, C3, C2], posted: [], pending: 0 },
+  K7a: { landed: ch('open', C3), chapters: [C1, C3], posted: ['removeEntry'] },
+  K7b: { landed: ch('open', C1), chapters: [C1], posted: ['removeEntry'] },
+  K8: { landed: book(B), posted: ['closeDetail'] },
+  // The book list is a grid too (checkbox / open); Escape does nothing on the list screen.
+  K9a: { landed: book(A), posted: [], tab0: { books: book(A) } },
+  K9b: { landed: book(B), posted: [], tab0: { books: book(B) } },
+  K9c: { landed: cb(B), posted: [], tab0: { books: cb(B) } },
+  K9d: { landed: cb(B), posted: [] },
+  // A re-push keeps each grid's Tab stop whether focus is in the grid or on the footer; a folded
+  // section has no rows, hence no Tab stop; a removed row's Tab stop follows focus to its neighbour.
+  K10a: { landed: ch('open', C2), tab0: { chapters: ch('open', C2) } },
+  K10b: { landed: 'bprint', tab0: { chapters: ch('open', C2), meta: null } },
+  K10c: { landed: 'infohead', posted: [], tab0: { meta: 'meta:title', chapters: ch('open', C2) } },
+  K11: { landed: ch('open', C3), chapters: [C1, C3], posted: ['removeEntry'], tab0: { chapters: ch('open', C3) } },
+  K12: { landed: book(B), posted: [], tab0: { books: book(B) } },
+  // The welcome screen's buttons keep focus across a state push.
+  W1: { landed: null, posted: [] },
+  W2: { landed: 'welcome:createBook', posted: [] },
+  // Drops: below the last row's midpoint = the tail; on the header = before the first row; the
+  // other list's section refuses; the row's own slot (before its successor) paints and posts nothing.
+  N1: { landed: ch('open', C1), chapters: [C2, C3, C1], posted: ['moveEntryTo'], drop: 'after ' + ch('open', C3), pending: 0 },
+  N2: { landed: ch('open', C3), chapters: [C3, C1, C2], posted: ['moveEntryTo'], drop: 'before ' + ch('open', C1), pending: 0 },
+  N3: { landed: ch('open', C1), chapters: [C1, C2, C3], posted: [], drop: null },
+  N4: { landed: ch('open', C2), chapters: [C1, C2, C3], posted: [], drop: null },
 };
 
 /** The page as the host serves it: the `__INIT` bootstrap (every label reads as its own key — the
@@ -417,6 +577,23 @@ test('focus lands on a safe neighbour after every host-driven rebuild (#78)', BR
     }
     if (want.pending !== undefined && r.pending !== want.pending) {
       wrong.push(`${r.name}: ${String(r.pending)} pending row(s), expected ${String(want.pending)}`);
+    }
+    for (const [grid, key] of Object.entries(want.tab0 ?? {})) {
+      if (r.tab0[grid] !== key) {
+        wrong.push(`${r.name}: ${grid} Tab stop is ${String(r.tab0[grid])}, expected ${String(key)}`);
+      }
+    }
+    if (want.drop !== undefined && r.drop !== want.drop) {
+      wrong.push(`${r.name}: drop mark ${String(r.drop)}, expected ${String(want.drop)}`);
+    }
+    // Invariants of every step: one Tab stop per grid at most, and the focused cell is its grid's.
+    for (const [grid, key] of Object.entries(r.tab0)) {
+      if (key === 'MULTI') {
+        wrong.push(`${r.name}: ${grid} has several tabindex=0 cells`);
+      }
+    }
+    if (r.grid !== null && r.tab0[r.grid] !== r.landed) {
+      wrong.push(`${r.name}: focus is on ${String(r.landed)} but ${r.grid}'s Tab stop is ${String(r.tab0[r.grid])}`);
     }
   }
   assert.deepEqual(wrong, [], wrong.join('\n'));

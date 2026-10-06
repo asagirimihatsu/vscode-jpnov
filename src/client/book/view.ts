@@ -423,9 +423,6 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       case 'addEntries':
         await this.dispatchList('jpbook.addFiles', msg.uri, msg.list);
         break;
-      case 'createEntry':
-        await this.dispatchList('jpbook.createFile', msg.uri, msg.list);
-        break;
       case 'removeEntry':
         await this.runEntryVerb(msg.uri, () => this.dispatchEntry('jpbook.removeEntry', msg.uri, msg.list, rowRefOf(msg)));
         break;
@@ -459,7 +456,7 @@ export class BooksViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     await vscode.commands.executeCommand('jpbook.editMeta', node);
   }
 
-  /** Dispatch a list command (add / create) with a synthesized list node. */
+  /** Dispatch a list command with a synthesized list node. */
   private async dispatchList(command: string, uri: unknown, list: unknown): Promise<void> {
     const entry = this.entryOf(uri);
     if (entry === undefined || !isEntryList(list)) {

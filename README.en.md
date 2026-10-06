@@ -58,9 +58,9 @@ No AI anywhere in the writing path (see [No-AI policy](#no-ai-policy)).
    page-number style (see
    [Per-book metadata](#per-book-metadata-front-matter)). Editing the file
    by hand does the same thing the view does.
-2. **Write chapters.** Click **New chapter…** under **Chapters** and name
-   the chapter the same way: the `.jpnov` file is created, listed in the
-   book, and opened in the editor. Aozora Bunko annotations are highlighted as you type;
+2. **Write chapters.** Click **Add chapters…** under **Chapters**, type a
+   name and press Enter: the `.jpnov` file is created, listed in the book,
+   and opened in the editor. Aozora Bunko annotations are highlighted as you type;
    click the preview icon in the editor title bar (**Japanese Novel: Open
    Preview to the Side**) to write beside the vertical layout.
 3. **Build it.** Click **Print / Save as PDF** at the bottom of the view: the
@@ -330,10 +330,12 @@ workspace, unknown metadata keys…), and document links — Cmd/Ctrl-click an
 entry to open the chapter.
 
 The Books view edits books, too. Open one to see its **Book Info**,
-**Cover pages** and **Chapters** sections: **New chapter…** creates a chapter
-file and adds it to the book, **Add chapters…** brings in files you already
-have, dragging (or the arrow buttons) reorders them, and **×** takes an entry
-out of the book while keeping the file. **Cover pages** manages the `cover`
+**Cover pages** and **Chapters** sections: **Add chapters…** ticks in files
+you already have and creates new ones from a typed name, dragging (or the
+arrow buttons) reorders them, and **×** takes an entry
+out of the book while keeping the file. From the keyboard, ↑/↓ move between
+entries, Alt+↑/↓ reorder them, Delete takes one out, and Esc returns to the
+list. **Cover pages** manages the `cover`
 list the same way (see [Submission cover sheets and title
 pages](#submission-cover-sheets-and-title-pages)). Expand **Book Info** and
 click a row to edit that value in place; the buttons at the bottom build only
@@ -412,7 +414,7 @@ the HTML build, and so in any PDF saved from it. The running head and page numbe
 start on the first body page, however many cover sheets precede it.
 
 The Books view's **Cover pages** section adds, creates and reorders these files
-just like chapters; **New cover page…** seeds the new file with the sample below.
+just like chapters; a cover created from **Add cover pages…** starts with the sample below.
 
 A cover file can pull in the book's own metadata:
 

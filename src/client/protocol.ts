@@ -113,7 +113,6 @@ export type BooksOutbound =
   // the `path` written there, the detail's `version`); the host acts only while the text still
   // matches, and answers a stale row with a re-push.
   | { readonly type: 'addEntries'; readonly uri: string; readonly list: EntryList }
-  | { readonly type: 'createEntry'; readonly uri: string; readonly list: EntryList }
   | {
     readonly type: 'removeEntry';
     readonly uri: string;
@@ -159,11 +158,11 @@ export interface Labels {
   readonly buildEpub: string;
   readonly revealOutput: string;
   readonly back: string;
-  readonly openChapter: string;
+  /** Accessible name of the book list (the grid) when no root heading names it. */
+  readonly books: string;
   readonly chapters: string;
   readonly bookInfo: string;
   readonly addChapters: string;
-  readonly newChapter: string;
   readonly moveUp: string;
   readonly moveDown: string;
   readonly remove: string;
@@ -171,8 +170,6 @@ export interface Labels {
   readonly noChapters: string;
   readonly covers: string;
   readonly addCovers: string;
-  readonly newCover: string;
-  readonly openCover: string;
   readonly noCovers: string;
   readonly noBooksTitle: string;
   readonly noBooksBody: string;
