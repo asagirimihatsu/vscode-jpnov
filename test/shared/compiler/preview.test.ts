@@ -12,8 +12,8 @@ const EDGE_MIX = 'color-mix(in srgb,var(--edge) 80%,transparent)';
 /** A match pattern: raw regex source with the escaped recipe for `base` appended. */
 const edgeMixRe = (raw: string): RegExp => new RegExp(raw + EDGE_MIX.replace(/[()]/g, '\\$&'));
 // Full recipe pinned by css.test.ts / styles-codegen.test.ts; here only a shipped-rule probe
-// (css.ts edgeRules(): per-boundary layers on a dedicated .segment::before rule).
-const EDGE_GRAD_PROBE = /\.segment::before\{background-image:linear-gradient\(/;
+// (preview.edge.css: the one-column tile on the .segment::before frame rule).
+const EDGE_GRAD_PROBE = /\.segment::before\{[^}]*background-image:linear-gradient\(/;
 
 /** renderPreview with explicit resolved options (the compiler has no defaults); chrome all-off. */
 function preview(
@@ -216,7 +216,7 @@ test('renderPreview line numbers count wrapped continuation columns as their own
 
 test('renderPreview edge lines ride the stylesheet only: red and text, both at 80% alpha', () => {
   const red = preview('一', { chrome: { lineNumbers: false, edgeLine: 'red' } });
-  assert.match(red, EDGE_GRAD_PROBE); // full-page rules on the frame's own background
+  assert.match(red, EDGE_GRAD_PROBE); // full-segment rules on the frame's own background
   assert.match(red, edgeMixRe(String.raw`\.segment::before\{[^}]*border:1px solid `));
   assert.match(red, /\.segment\{min-block-size:calc\(var\(--lpp\)\*var\(--pitch\)\*1em\);\}/);
   assert.match(red, /:root\{[^}]*--lpp:34;--edge:#cc0000\}/);

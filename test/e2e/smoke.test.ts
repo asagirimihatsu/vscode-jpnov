@@ -462,22 +462,30 @@ test('リーダー stays a font glyph — no drawn substitute markup', async () 
 /**
  * Same parse-time trick as MEASURE_SCRIPT, for the preview's edge-frame geometry. The page is
  * unscrolled (no bundle), so the viewport's right edge is the document's: the first segment's
- * right edge is where the blank margin ends.
+ * right edge is where the blank margin ends. The LAST segment is the over-long one (#177).
  */
 const EDGE_MEASURE_SCRIPT = `<script>
 (() => {
-  const seg = document.querySelector('.segment');
+  const segs = document.querySelectorAll('.segment');
+  const seg = segs[0];
+  const last = segs[segs.length - 1];
   const cs = seg ? getComputedStyle(seg, '::before') : null;
   const ln = seg ? seg.querySelector('.ln') : null;
+  const frame = (s) => s ? parseFloat(getComputedStyle(s, '::before').width) : 0;
   document.documentElement.setAttribute('${MARKER}', JSON.stringify({
     rootFontSize: parseFloat(getComputedStyle(document.documentElement).fontSize),
     lineCount: seg ? seg.querySelectorAll('.line').length : 0,
     segWidth: seg ? seg.getBoundingClientRect().width : 0,
-    frameWidth: cs ? parseFloat(cs.width) : 0,
-    ruleLayers: cs ? cs.backgroundImage.split('linear-gradient').length - 1 : 0,
+    frameWidth: frame(seg),
+    ruleRepeat: cs ? cs.backgroundRepeat : '',
+    tileWidth: cs ? parseFloat(cs.backgroundSize) : 0,
     innerWidth: window.innerWidth,
     segRight: seg ? seg.getBoundingClientRect().right : 0,
     lnRight: ln ? ln.getBoundingClientRect().right : 0,
+    segments: segs.length,
+    lastLineCount: last ? last.querySelectorAll('.line').length : 0,
+    lastSegWidth: last ? last.getBoundingClientRect().width : 0,
+    lastFrameWidth: frame(last),
   }));
 })();
 </script>`;
@@ -487,50 +495,79 @@ interface EdgeMetrics {
   readonly lineCount: number;
   readonly segWidth: number;
   readonly frameWidth: number;
-  /** Background layers on the frame — edgeRules() emits one per interior column boundary. */
-  readonly ruleLayers: number;
+  /** The 罫線 tile's repeat — along the columns (physical x), so any segment length is ruled. */
+  readonly ruleRepeat: string;
+  /** The tile's width (px) — one column at this 行送り. */
+  readonly tileWidth: number;
   readonly innerWidth: number;
   /** The first segment's right edge: the frame's too (`right:0` inside it). */
   readonly segRight: number;
   /** The first column's line number's right edge. */
   readonly lnRight: number;
+  readonly segments: number;
+  readonly lastLineCount: number;
+  readonly lastSegWidth: number;
+  readonly lastFrameWidth: number;
 }
 
-test('a ［＃改ページ］-shortened preview segment frames and rules a full page at every 行送り', BROWSER_SKIP, async () => {
+/** The frame (whose background carries the rules) spans its segment, −2px of its own borders. */
+function assertFrameSpans(segWidth: number, frameWidth: number, what: string): void {
+  assert.ok(
+    frameWidth > 0 && segWidth - frameWidth < 4,
+    `${what}: the frame must span the segment (frame ${String(frameWidth)}px, segment ${String(segWidth)}px)`,
+  );
+}
+
+/** The over-long last chapter of the edge test: its own segment, no ［＃改ページ］ inside. */
+const LONG_CHAPTER_LINES = 2 * PREVIEW_SETTINGS.linesPerPage + 12;
+
+test('preview edge: a ［＃改ページ］-short segment reserves a page, an over-long one is ruled to its end, at every 行送り', BROWSER_SKIP, async () => {
   assert.ok(browser, 'JPNOV_E2E_REQUIRE_BROWSER=1 but no Chromium-family browser was found');
+  // One page per launch: the short first chapter AND an over-long last one (#177).
+  const text = `${CHAPTER_TEXT}［＃改ページ］\n${'　山田　太郎は王都へ行った。\n'.repeat(LONG_CHAPTER_LINES)}`;
   for (const linePitch of LINE_PITCHES) {
     const { html } = await conn().request<RenderFileResult>('jpnov/renderFile', {
       uri: 'file:///e2e/edge.jpnov',
-      text: CHAPTER_TEXT,
+      text,
       settings: { ...PREVIEW_SETTINGS, edgeLine: 'red', linePitch },
     });
 
     const prefix = `edge-${String(linePitch).replace('.', '_')}`;
     const m = JSON.parse(await measurePage(browser, html, EDGE_MEASURE_SCRIPT, prefix, cleanups)) as EdgeMetrics;
+    const column = linePitch * m.rootFontSize;
 
-    assert.equal(
-      m.ruleLayers,
-      PREVIEW_SETTINGS.linesPerPage - 1,
-      `@${String(linePitch)}: one rule layer per interior column boundary must ride the frame background`,
+    // The 罫線: one column-wide tile on the frame, repeated along the columns.
+    assert.equal(m.ruleRepeat, 'repeat-x', `@${String(linePitch)}: the tile must repeat along the columns`);
+    assert.ok(
+      Math.abs(m.tileWidth - column) < 0.5,
+      `@${String(linePitch)}: the tile must be one column wide (${String(m.tileWidth)}px vs ${String(column)}px)`,
     );
+
+    // The short first segment reserves the full page width; its frame spans the reservation.
     assert.ok(
       m.lineCount >= 1 && m.lineCount < PREVIEW_SETTINGS.linesPerPage,
-      `@${String(linePitch)}: the corpus must under-fill the page for this test (saw ${String(m.lineCount)} lines)`,
+      `@${String(linePitch)}: the first chapter must under-fill the page for this test (saw ${String(m.lineCount)} lines)`,
     );
-    const fullPage = PREVIEW_SETTINGS.linesPerPage * linePitch * m.rootFontSize;
+    const fullPage = PREVIEW_SETTINGS.linesPerPage * column;
     assert.ok(
       Math.abs(m.segWidth - fullPage) < 2,
       `@${String(linePitch)}: a short segment must reserve the full page width (${String(m.segWidth)}px vs ${String(fullPage)}px)`,
     );
-    // The frame (whose background carries the rules) must span it (−2px of its own borders).
+    assertFrameSpans(m.segWidth, m.frameWidth, `@${String(linePitch)} first segment`);
+
+    // The over-long last segment grows with its lines (no page cap), and so does its frame.
+    assert.ok(m.segments >= 2 && m.lastLineCount === LONG_CHAPTER_LINES, `@${String(linePitch)}: the last chapter must over-fill a page in ONE segment`);
+    const extent = LONG_CHAPTER_LINES * column;
     assert.ok(
-      m.frameWidth > 0 && m.segWidth - m.frameWidth < 4,
-      `@${String(linePitch)}: the frame must span the reserved width (frame ${String(m.frameWidth)}px, segment ${String(m.segWidth)}px)`,
+      Math.abs(m.lastSegWidth - extent) < 2,
+      `@${String(linePitch)}: a long segment must span all its columns (${String(m.lastSegWidth)}px vs ${String(extent)}px)`,
     );
+    assertFrameSpans(m.lastSegWidth, m.lastFrameWidth, `@${String(linePitch)} last segment`);
+
     // The blank right margin (#123): PREVIEW_MARGIN_LINES of this pitch between the viewport's
     // right edge and the first segment — and so the frame and the rules; the line number stays
     // inside its column.
-    const margin = PREVIEW_MARGIN_LINES * linePitch * m.rootFontSize;
+    const margin = PREVIEW_MARGIN_LINES * column;
     assert.ok(
       Math.abs(m.innerWidth - m.segRight - margin) < 2,
       `@${String(linePitch)}: the text must start ${String(margin)}px in from the right edge (segment right ${String(m.segRight)}px of ${String(m.innerWidth)}px)`,
