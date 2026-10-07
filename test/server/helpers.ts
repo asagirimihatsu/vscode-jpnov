@@ -9,11 +9,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { CodeActionKind } from 'vscode-languageserver/node';
 import type { Connection, PublishDiagnosticsParams } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { parse } from '../../src/shared/ast/parse.ts';
 import { selectRules } from '../../src/shared/lint/select.ts';
+import { buildCodeActions } from '../../src/server/lint/codeActions.ts';
 import { computeLintFindings } from '../../src/server/lint/engine.ts';
 import type { LintFinding } from '../../src/server/lint/engine.ts';
 import type { RawLintConfigWire } from '../../src/shared/protocol.ts';
@@ -159,4 +161,13 @@ export function applyLintFixes(src: string, raw: RawLintConfigWire): { out: stri
     out = out.slice(0, ed.s) + ed.t + out.slice(ed.e);
   }
   return { out, edits };
+}
+
+/** The source after the editor's fix-all under `raw`: the `source.fixAll` action's edits, applied as
+ *  LSP applies them (overlapping fixes dropped, unlike {@link applyLintFixes}). */
+export function applyFixAll(src: string, raw: RawLintConfigWire): string {
+  const { doc, findings } = lintFindings(src, raw);
+  const whole = { start: doc.positionAt(0), end: doc.positionAt(src.length) };
+  const [action] = buildCodeActions(doc.uri, findings, whole, [CodeActionKind.SourceFixAll]);
+  return TextDocument.applyEdits(doc, action?.edit?.changes?.[doc.uri] ?? []);
 }

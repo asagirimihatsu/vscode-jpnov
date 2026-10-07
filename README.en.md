@@ -494,9 +494,10 @@ and a kanji run split by an annotation (`聴覚視覚［＃太字］区分装置
 counts as one run — the checks see the text the way a reader will.
 
 - **Hygiene checks are on by default** — half-width kana, decomposed (NFD)
-  characters, zero-width spaces, invalid control characters, and trailing
-  spaces (`common.noTrailingSpace`) — so a stray malformed or invisible
-  character never slips into a manuscript. The dash check (`common.dash`) is
+  characters, zero-width spaces, invalid control characters, trailing
+  spaces (`common.noTrailingSpace`), and a half-width space between full-width
+  characters (`common.jaNoSpaceBetweenFullWidth`) — so a stray malformed or
+  invisible character never slips into a manuscript. The dash check (`common.dash`) is
   on too, keeping one dash character throughout.
 - **Manuscript-convention checks are on by default too**, each with its own
   switch and message: paragraph indent (`narration.indent`), narration lines
@@ -561,6 +562,7 @@ form, and `ruby.kana` to ruby readings.
 | `jpnov.lint.common.dash` | `horizontalBar` | One dash character throughout, always in pairs (auto-fix) |
 | `jpnov.lint.common.ellipsis` | `true` | Even-count `…` runs; `。。`/`、、`/`・・` stand-ins (auto-fix) |
 | `jpnov.lint.common.exclamationSpace` | `true` | A full-width space after `！`/`？` when text continues (auto-fix) |
+| `jpnov.lint.common.jaNoSpaceBetweenFullWidth` | `true` | Half-width space between full-width characters, or after two or more half-width `!`/`?` (auto-fix) |
 | `jpnov.lint.common.questionExclamationMarks` | `fullWidth` | Half-width pairs `!!` `!?` `?!` `??` set in one square (auto-fix): `fullWidth` (one character, `⁉`) / `tcy` (the 縦中横 annotation) / `off` |
 | `jpnov.lint.narration.indent` | `true` | Narration lines start with `　` or an opening bracket (auto-fix) |
 | `jpnov.lint.narration.endPeriod` | `true` | Narration lines end with `。` (auto-fix) |
@@ -573,7 +575,6 @@ form, and `ruby.kana` to ruby readings.
 | `jpnov.lint.common.arabicDigits` | `null` | Digits per Arabic-numeral run (suggested 2) |
 | `jpnov.lint.common.blankRun` | `null` | Blank lines in a row, `0` to forbid them (suggested 1, auto-fix) |
 | `jpnov.lint.common.noUnmatchedPair` | `true` | Unmatched brackets / quotes |
-| `jpnov.lint.common.jaNoSpaceBetweenFullWidth` | `false` | Space between full-width characters (auto-fix) |
 | `jpnov.lint.common.jaUnnaturalAlphabet` | `false` | Lone letter between Japanese characters (IME slip) |
 | `jpnov.lint.common.minusPosition` | `false` | Minus sign not before a number |
 | `jpnov.lint.ruby.kana` | `off` | Ruby readings all-hiragana / all-katakana |

@@ -75,6 +75,14 @@ test('fullWidthSpace: a half-width space between full-width chars is fixed to �
   assert.deepEqual(flagged(fullWidthSpaceScan, 'あ B'), []); // mixed -> not flagged
 });
 
+test('fullWidthSpace: a half-width ！？ run ends Japanese prose, so the space after it is flagged', () => {
+  assert.deepEqual(fullWidthSpaceScan('なに!? そして', true), [{ start: 4, end: 5, fix: '　' }]);
+  assert.deepEqual(flagged(fullWidthSpaceScan, 'なに!!! そして'), [' ']);
+  assert.deepEqual(flagged(fullWidthSpaceScan, 'なに! そして'), []); // a lone mark is Western
+  assert.deepEqual(flagged(fullWidthSpaceScan, 'なに!? John'), []); // the right side still decides
+  assert.deepEqual(flagged(fullWidthSpaceScan, 'あ !?だ'), []); // before a pair: not the issue
+});
+
 test('minusPosition: only a minus immediately before a digit is allowed', () => {
   assert.deepEqual(flagged(minusPositionScan, '気温は－5度'), []); // － before 5
   assert.deepEqual(flagged(minusPositionScan, '気温は－５度'), []); // full-width digit

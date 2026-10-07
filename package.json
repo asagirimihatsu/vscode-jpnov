@@ -488,7 +488,7 @@
           },
           "jpnov.lint.common.jaNoSpaceBetweenFullWidth": {
             "type": "boolean",
-            "default": false,
+            "default": true,
             "order": 18,
             "markdownDescription": "%jpnov.lint.common.jaNoSpaceBetweenFullWidth.description%"
           },

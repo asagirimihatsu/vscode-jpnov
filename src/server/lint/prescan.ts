@@ -107,10 +107,23 @@ function isNonAscii(ch: string | undefined): boolean {
   return ch !== undefined && (ch.codePointAt(0) ?? 0) > 0x7f;
 }
 
+/** True for a half-width ! or ?. */
+function isHalfMark(ch: string | undefined): boolean {
+  return ch === '!' || ch === '?';
+}
+
+/** True when Japanese prose ends right before `pos`: a non-ASCII character, or a half-width ！？
+ *  run of two or more (`!?`, `!!`, `?!?`) — the sentence-ender form, at the same threshold as
+ *  exclamationSpace; a lone half-width mark is Western. */
+function endsJapanese(text: string, pos: number): boolean {
+  return isNonAscii(text[pos - 1]) || (isHalfMark(text[pos - 1]) && isHalfMark(text[pos - 2]));
+}
+
 /**
- * Flags a run of half-width spaces sandwiched between two full-width (non-ASCII) characters; the fix
- * REPLACES the run with a single full-width space (　) — never deletes it. A run touching ASCII or a
- * line edge is left alone (Western text; paragraph indentation is the indent rule's job).
+ * Flags a run of half-width spaces that Japanese prose ends before and a full-width (non-ASCII)
+ * character begins after; the fix REPLACES the run with a single full-width space (　) — never
+ * deletes it. A run touching other ASCII or a line edge is left alone (Western text; paragraph
+ * indentation is the indent rule's job).
  */
 export const fullWidthSpaceScan: PreScan = (text) => {
   const out: { start: number; end: number; fix: string }[] = [];
@@ -124,7 +137,7 @@ export const fullWidthSpaceScan: PreScan = (text) => {
     while (i < text.length && text.charAt(i) === ' ') {
       i += 1;
     }
-    if (isNonAscii(text[start - 1]) && isNonAscii(text[i])) {
+    if (isNonAscii(text[i]) && endsJapanese(text, start)) {
       out.push({ start, end: i, fix: FULL_WIDTH_SPACE });
     }
   }

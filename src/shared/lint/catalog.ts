@@ -88,7 +88,7 @@ export const RULES = [
   { id: 'noZeroWidth', scope: 'common', kind: 'boolean', default: true },
   { id: 'noControlChar', scope: 'common', kind: 'boolean', default: true },
   { id: 'shiftJisSafe', scope: 'common', kind: 'boolean', default: true },
-  { id: 'jaNoSpaceBetweenFullWidth', scope: 'common', kind: 'boolean' },
+  { id: 'jaNoSpaceBetweenFullWidth', scope: 'common', kind: 'boolean', default: true },
   { id: 'jaUnnaturalAlphabet', scope: 'common', kind: 'boolean' },
   { id: 'minusPosition', scope: 'common', kind: 'boolean' },
   { id: 'indent', scope: 'narration', kind: 'boolean', default: true },

@@ -63,7 +63,7 @@ const FIX_CORPUS: Record<CatalogId, readonly string[] | null> = {
     '　あ［＃メ\u0085モ］い。',
   ],
   shiftJisSafe: null,
-  jaNoSpaceBetweenFullWidth: ['　あ いう。'],
+  jaNoSpaceBetweenFullWidth: ['　あ いう。', '　なに!? そして。'],
   jaUnnaturalAlphabet: null,
   minusPosition: null,
   indent: ['これは地の文。'],
