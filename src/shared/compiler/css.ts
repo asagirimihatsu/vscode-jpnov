@@ -2,8 +2,8 @@
  * Assembles the document stylesheet from the static fragments in `styles/*.css` (compiled to
  * strings in `styles.generated.ts` by `scripts/gen-styles.ts`) plus the dynamic residue: the
  * `:root{}` variable block (`--cpl`/`--pitch`/`--lpp`/`--htop`, `--edge`), the BUILD paper
- * rules, the 罫線 layers ({@link edgeRules}), the on-demand `indent-N` / emphasis class rules
- * and the 本文 font ({@link fontRule}).
+ * rules, the build's 罫線 layers ({@link edgeRules}), the on-demand `indent-N` / emphasis class
+ * rules and the 本文 font ({@link fontRule}).
  * Constraints:
  * - everything is a RULE inside the document's one `<style>`, never a `style=` attribute (the
  *   webview CSP strips those);
@@ -143,19 +143,20 @@ function rootVars(vars: Record<string, RootValue>): string {
 }
 
 /**
- * The 罫線 (inter-column rules): one 1px background layer per interior column boundary on the
- * frame pseudo-element, each anchored an independent `k × var(--pitch)` from the frame's right
- * edge. NEVER a repeating gradient — Chromium's print rasterizer tiles those on a
- * device-pixel-snapped period, drifting off the vector-placed glyph columns (~half a column
- * across an A4 page) and dropping some repetitions. The em is the text's in both media (the
- * build sheet's; the preview's `.book` pins it, preview.base.css).
+ * The build's 罫線 (inter-column rules): one 1px background layer per interior column boundary
+ * on the `.page` frame pseudo-element, each anchored an independent `k × var(--pitch)` from
+ * the frame's right edge in the sheet's em. NEVER a repeated tile here — Chromium's print
+ * rasterizer tiles those on a device-pixel-snapped period, drifting off the vector-placed
+ * glyph columns (~half a column across an A4 page) and dropping some repetitions. The
+ * preview's segment has no page extent, so its frame repeats one column-wide tile instead
+ * (preview.edge.css); that is screen-only.
  */
-function edgeRules(selector: string, linesPerPage: number): string {
+function edgeRules(linesPerPage: number): string {
   const mix = 'color-mix(in srgb,var(--edge) 80%,transparent)';
   const boundaries = Array.from({ length: linesPerPage - 1 }, (_, i) => i + 1);
   const images = boundaries.map(() => `linear-gradient(${mix},${mix})`);
   const positions = boundaries.map((k) => `right calc(${String(k)}*var(--pitch)*1em - 1px) top`);
-  return `${selector}{background-image:${images.join(',')};` +
+  return `.page::before{background-image:${images.join(',')};` +
     `background-position:${positions.join(',')};` +
     'background-size:1px 100%;background-repeat:no-repeat;}';
 }
@@ -269,7 +270,7 @@ export function stylesheet(opts: StylesheetOptions): string {
       chrome.footer !== '' ? S.buildFooter : '',
       rootVars(vars),
       paperRules(fit),
-      edge !== null ? edgeRules('.page::before', opts.linesPerPage) : '',
+      edge !== null ? edgeRules(opts.linesPerPage) : '',
       ...tail,
     ].join('');
   }
@@ -288,7 +289,6 @@ export function stylesheet(opts: StylesheetOptions): string {
     opts.chrome.lineNumbers ? S.previewLn : '',
     edge !== null ? S.previewEdge : '',
     rootVars(vars),
-    edge !== null ? edgeRules('.segment::before', opts.linesPerPage) : '',
     ...tail,
   ].join('');
 }

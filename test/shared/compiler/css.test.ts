@@ -15,20 +15,30 @@ import { LINE_PITCHES } from '../../../src/shared/config/types.ts';
 const EDGE_MIX = 'color-mix(in srgb,var(--edge) 80%,transparent)';
 /** A match pattern: raw regex source with the escaped recipe appended. */
 const edgeMixRe = (raw: string): RegExp => new RegExp(raw + EDGE_MIX.replace(/[()]/g, '\\$&'));
-/** The inter-column rules: css.ts edgeRules() — one 1px background layer per interior column
- *  boundary, each an independent `right calc(k*pitch)` offset in the text's em (the
- *  no-repeating-gradient ruling lives on edgeRules). */
-const EDGE_RULES = (selector: string, linesPerPage = 34): string => {
+/** A 罫線's phase: the 1px line's right edge `k` columns in from the frame's right edge. ONE
+ *  template for both media, so the line's side of the boundary cannot drift between them. */
+const boundary = (k = ''): string => `right calc(${k}var(--pitch)*1em - 1px) top`;
+/** The build's inter-column rules: css.ts edgeRules() — one 1px background layer per interior
+ *  column boundary, each an independent `boundary(k)` in the sheet's em (the no-repeated-tile
+ *  ruling for print lives on edgeRules). */
+const EDGE_RULES = (linesPerPage = 34): string => {
   const images: string[] = [];
   const positions: string[] = [];
   for (let k = 1; k < linesPerPage; k++) {
     images.push(`linear-gradient(${EDGE_MIX},${EDGE_MIX})`);
-    positions.push(`right calc(${String(k)}*var(--pitch)*1em - 1px) top`);
+    positions.push(boundary(`${String(k)}*`));
   }
-  return `${selector}{background-image:${images.join(',')};` +
+  return `.page::before{background-image:${images.join(',')};` +
     `background-position:${positions.join(',')};` +
     'background-size:1px 100%;background-repeat:no-repeat;}';
 };
+/** The preview's inter-column rules (preview.edge.css): one column-wide tile on the frame,
+ *  a 1px line at its right edge, anchored one column in and repeated along the columns, so a
+ *  segment of any length is ruled (#177). */
+const PREVIEW_EDGE_TILE = `border:1px solid ${EDGE_MIX};` +
+  `background-image:linear-gradient(to left,${EDGE_MIX} 1px,transparent 1px);` +
+  `background-size:calc(var(--pitch)*1em) 100%;background-position:${boundary()};` +
+  'background-repeat:repeat-x;background-origin:border-box;background-clip:padding-box;';
 
 const PREVIEW_OFF: PreviewChrome = { lineNumbers: false, edgeLine: 'none' };
 const BUILD_OFF: BuildChrome = {
@@ -498,12 +508,13 @@ test('preview line numbers: fixed-px out-of-flow .ln rule (numbers are JS-emitte
   assert.doesNotMatch(css, /::after/); // no edge rules leak into the lineNumbers-only sheet
 });
 
-test('preview edge: frame + full-page background rules on the shared pitch', () => {
+test('preview edge: frame + full-segment background rules on the shared pitch', () => {
   const red = preview({ chrome: { lineNumbers: false, edgeLine: 'red' } });
   assert.match(red, /\.line\{position:relative;\}/); // paint order: text above the frame pseudo
-  // The rules ride the frame's own background — independent of the .line count.
-  assert.ok(red.includes(EDGE_RULES('.segment::before')));
-  assert.match(red, edgeMixRe(String.raw`\.segment::before\{[^}]*border:1px solid `));
+  // The rules ride the frame's own background as one repeated column tile — independent of
+  // the .line count AND of linesPerPage (a segment is not a page); never the build's layers.
+  assert.ok(red.includes(PREVIEW_EDGE_TILE));
+  assert.doesNotMatch(red, /\.segment::before\{background-image/); // no second edgeRules() home
   assert.match(red, /:root\{[^}]*--edge:#cc0000\}/); // the recipe's base colour rides --edge
   assert.doesNotMatch(red, /::after/);
   assert.doesNotMatch(red, /border-left|border-right/);
@@ -521,8 +532,7 @@ test('preview edge: frame + full-page background rules on the shared pitch', () 
   assert.match(red, /html\{[^}]*line-height:var\(--pitch\)/);
   assert.match(red, /\.line\{[^}]*block-size:calc\(var\(--pitch\)\*1em\)/);
   const text = preview({ chrome: { lineNumbers: false, edgeLine: 'text' } });
-  assert.ok(text.includes(EDGE_RULES('.segment::before')));
-  assert.match(text, edgeMixRe(String.raw`\.segment::before\{[^}]*border:1px solid `));
+  assert.ok(text.includes(PREVIEW_EDGE_TILE));
   assert.match(text, /:root\{[^}]*--edge:currentColor\}/);
   // Rules off ⇒ the SAME pitch — toggling edgeLine never moves a glyph within its segment
   // (the frame look also reserves the full page extent for short segments).
@@ -578,7 +588,8 @@ test('build all-on chrome: bands, outset frame, counters, rules, furniture style
   assert.match(css, /\.line\{[^}]*block-size:calc\(var\(--pitch\)\*1em\)/);
   // 罫線 ride the frame's own background (full page extent, independent of the .line count);
   // print-color-adjust keeps them in print/PDF (borders print, backgrounds are omitted).
-  assert.ok(css.includes(EDGE_RULES('.page::before')));
+  assert.ok(css.includes(EDGE_RULES()));
+  assert.doesNotMatch(css, /repeat-x|to left/); // print never tiles: the no-repeated-tile ruling
   assert.match(css, /\.page::before\{[^}]*-webkit-print-color-adjust:exact;print-color-adjust:exact/);
   assert.doesNotMatch(css, /::after/);
   assert.doesNotMatch(css, /\.line[^{]*\{[^}]*box-shadow/);
@@ -651,7 +662,7 @@ test('build red edge lines colour both the frame and the inter-column rules', ()
   // No line-number band here, so the frame floats EDGE_INSET off the header band.
   assert.ok(css.includes(FRAME_INSETS), 'frame insets must track the band constants');
   assert.match(css, htopRe(HEADER_BAND));
-  assert.ok(css.includes(EDGE_RULES('.page::before')));
+  assert.ok(css.includes(EDGE_RULES()));
   assert.match(css, /\.line\{[^}]*position:relative/); // paint order: text above the frame pseudo
   assert.match(css, /\.line\{[^}]*block-size:calc\(var\(--pitch\)\*1em\)/); // the one --pitch value
 });

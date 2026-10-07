@@ -111,10 +111,13 @@ test('the EDGE_INSET fragment sites all derive from the constant (reserve double
 test('the pitch-bearing fragment sites all read var(--pitch), and no literal pitch remains', () => {
   // The pitch sites live inside calc(), where cssValue() deliberately does not read — lock
   // the full var(--pitch) strings instead (the .line sizing and the 罫線 offsets MUST read
-  // the same variable: the uniform-layout contract; the 罫線 themselves are emitted by
-  // css.ts's edgeRules(), pinned in css.test.ts).
+  // the same variable: the uniform-layout contract; the build's 罫線 are emitted by css.ts's
+  // edgeRules(), pinned in css.test.ts; the preview's are the tile pinned below).
   const pitchSites: readonly (readonly [file: string, needle: string])[] = [
     ['preview.edge.css', 'min-block-size:calc(var(--lpp)*var(--pitch)*1em)'],
+    // The preview 罫線 tile: one column wide, anchored one column in (#177).
+    ['preview.edge.css', 'background-size:calc(var(--pitch)*1em) 100%;'],
+    ['preview.edge.css', 'background-position:right calc(var(--pitch)*1em - 1px) top;'],
     ['preview.base.css', 'line-height:var(--pitch);'],
     ['preview.base.css', '.line{block-size:calc(var(--pitch)*1em);'],
     // The right margin (#123) double-homes PREVIEW_MARGIN_LINES and reads the pitch in rem.
@@ -134,14 +137,22 @@ test('the pitch-bearing fragment sites all read var(--pitch), and no literal pit
   }
 });
 
-test('the edge fragments paint NO background of their own (edgeRules owns the 罫線)', () => {
-  // The 罫線 are css.ts edgeRules() per-boundary layers — the no-repeating-gradient ruling
+test('the build edge fragment paints NO background of its own (edgeRules owns the build 罫線)', () => {
+  // The build's 罫線 are css.ts edgeRules() per-boundary layers — the no-repeated-tile ruling
   // (print tiling drifts) lives there; a fragment-side background would be a second home.
-  for (const file of ['build.edge.css', 'preview.edge.css']) {
-    const rules = read(file).replace(/\/\*[\s\S]*?\*\//g, '');
-    assert.ok(!rules.includes('background-image'), `${file} must not paint its own background`);
-    assert.ok(!rules.includes('repeating-linear-gradient'), `${file} revived the tiled-gradient 罫線`);
-  }
+  const rules = read('build.edge.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.ok(!rules.includes('background-image'), 'build.edge.css must not paint its own background');
+  assert.ok(!rules.includes('repeating-linear-gradient'), 'build.edge.css revived the tiled-gradient 罫線');
+});
+
+test('the preview edge fragment paints ONE column-wide tile, repeated (#177)', () => {
+  // The preview's segment has no page extent, so its frame repeats a single one-column tile:
+  // exactly one gradient, repeat-x, never the repeating-gradient form (whose period Chromium
+  // snaps in print — and which would be a second recipe for the same stripe).
+  const rules = read('preview.edge.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.equal(rules.split('linear-gradient(').length - 1, 1, 'exactly one gradient layer');
+  assert.ok(rules.includes('background-repeat:repeat-x;'), 'the tile must repeat along the columns');
+  assert.ok(!rules.includes('repeating-linear-gradient'), 'preview.edge.css revived the repeating-gradient 罫線');
 });
 
 test('the base fragments carry NO ruby rules (the class.ruby-*.css lanes own rt sizing)', () => {
