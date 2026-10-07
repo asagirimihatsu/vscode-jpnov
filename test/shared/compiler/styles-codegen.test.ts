@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import {
   EDGE_INSET,
   FOOTER_BAND,
+  PREVIEW_MARGIN_LINES,
   SIDE_PAD,
 } from '../../../src/shared/compiler/geometry.ts';
 
@@ -116,6 +117,8 @@ test('the pitch-bearing fragment sites all read var(--pitch), and no literal pit
     ['preview.edge.css', 'min-block-size:calc(var(--lpp)*var(--pitch)*1em)'],
     ['preview.base.css', 'line-height:var(--pitch);'],
     ['preview.base.css', '.line{block-size:calc(var(--pitch)*1em);'],
+    // The right margin (#123) double-homes PREVIEW_MARGIN_LINES and reads the pitch in rem.
+    ['preview.base.css', `padding-block:calc(${String(PREVIEW_MARGIN_LINES)}*var(--pitch)*1rem) 20px;`],
     ['build.base.css', 'html{line-height:var(--pitch);}'],
     ['build.base.css', 'width:calc(var(--lpp)*var(--pitch)*1em);'],
     ['build.base.css', '.line{block-size:calc(var(--pitch)*1em);'],

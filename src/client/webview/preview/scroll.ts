@@ -13,10 +13,10 @@ import type { Cursor, PreviewInit } from '../../protocol.ts';
 import { api } from './api.ts';
 
 /**
- * Viewport fraction (from the left edge) where the active column's centre parks; vertical-rl reads
- * right-to-left, so >0.5 keeps the larger share of the pane ahead (left) of the cursor line.
+ * Viewport fraction (from the left edge) where the active column's centre parks: the golden
+ * section, with the larger share of the pane to the right (the text already read, in vertical-rl).
  */
-const REVEAL_RATIO = 0.6180339887498949;
+const REVEAL_RATIO = 0.38196601125010515;
 
 /** Per-frame fraction of the remaining distance the glide covers (~150ms to settle at 60fps). */
 const REVEAL_EASE = 0.3;

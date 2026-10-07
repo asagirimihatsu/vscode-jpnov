@@ -4,7 +4,7 @@ import type { BuildChrome, PreviewChrome } from '../../../src/shared/compiler/ch
 import { FURNITURE_ALIGNS } from '../../../src/shared/compiler/chrome.ts';
 import { DEFAULT_FONT_STACK, FONT_LIST_MAX, reflowStylesheet, stylesheet } from '../../../src/shared/compiler/css.ts';
 import type { PaperOrientation, PaperSize } from '../../../src/shared/compiler/geometry.ts';
-import { EDGE_INSET, FOOTER_BAND, HEADER_BAND, LINENUM_BAND, SIDE_PAD, fitPaper } from '../../../src/shared/compiler/geometry.ts';
+import { EDGE_INSET, FOOTER_BAND, HEADER_BAND, LINENUM_BAND, PREVIEW_MARGIN_LINES, SIDE_PAD, fitPaper } from '../../../src/shared/compiler/geometry.ts';
 import type { LinePitch } from '../../../src/shared/config/types.ts';
 import { LINE_PITCHES } from '../../../src/shared/config/types.ts';
 
@@ -146,6 +146,8 @@ const fitFormulaRe = new RegExp(
 );
 /** The unconditional text inset of a preview segment: EDGE_INSET in the text's em. */
 const SEGMENT_INSET = `.segment{position:relative;padding-inline:${String(EDGE_INSET)}em;}`;
+/** The preview body: the 16px top/bottom pads, the PREVIEW_MARGIN_LINES right margin, the host's 20px at the left. */
+const PREVIEW_BODY = `body{margin:0;padding-inline:16px;padding-block:calc(${String(PREVIEW_MARGIN_LINES)}*var(--pitch)*1rem) 20px;}`;
 /** The 本文 font rule: the built-in stack, then the setting's list when it has a legal one. */
 const fontRule = (list = ''): string =>
   `.book{font-family:${DEFAULT_FONT_STACK}${list === '' ? '' : `;font-family:${list}`}}`;
@@ -221,10 +223,16 @@ test('preview fit formula at the standard 40 chars per line pads the columns', (
   const css = preview();
   assert.match(css, fitFormulaRe);
   assert.ok(css.includes(':root{--cpl:40;--pitch:2}'));
-  // The padding the formula subtracts (top/bottom = inline axis in vertical-rl).
-  assert.match(css, /body\{[^}]*padding-inline:16px/);
+  // The padding the formula subtracts (top/bottom = inline axis in vertical-rl), with the
+  // blank right margin and the host's left pad on the body's block axis (#123).
+  assert.ok(css.includes(PREVIEW_BODY));
   // The matching text inset the denominator pays for — reserved with or without a frame.
   assert.ok(css.includes(SEGMENT_INSET));
+});
+
+test('the blank right margin is a preview look only (#123)', () => {
+  assert.doesNotMatch(build(), /padding-block:calc\(/);
+  assert.doesNotMatch(reflowStylesheet('relaxed', []), /padding-block:calc\(/);
 });
 
 /** The sheets the font rule has to close: both media, bare and with every chrome and class rules. */
