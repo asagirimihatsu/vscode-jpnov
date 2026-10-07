@@ -1,7 +1,8 @@
 /* The layout widget (chars per line × lines per page): a chip fixed over the preview's top-right
-   corner (the text starts there; new lines grow leftward), themed by the --vscode-* variables. The
-   document root is vertical-rl with a vh-fit font-size, so the chip pins its own writing mode and
-   px sizes; the strict CSP rules out style attributes, so every state is a class or data attribute. */
+   corner, inside the blank right margin at the document start (preview.base.css; the text starts
+   there and new lines grow leftward), themed by the --vscode-* variables. The document root is
+   vertical-rl with a vh-fit font-size, so the chip pins its own writing mode and px sizes; the
+   strict CSP rules out style attributes, so every state is a class or data attribute. */
 .jw{position:fixed;top:4px;right:8px;z-index:10;display:flex;align-items:center;gap:4px;padding:3px 6px;border-radius:4px;writing-mode:horizontal-tb;font:12px var(--vscode-font-family,sans-serif);line-height:normal;color:var(--vscode-editorWidget-foreground,var(--vscode-editor-foreground));background:var(--vscode-editorWidget-background,#252526);border:1px solid var(--vscode-editorWidget-border,var(--vscode-widget-border,transparent));box-shadow:0 0 8px var(--vscode-widget-shadow,rgba(0,0,0,.36));user-select:none;}
 /* An override is active: the input-validation warning look (the settings still hold the old values). */
 .jw[data-adjusted]{border-color:var(--vscode-inputValidation-warningBorder,#b89500);background:var(--vscode-inputValidation-warningBackground,#352a05);}

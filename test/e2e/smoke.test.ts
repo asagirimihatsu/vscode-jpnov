@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import type { CodeAction } from 'vscode-languageserver/node';
 
-import { HEADER_BAND, fitPaper } from '../../src/shared/compiler/geometry.ts';
+import { HEADER_BAND, PREVIEW_MARGIN_LINES, fitPaper } from '../../src/shared/compiler/geometry.ts';
 import { LINE_PITCHES } from '../../src/shared/config/types.ts';
 import type {
   BuildResult,
@@ -459,17 +459,25 @@ test('リーダー stays a font glyph — no drawn substitute markup', async () 
   assert.doesNotMatch(html, /class="ldr/, 'leaders ride the font, never a drawn substitute');
 });
 
-/** Same parse-time trick as MEASURE_SCRIPT, for the preview's edge-frame geometry. */
+/**
+ * Same parse-time trick as MEASURE_SCRIPT, for the preview's edge-frame geometry. The page is
+ * unscrolled (no bundle), so the viewport's right edge is the document's: the first segment's
+ * right edge is where the blank margin ends.
+ */
 const EDGE_MEASURE_SCRIPT = `<script>
 (() => {
   const seg = document.querySelector('.segment');
   const cs = seg ? getComputedStyle(seg, '::before') : null;
+  const ln = seg ? seg.querySelector('.ln') : null;
   document.documentElement.setAttribute('${MARKER}', JSON.stringify({
     rootFontSize: parseFloat(getComputedStyle(document.documentElement).fontSize),
     lineCount: seg ? seg.querySelectorAll('.line').length : 0,
     segWidth: seg ? seg.getBoundingClientRect().width : 0,
     frameWidth: cs ? parseFloat(cs.width) : 0,
     ruleLayers: cs ? cs.backgroundImage.split('linear-gradient').length - 1 : 0,
+    innerWidth: window.innerWidth,
+    segRight: seg ? seg.getBoundingClientRect().right : 0,
+    lnRight: ln ? ln.getBoundingClientRect().right : 0,
   }));
 })();
 </script>`;
@@ -481,6 +489,11 @@ interface EdgeMetrics {
   readonly frameWidth: number;
   /** Background layers on the frame — edgeRules() emits one per interior column boundary. */
   readonly ruleLayers: number;
+  readonly innerWidth: number;
+  /** The first segment's right edge: the frame's too (`right:0` inside it). */
+  readonly segRight: number;
+  /** The first column's line number's right edge. */
+  readonly lnRight: number;
 }
 
 test('a ［＃改ページ］-shortened preview segment frames and rules a full page at every 行送り', BROWSER_SKIP, async () => {
@@ -513,6 +526,18 @@ test('a ［＃改ページ］-shortened preview segment frames and rules a full 
     assert.ok(
       m.frameWidth > 0 && m.segWidth - m.frameWidth < 4,
       `@${String(linePitch)}: the frame must span the reserved width (frame ${String(m.frameWidth)}px, segment ${String(m.segWidth)}px)`,
+    );
+    // The blank right margin (#123): PREVIEW_MARGIN_LINES of this pitch between the viewport's
+    // right edge and the first segment — and so the frame and the rules; the line number stays
+    // inside its column.
+    const margin = PREVIEW_MARGIN_LINES * linePitch * m.rootFontSize;
+    assert.ok(
+      Math.abs(m.innerWidth - m.segRight - margin) < 2,
+      `@${String(linePitch)}: the text must start ${String(margin)}px in from the right edge (segment right ${String(m.segRight)}px of ${String(m.innerWidth)}px)`,
+    );
+    assert.ok(
+      m.lnRight > 0 && m.lnRight <= m.segRight + 1,
+      `@${String(linePitch)}: the first line number must stay out of the margin (${String(m.lnRight)}px vs ${String(m.segRight)}px)`,
     );
   }
 });

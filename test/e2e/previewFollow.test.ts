@@ -83,7 +83,7 @@ function page(init: PreviewInit): string {
 function probe(steps: readonly (readonly [name: string, line: number, character: number])[]): string {
   return `<script>
 (() => {
-  const x = () => window.innerWidth * (Math.sqrt(5) - 1) / 2;
+  const x = () => window.innerWidth * (3 - Math.sqrt(5)) / 2;
   const parked = (name) => {
     let best = null;
     let off = Infinity;
