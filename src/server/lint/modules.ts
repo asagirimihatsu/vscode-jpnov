@@ -11,7 +11,7 @@
  */
 import type { CatalogId } from '../../shared/lint/catalog.ts';
 
-import { dashScan, fullWidthSpaceScan, minusPositionScan, shiftJisSafeScan } from './prescan.ts';
+import { dashScan, halfWidthSpaceScan, minusPositionScan, shiftJisSafeScan } from './prescan.ts';
 import type { PreScan } from './prescan.ts';
 import { perPieceScan, viewScan } from './rules/adapt.ts';
 import {
@@ -19,7 +19,7 @@ import {
   hankakuKanaRule,
   nfdRule,
   rubyKanaRule,
-  unnaturalAlphabetRule,
+  strayLetterRule,
   zeroWidthRule,
 } from './rules/chars.ts';
 import {
@@ -81,8 +81,8 @@ export const RULE_IMPL: Record<CatalogId, RuleImpl> = {
   noZeroWidth: line(zeroWidthRule),
   noControlChar: line(controlCharRule),
   shiftJisSafe: { kind: 'raw', scan: shiftJisSafeScan },
-  jaNoSpaceBetweenFullWidth: line(viewScan(fullWidthSpaceScan, 'prose')),
-  jaUnnaturalAlphabet: line(unnaturalAlphabetRule),
+  noHalfWidthSpace: line(viewScan(halfWidthSpaceScan, 'prose')),
+  noStrayLetter: line(strayLetterRule),
   minusPosition: line(viewScan(minusPositionScan, 'prose')),
   indent: line(indentRule),
   endPeriod: line(endPeriodRule),

@@ -178,7 +178,7 @@ function eachMarkRun(
 
 /** ！？の直後は全角スペース: report the run's last mark when prose continues without one; after a
  *  half-width space the report carries no fix (replacing that space's width is
- *  jaNoSpaceBetweenFullWidth's fix); after a tab there is no fix at all. */
+ *  noHalfWidthSpace's fix); after a tab there is no fix at all. */
 export function exclamationSpaceRule(ctx: RuleContext): LineRule {
   return {
     line(line: LintLine): void {

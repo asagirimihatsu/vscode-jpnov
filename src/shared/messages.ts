@@ -137,9 +137,9 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return 'invalid control character';
     case 'lint.common.shiftJisSafe':
       return `"${a(0)}" (U+${a(1)}) is missing from Shift JIS (often an old-form or variant character); use another`;
-    case 'lint.common.jaNoSpaceBetweenFullWidth':
+    case 'lint.common.noHalfWidthSpace':
       return 'space between full-width characters';
-    case 'lint.common.jaUnnaturalAlphabet':
+    case 'lint.common.noStrayLetter':
       return 'a stray letter between Japanese characters';
     case 'lint.common.minusPosition':
       return 'a minus sign is allowed only before a number';

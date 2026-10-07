@@ -125,7 +125,7 @@ function endsJapanese(text: string, pos: number): boolean {
  * deletes it. A run touching other ASCII or a line edge is left alone (Western text; paragraph
  * indentation is the indent rule's job).
  */
-export const fullWidthSpaceScan: PreScan = (text) => {
+export const halfWidthSpaceScan: PreScan = (text) => {
   const out: { start: number; end: number; fix: string }[] = [];
   let i = 0;
   while (i < text.length) {

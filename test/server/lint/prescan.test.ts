@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 
 import {
   dashScan,
-  fullWidthSpaceScan,
+  halfWidthSpaceScan,
   minusPositionScan,
   rubyKanaScan,
 } from '../../../src/server/lint/prescan.ts';
@@ -68,19 +68,19 @@ test('dash: each mode judges by its own glyph; an unset mode checks nothing', ()
   assert.deepEqual(flagged(dashScan, '彼は―と', true), []);
 });
 
-test('fullWidthSpace: a half-width space between full-width chars is fixed to 　 (run collapses)', () => {
-  assert.deepEqual(fullWidthSpaceScan('あ いう', true), [{ start: 1, end: 2, fix: '　' }]);
-  assert.deepEqual(fullWidthSpaceScan('あ  い', true), [{ start: 1, end: 3, fix: '　' }]); // run -> one
-  assert.deepEqual(flagged(fullWidthSpaceScan, 'A B'), []); // ASCII neighbours -> not flagged
-  assert.deepEqual(flagged(fullWidthSpaceScan, 'あ B'), []); // mixed -> not flagged
+test('halfWidthSpace: a half-width space between full-width chars is fixed to 　 (run collapses)', () => {
+  assert.deepEqual(halfWidthSpaceScan('あ いう', true), [{ start: 1, end: 2, fix: '　' }]);
+  assert.deepEqual(halfWidthSpaceScan('あ  い', true), [{ start: 1, end: 3, fix: '　' }]); // run -> one
+  assert.deepEqual(flagged(halfWidthSpaceScan, 'A B'), []); // ASCII neighbours -> not flagged
+  assert.deepEqual(flagged(halfWidthSpaceScan, 'あ B'), []); // mixed -> not flagged
 });
 
-test('fullWidthSpace: a half-width ！？ run ends Japanese prose, so the space after it is flagged', () => {
-  assert.deepEqual(fullWidthSpaceScan('なに!? そして', true), [{ start: 4, end: 5, fix: '　' }]);
-  assert.deepEqual(flagged(fullWidthSpaceScan, 'なに!!! そして'), [' ']);
-  assert.deepEqual(flagged(fullWidthSpaceScan, 'なに! そして'), []); // a lone mark is Western
-  assert.deepEqual(flagged(fullWidthSpaceScan, 'なに!? John'), []); // the right side still decides
-  assert.deepEqual(flagged(fullWidthSpaceScan, 'あ !?だ'), []); // before a pair: not the issue
+test('halfWidthSpace: a half-width ！？ run ends Japanese prose, so the space after it is flagged', () => {
+  assert.deepEqual(halfWidthSpaceScan('なに!? そして', true), [{ start: 4, end: 5, fix: '　' }]);
+  assert.deepEqual(flagged(halfWidthSpaceScan, 'なに!!! そして'), [' ']);
+  assert.deepEqual(flagged(halfWidthSpaceScan, 'なに! そして'), []); // a lone mark is Western
+  assert.deepEqual(flagged(halfWidthSpaceScan, 'なに!? John'), []); // the right side still decides
+  assert.deepEqual(flagged(halfWidthSpaceScan, 'あ !?だ'), []); // before a pair: not the issue
 });
 
 test('minusPosition: only a minus immediately before a digit is allowed', () => {

@@ -137,7 +137,7 @@ const NATURAL_ALPHA = new Set(['a', 'i', 'u', 'e', 'o', 'n', 'ａ', 'ｉ', 'ｕ'
 
 /** 不自然なアルファベット: one letter sandwiched between Japanese characters — the shape of an
  *  IME slip (見るr) — unless it is on the allow list or a capital. */
-const unnaturalAlphabetScan: PreScan = (text) => {
+const strayLetterScan: PreScan = (text) => {
   const out: { start: number; end: number }[] = [];
   for (let i = 0; i < text.length; i += 1) {
     const ch = text.charAt(i);
@@ -156,7 +156,7 @@ const unnaturalAlphabetScan: PreScan = (text) => {
 
 export const hankakuKanaRule = viewScan(hankakuKanaScan, 'prose');
 export const zeroWidthRule = viewScan(zeroWidthScan, 'prose');
-export const unnaturalAlphabetRule = viewScan(unnaturalAlphabetScan, 'prose');
+export const strayLetterRule = viewScan(strayLetterScan, 'prose');
 
 /** ルビの読みの仮名種: each reading must be entirely the chosen kana type. */
 export function rubyKanaRule(ctx: RuleContext): LineRule {
