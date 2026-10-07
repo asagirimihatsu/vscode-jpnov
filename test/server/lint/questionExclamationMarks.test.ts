@@ -7,17 +7,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { CodeActionKind } from 'vscode-languageserver/node';
-import { TextDocument } from 'vscode-languageserver-textdocument';
-
 import { tcyAnnotation } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
 import type { RawLintConfigWire } from '../../../src/shared/protocol.ts';
-import { buildCodeActions } from '../../../src/server/lint/codeActions.ts';
 import { D } from '../../shared/_kana.ts';
 import { manuscripts } from '../../shared/ast/_fuzz.ts';
 import { contentOf } from '../../shared/ast/_shape.ts';
-import { lintFindings } from '../helpers.ts';
+import { applyFixAll, lintFindings } from '../helpers.ts';
 
 const KEY = 'jpnov.lint.common.questionExclamationMarks';
 const TCY: RawLintConfigWire = { [KEY]: 'tcy' };
@@ -46,13 +42,8 @@ function lint(src: string, raw: RawLintConfigWire = TCY): Hit[] {
   });
 }
 
-/** The source after the editor's fix-all under `raw`: the action's edits, applied as LSP applies them. */
-function fixed(src: string, raw: RawLintConfigWire = TCY): string {
-  const { doc, findings } = lintFindings(src, raw);
-  const whole = { start: doc.positionAt(0), end: doc.positionAt(src.length) };
-  const [action] = buildCodeActions(doc.uri, findings, whole, [CodeActionKind.SourceFixAll]);
-  return TextDocument.applyEdits(doc, action?.edit?.changes?.[doc.uri] ?? []);
-}
+/** The source after the editor's fix-all under `raw`. */
+const fixed = (src: string, raw: RawLintConfigWire = TCY): string => applyFixAll(src, raw);
 
 const wrap = (pair: string): string => pair + tcyAnnotation(pair);
 

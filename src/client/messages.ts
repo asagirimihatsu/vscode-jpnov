@@ -148,9 +148,9 @@ export function renderMessage(msg: LocalizableMessage): string {
       return vscode.l10n.t('invalid control character');
     case 'lint.common.shiftJisSafe':
       return vscode.l10n.t('"{0}" (U+{1}) is missing from Shift JIS (often an old-form or variant character); use another', s(0), s(1));
-    case 'lint.common.jaNoSpaceBetweenFullWidth':
+    case 'lint.common.noHalfWidthSpace':
       return vscode.l10n.t('space between full-width characters');
-    case 'lint.common.jaUnnaturalAlphabet':
+    case 'lint.common.noStrayLetter':
       return vscode.l10n.t('a stray letter between Japanese characters');
     case 'lint.common.minusPosition':
       return vscode.l10n.t('a minus sign is allowed only before a number');

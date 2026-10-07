@@ -17,7 +17,7 @@ import { displayText } from '../../../src/shared/chars.ts';
 import { RULES, settingKey } from '../../../src/shared/lint/catalog.ts';
 import { selectRules } from '../../../src/shared/lint/select.ts';
 import type { RawLintConfigWire } from '../../../src/shared/protocol.ts';
-import { applyLintFixes, lintFindings } from '../helpers.ts';
+import { applyFixAll, applyLintFixes, lintFindings } from '../helpers.ts';
 
 interface Hit {
   readonly code: string;
@@ -113,11 +113,11 @@ test('common noHankakuKana carries a fix mapping the source kana to full-width',
   assert.equal(applied('はｶﾞだ', { 'jpnov.lint.common.noHankakuKana': true }), 'はガだ');
 });
 
-test('common jaNoSpaceBetweenFullWidth fixes the space to a full-width space (not deletion)', () => {
-  assert.deepEqual(lintAll('あ いう', { 'jpnov.lint.common.jaNoSpaceBetweenFullWidth': true }), [
-    { code: 'lint.common.jaNoSpaceBetweenFullWidth', text: ' ', fix: { text: ' ', newText: '　' } },
+test('common noHalfWidthSpace fixes the space to a full-width space (not deletion)', () => {
+  assert.deepEqual(lintAll('あ いう', { 'jpnov.lint.common.noHalfWidthSpace': true }), [
+    { code: 'lint.common.noHalfWidthSpace', text: ' ', fix: { text: ' ', newText: '　' } },
   ]);
-  assert.equal(applied('あ いう', { 'jpnov.lint.common.jaNoSpaceBetweenFullWidth': true }), 'あ　いう');
+  assert.equal(applied('あ いう', { 'jpnov.lint.common.noHalfWidthSpace': true }), 'あ　いう');
 });
 
 // --- fix correctness: inserts must not delete chars; line-end fixes must keep the newline ---
@@ -149,10 +149,10 @@ test('only the dash rule is scanned per piece — the rest keep their neighbours
   // A scanner that reads the character next to its hit misjudges the one at a piece edge, so
   // only a rule whose notion of a run must match the renderer's opts in.
   const MINUS = { 'jpnov.lint.common.minusPosition': true };
-  const SPACE = { 'jpnov.lint.common.jaNoSpaceBetweenFullWidth': true };
+  const SPACE = { 'jpnov.lint.common.noHalfWidthSpace': true };
   assert.deepEqual(lint('気温は−［＃縦中横］１０［＃縦中横終わり］度。', MINUS), []);
   assert.deepEqual(lint('あ ｜漢《かん》い', SPACE), [
-    { code: 'lint.common.jaNoSpaceBetweenFullWidth', text: ' ' },
+    { code: 'lint.common.noHalfWidthSpace', text: ' ' },
   ]);
   // …and the markup between two hits still costs only the FIX, never the warning
   assert.equal(applied('あ ［＃「z」に傍点］ い', SPACE), 'あ ［＃「z」に傍点］ い');
@@ -486,6 +486,39 @@ test('exclamationSpace warns on a half-width space after the mark but offers no 
   ]);
   assert.equal(applied('「すごい！ そして」', EXCL_SPACE), '「すごい！ そして」');
   assert.deepEqual(lint('「すごい！　そして」', EXCL_SPACE), []);
+});
+
+// --- #105: the width rule owns the half-width space after ！？, so one fix-all clears both ---
+
+const SPACE: RawLintConfigWire = { 'jpnov.lint.common.noHalfWidthSpace': true };
+
+test('noHalfWidthSpace widens the space after ！, and one fix-all clears exclamationSpace too', () => {
+  const both = { ...EXCL_SPACE, ...SPACE };
+  assert.deepEqual(lintAll('「すごい！ そして」', both), [
+    { code: 'lint.common.exclamationSpace', text: '！' },
+    { code: 'lint.common.noHalfWidthSpace', text: ' ', fix: { text: ' ', newText: '　' } },
+  ]);
+  const out = applyFixAll('「すごい！ そして」', both);
+  assert.equal(out, '「すごい！　そして」');
+  assert.deepEqual(lint(out, both), []);
+});
+
+test('noHalfWidthSpace reads the half-width !? pair as Japanese context; the pair fix lands beside it', () => {
+  const KEY = 'jpnov.lint.common.questionExclamationMarks';
+  for (const [mode, pairCode, want] of [
+    ['fullWidth', 'lint.common.questionExclamationMarks', '「なに⁉　そして」'],
+    ['tcy', 'lint.common.questionExclamationMarks.tcy', '「なに!?［＃「!?」は縦中横］　そして」'],
+  ] as const) {
+    const all: RawLintConfigWire = { ...EXCL_SPACE, ...SPACE, [KEY]: mode };
+    assert.deepEqual(
+      lint('「なに!? そして」', all).map((h) => h.code),
+      ['lint.common.exclamationSpace', pairCode, 'lint.common.noHalfWidthSpace'],
+      mode,
+    );
+    const out = applyFixAll('「なに!? そして」', all);
+    assert.equal(out, want, mode);
+    assert.deepEqual(lint(out, all), [], mode);
+  }
 });
 
 test('ellipsis parity doubles the last leader in place, so it stays inside its span', () => {

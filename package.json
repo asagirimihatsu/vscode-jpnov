@@ -486,17 +486,17 @@
             "order": 17,
             "markdownDescription": "%jpnov.lint.common.shiftJisSafe.description%"
           },
-          "jpnov.lint.common.jaNoSpaceBetweenFullWidth": {
+          "jpnov.lint.common.noHalfWidthSpace": {
             "type": "boolean",
-            "default": false,
+            "default": true,
             "order": 18,
-            "markdownDescription": "%jpnov.lint.common.jaNoSpaceBetweenFullWidth.description%"
+            "markdownDescription": "%jpnov.lint.common.noHalfWidthSpace.description%"
           },
-          "jpnov.lint.common.jaUnnaturalAlphabet": {
+          "jpnov.lint.common.noStrayLetter": {
             "type": "boolean",
             "default": false,
             "order": 19,
-            "markdownDescription": "%jpnov.lint.common.jaUnnaturalAlphabet.description%"
+            "markdownDescription": "%jpnov.lint.common.noStrayLetter.description%"
           },
           "jpnov.lint.common.minusPosition": {
             "type": "boolean",
