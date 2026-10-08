@@ -117,7 +117,7 @@ class FakeLanguageClient {
 }
 
 mock.module('vscode-languageclient/node', {
-  namedExports: { LanguageClient: FakeLanguageClient, State, TransportKind: { ipc: 1 } },
+  namedExports: { LanguageClient: FakeLanguageClient, PrepareRenameRequest: { type: 'textDocument/prepareRename' }, State, TransportKind: { ipc: 1 } },
 });
 
 const { activate, deactivate } = await import('../../src/client/extension.ts');

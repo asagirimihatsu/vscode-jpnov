@@ -18,6 +18,7 @@ import { selectRules } from '../../src/shared/lint/select.ts';
 import { buildCodeActions } from '../../src/server/lint/codeActions.ts';
 import { computeLintFindings } from '../../src/server/lint/engine.ts';
 import type { LintFinding } from '../../src/server/lint/engine.ts';
+import { mergedEdits } from '../../src/server/targets.ts';
 import type { RawLintConfigWire } from '../../src/shared/protocol.ts';
 import { createHighlightStore } from '../../src/server/highlight/vocabulary.ts';
 import type { ReadText, ServerContext } from '../../src/server/context.ts';
@@ -148,13 +149,12 @@ export function lintFindings(src: string, raw: RawLintConfigWire): { doc: TextDo
 }
 
 /** Lints `src` under `raw` and applies every fix right-to-left (at one offset the wider edit first,
- *  so an insert there survives as under LSP `applyEdits`), returning the result and its edits. */
+ *  so an insert there survives as under LSP `applyEdits`), returning the result and its edits. The
+ *  対象文字列 the fixes land inside are rewritten with them, as the code actions do. */
 export function applyLintFixes(src: string, raw: RawLintConfigWire): { out: string; edits: LintEdit[] } {
   const { doc, findings } = lintFindings(src, raw);
-  const edits = findings
-    .flatMap((f) =>
-      f.fix ? [{ s: doc.offsetAt(f.fix.range.start), e: doc.offsetAt(f.fix.range.end), t: f.fix.newText }] : [],
-    )
+  const edits = mergedEdits(findings.flatMap((f) => (f.fix ? [f.fix] : [])))
+    .map((edit): LintEdit => ({ s: doc.offsetAt(edit.range.start), e: doc.offsetAt(edit.range.end), t: edit.newText }))
     .sort((a, b) => b.s - a.s || b.e - a.e);
   let out = src;
   for (const ed of edits) {

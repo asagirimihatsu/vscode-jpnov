@@ -15,6 +15,7 @@ import * as vscode from 'vscode';
 
 import {
   LanguageClient,
+  PrepareRenameRequest,
   State,
   TransportKind,
   type LanguageClientOptions,
@@ -40,6 +41,7 @@ import { command } from './commands.ts';
 import { registerAutoIndent } from './editor/autoIndent.ts';
 import { registerWordCommands } from './editor/wordCommands.ts';
 import { buildHighlightSnapshot } from './highlightConfig.ts';
+import { registerAnnotationHover } from './hover.ts';
 import { buildLintSnapshot } from './lintConfig.ts';
 import { folderIsNovelProject } from './probe.ts';
 import { isLocalizableMessage, renderMessage } from './messages.ts';
@@ -173,6 +175,20 @@ function ensureStarted(): void {
         }
         return actions;
       },
+      // Off a 対象文字列 the server answers null, which vscode-languageclient turns into an
+      // English sentence of its own; ask the server here and say instead what can be renamed.
+      async prepareRename(document, position, token) {
+        const c = client;
+        if (c === undefined) {
+          return null;
+        }
+        const params = c.code2ProtocolConverter.asTextDocumentPositionParams(document, position);
+        const result = await c.sendRequest(PrepareRenameRequest.type, params, token);
+        if (result !== null && 'placeholder' in result) {
+          return { range: c.protocol2CodeConverter.asRange(result.range), placeholder: result.placeholder };
+        }
+        throw new Error(vscode.l10n.t("Only an annotation's target text and the body it names can be renamed."));
+      },
     },
   };
 
@@ -188,7 +204,7 @@ function ensureStarted(): void {
 
   // Dispose UI singletons on deactivate (order: stop the client separately in deactivate()).
   // Rename tracking registers here too — novel workspaces only, like everything phase-2.
-  context.subscriptions.push(preview, booksView, registerRenameTracking());
+  context.subscriptions.push(preview, booksView, registerRenameTracking(), registerAnnotationHover(client));
 
   // Push jpnov.lint.* changes so the server re-lints open files live; re-render the preview
   // when any jpnov.layout.* setting changes (the txt/outDir members only feed

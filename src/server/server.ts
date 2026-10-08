@@ -35,6 +35,7 @@ import type { InitializationOptions } from '#/shared/protocol.ts';
 import {
   BuildRequest,
   HighlightChangedNotification,
+  HoverRequest,
   LintConfigChangedNotification,
   ListBooksRequest,
   ReadTextRequest,
@@ -44,6 +45,8 @@ import type {
   BuildParams,
   BuildResult,
   HighlightChangedParams,
+  HoverParams,
+  HoverResult,
   LintConfigChangedParams,
   ListBooksParams,
   ListBooksResult,
@@ -53,6 +56,7 @@ import type {
   RenderFileResult,
 } from '#/shared/protocol.ts';
 
+import { highlightsAt, hoverAt, prepareRenameAt, renameAt } from './annotations.ts';
 import { handleBuild, handleListBooks } from './build.ts';
 import { buildCodeActions } from './lint/codeActions.ts';
 import { computeLintFindings } from './lint/engine.ts';
@@ -137,6 +141,11 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       codeActionProvider: {
         codeActionKinds: [CodeActionKind.QuickFix, CodeActionKind.SourceFixAll],
       },
+      // The annotation features of a .jpnov: F2 on a 対象文字列 or the body it names, and what
+      // lights up with the cursor. The hover is the custom jpnov/hover request (its text is
+      // rendered by the client).
+      renameProvider: { prepareProvider: true },
+      documentHighlightProvider: true,
       // No executeCommandProvider: this extension drives everything through custom requests.
     },
   };
@@ -220,6 +229,40 @@ connection.languages.semanticTokens.on((params) => {
     return { data: [] };
   }
   return buildSemanticTokens(parsed.syntaxOf(doc), context.highlight.recognizerFor(params.textDocument.uri));
+});
+
+// The annotation under the cursor of an open .jpnov: its hover, what lights up with it, and the
+// rename of a 対象文字列 with the body it names. Each reads the editor's parse of the buffer.
+connection.onRequest(HoverRequest, (params: HoverParams): HoverResult | null => {
+  const doc = documents.get(params.uri);
+  if (doc?.languageId !== 'jpnov') {
+    return null;
+  }
+  return hoverAt(doc, parsed.astOf(doc), params.position);
+});
+
+connection.onDocumentHighlight((params) => {
+  const doc = documents.get(params.textDocument.uri);
+  if (doc?.languageId !== 'jpnov') {
+    return [];
+  }
+  return highlightsAt(doc, parsed.astOf(doc), params.position);
+});
+
+connection.onPrepareRename((params) => {
+  const doc = documents.get(params.textDocument.uri);
+  if (doc?.languageId !== 'jpnov') {
+    return null;
+  }
+  return prepareRenameAt(doc, parsed.astOf(doc), params.position);
+});
+
+connection.onRenameRequest((params) => {
+  const doc = documents.get(params.textDocument.uri);
+  if (doc?.languageId !== 'jpnov') {
+    return null;
+  }
+  return renameAt(doc, parsed.astOf(doc), params.position, params.newName);
 });
 
 /** Returns line `n`'s text (no terminator); `position.character` indexes into this. */

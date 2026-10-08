@@ -89,6 +89,49 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return 'empty ruby reading 《》 (it prints as typed)';
     case 'syntax.indentTooLarge':
       return `字下げ is too large (keep it to ${a(0)} or less for it to take effect)`;
+    // hover (the lines of a jpnov/hover reply; see protocol.ts).
+    case 'hover.postfix':
+      return `${a(0)} (forward reference)`;
+    case 'hover.rubyLeft':
+      return `Left ruby: ${a(0)} (forward reference)`;
+    case 'hover.spanStart':
+      return `${a(0)} start (start/end form)`;
+    case 'hover.spanEnd':
+      return `${a(0)} end (start/end form)`;
+    case 'hover.blockStart':
+      return `${a(0)} start (block form)`;
+    case 'hover.blockEnd':
+      return `${a(0)} end (block form)`;
+    case 'hover.indent':
+      return `Indent by ${a(0)} (this line)`;
+    case 'hover.pageBreak':
+      return 'Page break';
+    case 'hover.value':
+      return `Shows the value of "${a(0)}" (the book file sets it)`;
+    case 'hover.gaiji':
+      return `External character: ${a(0)}`;
+    case 'hover.comment':
+      return 'Unrecognized annotation (not in the output)';
+    case 'hover.broken':
+      return 'Unclosed annotation (prints as typed)';
+    case 'hover.ruby':
+      return `Ruby: ${a(0)}`;
+    case 'hover.rubyBase':
+      return `Base: ${a(0)}`;
+    case 'hover.target':
+      return `Target: ${a(0)}`;
+    case 'hover.targetMissing':
+      return 'Target not found';
+    case 'hover.pairEnd':
+      return `Ends at ${a(0)} (line ${a(1)})`;
+    case 'hover.pairStart':
+      return `Starts at ${a(0)} (line ${a(1)})`;
+    case 'hover.endMissing':
+      return 'No end annotation';
+    case 'hover.startMissing':
+      return 'No start annotation';
+    case 'hover.holds':
+      return `Holds: ${a(0)}`;
     // prose lint (one code per (scope, rule); see lint/catalog.ts).
     // `common` rules run on both 地の文 + セリフ under one code; JA lives in bundle.l10n.ja.json.
     case 'lint.common.sentenceLength':

@@ -4,8 +4,11 @@
  * may land inside a ruby or an annotation span (an inserted 。 once split 山田《やまだ》 — #72). The
  * noNfd and noControlChar fixes are the edits allowed inside markup, each only as its own
  * operation: the markup nodes are compared modulo {@link composeKana}, and for noControlChar
- * modulo the control characters it deletes. A corpus whose fix changes what the markup MEANS (a
- * decomposed keyword becoming a real annotation) belongs in engine.test.ts, not here.
+ * modulo the control characters it deletes. The one other edit inside markup is the 対象文字列
+ * of a postfix that bound, rewritten with the body it names: that part is masked in the
+ * comparison, and the postfix must still bind after the fix — unless an edit deleted the whole
+ * body it bound to, which no 「…」 can follow. A corpus whose fix changes what the markup MEANS
+ * (a decomposed keyword becoming a real annotation) belongs in engine.test.ts, not here.
  *
  * A fix may WRITE markup of its own (questionExclamationMarks writes the 縦中横 annotation in
  * its `tcy` mode): what it wrote
@@ -24,11 +27,12 @@ import assert from 'node:assert/strict';
 
 import { isControlChar } from '../../../src/server/lint/rules/chars.ts';
 import type { Span } from '../../../src/shared/ast/nodes.ts';
-import { composeKana } from '../../../src/shared/chars.ts';
+import { composeKana, displayText } from '../../../src/shared/chars.ts';
 import { RULES, settingKey } from '../../../src/shared/lint/catalog.ts';
 import type { CatalogId } from '../../../src/shared/lint/catalog.ts';
 import type { RawLintConfigWire } from '../../../src/shared/protocol.ts';
-import { gaijiOf, nodesOf } from '../../shared/ast/_shape.ts';
+import { parse } from '../../../src/shared/ast/parse.ts';
+import { boundOf, gaijiOf, isPostfix, nodesIn } from '../../shared/ast/_shape.ts';
 import { applyLintFixes } from '../helpers.ts';
 import type { LintEdit } from '../helpers.ts';
 
@@ -84,9 +88,11 @@ function enabling(rule: (typeof RULES)[number]): readonly (boolean | number | st
   return rule.values.filter((v) => v !== 'off');
 }
 
-/** A markup node: what it is, and where it sits. */
+/** A markup node: what it is, and where it sits; a postfix also as it reads with its 対象文字列 masked. */
 interface Markup {
   readonly label: string;
+  readonly masked: string;
+  readonly postfix: boolean;
   readonly span: Span;
 }
 
@@ -99,12 +105,31 @@ const NORMALIZE: Partial<Record<CatalogId, (text: string) => string>> = {
  *  the one edit the rule's fix makes inside markup. A ruby's base is text (a fix may
  *  legitimately rewrite its characters); what kind of ruby its reading closes is markup. */
 function markup(src: string, normalize: (text: string) => string): Markup[] {
-  return nodesOf(src).flatMap((node) => {
+  return nodesIn(parse(src)).flatMap((node): Markup[] => {
     if (node.kind === 'text') {
       return [];
     }
     const kind = node.kind === 'rubyReading' && node.implicit ? 'rubyReading(implicit)' : node.kind;
-    return [{ label: `${kind}:${normalize(node.text)}`, span: node.span }];
+    const label = `${kind}:${normalize(node.text)}`;
+    if (!isPostfix(node)) {
+      return [{ label, masked: label, postfix: false, span: node.span }];
+    }
+    const masked = `${kind}:${normalize(node.parts.map((part) => (part.role === 'target' ? '〈〉' : part.text)).join(''))}`;
+    return [{ label, masked, postfix: true, span: node.span }];
+  });
+}
+
+/** The labels of `nodes`, the 対象文字列 of the k-th postfix masked when `bound[k]` says it bound
+ *  before the fix: a fix rewrites it with the body (that it still binds is asserted apart). */
+function labels(nodes: readonly Markup[], bound: readonly (Span | null)[]): string[] {
+  let k = 0;
+  return nodes.map((node) => {
+    if (!node.postfix) {
+      return node.label;
+    }
+    const was = bound[k];
+    k += 1;
+    return was === null || was === undefined ? node.label : node.masked;
   });
 }
 
@@ -122,17 +147,20 @@ function landings(edits: readonly LintEdit[]): { edit: LintEdit; span: Span }[] 
 }
 
 /** A wedge: markup `open`…`close` around `wraps` characters of the corpus (0 = slipped between
- *  two characters). */
+ *  two characters). A close spelled from what is wrapped names it, and wraps nothing that shows
+ *  as nothing (no 「…」 names that). */
 interface Wedge {
   readonly open: string;
-  readonly close: string;
+  readonly close: string | ((inner: string) => string);
   readonly wraps: number;
 }
 
 /** Between two characters: a postfix (its target is never in the corpora), a comment and a
- *  外字注記. Around one: an explicit ruby, and the 縦中横 / 傍点 / 丸傍点 / block 太字 spans. */
+ *  外字注記. Around one: a postfix naming it, an explicit ruby, and the 縦中横 / 傍点 / 丸傍点 /
+ *  block 太字 spans. */
 const WEDGES: readonly Wedge[] = [
   { open: '［＃「z」に傍点］', close: '', wraps: 0 },
+  { open: '', close: (inner) => `［＃「${inner}」に傍点］`, wraps: 1 },
   { open: '［＃メモ］', close: '', wraps: 0 },
   { open: gaijiOf('⁉'), close: '', wraps: 0 },
   { open: '｜', close: '《z》', wraps: 1 },
@@ -150,11 +178,12 @@ function variants(corpus: string, wedge: Wedge): { variant: string; start: numbe
   const out: { variant: string; start: number; end: number }[] = [];
   for (let at = 0; at + wedge.wraps <= corpus.length; at += 1) {
     const inner = corpus.slice(at, at + wedge.wraps);
-    if (inner.includes('\n')) {
+    if (inner.includes('\n') || (typeof wedge.close === 'function' && displayText(inner) === '')) {
       continue;
     }
-    const variant = corpus.slice(0, at) + wedge.open + inner + wedge.close + corpus.slice(at + wedge.wraps);
-    out.push({ variant, start: at, end: at + wedge.open.length + inner.length + wedge.close.length });
+    const close = typeof wedge.close === 'string' ? wedge.close : wedge.close(inner);
+    const variant = corpus.slice(0, at) + wedge.open + inner + close + corpus.slice(at + wedge.wraps);
+    out.push({ variant, start: at, end: at + wedge.open.length + inner.length + close.length });
   }
   return out;
 }
@@ -180,12 +209,23 @@ for (const rule of RULES) {
             const landed = landings(edits);
             const written = ({ span }: Markup): boolean =>
               landed.some((at) => at.span.start <= span.start && span.end <= at.span.end);
+            const bound = boundOf(variant);
             const after = markup(out, normalize);
             assert.deepEqual(
-              after.filter((node) => !written(node)).map((node) => node.label),
-              shape(variant),
+              labels(after.filter((node) => !written(node)), bound),
+              labels(markup(variant, normalize), bound),
               `${label} — markup changed`,
             );
+            // (d) a postfix that bound still binds, unless an edit took the whole body it named:
+            // deleted it, or replaced it as part of a wider run (`syncedTargets` follows neither)
+            const taken = (b: Span): boolean =>
+              edits.some((ed) => ed.s <= b.start && b.end <= ed.e && (ed.t === '' || ed.s < b.start || b.end < ed.e));
+            boundOf(out).forEach((later, i) => {
+              const earlier = bound[i];
+              if (earlier !== null && earlier !== undefined && !taken(earlier)) {
+                assert.ok(later !== null, `${label} — postfix #${String(i)} lost its target`);
+              }
+            });
             assert.deepEqual(
               after.filter(written).map((node) => node.label),
               landed.flatMap(({ edit }) => shape(edit.t)),

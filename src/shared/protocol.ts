@@ -88,6 +88,28 @@ export type MsgCode =
   | 'syntax.rubyBaseMissing' // args: [reading] — a closed 《…》 with no base text before it (line start; after punctuation, a space or an annotation; a ｜ with nothing visible before the 《), printed as typed; range = the 《…》 run, from the ｜ when one opened it
   | 'syntax.rubyReadingEmpty' // args: [] — an empty 《》 (no reading to set), printed as typed; range = the 《》
   | 'syntax.indentTooLarge' // args: [limit] — a line-head ［＃○字下げ］ or a ［＃ここから○字下げ］ above the notation's maximum, left a comment; `limit` is the largest count that is read, in full-width digits; range = the annotation
+  // hover.* — the lines of a jpnov/hover reply (see HoverResult): first what the annotation is, then what it relates to
+  | 'hover.postfix' // args: [mark] — a corner-target postfix: the mark it sets (傍点, 左に傍線, 太字, 縦中横, 大見出し)
+  | 'hover.rubyLeft' // args: [reading] — ［＃「…」の左に「reading」のルビ］
+  | 'hover.spanStart' // args: [mark] — an inline ［＃mark］ start
+  | 'hover.spanEnd' // args: [mark] — an inline ［＃mark終わり］ end
+  | 'hover.blockStart' // args: [mark] — a ［＃ここからmark］ start
+  | 'hover.blockEnd' // args: [mark] — a ［＃ここでmark終わり］ end
+  | 'hover.indent' // args: [count] — a line-head ［＃○字下げ］; `count` in full-width digits
+  | 'hover.pageBreak' // args: []
+  | 'hover.value' // args: [name] — ［＃ここに「name」の値を表示］; the editor never knows the value
+  | 'hover.gaiji' // args: [char] — a 外字注記 and the character it stands for
+  | 'hover.comment' // args: [] — a closed ［＃…］ nothing recognizes
+  | 'hover.broken' // args: [] — an unclosed ［＃
+  | 'hover.ruby' // args: [reading] — a 《reading》
+  | 'hover.rubyBase' // args: [text] — the text a ruby reads
+  | 'hover.target' // args: [text] — the body text a postfix bound to, as written
+  | 'hover.targetMissing' // args: [] — the postfix bound to nothing
+  | 'hover.pairEnd' // args: [annotation, line] — a start's end, with its 1-based line
+  | 'hover.pairStart' // args: [annotation, line] — an end's start, with its 1-based line
+  | 'hover.endMissing' // args: [] — a start with no end
+  | 'hover.startMissing' // args: [] — an end with no start
+  | 'hover.holds' // args: [text] — what a ［＃縦中横］ span holds
   | LintCode // one prose-lint code per (scope, rule); see lint/catalog.ts
   | 'lint.common.dash.parity' // args: [] — the `dash` rule's second fault: right glyph, odd count
   | 'lint.common.ellipsis.parity' // args: [] — the `ellipsis` rule's second fault: real …, odd count
@@ -115,6 +137,39 @@ export const ServerErrorNotification = 'jpnov/serverError';
  */
 export interface ServerErrorParams {
   readonly message: LocalizableMessage;
+}
+
+// jpnov/hover (C->S request)
+
+export const HoverRequest = 'jpnov/hover';
+
+/** An LSP position: 0-based line, UTF-16 column. Spelled here so the wire types stay dependency-free. */
+export interface Position {
+  readonly line: number;
+  readonly character: number;
+}
+
+/** An LSP range, half-open. */
+export interface Range {
+  readonly start: Position;
+  readonly end: Position;
+}
+
+export interface HoverParams {
+  readonly uri: string;
+  readonly position: Position;
+}
+
+/**
+ * What the editor shows over an annotation: `lines` in reading order — what the annotation is,
+ * then what it relates to (the 対象文字列 it bound to, the start or end it pairs with) — each a
+ * code the client renders; `link` the page of the 青空文庫 guide for its kind. Null off an
+ * annotation. A custom request because LSP's Hover carries text, which the server never writes.
+ */
+export interface HoverResult {
+  readonly range: Range;
+  readonly lines: readonly LocalizableMessage[];
+  readonly link?: string;
 }
 
 // jpnov/lintConfigChanged (C->S notification)

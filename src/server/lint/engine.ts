@@ -24,7 +24,7 @@
  * imports `vscode`; `selection` arrives as plain data from `select.ts`.
  */
 import { DiagnosticSeverity } from 'vscode-languageserver/node';
-import type { Diagnostic, Range } from 'vscode-languageserver/node';
+import type { Diagnostic } from 'vscode-languageserver/node';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 
 import type { Ast, Span } from '../../shared/ast/nodes.ts';
@@ -33,16 +33,19 @@ import type { ActiveRule, RuleSelection } from '../../shared/lint/select.ts';
 import type { LocalizableMessage } from '../../shared/protocol.ts';
 
 import { diagnostic } from '../diagnostics.ts';
+import { TargetIndex, rangeKey, rangeOf } from '../targets.ts';
+import type { SyncedEdit } from '../targets.ts';
 import { RULE_IMPL } from './modules.ts';
 import type { PreScan } from './prescan.ts';
 import type { FixSpec, LineRule, ProseUnit } from './types.ts';
 import { walkLines } from './walker.ts';
 
-/** A single auto-fix edit, already mapped to SOURCE coordinates. */
-export interface LintFix {
-  readonly range: Range;
-  readonly newText: string;
-}
+/**
+ * A single auto-fix edit, already mapped to SOURCE coordinates. `within` names every 対象文字列
+ * the edit lands inside, with the edit as it falls there: applied together (codeActions.ts), the
+ * annotation keeps naming the text it names.
+ */
+export type LintFix = SyncedEdit;
 
 /** One lint result: the diagnostic to publish, plus its fix when the rule is auto-fixable. */
 export interface LintFinding {
@@ -55,11 +58,6 @@ const WARNING = DiagnosticSeverity.Warning;
 /** Pair a diagnostic with an optional fix, omitting `fix` entirely when absent (exactOptional…). */
 function finding(diag: Diagnostic, fix: LintFix | undefined): LintFinding {
   return fix !== undefined ? { diagnostic: diag, fix } : { diagnostic: diag };
-}
-
-/** A range as a comparable key: two findings over the same characters are the same defect. */
-function rangeKey(r: Range): string {
-  return [r.start.line, r.start.character, r.end.line, r.end.character].join(':');
 }
 
 /** The source offset an insert anchored on `unit` resolves to: inside a piece the neighbour is
@@ -75,31 +73,31 @@ function insertOffset(unit: ProseUnit, side: 'before' | 'after'): number {
   return unit.indexInPiece + 1 < piece.text.length ? unit.src + 1 : piece.outerEnd;
 }
 
-/** Materializes a {@link FixSpec} into source coordinates (see the module header for why the
- *  three shapes are the only safe ones). */
-function materializeFix(spec: FixSpec, doc: TextDocument): LintFix {
+/** The source span a {@link FixSpec} edits and the text it writes there (see the module header
+ *  for why the three shapes are the only safe ones). */
+function fixSpan(spec: FixSpec, doc: TextDocument): { span: Span; text: string } {
   if ('insert' in spec) {
-    const pos = doc.positionAt(insertOffset(spec.insert, spec.side));
-    return { range: { start: pos, end: pos }, newText: spec.text };
+    const at = insertOffset(spec.insert, spec.side);
+    return { span: { start: at, end: at }, text: spec.text };
   }
   if ('erase' in spec) {
-    const range = { start: doc.positionAt(spec.erase.start), end: doc.positionAt(spec.erase.end) };
-    if (!/^[\r\n]*$/.test(doc.getText(range))) {
+    if (!/^[\r\n]*$/.test(doc.getText(rangeOf(doc, spec.erase)))) {
       throw new Error(`lint fix erases content: [${String(spec.erase.start)}, ${String(spec.erase.end)})`);
     }
-    return { range, newText: '' };
+    return { span: spec.erase, text: '' };
   }
   const { slice, start, end } = spec.replace;
   if (start < 0 || end < start || end > slice.text.length) {
     throw new Error(`lint fix out of slice bounds: [${String(start)}, ${String(end)})`);
   }
-  return {
-    range: {
-      start: doc.positionAt(slice.srcStart + start),
-      end: doc.positionAt(slice.srcStart + end),
-    },
-    newText: spec.text,
-  };
+  return { span: { start: slice.srcStart + start, end: slice.srcStart + end }, text: spec.text };
+}
+
+/** Materializes a {@link FixSpec} into source coordinates, with the 対象文字列 it lands inside. */
+function materializeFix(spec: FixSpec, doc: TextDocument, targets: TargetIndex): LintFix {
+  const { span, text } = fixSpan(spec, doc);
+  const range = rangeOf(doc, span);
+  return { range, newText: text, within: targets.within(doc, range.start.line, span, text) };
 }
 
 /**
@@ -111,6 +109,7 @@ export function computeLintFindings(doc: TextDocument, ast: Ast, selection: Rule
     return [];
   }
   const text = doc.getText();
+  const targets = new TargetIndex(ast, text);
   const prose: LintFinding[] = [];
   const instances: LineRule[] = [];
   const rawRules: { readonly rule: ActiveRule; readonly scan: PreScan }[] = [];
@@ -125,9 +124,9 @@ export function computeLintFindings(doc: TextDocument, ast: Ast, selection: Rule
         options: rule.options,
         ast,
         report(span: Span, extra?: { message?: LocalizableMessage; fix?: FixSpec }): void {
-          const range = { start: doc.positionAt(span.start), end: doc.positionAt(span.end) };
+          const range = rangeOf(doc, span);
           const message = extra?.message ?? { code: rule.code };
-          const fix = extra?.fix === undefined ? undefined : materializeFix(extra.fix, doc);
+          const fix = extra?.fix === undefined ? undefined : materializeFix(extra.fix, doc, targets);
           prose.push(finding(diagnostic(range, message, WARNING), fix));
         },
       }),
@@ -149,7 +148,7 @@ export function computeLintFindings(doc: TextDocument, ast: Ast, selection: Rule
   const raw: LintFinding[] = [];
   for (const { rule, scan } of rawRules) {
     for (const span of scan(text, rule.options)) {
-      const range = { start: doc.positionAt(span.start), end: doc.positionAt(span.end) };
+      const range = rangeOf(doc, span);
       if (taken.has(rangeKey(range))) {
         continue;
       }

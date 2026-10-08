@@ -4,32 +4,29 @@
  *
  * Titles are English here (the vscode-free server cannot localize); the client's `provideCodeActions`
  * middleware swaps in the localized text — a quick-fix reuses its diagnostic's localized message, the
- * fix-all is recognized by its `source.fixAll` kind. Relative imports (native test loader).
+ * fix-all is recognized by its `source.fixAll` kind.
+ *
+ * A fix that lands inside a 対象文字列 brings the edit of that 「…」 with it (`LintFix.within`,
+ * merged by `mergedEdits`): the quick-fix carries both, and the fix-all rewrites each 「…」 once,
+ * from the fixes it kept. Relative imports (native test loader).
  */
 import { CodeActionKind } from 'vscode-languageserver/node';
-import type { CodeAction, Position, Range, TextEdit } from 'vscode-languageserver/node';
+import type { CodeAction, Position, Range } from 'vscode-languageserver/node';
 
+import { comparePositions, mergedEdits, rangesOverlap } from '../targets.ts';
 import type { LintFinding, LintFix } from './engine.ts';
 
 type FixableFinding = LintFinding & { readonly fix: LintFix };
 
 const FIX_ALL_TITLE = 'Fix all auto-fixable problems (Japanese Novel)';
 
-function comparePositions(a: Position, b: Position): number {
-  return a.line - b.line || a.character - b.character;
-}
-
-function rangesOverlap(a: Range, b: Range): boolean {
-  return comparePositions(a.start, b.end) <= 0 && comparePositions(b.start, a.end) <= 0;
-}
-
 /** Sort edits by position and drop any overlapping an already-kept edit, so the WorkspaceEdit is valid. */
-function nonOverlapping(edits: readonly TextEdit[]): TextEdit[] {
+function nonOverlapping<T extends { readonly range: Range }>(edits: readonly T[]): T[] {
   const sorted = [...edits].sort(
     (a, b) =>
       comparePositions(a.range.start, b.range.start) || comparePositions(a.range.end, b.range.end),
   );
-  const out: TextEdit[] = [];
+  const out: T[] = [];
   let lastEnd: Position | undefined;
   for (const e of sorted) {
     if (lastEnd === undefined || comparePositions(e.range.start, lastEnd) >= 0) {
@@ -49,12 +46,13 @@ function quickFix(uri: string, f: FixableFinding): CodeAction {
     kind: CodeActionKind.QuickFix,
     diagnostics: [f.diagnostic],
     isPreferred: true,
-    edit: { changes: { [uri]: [{ range: f.fix.range, newText: f.fix.newText }] } },
+    edit: { changes: { [uri]: nonOverlapping(mergedEdits([f.fix])) } },
   };
 }
 
 function fixAll(uri: string, fixable: readonly FixableFinding[]): CodeAction {
-  const edits = nonOverlapping(fixable.map((f) => ({ range: f.fix.range, newText: f.fix.newText })));
+  // The 「…」 edits come from the fixes kept, so a 「…」 two fixes land inside is rewritten once.
+  const edits = nonOverlapping(mergedEdits(nonOverlapping(fixable.map((f) => f.fix))));
   return {
     title: FIX_ALL_TITLE,
     kind: CodeActionKind.SourceFixAll,
