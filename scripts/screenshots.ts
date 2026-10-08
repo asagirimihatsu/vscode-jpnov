@@ -158,9 +158,9 @@ async function runChromeUntilSettled(args: string[], outFile: string): Promise<v
   rmSync(outFile, { force: true }); // 前回の出力が残っているとポーリングが即座に誤終了する
   const profile = mkdtempSync(join(tmpdir(), 'jpnov-shot-')); // プロファイル再利用は SingletonLock で死ぬ
   const proc = spawn(CHROME, [`--user-data-dir=${profile}`, ...args], { stdio: 'ignore' });
-  const deadline = Date.now() + 30_000;
+  const deadline = performance.now() + 30_000;
   let last = -1;
-  while (Date.now() < deadline) {
+  while (performance.now() < deadline) {
     await new Promise((r) => setTimeout(r, 250));
     let size = 0;
     try {
