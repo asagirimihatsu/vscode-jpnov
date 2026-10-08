@@ -16,11 +16,11 @@
  */
 import { copyFile, mkdir, readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 import * as esbuild from 'esbuild';
 
-import { writeIfChanged } from './write.ts';
+import { runCli, writeIfChanged } from './write.ts';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 
@@ -141,14 +141,4 @@ export async function writeWebviewModules(production = false): Promise<boolean> 
 
 // CLI: `node scripts/gen-webview.ts` (via `npm run gen:webview`). Non-minified — the production
 // build re-runs writeWebviewModules(true) up front, so the packaged bundle stays minified.
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const production = process.argv.includes('--production');
-  writeWebviewModules(production)
-    .then((changed) => {
-      console.log(changed ? 'regenerated webview modules' : 'webview modules up to date');
-    })
-    .catch((err: unknown) => {
-      console.error('error generating webview modules:', err);
-      process.exit(1);
-    });
-}
+runCli(import.meta.url, 'webview modules', () => writeWebviewModules(process.argv.includes('--production')));

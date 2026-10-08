@@ -876,8 +876,9 @@
   "scripts": {
     "type-check": "tsc --noEmit && tsc -p src/client/webview/tsconfig.json --noEmit",
     "lint": "eslint .",
-    "gen": "npm run gen:styles && npm run gen:webview",
+    "gen": "npm run gen:styles && npm run gen:webview && npm run gen:grammar",
     "gen:styles": "node scripts/gen-styles.ts",
+    "gen:grammar": "node scripts/gen-grammar.ts",
     "gen:webview": "node scripts/gen-webview.ts",
     "prepare": "npm run gen",
     "build": "node esbuild.config.js --production",

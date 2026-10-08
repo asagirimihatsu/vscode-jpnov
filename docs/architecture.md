@@ -43,8 +43,9 @@ The boundaries:
 
 esbuild produces two bundles, `dist/client/extension.js` and
 `dist/server/server.js`. The stylesheet fragments and the webview scripts become
-generated modules first (`scripts/gen-styles.ts`, `scripts/gen-webview.ts`);
-generated files are not committed.
+generated modules first (`scripts/gen-styles.ts`, `scripts/gen-webview.ts`), and
+the TextMate grammar of `.jpnov` is generated from the notation and the colour of
+each part role (`scripts/gen-grammar.ts`); generated files are not committed.
 
 ## The pipeline
 

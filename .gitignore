@@ -11,6 +11,7 @@ src/shared/compiler/styles/styles.generated.ts
 src/shared/compiler/emrProbe.generated.ts
 src/client/book/webviewBundle.generated.ts
 src/client/preview/webviewBundle.generated.ts
+syntaxes/jpnov.tmLanguage.json
 # Codicon font/stylesheet vendored from node_modules/@vscode/codicons at gen time.
 media/codicon/
 
