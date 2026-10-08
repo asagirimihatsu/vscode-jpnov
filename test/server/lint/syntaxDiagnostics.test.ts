@@ -14,7 +14,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import type { Finding } from '../../../src/server/diagnostics.ts';
 import { buildCodeActions } from '../../../src/server/lint/codeActions.ts';
-import { INDENT_TOO_LARGE, TCY_MAX, syntaxFindings as findingsOf } from '../../../src/server/syntax.ts';
+import { INDENT_TOO_LARGE, TCY_MAX, syntaxFindings } from '../../../src/server/syntax.ts';
 import { rangeOf } from '../../../src/server/targets.ts';
 import { INDENT_MAX, fullWidthDigits, indentAnnotation } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
@@ -28,7 +28,7 @@ const doc = (text: string): TextDocument =>
   TextDocument.create('mem://x.jpnov', 'jpnov', 1, text);
 
 /** The syntax findings of `document` over the editor's parse of it. */
-const annotationFindings = (document: TextDocument): Finding[] => findingsOf(document, parse(document.getText()));
+const annotationFindings = (document: TextDocument): Finding[] => syntaxFindings(document, parse(document.getText()));
 
 /** The syntax diagnostics of `document` over the editor's parse of it. */
 const annotationDiagnostics = (document: TextDocument): Diagnostic[] => annotationFindings(document).map((f) => f.diagnostic);
