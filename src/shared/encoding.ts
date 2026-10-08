@@ -15,7 +15,7 @@
  * (https://www.aozora.gr.jp/annotation/external_character.html), so both sides count them as held.
  */
 import { GAIJI, gaijiAnnotation } from './ast/notation.ts';
-import { composeKana, dropWithOrigin, graphemes } from './chars.ts';
+import { clustersOf, composeKana, dropWithOrigin, graphemes } from './chars.ts';
 
 /** `jpnov.layout.txt.encoding` members — the encodings a built `.txt` can be written in. */
 export const TXT_ENCODINGS = ['shiftJis', 'utf8', 'utf8Bom'] as const;
@@ -160,13 +160,25 @@ function holdsWhole(cluster: string, map: Map<number, number>): boolean {
  * Every written character of `text` Shift JIS cannot hold whole once its kana are composed, in
  * order — at most one per cluster. The characters the text build drops ({@link dropWithOrigin}) are
  * left out first; the offsets stay those of `text`.
+ *
+ * Code units with a cell are skipped, and only the cluster around one without is examined: the
+ * cluster pass adds no code point (it drops some and composes kana over a mark that has no cell
+ * itself), so a cluster of held units reports nothing. A surrogate has no cell either, so an
+ * astral character lands here unpaired.
  */
 export function unencodableChars(text: string): UnencodableChar[] {
   const map = shiftJisTable();
   const out: UnencodableChar[] = [];
   const { text: shown, origin } = dropWithOrigin(text);
-  let index = 0;
-  for (const segment of graphemes(shown)) {
+  let clusters: Intl.Segments | undefined;
+  let i = 0;
+  while (i < shown.length) {
+    if (map.has(shown.charCodeAt(i))) {
+      i += 1;
+      continue;
+    }
+    clusters ??= clustersOf(shown);
+    const { segment, index } = clusters.containing(i) ?? { segment: shown.charAt(i), index: i }; // never the fallback: i is inside shown
     if (!holdsWhole(composeKana(segment), map)) {
       // Reported on the RAW code point: the mark itself has no cell, so a cluster whose composition
       // lacks one always lands here — the offset noNfd reports too, which lets the engine de-duplicate.
@@ -180,7 +192,7 @@ export function unencodableChars(text: string): UnencodableChar[] {
         offset += ch.length;
       }
     }
-    index += segment.length;
+    i = index + segment.length;
   }
   return out;
 }

@@ -78,6 +78,12 @@ export function composedChars(text: string): ComposedChar[] {
 
 const GRAPHEMES = new Intl.Segmenter('ja', { granularity: 'grapheme' });
 
+/** The clusters of `text` by position: `containing(at)` is the one holding UTF-16 unit `at`, found
+ *  without walking the rest. Building the object is what costs, so keep it across lookups. */
+export function clustersOf(text: string): Intl.Segments {
+  return GRAPHEMES.segment(text);
+}
+
 /**
  * The blocks a manuscript is made of, less every code point that joins a cluster
  * (Grapheme_Cluster_Break=Other, https://www.unicode.org/reports/tr29/): a text of these alone is one
@@ -103,7 +109,7 @@ export function isClusterBoundary(text: string, at: number): boolean {
   if (at <= 0 || at >= text.length) {
     return false;
   }
-  return SINGLETONS.test(text.slice(at - 1, at + 1)) || GRAPHEMES.segment(text).containing(at)?.index === at;
+  return SINGLETONS.test(text.slice(at - 1, at + 1)) || clustersOf(text).containing(at)?.index === at;
 }
 
 /** The first code point of `text` as a string: the character a cluster is classed by. */
