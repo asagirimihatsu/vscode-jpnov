@@ -17,6 +17,7 @@ import {
   unencodableChars,
   type TxtEncoding,
 } from '../../src/shared/encoding.ts';
+import { CLUSTERS, D, TSUJI, UNSHOWN } from './_kana.ts';
 
 import { gaijiOf } from './ast/_shape.ts';
 
@@ -262,5 +263,37 @@ test('a character the text build drops is not reported; the offsets stay those o
   assert.deepEqual(unencodableChars(src), [
     { cluster: '\u2764\uFE0F', cp: 0x2764, offset: src.indexOf('\u2764'), length: 1 },
     { cluster: '\u8FBB\u{E0100}', cp: 0xe0100, offset: src.indexOf('\u{E0100}'), length: 2 },
+  ]);
+});
+
+test('the offsets of a later line are those of the whole text', () => {
+  const src = `あいう\nかきく\nさ😀し\n${TSUJI}`;
+  assert.deepEqual(unencodableChars(src), [
+    { cluster: '😀', cp: 0x1f600, offset: src.indexOf('😀'), length: 2 },
+    { cluster: TSUJI, cp: 0xe0100, offset: src.indexOf('\u{E0100}'), length: 2 },
+  ]);
+});
+
+test('a line break never reports, whichever way it is written', () => {
+  const src = 'あ\r\n😀\r\nい\r\n';
+  assert.deepEqual(unencodableChars(src), [{ cluster: '😀', cp: 0x1f600, offset: src.indexOf('😀'), length: 2 }]);
+});
+
+test('a decomposed kana among held characters is still composed, and a lone mark still reported', () => {
+  assert.deepEqual(unencodableChars(`あ\nか${D}\nい`), []);
+  const src = `あ\n］${D}\nい`;
+  assert.deepEqual(unencodableChars(src), [{ cluster: `］${D}`, cp: 0x3099, offset: src.indexOf(D), length: 1 }]);
+});
+
+test('clusters scattered through held prose are each reported once, in order', () => {
+  const src = [...CLUSTERS, ...UNSHOWN, ...Object.values(GAIJI)].map((sample) => `あいう${sample}えお`).join('\n');
+  const at = (ch: string): number => src.indexOf(ch);
+  assert.deepEqual(unencodableChars(src), [
+    { cluster: TSUJI, cp: 0xe0100, offset: at('\u{E0100}'), length: 2 },
+    { cluster: '\u2764\uFE0F', cp: 0x2764, offset: at('\u2764'), length: 1 },
+    { cluster: `あ${D}`, cp: 0x3099, offset: at(D), length: 1 },
+    { cluster: '\u{1F468}\u200D\u{1F469}\u200D\u{1F466}', cp: 0x1f468, offset: at('\u{1F468}'), length: 2 },
+    { cluster: '\u{1F1EF}\u{1F1F5}', cp: 0x1f1ef, offset: at('\u{1F1EF}'), length: 2 },
+    { cluster: 'e\u0301', cp: 0x0301, offset: at('\u0301'), length: 1 },
   ]);
 });
