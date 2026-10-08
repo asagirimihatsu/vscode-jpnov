@@ -137,6 +137,8 @@ Where things live today:
 | Which characters before a `《…》` are its base | Scanner | a rule of the notation; a grapheme cluster is one character, classed by its first code point |
 | The largest 字下げ that is read | Scanner | a rule of the notation |
 | Pairing ［＃傍点］ with ［＃傍点終わり］; finding what ［＃「…」に傍点］ names | AST | what the notation means |
+| A start while its channel is in effect (［＃太字］ inside ［＃ここから太字］); a ［＃ここから○字下げ］ of another count is the notation's own form, not a finding ([layout_2](https://www.aozora.gr.jp/annotation/layout_2.html)) | AST (the finding); editor (the fix removing a start that sets again what is in effect, or an end with nothing open, with its line when a block directive had it to itself) | the slot is the resolver's: a start replaces the open one, never nests; whether a line can go is the editor's |
+| An end of the other form than its start (［＃ここから太字］ closed by ［＃太字終わり］) | AST (the finding); editor (the fix, `src/server/syntax.ts`) | the pairing is the resolver's, and it holds both forms; which annotation to rewrite, and how, is the editor's: the end, respelled in the start's form |
 | Which `※［＃…］` is a 外字注記 | Scanner | a rule of the notation: the annotation directly follows its `※` |
 | Showing a 外字注記 as its character | AST | content is what is shown |
 | What one character shown is: a grapheme cluster, its kana composed | AST | content is what is shown; a target cannot cut one |

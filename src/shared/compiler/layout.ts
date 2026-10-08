@@ -18,6 +18,7 @@
  * and state and decides only how they are set on the page.
  */
 import type { Ast, HeadingLevel, Inline, Line, Mark, Marks, ValueLookup } from '../ast/nodes.ts';
+import { paintsNothing } from '../ast/resolve.ts';
 import type { DashMode, KinsokuMode } from '../config/types.ts';
 import { graphemes, headChar } from '../chars.ts';
 import { DASH_BY_MODE, DASH_CHARS, DASH_GLYPH } from '../dash.ts';
@@ -310,7 +311,7 @@ export function rowShape(line: Line, last: boolean): { readonly line: boolean; r
   if (line.pageBreak) {
     return { line: any, pagebreak: true };
   }
-  if (line.blockDirective && line.content.every((item) => item.kind === 'comment')) {
+  if (paintsNothing(line)) {
     return { line: false, pagebreak: false };
   }
   return { line: any || !last, pagebreak: false };

@@ -303,6 +303,12 @@ export type ScanIssue =
 export type Issue =
   | ScanIssue
   | { readonly kind: 'unterminatedSpan' | 'danglingSpanEnd'; readonly span: Span; readonly block: boolean }
+  // `span`: the end, paired with a start of the other form; `expected` is the end respelled in that form.
+  | { readonly kind: 'spanFormMismatch'; readonly span: Span; readonly expected: string }
+  // `span`: a start written while its channel is in effect; `mark` what was in effect, `redundant`
+  // whether the start sets that very mark again (then it does nothing; otherwise it replaces the
+  // earlier start).
+  | { readonly kind: 'spanAlreadyOpen'; readonly span: Span; readonly mark: string; readonly redundant: boolean }
   | { readonly kind: 'unterminatedTcy' | 'danglingTcyEnd'; readonly span: Span }
   | { readonly kind: 'postfixTargetMissing'; readonly span: Span; readonly target: string };
 

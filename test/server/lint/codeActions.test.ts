@@ -5,8 +5,8 @@ import assert from 'node:assert/strict';
 import { CodeActionKind } from 'vscode-languageserver/node';
 import type { CodeAction, Diagnostic, Range, TextEdit } from 'vscode-languageserver/node';
 
+import type { Finding } from '../../../src/server/diagnostics.ts';
 import { buildCodeActions } from '../../../src/server/lint/codeActions.ts';
-import type { LintFinding } from '../../../src/server/lint/engine.ts';
 import type { SyncedTarget } from '../../../src/server/targets.ts';
 import { inLinearTime } from '../../shared/_timing.ts';
 
@@ -16,7 +16,7 @@ function range(l1: number, c1: number, l2: number, c2: number): Range {
   return { start: { line: l1, character: c1 }, end: { line: l2, character: c2 } };
 }
 
-function finding(r: Range, code: string, fixNewText?: string, within: SyncedTarget[] = []): LintFinding {
+function finding(r: Range, code: string, fixNewText?: string, within: SyncedTarget[] = []): Finding {
   const diagnostic: Diagnostic = { range: r, message: `msg:${code}`, severity: 2, source: 'jpnov', data: { code } };
   return fixNewText === undefined ? { diagnostic } : { diagnostic, fix: { range: r, newText: fixNewText, within } };
 }
@@ -106,7 +106,7 @@ test('fix-all over thousands of 「…」 takes linear time (issue #182)', () =>
   // Line k: `なに!?［＃「なに!?」に傍点］` with its 「…」 at 7..11; a pair fix inside the text and a
   // composition fix inside the 「…」 that gives way.
   const n = 8000;
-  const findings: LintFinding[] = [];
+  const findings: Finding[] = [];
   for (let k = 0; k < n; k += 1) {
     const target = range(k, 7, k, 11);
     const w: SyncedTarget = { range: target, text: 'なに!?', start: 2, end: 4, newText: '⁉' };

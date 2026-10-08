@@ -9,7 +9,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { buildCodeActions } from '../../src/server/lint/codeActions.ts';
 import { computeLintFindings } from '../../src/server/lint/engine.ts';
-import { annotationDiagnostics } from '../../src/server/syntax.ts';
+import { syntaxFindings } from '../../src/server/syntax.ts';
 import { parse } from '../../src/shared/ast/parse.ts';
 import { allSettingKeys } from '../../src/shared/lint/catalog.ts';
 import { selectRules } from '../../src/shared/lint/select.ts';
@@ -20,6 +20,9 @@ import type { DiagnosticOut, Range } from './contract.ts';
 import { readRootText } from './root.ts';
 
 const URI = 'file:///sample.jpnov';
+
+/** The syntax diagnostics of `document` over the editor's parse of it. */
+const annotationDiagnostics = (document: TextDocument): Diagnostic[] => syntaxFindings(document, parse(document.getText())).map((f) => f.diagnostic);
 
 interface Manifest {
   readonly contributes: {
@@ -88,7 +91,7 @@ export function lintSource(src: string): LintResult {
   for (const finding of findings) {
     push(finding.diagnostic, finding.fix === undefined ? undefined : { range: toRange(finding.fix.range), newText: finding.fix.newText });
   }
-  for (const diag of annotationDiagnostics(doc, ast)) {
+  for (const diag of annotationDiagnostics(doc)) {
     push(diag);
   }
   const whole = { start: { line: 0, character: 0 }, end: doc.positionAt(src.length) };

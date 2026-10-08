@@ -60,16 +60,16 @@ import type {
 
 import { highlightsAt, hoverAt, prepareRenameAt, renameAt } from './annotations.ts';
 import { handleBuild, handleListBooks } from './build.ts';
+import type { Finding } from './diagnostics.ts';
 import { buildCodeActions } from './lint/codeActions.ts';
 import { computeLintFindings } from './lint/engine.ts';
-import type { LintFinding } from './lint/engine.ts';
 import { createParseCache } from './parsed.ts';
 import { reportError } from './report.ts';
 import { createWorkspaceRoots } from './roots.ts';
 import type { ServerContext } from './context.ts';
 import { createHighlightStore, handleHighlightChanged } from './highlight/vocabulary.ts';
 import { buildSemanticTokens, SEMANTIC_LEGEND } from './semanticTokens.ts';
-import { annotationDiagnostics } from './syntax.ts';
+import { syntaxFindings } from './syntax.ts';
 import { completeJpbook, diagnoseJpbook, documentLinksForJpbook } from './jpbook.ts';
 import { parseJpbook } from '#/shared/book/jpbook.ts';
 
@@ -347,20 +347,18 @@ const PROSE_DEBOUNCE_MS = 300;
 
 // Last published findings per open .jpnov (uri -> {version, findings}); the code-action handler reuses
 // them so it never re-lints when the cache is current. Kept in lockstep with what is published.
-const findingsCache = new Map<string, { version: number; findings: LintFinding[] }>();
+const findingsCache = new Map<string, { version: number; findings: Finding[] }>();
+
+/** Everything `doc` publishes: the syntax findings under every lint configuration, then the lint's. */
+function findingsOf(doc: TextDocument): Finding[] {
+  const ast = parsed.astOf(doc);
+  return [...syntaxFindings(doc, ast), ...computeLintFindings(doc, ast, context.lintSelection)];
+}
 
 /** Cache the findings and publish their diagnostics (one place keeps cache and diagnostics aligned). */
-function publishFindings(uri: string, version: number, findings: LintFinding[]): void {
+function publishFindings(uri: string, version: number, findings: Finding[]): void {
   findingsCache.set(uri, { version, findings });
-  // Syntax Errors (unclosed ［＃) ride the same single publish per URI. Re-derived from the live
-  // document (same version as `findings` — the callers' version guards run synchronously before
-  // this call) and kept OUT of findingsCache: they carry no fix, so code actions never see them.
-  const doc = documents.get(uri);
-  const syntax = doc === undefined ? [] : annotationDiagnostics(doc, parsed.astOf(doc));
-  void connection.sendDiagnostics({
-    uri,
-    diagnostics: [...syntax, ...findings.map((f) => f.diagnostic)],
-  });
+  void connection.sendDiagnostics({ uri, diagnostics: findings.map((f) => f.diagnostic) });
 }
 
 function scheduleProseDiagnostics(doc: TextDocument): void {
@@ -376,11 +374,7 @@ function scheduleProseDiagnostics(doc: TextDocument): void {
         return;
       }
       try {
-        publishFindings(
-          uri,
-          scheduledVersion,
-          computeLintFindings(current, parsed.astOf(current), context.lintSelection),
-        );
+        publishFindings(uri, scheduledVersion, findingsOf(current));
       } catch (err) {
         reportError(context, err);
       }
@@ -402,7 +396,7 @@ connection.onCodeAction((params: CodeActionParams): CodeAction[] => {
   if (cached?.version === version) {
     return buildCodeActions(uri, cached.findings, params.range, params.context.only);
   }
-  const findings = computeLintFindings(doc, parsed.astOf(doc), context.lintSelection);
+  const findings = findingsOf(doc);
   findingsCache.set(uri, { version, findings });
   return buildCodeActions(uri, findings, params.range, params.context.only);
 });

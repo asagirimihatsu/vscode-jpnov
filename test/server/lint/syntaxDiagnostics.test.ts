@@ -1,6 +1,6 @@
 /**
- * Editor-surface tests for src/server/syntax.ts — the always-on unclosed-［＃ Error diagnostics
- * that publishFindings merges ahead of the lint findings. Pure + import-light (relative imports
+ * Editor-surface tests for src/server/syntax.ts — the always-on syntax findings (the unclosed-［＃
+ * Error, the Warnings, the one fix) that publishFindings merges ahead of the lint findings. Pure + import-light (relative imports
  * only in the graph), so it runs on Node's native test loader inside the `test/server/lint/**`
  * npm-test glob. The findings themselves are covered in test/shared/ast/issues.test.ts; these
  * tests pin the LSP mapping (Range / severity / code / source).
@@ -8,23 +8,30 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { DiagnosticSeverity } from 'vscode-languageserver/node';
+import { CodeActionKind, DiagnosticSeverity } from 'vscode-languageserver/node';
 import type { Diagnostic } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
-import { INDENT_TOO_LARGE, TCY_MAX, annotationDiagnostics as diagnosticsOf } from '../../../src/server/syntax.ts';
+import type { Finding } from '../../../src/server/diagnostics.ts';
+import { buildCodeActions } from '../../../src/server/lint/codeActions.ts';
+import { INDENT_TOO_LARGE, TCY_MAX, syntaxFindings } from '../../../src/server/syntax.ts';
+import { rangeOf } from '../../../src/server/targets.ts';
 import { INDENT_MAX, fullWidthDigits, indentAnnotation } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
 import { COVER_TEMPLATE } from '../../../src/shared/book/create.ts';
 import { renderEnglish } from '../../../src/shared/messages.ts';
 import { D } from '../../shared/_kana.ts';
-import { blockOf } from '../../shared/ast/_shape.ts';
+import { at, blockOf } from '../../shared/ast/_shape.ts';
+import { fixAllOf } from '../helpers.ts';
 
 const doc = (text: string): TextDocument =>
   TextDocument.create('mem://x.jpnov', 'jpnov', 1, text);
 
+/** The syntax findings of `document` over the editor's parse of it. */
+const annotationFindings = (document: TextDocument): Finding[] => syntaxFindings(document, parse(document.getText()));
+
 /** The syntax diagnostics of `document` over the editor's parse of it. */
-const annotationDiagnostics = (document: TextDocument): Diagnostic[] => diagnosticsOf(document, parse(document.getText()));
+const annotationDiagnostics = (document: TextDocument): Diagnostic[] => annotationFindings(document).map((f) => f.diagnostic);
 
 test('a clean document yields no syntax diagnostics', () => {
   assert.deepEqual(annotationDiagnostics(doc('本文［＃メモ］と《るび》。')), []);
@@ -150,9 +157,111 @@ test('an unterminated inline opener and a dangling inline 終わり yield the sp
     start: { line: 1, character: 0 },
     end: { line: 1, character: 8 }, // ［＃傍点終わり］
   });
-  // Forms pair by channel, as the render does: neither mixed pair warns.
-  assert.deepEqual(annotationDiagnostics(doc('［＃ここから太字］\n題\n［＃太字終わり］')), []);
-  assert.deepEqual(annotationDiagnostics(doc('［＃太字］題［＃ここで太字終わり］')), []);
+  // Forms pair by channel, as the render does: a mixed pair is neither unterminated nor dangling.
+  assert.deepEqual(annotationDiagnostics(doc('［＃ここから太字］\n題\n［＃太字終わり］')).map((d) => d.code), ['syntax.spanFormMismatch']);
+});
+
+test('an end of the other form than its start: one Warning over the end, with the fix respelling it', () => {
+  const cases: readonly [src: string, closer: string, expected: string, fixed: string][] = [
+    ['［＃ここから太字］\n題\n［＃太字終わり］', '［＃太字終わり］', '［＃ここで太字終わり］', '［＃ここから太字］\n題\n［＃ここで太字終わり］'],
+    ['［＃太字］題［＃ここで太字終わり］', '［＃ここで太字終わり］', '［＃太字終わり］', '［＃太字］題［＃太字終わり］'],
+    // The keyword stays as written: the level is not this finding's object.
+    ['［＃ここから大見出し］\n題\n［＃小見出し終わり］', '［＃小見出し終わり］', '［＃ここで小見出し終わり］', '［＃ここから大見出し］\n題\n［＃ここで小見出し終わり］'],
+  ];
+  for (const [src, closer, expected, fixed] of cases) {
+    const document = doc(src);
+    const findings = annotationFindings(document);
+    assert.equal(findings.length, 1, src);
+    const f = findings[0];
+    assert.ok(f);
+    assert.equal(f.diagnostic.severity, DiagnosticSeverity.Warning);
+    assert.deepEqual(f.diagnostic.data, { code: 'syntax.spanFormMismatch', args: [expected] });
+    assert.equal(f.diagnostic.message, `end annotation does not match the form of its start (write ${expected})`);
+    const range = rangeOf(document, at(src, closer));
+    assert.deepEqual(f.diagnostic.range, range);
+    assert.deepEqual(f.fix, { range, newText: expected, within: [] });
+    assert.equal(TextDocument.applyEdits(document, [f.fix]), fixed);
+    // The code actions see it like a lint fix: a quick fix over the end, and the fix-all.
+    const actions = buildCodeActions(document.uri, findings, range, undefined);
+    assert.deepEqual(actions.map((a) => a.kind), [CodeActionKind.QuickFix, CodeActionKind.SourceFixAll]);
+    assert.deepEqual(actions[0]?.edit?.changes?.[document.uri], [{ range, newText: expected }]);
+  }
+});
+
+test('a start while its channel is in effect: one Warning over the start; the fix removes a redundant one', () => {
+  const cases: readonly [src: string, mark: string, fixed: string | null][] = [
+    // Mid-line: the annotation alone goes.
+    ['［＃ここから太字］［＃太字］題［＃太字終わり］［＃ここで太字終わり］', '太字', '［＃ここから太字］題［＃太字終わり］［＃ここで太字終わり］'],
+    // A ここから directive alone on its line goes with the line: the line painted nothing.
+    ['［＃ここから太字］\n［＃ここから太字］\n題\n［＃ここで太字終わり］', '太字', '［＃ここから太字］\n題\n［＃ここで太字終わり］'],
+    ['［＃ここから２字下げ］\r\n［＃ここから２字下げ］\r\n題', '２字下げ', '［＃ここから２字下げ］\r\n題'],
+    // On the last line, the terminator before it goes instead.
+    ['［＃ここから太字］\n題\n［＃ここから太字］', '太字', '［＃ここから太字］\n題'],
+    // An inline start alone on its line stays a line: that line is painted (empty) either way.
+    ['［＃太字］\n［＃太字］\n題［＃太字終わり］', '太字', '［＃太字］\n\n題［＃太字終わり］'],
+    // What is set changes: the Warning names what is in effect, and there is no fix.
+    ['［＃ここから大見出し］\n［＃ここから中見出し］\n題\n［＃ここで小見出し終わり］', '大見出し', null],
+  ];
+  for (const [src, mark, fixed] of cases) {
+    const document = doc(src);
+    const findings = annotationFindings(document).filter((f) => f.diagnostic.code === 'syntax.spanAlreadyOpen');
+    assert.equal(findings.length, 1, src);
+    const f = findings[0];
+    assert.ok(f);
+    assert.equal(f.diagnostic.severity, DiagnosticSeverity.Warning);
+    assert.deepEqual(f.diagnostic.data, { code: 'syntax.spanAlreadyOpen', args: [mark] });
+    assert.equal(f.diagnostic.message, `start annotation while ${mark} is already in effect`);
+    assert.equal(f.diagnostic.range.start.line, rangeOf(document, at(src, '］', 1)).start.line, src);
+    if (fixed === null) {
+      assert.equal(f.fix, undefined, src);
+      continue;
+    }
+    assert.ok(f.fix, src);
+    assert.equal(f.fix.newText, '');
+    assert.deepEqual(f.fix.within, []);
+    assert.equal(TextDocument.applyEdits(document, [f.fix]), fixed, src);
+  }
+  // Blocks of different counts run together with one 終わり: the notation's own form, no Warning
+  // (https://www.aozora.gr.jp/annotation/layout_2.html).
+  assert.deepEqual(annotationDiagnostics(doc('［＃ここから２字下げ］\n本文\n［＃ここから４字下げ］\n本文\n［＃ここで字下げ終わり］')), []);
+});
+
+test('an end with nothing open: the fix removes it, with its line when a ここで directive had the line to itself', () => {
+  const cases: readonly [src: string, code: string, fixed: string][] = [
+    ['題\n［＃ここで太字終わり］\n次', 'syntax.danglingBlockEnd', '題\n次'],
+    ['題\n［＃ここで字下げ終わり］', 'syntax.danglingBlockEnd', '題'],
+    ['題［＃ここで太字終わり］次', 'syntax.danglingBlockEnd', '題次'], // not alone: the annotation only
+    ['題［＃傍点終わり］次', 'syntax.danglingSpanEnd', '題次'],
+    ['題\n［＃傍点終わり］\n次', 'syntax.danglingSpanEnd', '題\n\n次'], // an inline-only line is painted: it stays
+    ['題［＃縦中横終わり］次', 'syntax.danglingTcyEnd', '題次'],
+    // The second ここで of your example: the first one closed the channel.
+    ['［＃ここから太字］\n題\n［＃ここで太字終わり］\n［＃ここで太字終わり］', 'syntax.danglingBlockEnd', '［＃ここから太字］\n題\n［＃ここで太字終わり］'],
+  ];
+  for (const [src, code, fixed] of cases) {
+    const document = doc(src);
+    const findings = annotationFindings(document);
+    assert.deepEqual(findings.map((f) => f.diagnostic.code), [code], src);
+    const f = findings[0];
+    assert.ok(f?.fix, src);
+    assert.deepEqual(f.fix, { range: f.fix.range, newText: '', within: [] });
+    assert.equal(TextDocument.applyEdits(document, [f.fix]), fixed, src);
+  }
+});
+
+test('a redundant pair in the other form resolves in ONE fix-all: the redundant start and the dangling end go, the end in between is respelled', () => {
+  const src = '［＃ここから太字］［＃太字］テスト［＃太字終わり］［＃ここで太字終わり］\n［＃太字］［＃ここから太字］テスト［＃ここで太字終わり］［＃太字終わり］';
+  const document = doc(src);
+  const findings = annotationFindings(document);
+  assert.deepEqual(
+    findings.map((f) => [f.diagnostic.range.start.line, f.diagnostic.code]),
+    [
+      [0, 'syntax.spanAlreadyOpen'], [0, 'syntax.spanFormMismatch'], [0, 'syntax.danglingBlockEnd'],
+      [1, 'syntax.spanAlreadyOpen'], [1, 'syntax.spanFormMismatch'], [1, 'syntax.danglingSpanEnd'],
+    ],
+  );
+  const fixed = fixAllOf(document, findings);
+  assert.equal(fixed, '［＃ここから太字］テスト［＃ここで太字終わり］\n［＃太字］テスト［＃太字終わり］');
+  assert.deepEqual(annotationDiagnostics(doc(fixed)), []);
 });
 
 test('a same-channel re-open replaces the slot (last-wins) — balanced, no Warning', () => {

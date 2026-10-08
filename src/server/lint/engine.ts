@@ -1,6 +1,6 @@
 /**
  * The prose-lint driver: turns a document + the active {@link RuleSelection} into
- * {@link LintFinding}s (a diagnostic plus, when the rule is auto-fixable, a source-mapped fix).
+ * {@link Finding}s (a diagnostic plus, when the rule is auto-fixable, a source-mapped fix).
  *
  * ONE synchronous pass: instantiate every enabled `line` rule, feed each {@link LintLine} from the
  * single-walk {@link walkLines} to every instance, flush with `end()`, then run the `raw` rules
@@ -24,7 +24,6 @@
  * imports `vscode`; `selection` arrives as plain data from `select.ts`.
  */
 import { DiagnosticSeverity } from 'vscode-languageserver/node';
-import type { Diagnostic } from 'vscode-languageserver/node';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 
 import type { Ast, Span } from '../../shared/ast/nodes.ts';
@@ -32,33 +31,15 @@ import { isSelectionEmpty } from '../../shared/lint/select.ts';
 import type { ActiveRule, RuleSelection } from '../../shared/lint/select.ts';
 import type { LocalizableMessage } from '../../shared/protocol.ts';
 
-import { diagnostic } from '../diagnostics.ts';
+import { diagnostic, finding } from '../diagnostics.ts';
+import type { Finding, Fix } from '../diagnostics.ts';
 import { TargetIndex, rangeKey, rangeOf } from '../targets.ts';
-import type { SyncedEdit } from '../targets.ts';
 import { RULE_IMPL } from './modules.ts';
 import type { PreScan } from './prescan.ts';
 import type { FixSpec, LineRule, ProseUnit } from './types.ts';
 import { walkLines } from './walker.ts';
 
-/**
- * A single auto-fix edit, already mapped to SOURCE coordinates. `within` names every 対象文字列
- * the edit lands inside, with the edit as it falls there: applied together (codeActions.ts), the
- * annotation keeps naming the text it names.
- */
-export type LintFix = SyncedEdit;
-
-/** One lint result: the diagnostic to publish, plus its fix when the rule is auto-fixable. */
-export interface LintFinding {
-  readonly diagnostic: Diagnostic;
-  readonly fix?: LintFix;
-}
-
 const WARNING = DiagnosticSeverity.Warning;
-
-/** Pair a diagnostic with an optional fix, omitting `fix` entirely when absent (exactOptional…). */
-function finding(diag: Diagnostic, fix: LintFix | undefined): LintFinding {
-  return fix !== undefined ? { diagnostic: diag, fix } : { diagnostic: diag };
-}
 
 /** The source offset an insert anchored on `unit` resolves to: inside a piece the neighbour is
  *  source-adjacent; at an edge the piece's outer extent skips the markup wrapping it. */
@@ -94,7 +75,7 @@ function fixSpan(spec: FixSpec, doc: TextDocument): { span: Span; text: string }
 }
 
 /** Materializes a {@link FixSpec} into source coordinates, with the 対象文字列 it lands inside. */
-function materializeFix(spec: FixSpec, doc: TextDocument, targets: TargetIndex): LintFix {
+function materializeFix(spec: FixSpec, doc: TextDocument, targets: TargetIndex): Fix {
   const { span, text } = fixSpan(spec, doc);
   const range = rangeOf(doc, span);
   return { range, newText: text, within: targets.within(doc, range.start.line, span, text) };
@@ -104,13 +85,13 @@ function materializeFix(spec: FixSpec, doc: TextDocument, targets: TargetIndex):
  * Computes the prose-lint findings of `doc` under `selection` — synchronously; the all-off
  * default costs nothing (no walk, no scans). `ast` is the editor's parse of its text.
  */
-export function computeLintFindings(doc: TextDocument, ast: Ast, selection: RuleSelection): LintFinding[] {
+export function computeLintFindings(doc: TextDocument, ast: Ast, selection: RuleSelection): Finding[] {
   if (isSelectionEmpty(selection)) {
     return [];
   }
   const text = doc.getText();
   const targets = new TargetIndex(ast, text);
-  const prose: LintFinding[] = [];
+  const prose: Finding[] = [];
   const instances: LineRule[] = [];
   const rawRules: { readonly rule: ActiveRule; readonly scan: PreScan }[] = [];
   for (const rule of selection) {
@@ -145,7 +126,7 @@ export function computeLintFindings(doc: TextDocument, ast: Ast, selection: Rule
   }
 
   const taken = new Set(prose.map((f) => rangeKey(f.diagnostic.range)));
-  const raw: LintFinding[] = [];
+  const raw: Finding[] = [];
   for (const { rule, scan } of rawRules) {
     for (const span of scan(text, rule.options)) {
       const range = rangeOf(doc, span);

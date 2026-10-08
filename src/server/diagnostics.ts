@@ -1,16 +1,19 @@
 /**
  * The server's single source for LSP `Diagnostic` construction: one `source: 'jpnov'`
  * constructor plus a file-level (zero-width, doc-start) error helper, so every diagnostic
- * carries an identical `source` and shape.
+ * carries an identical `source` and shape — and the {@link Finding} the syntax diagnostics and
+ * the lint both publish: a diagnostic with its fix, when one is mechanical.
  *
- * Imports only `vscode-languageserver/node` (already a dependency of every consumer); owns no
- * state and imports no other server module, so it stays a dependency-free leaf (no cycle risk).
+ * Imports only `vscode-languageserver/node` (already a dependency of every consumer) and a type
+ * of `targets.ts`; owns no state and loads no other server module, so it stays a leaf (no cycle risk).
  */
 import { DiagnosticSeverity } from 'vscode-languageserver/node';
 import type { Diagnostic, Range } from 'vscode-languageserver/node';
 
 import { renderEnglish } from '../shared/messages.ts';
 import type { LocalizableMessage } from '../shared/protocol.ts';
+
+import type { SyncedEdit } from './targets.ts';
 
 /** The `source` field stamped on every diagnostic this server emits. */
 const DIAGNOSTIC_SOURCE = 'jpnov';
@@ -41,6 +44,20 @@ export function diagnostic(
     message: renderEnglish(message.code, message.args),
     data: message,
   };
+}
+
+/** A single auto-fix edit in SOURCE coordinates: a {@link SyncedEdit}, applied with the 「…」 edits it carries. */
+export type Fix = SyncedEdit;
+
+/** One finding to publish: its diagnostic, plus its fix when there is one to offer. */
+export interface Finding {
+  readonly diagnostic: Diagnostic;
+  readonly fix?: Fix;
+}
+
+/** Pairs a diagnostic with an optional fix, omitting `fix` entirely when absent (exactOptional…). */
+export function finding(diag: Diagnostic, fix: Fix | undefined): Finding {
+  return fix !== undefined ? { diagnostic: diag, fix } : { diagnostic: diag };
 }
 
 /** An Error-severity, document-start ("file level") diagnostic. */

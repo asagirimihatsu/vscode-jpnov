@@ -14,7 +14,7 @@ import type { DocumentHighlight, Range, TextEdit, WorkspaceEdit } from 'vscode-l
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 
 import type { Ast, PairedNode, PostfixNode, Span, SyntaxNode } from '../shared/ast/nodes.ts';
-import { INDENT, LEFT_SHORT, TCY, fullWidthDigits, headingLiteralOf } from '../shared/ast/notation.ts';
+import { TCY, fullWidthDigits, headingLiteralOf, markOf, spanMark } from '../shared/ast/notation.ts';
 import type { Channel } from '../shared/ast/notation.ts';
 import type { HoverResult, LocalizableMessage, Position } from '../shared/protocol.ts';
 
@@ -90,11 +90,6 @@ function holding<T extends { readonly bound: Span }>(items: readonly T[], offset
   return inside.length > 0 ? inside : items.filter(({ bound }) => bound.start <= offset && offset <= bound.end);
 }
 
-/** The mark a decoration spells: its variant, with 左に before a left-side one. */
-function markOf(node: { readonly variant: string; readonly left: boolean }): string {
-  return `${node.left ? LEFT_SHORT : ''}${node.variant}`;
-}
-
 /** The code naming a start or end by its form: ここから／ここで, or the inline ［＃…］／［＃…終わり］. */
 function formOf(node: PairedNode): LocalizableMessage['code'] {
   const start = node.kind.endsWith('Start');
@@ -135,15 +130,12 @@ function whatItIs(node: SyntaxNode): LocalizableMessage | undefined {
     case 'rubyLeftPostfix':
       return { code: 'hover.rubyLeft', args: [node.reading.text] };
     case 'indentBlockStart':
-      return { code: formOf(node), args: [`${fullWidthDigits(node.amount)}${INDENT}`] };
     case 'indentBlockEnd':
-      return { code: formOf(node), args: [INDENT] };
     case 'emphasisSpanStart':
     case 'emphasisSpanEnd':
-      return { code: formOf(node), args: [markOf(node)] };
     case 'headingSpanStart':
     case 'headingSpanEnd':
-      return { code: formOf(node), args: [headingLiteralOf(node.level)] };
+      return { code: formOf(node), args: [spanMark(node)] };
     case 'tcySpanStart':
     case 'tcySpanEnd':
       return { code: formOf(node), args: [TCY] };

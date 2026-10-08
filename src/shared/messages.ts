@@ -75,6 +75,10 @@ export function renderEnglish(code: MsgCode, args: readonly (string | number)[] 
       return 'unterminated start/end annotation (missing ［＃…終わり］)';
     case 'syntax.danglingSpanEnd':
       return 'end annotation without a matching start';
+    case 'syntax.spanAlreadyOpen':
+      return `start annotation while ${a(0)} is already in effect`;
+    case 'syntax.spanFormMismatch':
+      return `end annotation does not match the form of its start (write ${a(0)})`;
     case 'syntax.postfixTargetMissing':
       return `annotation target "${a(0)}" is not on this line, or is not aligned to a character boundary`;
     case 'syntax.unterminatedTcy':
