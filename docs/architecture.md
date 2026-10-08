@@ -145,6 +145,7 @@ Where things live today:
 | The ダッシュ glyph, 禁則, 分離禁止, ぶら下げ, the space dropped after a line-end 区切り約物, ruby overhang, wrapping, pagination | Output | typesetting, driven by layout settings |
 | The class of a character under 禁則: its first code point's | Output | a rule of typesetting |
 | A 縦中横 too long to fit its cell | editor | a threshold, judged on what the AST holds |
+| Which 「」『』 of the prose open and close an utterance, across lines | editor (`src/server/dialogue.ts`) | a convention of the manuscript over the prose nodes, read by the lint and the highlighter alike; an annotation's 「対象」 is not prose |
 | A half-width pair (`!?`) with no 縦中横 annotation | editor | a manuscript convention, judged on what the AST holds; the fix replaces the pair with its character or writes the annotation, as the lint setting says |
 | What an annotation shows on hover, what lights up with it, renaming a 対象文字列 with the body it names, a fix rewriting the 「…」 of the postfix bound over it | editor (`src/server/annotations.ts`, `targets.ts`) | each reads what the postfix bound to and which start pairs with which end: the resolver's findings; the 「…」 is rewritten only where it is written as the body it bound to |
 | Writing `‼` `⁇` `⁈` `⁉` `¡` `¿` as 外字注記 in a Shift JIS text | client (`encodeTxt`) | the encoding is a client setting; the Scanner and the AST take none |
