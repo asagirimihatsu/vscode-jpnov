@@ -45,6 +45,7 @@ import { registerAnnotationHover } from './hover.ts';
 import { buildLintSnapshot } from './lintConfig.ts';
 import { folderIsNovelProject } from './probe.ts';
 import { isLocalizableMessage, renderMessage } from './messages.ts';
+import { documentSync } from './documentSync.ts';
 import { Preview } from './preview/preview.ts';
 import { registerRenameTracking } from './book/tracking.ts';
 import { readText } from './book/readText.ts';
@@ -140,6 +141,8 @@ function ensureStarted(): void {
       highlight: buildHighlightSnapshot(),
     },
     middleware: {
+      // A document request waits for its document's open (see documentSync.ts).
+      ...documentSync(),
       // Server diagnostics carry English in `.message` (the fallback VS Code shows) and the
       // localizable `{code,args}` in `.data`. Replace `.message` with the localized render when
       // data is present; otherwise leave the English fallback untouched.

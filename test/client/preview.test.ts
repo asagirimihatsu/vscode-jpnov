@@ -602,7 +602,7 @@ test('adopt() re-enables scripts on the revived webview', () => {
 });
 
 test('a render resolving after the panel closed writes nothing and does not throw', async () => {
-  // Definitely assigned: open() below calls sendRequest synchronously.
+  // Definitely assigned: the tick after open() below lets the render reach sendRequest.
   let resolveRender!: (r: { html: string }) => void;
   const deferred = {
     sendRequest: () =>
@@ -616,6 +616,7 @@ test('a render resolving after the panel closed writes nothing and does not thro
   state.activeEditor = { document: d, viewColumn: 1 };
 
   preview.open(true);
+  await tick();
   const panel = firstPanel();
   assert.equal(panel.webview.html, '', 'render still in flight');
 
@@ -645,6 +646,8 @@ test('renderDocument ships the settings snapshot on the renderFile request', asy
   await tick();
 
   const params = captured as { settings?: unknown };
+  // The wire carries the uri and the snapshot only: the server renders its synced copy.
+  assert.deepEqual(Object.keys(params), ['uri', 'settings']);
   // Overrides read from the store; untouched keys fall back to the product defaults.
   assert.deepEqual(params.settings, {
     charsPerLine: 24,

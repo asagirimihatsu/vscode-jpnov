@@ -1,17 +1,18 @@
-import { parse } from '../ast/parse.ts';
+import type { Ast } from '../ast/nodes.ts';
 import type { LayoutSettings } from '../config/types.ts';
 import type { PreviewChrome } from './chrome.ts';
 import { emrProbe, stylesheet } from './css.ts';
 import { buildRows, flowToHtml } from './layout.ts';
 
 /**
- * Renders ONE file as a full standalone `<html>` document for the preview pane: a CONTINUOUS
- * line flow (no pagination) built by the SAME layout engine the book build uses, so the preview
- * agrees with the printed page. Lines hard-wrap at `charsPerLine` (折り返し), and the stylesheet
- * scales its font so a full charsPerLine-char line fills the pane height; `kinsoku` selects
- * the 禁則処理 tier; ［＃改ページ］ shows as a labelled `<div class="pagebreak">` marker rather
- * than a real page break. `chrome` drives the line-head numbers (JS-numbered `.ln` spans that
- * restart after every break marker, see {@link flowToHtml}) and the CSS-only column edge rules.
+ * Renders one resolved manuscript (the editor's parse, no values) as a full standalone `<html>`
+ * document for the preview pane: a CONTINUOUS line flow (no pagination) built by the SAME layout
+ * engine the book build uses, so the preview agrees with the printed page. Lines hard-wrap at
+ * `charsPerLine` (折り返し), and the stylesheet scales its font so a full charsPerLine-char line
+ * fills the pane height; `kinsoku` selects the 禁則処理 tier; ［＃改ページ］ shows as a labelled
+ * `<div class="pagebreak">` marker rather than a real page break. `chrome` drives the line-head
+ * numbers (JS-numbered `.ln` spans that restart after every break marker, see {@link flowToHtml})
+ * and the CSS-only column edge rules.
  * Each column carries its source line (`data-line`) and, once a line wraps, where in the line
  * the column starts (`data-ch`), so the client can park the column holding the editor cursor.
  *
@@ -20,14 +21,14 @@ import { buildRows, flowToHtml } from './layout.ts';
  * client owns the CSP/nonce + the scroll script when injecting this into a webview).
  */
 export function renderPreview(
-  src: string,
+  ast: Ast,
   opts: LayoutSettings & { chrome: PreviewChrome },
 ): string {
   // Render the body first so the CSS includes ONLY the classes it used (the sort is
   // lexicographic, deterministic).
   const used = new Set<string>();
   const body = flowToHtml(
-    buildRows(parse(src), { dash: opts.dash }),
+    buildRows(ast, { dash: opts.dash }),
     opts.charsPerLine,
     opts.kinsoku,
     used,

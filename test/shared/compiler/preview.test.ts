@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EDGE_INSET } from '../../../src/shared/compiler/geometry.ts';
 import { renderPreview } from '../../../src/shared/compiler/preview.ts';
+import { parse } from '../../../src/shared/ast/parse.ts';
 import { VALUE_DEFAULTS } from '../../../src/shared/ast/notation.ts';
 
 /**
@@ -20,7 +21,7 @@ function preview(
   src: string,
   o: Partial<Parameters<typeof renderPreview>[1]> = {},
 ): string {
-  return renderPreview(src, {
+  return renderPreview(parse(src), {
     charsPerLine: 40,
     linesPerPage: 34,
     linePitch: 2,

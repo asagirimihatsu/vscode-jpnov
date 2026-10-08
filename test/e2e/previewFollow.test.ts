@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 
 import { PREVIEW_JS } from '../../src/client/preview/webviewBundle.generated.ts';
 import type { PreviewInit } from '../../src/client/protocol.ts';
+import { parse } from '../../src/shared/ast/parse.ts';
 import { renderPreview } from '../../src/shared/compiler/preview.ts';
 import { resolvePreviewSettings } from '../../src/shared/config/settings.ts';
 import { CHARS_MAX, CHARS_MIN } from '../../src/shared/config/types.ts';
@@ -72,7 +73,7 @@ function page(init: PreviewInit): string {
     `window.__INIT = ${JSON.stringify(init).replace(/</g, '\\u003c')};</script>`,
     `<script>${PREVIEW_JS}</script>`,
   ].join('');
-  return renderPreview(SOURCE, { ...settings, chrome: settings }).replace('</body>', () => `${stubs}</body>`);
+  return renderPreview(parse(SOURCE), { ...settings, chrome: settings }).replace('</body>', () => `${stubs}</body>`);
 }
 
 /**

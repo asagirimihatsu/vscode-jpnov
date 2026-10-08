@@ -5,6 +5,7 @@
  */
 import { readdir } from 'node:fs/promises';
 
+import { parse } from '../../src/shared/ast/parse.ts';
 import { composeBookChrome, coverPathOf, parseJpbook } from '../../src/shared/book/jpbook.ts';
 import { EDGE_INSET } from '../../src/shared/compiler/geometry.ts';
 import { renderBook } from '../../src/shared/compiler/document.ts';
@@ -111,7 +112,7 @@ function stageSources(texts: Texts): StageSources {
 function renderPreviewSample(texts: Texts, sample: PreviewSample, stage: StageSources): PreviewRender {
   const src = 'specimen' in sample.source ? texts.specimen(sample.source.specimen) : stage[sample.source.state];
   const layout = { ...LAYOUT_DEFAULT, ...sample.layout };
-  const html = renderPreview(src, { ...layout, chrome: { ...PREVIEW_CHROME_DEFAULT, ...sample.chrome } });
+  const html = renderPreview(parse(src), { ...layout, chrome: { ...PREVIEW_CHROME_DEFAULT, ...sample.chrome } });
   const isStage = 'state' in sample.source;
   const { fragment } = scopeFragment(html, { scope: isStage ? STAGE_SCOPE : `.jp-r-${sample.name}`, kind: 'preview' });
   const out: PreviewRender = {

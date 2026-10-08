@@ -75,6 +75,20 @@ const conn = (): LspClient => {
   return client;
 };
 
+/** Runs `body` with `text` open at `uri` on the server, then closes it. */
+async function withOpen<T>(uri: string, text: string, body: () => Promise<T>): Promise<T> {
+  conn().notify('textDocument/didOpen', { textDocument: { uri, languageId: 'jpnov', version: 1, text } });
+  try {
+    return await body();
+  } finally {
+    conn().notify('textDocument/didClose', { textDocument: { uri } });
+  }
+}
+
+/** Renders `text` opened at `uri`: the preview draws the server's copy. */
+const render = (uri: string, text: string, settings: PreviewSettings = PREVIEW_SETTINGS): Promise<string> =>
+  withOpen(uri, text, async () => (await conn().request<RenderFileResult>('jpnov/renderFile', { uri, settings })).html);
+
 before(async () => {
   assert.ok(
     existsSync(SERVER_MODULE),
@@ -98,11 +112,7 @@ after(async () => {
 });
 
 test('jpnov/renderFile renders ruby, 縦中横, and the pagebreak marker over the wire', async () => {
-  const { html } = await conn().request<RenderFileResult>('jpnov/renderFile', {
-    uri: 'file:///e2e/preview.jpnov',
-    text: CHAPTER_TEXT,
-    settings: PREVIEW_SETTINGS,
-  });
+  const html = await render('file:///e2e/preview.jpnov', CHAPTER_TEXT);
 
   assert.ok(html.includes('<ruby class="rr">'), 'ruby must render on the custom right lane');
   assert.ok(
@@ -117,12 +127,30 @@ test('jpnov/renderFile renders ruby, 縦中横, and the pagebreak marker over th
   assert.ok(html.includes('pagebreak'), '改ページ must surface as the preview pagebreak marker');
 });
 
+test('jpnov/renderFile rejects a uri the client never opened', async () => {
+  await assert.rejects(
+    conn().request<RenderFileResult>('jpnov/renderFile', { uri: 'file:///e2e/never.jpnov', settings: PREVIEW_SETTINGS }),
+    /server error/,
+  );
+});
+
+test('jpnov/renderFile renders the synced version of the open document', async () => {
+  const uri = 'file:///e2e/synced.jpnov';
+  await withOpen(uri, '一\n', async () => {
+    conn().notify('textDocument/didChange', {
+      textDocument: { uri, version: 2 },
+      contentChanges: [{ range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } }, text: '二' }],
+    });
+    const { html } = await conn().request<RenderFileResult>('jpnov/renderFile', { uri, settings: PREVIEW_SETTINGS });
+    assert.ok(html.includes('二'), 'the edit applied on the server is what the preview draws');
+    assert.ok(!html.includes('一'), 'the opened text is not drawn once the edit has replaced it');
+  });
+});
+
 test('a half-width pair is flagged, fixed by the code action, and then set in one cell', async () => {
   const uri = 'file:///e2e/pair.jpnov';
   const text = '走った!?';
-  const render = async (src: string): Promise<string> =>
-    (await conn().request<RenderFileResult>('jpnov/renderFile', { uri, text: src, settings: PREVIEW_SETTINGS })).html;
-  assert.ok(!(await render(text)).includes('class="tcy"'), 'a pair with no annotation stays two characters');
+  assert.ok(!(await render(uri, text)).includes('class="tcy"'), 'a pair with no annotation stays two characters');
 
   conn().notify('jpnov/lintConfigChanged', { lintConfig: { 'jpnov.lint.common.questionExclamationMarks': 'tcy' } });
   conn().notify('textDocument/didOpen', { textDocument: { uri, languageId: 'jpnov', version: 1, text } });
@@ -139,7 +167,7 @@ test('a half-width pair is flagged, fixed by the code action, and then set in on
   assert.deepEqual(actions.flatMap((action) => action.edit?.changes?.[uri] ?? []), [
     { range: { start: { line: 0, character: pair }, end: { line: 0, character: text.length } }, newText: fixed.slice(pair) },
   ]);
-  assert.ok((await render(fixed)).includes('<span class="tcy">!?</span>'), 'the written annotation combines the pair');
+  assert.ok((await render(uri, fixed)).includes('<span class="tcy">!?</span>'), 'the written annotation combines the pair');
 });
 
 test('the annotation features answer over the wire: hover, highlight, rename, and a fix that keeps the 「…」', async () => {
@@ -462,11 +490,7 @@ interface DashMetrics {
 test('ダッシュ stays a font glyph — the configured spelling is emitted as the em dash', async () => {
   // Dashes must NOT be drawn in CSS: a sub-pixel box pixel-snaps in print (the same Skia
   // lesson as the リーダー below); the em dash glyph joins a doubled pair on its own.
-  const { html } = await conn().request<RenderFileResult>('jpnov/renderFile', {
-    uri: 'file:///e2e/dash.jpnov',
-    text: DASH_TEXT,
-    settings: PREVIEW_SETTINGS,
-  });
+  const html = await render('file:///e2e/dash.jpnov', DASH_TEXT);
   assert.match(html, /約束は——もう/, 'the configured ― pair is typeset as an em dash pair');
   assert.match(html, /<span class="b">——<\/span>/, '太字 wraps the translated run');
   assert.doesNotMatch(html, /class="dash/, 'dashes ride the font, never a drawn substitute');
@@ -475,11 +499,7 @@ test('ダッシュ stays a font glyph — the configured spelling is emitted as 
 
 test('a ダッシュ pair advances exactly two cells as bare glyphs', BROWSER_SKIP, async () => {
   assert.ok(browser, 'JPNOV_E2E_REQUIRE_BROWSER=1 but no Chromium-family browser was found');
-  const { html } = await conn().request<RenderFileResult>('jpnov/renderFile', {
-    uri: 'file:///e2e/dash.jpnov',
-    text: DASH_TEXT,
-    settings: PREVIEW_SETTINGS,
-  });
+  const html = await render('file:///e2e/dash.jpnov', DASH_TEXT);
   const m = JSON.parse(await measurePage(browser, html, DASH_MEASURE_SCRIPT, 'dash', cleanups)) as DashMetrics;
   // The .b span wraps exactly the translated pair; a full-width em dash advances one cell, so
   // any font substitution or kerning collapse shows up as a broken 2em extent.
@@ -493,11 +513,7 @@ test('リーダー stays a font glyph — no drawn substitute markup', async () 
   // Leader dots must NOT be drawn in CSS: Chromium's Skia PDF backend quantizes sub-2pt
   // geometry (~0.5pt) and double-blits it, so drawn dots smear in the printed PDF.
   // Correct centred ellipses come from the JP-first default stack (css.ts DEFAULT_FONT_STACK).
-  const { html } = await conn().request<RenderFileResult>('jpnov/renderFile', {
-    uri: 'file:///e2e/ldr.jpnov',
-    text: '　沈黙が……続く。\n',
-    settings: PREVIEW_SETTINGS,
-  });
+  const html = await render('file:///e2e/ldr.jpnov', '　沈黙が……続く。\n');
   assert.match(html, /……/);
   assert.doesNotMatch(html, /class="ldr/, 'leaders ride the font, never a drawn substitute');
 });
@@ -569,11 +585,7 @@ test('preview edge: a ［＃改ページ］-short segment reserves a page, an ov
   // One page per launch: the short first chapter AND an over-long last one (#177).
   const text = `${CHAPTER_TEXT}［＃改ページ］\n${'　山田　太郎は王都へ行った。\n'.repeat(LONG_CHAPTER_LINES)}`;
   for (const linePitch of LINE_PITCHES) {
-    const { html } = await conn().request<RenderFileResult>('jpnov/renderFile', {
-      uri: 'file:///e2e/edge.jpnov',
-      text,
-      settings: { ...PREVIEW_SETTINGS, edgeLine: 'red', linePitch },
-    });
+    const html = await render('file:///e2e/edge.jpnov', text, { ...PREVIEW_SETTINGS, edgeLine: 'red', linePitch });
 
     const prefix = `edge-${String(linePitch).replace('.', '_')}`;
     const m = JSON.parse(await measurePage(browser, html, EDGE_MEASURE_SCRIPT, prefix, cleanups)) as EdgeMetrics;
