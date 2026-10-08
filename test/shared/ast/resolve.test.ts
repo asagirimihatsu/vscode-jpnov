@@ -12,6 +12,7 @@ import { scan } from '../../../src/shared/ast/scan.ts';
 
 import { at, boundOf, charStarts, contentOf, gaijiOf, heldOf, issuesOf } from './_shape.ts';
 import { BEL, D, UNSHOWN } from '../_kana.ts';
+import { inLinearTime } from '../_timing.ts';
 
 /** The content of a one-line source. */
 const content = (src: string, values?: ReadonlyMap<string, string>): string[] => contentOf(src, values)[0] ?? [];
@@ -67,6 +68,39 @@ test('a postfix finds its target however far back on the line it sits', () => {
     const twice = `聖剣と${'あ'.repeat(gap)}聖剣${'い'.repeat(gap)}［＃「聖剣」に傍点］`;
     assert.deepEqual(boundOf(twice), [at(twice, '聖剣', 1)], `gap ${String(gap)}, the last of two`);
     assert.deepEqual(boundOf(`王都${'あ'.repeat(gap)}［＃「聖剣」に傍点］`), [null], `gap ${String(gap)}, absent`);
+  }
+});
+
+test('a later postfix for the same target sees what was written since the earlier one', () => {
+  // The search for a target resumes where the last one for it left off; what it found before
+  // stands until a newer occurrence is written. Each case lists what the postfixes bind, in order.
+  // `at(src, '聖剣', n)`: the n-th occurrence counting the ones inside the 「…」 too.
+  const newer = '聖剣あ［＃「聖剣」に傍点］聖剣い［＃「聖剣」に傍点］';
+  assert.deepEqual(boundOf(newer), [at(newer, '聖剣'), at(newer, '聖剣', 2)]);
+  const later = '［＃「聖剣」に傍点］聖剣［＃「聖剣」に傍点］';
+  assert.deepEqual(boundOf(later), [null, at(later, '聖剣', 1)]);
+  const straddle = '聖［＃「聖剣」に傍点］剣［＃「聖剣」に傍点］';
+  assert.deepEqual(boundOf(straddle), [null, { start: 0, end: at(straddle, '剣', 1).end }]);
+  const ruby = '［＃「聖剣」に傍点］｜聖剣《せいけん》［＃「聖剣」に傍点］';
+  assert.deepEqual(boundOf(ruby), [null, { start: ruby.indexOf('｜'), end: ruby.indexOf('》') + 1 }]);
+  const twice = `あ${'漢《かん》'.repeat(100)}［＃「あ」に傍点］［＃「あ」は太字］`; // a kanji base: あ stays a cell of its own
+  assert.deepEqual(boundOf(twice), [at(twice, 'あ'), at(twice, 'あ')]);
+  assert.deepEqual(content(twice)[0], 'chars あ emph=傍点 weight=太字');
+  const across = 'い［＃「あ」に傍点］｜漢《かん》い［＃「あ」に傍点］';
+  assert.deepEqual(boundOf(across), [null, null]);
+});
+
+test('a line of any number of postfixes resolves in linear time', () => {
+  // Each shape read the line back to its start once per postfix before (#182).
+  const far = `あ${'漢《かん》'.repeat(20_000)}`;
+  const cuts = Array.from({ length: 1000 }, (_, j) => `［＃「${'い'.repeat(j + 1)}あ」に傍点］`).join('');
+  for (const [name, src] of [
+    ['misses', 'い［＃「あ」に傍点］'.repeat(20_000)],
+    ['misses after a ｜…《》 each', '｜漢《かん》い［＃「あ」に傍点］'.repeat(10_000)],
+    ['far hits', `${far}${'［＃「あ」に傍点］'.repeat(2000)}`],
+    ['cuts of one long run', `${'い'.repeat(100_000)}あ${cuts}`],
+  ] as const) {
+    assert.equal(inLinearTime(name, () => parse(src)).lines.length, 1, name);
   }
 });
 

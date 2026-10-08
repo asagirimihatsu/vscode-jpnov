@@ -12,9 +12,7 @@
  */
 import { displayText } from '../chars.ts';
 
-import { charsCell, contentOf, matchTarget, spanOf, textOf, withMark, withMarksOf } from './cells.ts';
-import type { Cell } from './cells.ts';
-import { append } from './lists.ts';
+import { LineCells, charsCell, contentOf, spanOf, textOf, withMark, withMarksOf } from './cells.ts';
 import type {
   Ast,
   CharsOrigin,
@@ -99,13 +97,6 @@ function markOf(node: EmphasisPostfixNode | EmphasisSpanStartNode): Mark {
   return { variant: node.variant, left: node.left };
 }
 
-/** `cells.splice(first, count, ...items)`, for any number of items. */
-function replace(cells: Cell[], first: number, count: number, items: readonly Cell[]): void {
-  const after = cells.splice(first).slice(count);
-  append(cells, items);
-  append(cells, after);
-}
-
 /** `a` and `b` pair: each is what the other relates to. */
 function pair(pairs: Map<PairedNode, Span>, a: PairedNode, b: PairedNode): void {
   pairs.set(a, b.span);
@@ -118,7 +109,7 @@ class LineResolver {
   private readonly ledger: Ledger;
   private readonly values: ValueLookup | undefined;
 
-  private readonly cells: Cell[] = [];
+  private readonly cells = new LineCells();
   private indent: number;
   private heading: HeadingLevel | undefined;
   private pageBreak = false;
@@ -145,7 +136,7 @@ class LineResolver {
     }
     this.closeTcy(null); // an open ［＃縦中横］ closes with its line
     return {
-      content: contentOf(this.cells),
+      content: contentOf(this.cells.items),
       indent: this.indent,
       ...(this.heading === undefined ? {} : { heading: this.heading }),
       pageBreak: this.pageBreak,
@@ -279,7 +270,7 @@ class LineResolver {
       throw new Error('resolve: a ruby reading without its ｜'); // the scanner pairs them on one line
     }
     this.base = null;
-    const inside = this.cells.splice(open.start);
+    const inside = this.cells.truncate(open.start);
     const base = displayText(inside.map(textOf).join(''));
     if (base === '') {
       // Nothing visible (an empty value): the markup prints as typed.
@@ -295,7 +286,9 @@ class LineResolver {
         marks: withMarksOf(this.flow.marks, inside),
       });
     }
-    append(this.cells, inside.filter((cell) => cell.kind === 'comment')); // zero-width cells survive
+    for (const cell of inside.filter((cell) => cell.kind === 'comment')) {
+      this.cells.push(cell); // zero-width cells survive
+    }
     for (const p of open.postfixes) {
       this.bind(p.node, p.judged);
     }
@@ -314,9 +307,9 @@ class LineResolver {
   private bind(node: PostfixNode, judged: boolean): void {
     const { cells } = this;
     const target = displayText(node.target.text);
-    const m = matchTarget(cells, target);
-    const first = m === null ? undefined : cells[m.first];
-    const last = m === null ? undefined : cells[m.last];
+    const m = cells.match(target);
+    const first = m === null ? undefined : cells.items[m.first];
+    const last = m === null ? undefined : cells.items[m.last];
     const miss = (): void => {
       if (judged) {
         this.ledger.issues.push({ kind: 'postfixTargetMissing', span: node.target.span, target: node.target.text });
@@ -328,30 +321,30 @@ class LineResolver {
       return;
     }
     const span = { start: spanOf(first).start, end: spanOf(last).end };
-    const range = cells.slice(m.first, m.last + 1);
+    const range = cells.items.slice(m.first, m.last + 1);
     const kept = range.filter((cell) => cell.kind === 'comment');
     const marks = first.kind === 'comment' ? {} : first.marks;
     switch (node.kind) {
       case 'emphasisPostfix':
         for (let i = m.first; i <= m.last; i += 1) {
-          const cell = cells[i];
+          const cell = cells.items[i];
           if (cell !== undefined && cell.kind !== 'comment') {
-            cells[i] = { ...cell, marks: withMark(cell.marks, node.channel, markOf(node)) };
+            cells.set(i, { ...cell, marks: withMark(cell.marks, node.channel, markOf(node)) });
           }
         }
         break;
       case 'tcyPostfix':
         // Whole coverage of a ruby REPLACES it (手動縦中横 > ルビ).
-        replace(cells, m.first, range.length, [{ kind: 'tcy', text: target, span, marks }, ...kept]);
+        cells.replace(m.first, range.length, [{ kind: 'tcy', text: target, span, marks }, ...kept]);
         break;
       case 'rubyLeftPostfix': {
         const real = range.filter((cell) => cell.kind !== 'comment');
         const single = real.length === 1 ? real[0] : undefined;
         const left = displayText(node.reading.text);
         if (single?.kind === 'ruby') {
-          cells[cells.indexOf(single, m.first)] = { ...single, left }; // 両側ルビ
+          cells.set(cells.items.indexOf(single, m.first), { ...single, left }); // 両側ルビ
         } else if (real.every((cell) => cell.kind === 'chars')) {
-          replace(cells, m.first, range.length, [{ kind: 'ruby', base: target, left, span, marks }, ...kept]);
+          cells.replace(m.first, range.length, [{ kind: 'ruby', base: target, left, span, marks }, ...kept]);
         } else {
           miss(); // a reading or a cell inside would be silently destroyed
           return;

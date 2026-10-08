@@ -8,6 +8,7 @@ import type { CodeAction, Diagnostic, Range, TextEdit } from 'vscode-languageser
 import { buildCodeActions } from '../../../src/server/lint/codeActions.ts';
 import type { LintFinding } from '../../../src/server/lint/engine.ts';
 import type { SyncedTarget } from '../../../src/server/targets.ts';
+import { inLinearTime } from '../../shared/_timing.ts';
 
 const URI = 'file:///x.jpnov';
 
@@ -98,6 +99,27 @@ test('a quick-fix carries the edit of the 「…」 its fix lands inside', () =>
   assert.deepEqual(editsOf(quickFix), [
     { range: range(0, 3, 0, 5), newText: '⁉' },
     { range: TARGET, newText: 'なに⁉だ!?' },
+  ]);
+});
+
+test('fix-all over thousands of 「…」 takes linear time (issue #182)', () => {
+  // Line k: `なに!?［＃「なに!?」に傍点］` with its 「…」 at 7..11; a pair fix inside the text and a
+  // composition fix inside the 「…」 that gives way.
+  const n = 8000;
+  const findings: LintFinding[] = [];
+  for (let k = 0; k < n; k += 1) {
+    const target = range(k, 7, k, 11);
+    const w: SyncedTarget = { range: target, text: 'なに!?', start: 2, end: 4, newText: '⁉' };
+    findings.push(finding(range(k, 2, k, 4), 'lint.common.questionExclamationMarks', '⁉', [w]));
+    findings.push(finding(range(k, 8, k, 9), 'lint.common.noNfd', 'に'));
+  }
+  const [fixAll] = inLinearTime('fix-all', () => buildCodeActions(URI, findings, range(0, 0, 0, 0), [CodeActionKind.SourceFixAll]));
+  assert.ok(fixAll);
+  const edits = editsOf(fixAll);
+  assert.equal(edits.length, 2 * n);
+  assert.deepEqual(edits.slice(0, 2), [
+    { range: range(0, 2, 0, 4), newText: '⁉' },
+    { range: range(0, 7, 0, 11), newText: 'なに⁉' },
   ]);
 });
 

@@ -263,6 +263,7 @@ test('a line of any length is read once', () => {
     ['あ!?［＃メモ］', many], // a piece and a comment each
     ['。《!?》', 0], // a 《…》 that made no ruby each
     ['に!?［＃「に!」に傍点］', many], // a cut each
+    ['い［＃「あ」に傍点］', 0], // a miss each (#182)
   ] as const) {
     for (const raw of MODES) {
       assert.equal(lint(unit.repeat(many), raw).length, found, unit);

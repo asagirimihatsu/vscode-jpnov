@@ -27,6 +27,12 @@ const CLOSERS = new Set(Object.values(PAIRS));
 
 export function noUnmatchedPairRule(ctx: RuleContext): LineRule {
   const open: { readonly expected: string; readonly src: number }[] = [];
+  // How many of `open` await each closer: a dangling closer is known in one step, and the walk
+  // down the stack below runs only when it ends in a match that removes what it passed.
+  const awaiting = new Map<string, number>();
+  const count = (closer: string, by: number): void => {
+    awaiting.set(closer, (awaiting.get(closer) ?? 0) + by);
+  };
   return {
     line(line: LintLine): void {
       const v = line.prose();
@@ -40,26 +46,26 @@ export function noUnmatchedPairRule(ctx: RuleContext): LineRule {
         const expected = PAIRS[ch];
         if (expected !== undefined) {
           open.push({ expected, src });
+          count(expected, 1);
           continue;
         }
         if (!CLOSERS.has(ch)) {
           continue;
         }
-        let at = -1;
-        for (let d = open.length - 1; d >= 0; d -= 1) {
-          if (open[d]?.expected === ch) {
-            at = d;
-            break;
-          }
-        }
-        if (at === -1) {
+        if ((awaiting.get(ch) ?? 0) === 0) {
           ctx.report({ start: src, end: src + 1 }); // dangling closer
           continue;
         }
-        for (const skipped of open.splice(at + 1)) {
-          ctx.report({ start: skipped.src, end: skipped.src + 1 }); // unclosed inner opener
+        let at = open.length - 1;
+        while (open[at]?.expected !== ch) {
+          at -= 1;
         }
-        open.pop();
+        for (const o of open.splice(at)) {
+          count(o.expected, -1);
+          if (o.expected !== ch) {
+            ctx.report({ start: o.src, end: o.src + 1 }); // unclosed inner opener, skipped
+          }
+        }
       }
     },
     end(): void {

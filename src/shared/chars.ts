@@ -94,6 +94,18 @@ export function graphemes(text: string): string[] {
   return SINGLETONS.test(text) ? Array.from(text) : Array.from(GRAPHEMES.segment(text), (s) => s.segment);
 }
 
+/**
+ * True iff `at` falls between two clusters of `text`: never at its ends. Two singletons always
+ * part (a cluster joins across a non-singleton on one of its sides); anything else asks the
+ * segmenter for the one cluster around `at`, whatever the length of `text`.
+ */
+export function isClusterBoundary(text: string, at: number): boolean {
+  if (at <= 0 || at >= text.length) {
+    return false;
+  }
+  return SINGLETONS.test(text.slice(at - 1, at + 1)) || GRAPHEMES.segment(text).containing(at)?.index === at;
+}
+
 /** The first code point of `text` as a string: the character a cluster is classed by. */
 export function headChar(text: string): string {
   return text.slice(0, (text.codePointAt(0) ?? 0) > 0xffff ? 2 : 1); // slice, not fromCodePoint: this sits under every unit of the wrap

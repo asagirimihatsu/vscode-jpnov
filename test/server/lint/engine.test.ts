@@ -17,6 +17,7 @@ import { displayText } from '../../../src/shared/chars.ts';
 import { RULES, settingKey } from '../../../src/shared/lint/catalog.ts';
 import { selectRules } from '../../../src/shared/lint/select.ts';
 import type { RawLintConfigWire } from '../../../src/shared/protocol.ts';
+import { inLinearTime } from '../../shared/_timing.ts';
 import { applyFixAll, applyLintFixes, lintFindings } from '../helpers.ts';
 
 interface Hit {
@@ -700,6 +701,13 @@ test('noUnmatchedPair: a closer skipping an inner opener reports the skipped ope
 
 test('noUnmatchedPair spans lines (a multi-line utterance is balanced)', () => {
   assert.deepEqual(lint('「あの\nね」', PAIRS), []);
+});
+
+test('noUnmatchedPair: dangling closers over a deep open stack take linear time (issue #182)', () => {
+  const n = 20_000;
+  const hits = inLinearTime('dangling closers', () => lint(`${'（あ\n'.repeat(n)}${'あ」\n'.repeat(n)}`, PAIRS));
+  assert.equal(hits.filter((h) => h.text === '」').length, n); // every closer dangles
+  assert.equal(hits.filter((h) => h.text === '（').length, n); // every opener stays open to EOF
 });
 
 test('noUnmatchedPair flags a lone prose 《 — a broken ruby, in practice', () => {
