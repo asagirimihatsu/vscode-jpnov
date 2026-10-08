@@ -15,9 +15,9 @@
  */
 import { readdir, readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
-import { writeIfChanged } from './write.ts';
+import { runCli, writeIfChanged } from './write.ts';
 
 const STYLES_DIR = fileURLToPath(new URL('../src/shared/compiler/styles/', import.meta.url));
 const GENERATED = join(STYLES_DIR, 'styles.generated.ts');
@@ -68,11 +68,4 @@ export async function writeStylesModule(): Promise<boolean> {
 }
 
 // CLI: `node scripts/gen-styles.ts` (or via `npm run gen:styles`).
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  writeStylesModule().then((changed) => {
-    console.log(changed ? `regenerated ${GENERATED}` : `up to date: ${GENERATED}`);
-  }).catch((err: unknown) => {
-    console.error(`error generating ${GENERATED}:`, err);
-    process.exit(1);
-  });
-}
+runCli(import.meta.url, GENERATED, writeStylesModule);

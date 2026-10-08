@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 
 import * as esbuild from 'esbuild';
 
+import { writeGrammar } from './scripts/gen-grammar.ts';
 import { styleSourcePaths, writeStylesModule } from './scripts/gen-styles.ts';
 import { webviewSourcePaths, writeWebviewModules } from './scripts/gen-webview.ts';
 
@@ -10,9 +11,11 @@ const watch = process.argv.includes('--watch');
 
 // Regenerate the generated modules up front so every build (dev, prod, and watch's first pass)
 // bundles fresh sources; the codegen plugins keep --watch rebuilds fresh thereafter. The webview
-// bundle is minified in production so the packaged extension ships minified webview code.
+// bundle is minified in production so the packaged extension ships minified webview code. The
+// grammar is no bundle input: VS Code reads it from syntaxes/, so a build only keeps it fresh.
 await writeStylesModule();
 await writeWebviewModules(production);
+await writeGrammar();
 
 /** @type {import('esbuild').BuildOptions} */
 const base = {

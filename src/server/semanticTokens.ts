@@ -78,6 +78,12 @@ const PART_HIGHLIGHT: Record<PartRole, TokenType | null> = {
   inner: 'marker',
 };
 
+/** The highlight a part of `role` is coloured as; null for one that keeps the default colour. */
+export function partHighlight(role: PartRole): (typeof HIGHLIGHTS)[number] | null {
+  const kind = PART_HIGHLIGHT[role];
+  return HIGHLIGHTS.find((h) => h.kind === kind) ?? null;
+}
+
 /**
  * Runs of adjacent parts that are ONE token: a quoted reading with its corners, a reading with
  * its opening 《, and the value display's ここに「 … 」の値を表示 scaffolding.
@@ -95,7 +101,7 @@ const DIALOGUE_CLOSER = new Map<string, string>([
 ]);
 
 /** The dialogue corners: the only characters of body text that read as markup. */
-const CORNERS = /[「『」』]/g;
+export const CORNERS = /[「『」』]/g;
 
 interface TokenSpan {
   readonly start: number; // source UTF-16 offset

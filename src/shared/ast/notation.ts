@@ -85,11 +85,15 @@ export function variantStyle(spelling: string, form: DirectionForm = 'none'): Va
   if (!isVariant(name)) {
     return null;
   }
-  const channel: Channel = EMPHASIS_VARIANTS[name];
-  if (left && channel !== 'emph' && channel !== 'line') {
+  if (left && !hasLeftSide(name)) {
     return null;
   }
-  return { variant: name, left, channel, prefix: left ? prefix.length : 0 };
+  return { variant: name, left, channel: EMPHASIS_VARIANTS[name], prefix: left ? prefix.length : 0 };
+}
+
+/** True iff `variant` may sit on the left side: 傍点 and 傍線. */
+export function hasLeftSide(variant: string): boolean {
+  return isVariant(variant) && (EMPHASIS_VARIANTS[variant] === 'emph' || EMPHASIS_VARIANTS[variant] === 'line');
 }
 
 /** True iff `variant` has a ここから／ここで form: 太字 and 斜体 only. */
@@ -166,7 +170,7 @@ export function valueOf(name: string, values: ValueLookup | undefined): string {
 }
 
 /** `inner` wrapped as a ［＃…］ annotation. */
-function annotation(inner: string): string {
+export function annotation(inner: string): string {
   return `${ANNOTATION_OPEN}${inner}${ANNOTATION_CLOSE}`;
 }
 
