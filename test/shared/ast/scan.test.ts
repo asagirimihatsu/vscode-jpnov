@@ -11,6 +11,7 @@ import { scan } from '../../../src/shared/ast/scan.ts';
 
 import { at, blockIndent, blockOf, contentOf, facts, gaijiOf, kinds, lineShapes, nodeOf, nodesOf, shape } from './_shape.ts';
 import { D } from '../_kana.ts';
+import { inLinearTime } from '../_timing.ts';
 
 // --------------------------------------------------------------- lines
 
@@ -95,9 +96,7 @@ test('an implicit base of any length is found whole, and the text before a 《 i
   // A cluster cut at a stretch's edge never ends the base: 64 code units back lands inside this 𠮷.
   const astral = `。${'漢'.repeat(63)}𠮷${'漢'.repeat(30)}《よみ》`;
   assert.deepEqual(shape(astral).slice(1), [`base ${'漢'.repeat(63)}𠮷${'漢'.repeat(30)}`, 'rubyReading 《よみ》']);
-  const started = performance.now();
-  scan('。《!?》'.repeat(20_000));
-  assert.ok(performance.now() - started < 2_000, 'a line of readings with no base is read in linear time');
+  inLinearTime('a line of readings with no base is read in linear time', () => scan('。《!?》'.repeat(20_000)));
 });
 
 /** An explicit base may hold annotations; a ｜ that meets no reading on its line comes out as typed. */

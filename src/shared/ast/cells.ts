@@ -2,9 +2,10 @@
  * The cells of a line while it is being resolved: what a corner-target postfix is matched
  * against and rewrites, and what becomes the line's content.
  */
-import { displayChars, displayText, graphemes } from '../chars.ts';
+import { displayChars, displayText, isClusterBoundary } from '../chars.ts';
 import type { ComposedChar } from '../chars.ts';
 
+import { upperBound } from './lists.ts';
 import type { CharsOrigin, CommentInline, Inline, Mark, Marks, Ruby, Span, SyntaxNode, Tcy } from './nodes.ts';
 import { CHANNELS } from './notation.ts';
 import type { Channel } from './notation.ts';
@@ -84,18 +85,6 @@ export function textOf(cell: Cell): string {
   }
 }
 
-/** True iff `text` may be cut at `at`: only between two characters, never inside a grapheme cluster. */
-function isCharBoundary(text: string, at: number): boolean {
-  let shown = 0;
-  for (const ch of graphemes(text)) {
-    if (shown >= at) {
-      break;
-    }
-    shown += ch.length;
-  }
-  return shown === at;
-}
-
 function cut(cell: CharsCell, at: number): [CharsCell, CharsCell] {
   return [
     { ...cell, text: cell.text.slice(0, at) },
@@ -104,69 +93,137 @@ function cut(cell: CharsCell, at: number): [CharsCell, CharsCell] {
 }
 
 /**
- * The LAST occurrence of `target` in the cells' concatenated text, as an inclusive index range
- * of WHOLE cells — a character run is cut where the match starts and ends; a match cutting into
- * a ruby or a 縦中横 cell is none. Only that last occurrence is tested (the spec's forward
- * references sit next to their target).
+ * The cells of one line as it is resolved, with where each ends in their concatenated text and
+ * what each target has been searched for so far: a line may carry thousands of postfixes, and
+ * each search reads only the text written since the last one for the same target. The text
+ * only grows: a cut or a replacement moves cell boundaries, never a text offset, and a ｜ base
+ * is truncated before anything binds to it — so what a search found stays where it was.
  */
-export function matchTarget(cells: Cell[], target: string): { first: number; last: number } | null {
-  // Read back from the end, each stretch as long as all read before it: the last occurrence is
-  // met first, long before the head of a long line.
-  let text = '';
-  let from = cells.length; // cells[from..] are read
-  let pos = -1;
-  while (pos === -1 && from > 0) {
-    const want = Math.max(target.length, text.length, 64);
-    let stretch = '';
-    while (from > 0 && stretch.length < want) {
-      from -= 1;
-      const cell = cells[from];
-      stretch = (cell === undefined ? '' : textOf(cell)) + stretch;
+export class LineCells {
+  private readonly cells: Cell[] = [];
+  /** `ends[i]`: the text length of `cells[0..i]`; a zero-width cell repeats the one before. */
+  private readonly ends: number[] = [];
+  /** Per target: the text length searched, and the last occurrence found below it (-1: none). */
+  private readonly searched = new Map<string, { upTo: number; pos: number }>();
+
+  get items(): readonly Cell[] {
+    return this.cells;
+  }
+
+  get length(): number {
+    return this.cells.length;
+  }
+
+  private get textLength(): number {
+    return this.ends[this.ends.length - 1] ?? 0;
+  }
+
+  push(cell: Cell): void {
+    this.cells.push(cell);
+    this.ends.push(this.textLength + textOf(cell).length);
+  }
+
+  /** Removes and returns `cells[from..]`. */
+  truncate(from: number): Cell[] {
+    const removed = this.cells.splice(from);
+    this.ends.length = this.cells.length;
+    return removed;
+  }
+
+  /** `cells.splice(first, count, ...items)` for any number of items; the text they show is the text they replace. */
+  replace(first: number, count: number, items: readonly Cell[]): void {
+    const after = this.truncate(first).slice(count);
+    for (const cell of items) {
+      this.push(cell);
     }
-    text = stretch + text;
-    pos = text.lastIndexOf(target);
-  }
-  if (pos === -1) {
-    return null;
-  }
-  const bounds: { start: number; end: number; index: number }[] = [];
-  let at = 0;
-  for (let index = from; index < cells.length; index += 1) {
-    const cell = cells[index];
-    const t = cell === undefined ? '' : textOf(cell);
-    if (t !== '') {
-      bounds.push({ start: at, end: at + t.length, index });
-      at += t.length;
+    for (const cell of after) {
+      this.push(cell);
     }
   }
-  const end = pos + target.length;
-  const head = bounds.find((b) => b.start <= pos && pos < b.end);
-  const tail = bounds.find((b) => b.start < end && end <= b.end);
-  const headCell = head === undefined ? undefined : cells[head.index];
-  const tailCell = tail === undefined ? undefined : cells[tail.index];
-  if (head === undefined || tail === undefined || headCell === undefined || tailCell === undefined) {
-    return null;
+
+  /** `cells[index] = cell`, for a cell showing the same text with other marks. */
+  set(index: number, cell: Cell): void {
+    this.cells[index] = cell;
   }
-  const headAt = pos - head.start;
-  const tailAt = end - tail.start;
-  if (headAt !== 0 && (headCell.kind !== 'chars' || !isCharBoundary(headCell.text, headAt))) {
-    return null;
+
+  /** The start of the last occurrence of `target` in the concatenated text, or -1. */
+  private find(target: string): number {
+    const entry = this.searched.get(target);
+    // Read back from the end, each stretch as long as all read before it: the last occurrence is
+    // met first, long before the head of a long line. Text searched for this target before is
+    // read again only as far as an occurrence could straddle its edge.
+    const floor = entry === undefined ? 0 : Math.max(0, entry.upTo - target.length + 1);
+    const { cells, ends } = this;
+    let text = '';
+    let from = cells.length; // cells[from..] are read
+    const unread = (): boolean => (ends[from - 1] ?? 0) > floor;
+    let pos = -1;
+    while (pos === -1 && unread()) {
+      const want = Math.max(target.length, text.length, 64);
+      let stretch = '';
+      while (stretch.length < want && unread()) {
+        from -= 1;
+        const cell = cells[from];
+        stretch = (cell === undefined ? '' : textOf(cell)) + stretch;
+      }
+      text = stretch + text;
+      pos = text.lastIndexOf(target);
+      if (pos !== -1) {
+        pos += ends[from - 1] ?? 0;
+      }
+    }
+    if (pos === -1 && entry !== undefined) {
+      pos = entry.pos;
+    }
+    this.searched.set(target, { upTo: this.textLength, pos });
+    return pos;
   }
-  if (end !== tail.end && (tailCell.kind !== 'chars' || !isCharBoundary(tailCell.text, tailAt))) {
-    return null;
+
+  /**
+   * The LAST occurrence of `target` in the cells' concatenated text, as an inclusive index range
+   * of WHOLE cells — a character run is cut where the match starts and ends; a match cutting into
+   * a ruby or a 縦中横 cell is none. Only that last occurrence is tested (the spec's forward
+   * references sit next to their target).
+   */
+  match(target: string): { first: number; last: number } | null {
+    if (target === '') {
+      return null;
+    }
+    const pos = this.find(target);
+    if (pos === -1) {
+      return null;
+    }
+    const { cells, ends } = this;
+    const end = pos + target.length;
+    let first = upperBound(ends, pos); // the cell whose text runs past `pos`
+    let last = upperBound(ends, end - 1);
+    const headCell = cells[first];
+    const tailCell = cells[last];
+    if (headCell === undefined || tailCell === undefined) {
+      return null;
+    }
+    const headAt = pos - (ends[first - 1] ?? 0);
+    const tailAt = end - (ends[last - 1] ?? 0);
+    const tailEnd = ends[last] ?? 0;
+    if (headAt !== 0 && (headCell.kind !== 'chars' || !isClusterBoundary(headCell.text, headAt))) {
+      return null;
+    }
+    if (end !== tailEnd && (tailCell.kind !== 'chars' || !isClusterBoundary(tailCell.text, tailAt))) {
+      return null;
+    }
+    if (end !== tailEnd && tailCell.kind === 'chars') {
+      cells.splice(last, 1, ...cut(tailCell, tailAt));
+      ends.splice(last, 0, end);
+    }
+    const cutHead = cells[first];
+    if (headAt !== 0 && cutHead?.kind === 'chars') {
+      cells.splice(first, 1, ...cut(cutHead, headAt));
+      ends.splice(first, 0, pos);
+      first += 1;
+      last += 1;
+    }
+    return { first, last };
   }
-  let first = head.index;
-  let last = tail.index;
-  if (end !== tail.end && tailCell.kind === 'chars') {
-    cells.splice(last, 1, ...cut(tailCell, tailAt));
-  }
-  const cutHead = cells[first];
-  if (headAt !== 0 && cutHead?.kind === 'chars') {
-    cells.splice(first, 1, ...cut(cutHead, headAt));
-    first += 1;
-    last += 1;
-  }
-  return { first, last };
 }
 
 /** `marks` with `channel` set to `mark`, or cleared when `mark` is undefined. */

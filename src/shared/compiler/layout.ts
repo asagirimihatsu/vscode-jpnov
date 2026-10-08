@@ -656,6 +656,8 @@ function wrapRow(
           continue; // u is consumed — it must not count into the next column
         }
         // 追い出し: find the last acceptable break point; the line keeps its first real unit.
+        // The walk steps from real unit to real unit: a break anywhere inside a run of
+        // zero-width units tests the same pair of neighbours as one before the run.
         const floor = nextReal(units, start) + 1;
         while (
           brk > floor &&
@@ -663,7 +665,7 @@ function wrapRow(
             isDividingSpace(units, nextReal(units, brk)) ||
             everyCharIn(units[lastReal(units, start, brk)], KINSOKU_OPEN))
         ) {
-          brk -= 1;
+          brk = Math.max(floor, lastReal(units, start, brk));
         }
       }
       lines.push({ srcLine, at: columnAt(units, start), units: units.slice(start, brk), indent, ...hs });

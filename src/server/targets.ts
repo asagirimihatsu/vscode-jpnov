@@ -62,6 +62,9 @@ export function comparePositions(a: Position, b: Position): number {
   return a.line - b.line || a.character - b.character;
 }
 
+const byStart = (a: { readonly range: Range }, b: { readonly range: Range }): number =>
+  comparePositions(a.range.start, b.range.start);
+
 /** True iff the ranges share a character or touch. */
 export function rangesOverlap(a: Range, b: Range): boolean {
   return comparePositions(a.start, b.end) <= 0 && comparePositions(b.start, a.end) <= 0;
@@ -204,9 +207,20 @@ export function targetEdits(within: readonly SyncedTarget[]): TextEdit[] {
  * gives way: the rewrite carries it.
  */
 export function mergedEdits(edits: readonly SyncedEdit[]): TextEdit[] {
-  const targets = targetEdits(edits.flatMap((edit) => edit.within));
-  const own = edits
-    .filter((edit) => !targets.some((target) => rangesOverlap(target.range, edit.range)))
-    .map((edit): TextEdit => ({ range: edit.range, newText: edit.newText }));
+  const targets = targetEdits(edits.flatMap((edit) => edit.within)).sort(byStart);
+  // Each target range is one postfix's own 「…」, so the targets are disjoint and by start they
+  // are by end too: one walk over the edits in order meets each target once.
+  const own: TextEdit[] = [];
+  let t = 0;
+  for (const edit of edits.toSorted(byStart)) {
+    let target = targets[t];
+    while (target !== undefined && comparePositions(target.range.end, edit.range.start) < 0) {
+      t += 1;
+      target = targets[t];
+    }
+    if (target === undefined || !rangesOverlap(target.range, edit.range)) {
+      own.push({ range: edit.range, newText: edit.newText });
+    }
+  }
   return [...targets, ...own];
 }

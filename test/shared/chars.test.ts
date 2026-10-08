@@ -15,9 +15,10 @@ import {
   dropUnshown,
   graphemes,
   headChar,
+  isClusterBoundary,
   isCombiningKanaMark,
 } from '../../src/shared/chars.ts';
-import { BEL, CLUSTERS, D } from './_kana.ts';
+import { BEL, CLUSTERS, D, TSUJI } from './_kana.ts';
 import { isXmlChar } from './xml.ts';
 
 const MARKS = ['\u3099', '\u309A'] as const;
@@ -154,6 +155,26 @@ test('graphemes: no code point of the fast path ever joins a cluster', () => {
       assert.equal(Array.from(segmenter.segment(`${ch}a${ch}${ch}`)).length, 4, `U+${cp.toString(16)}`);
     }
   }
+});
+
+test('isClusterBoundary: between clusters only, never inside one nor at the ends', () => {
+  const text = `あ${CLUSTERS.join('')}い`;
+  const cuts = new Set<number>();
+  let at = 0;
+  for (const cluster of graphemes(text)) {
+    cuts.add(at);
+    at += cluster.length;
+  }
+  for (let i = 0; i <= text.length; i += 1) {
+    assert.equal(isClusterBoundary(text, i), i > 0 && i < text.length && cuts.has(i), `at ${String(i)}`);
+  }
+  // The singleton fast path gives the same answer as the segmenter does on a long run.
+  const long = `${'い'.repeat(100_000)}${TSUJI}${'い'.repeat(10)}`;
+  assert.equal(isClusterBoundary(long, 50_000), true);
+  assert.equal(isClusterBoundary(long, 100_000), true);
+  assert.equal(isClusterBoundary(long, 100_001), false);
+  assert.equal(isClusterBoundary(long, 100_002), false);
+  assert.equal(isClusterBoundary(long, 100_003), true);
 });
 
 test('displayChars: one entry per cluster, composed, with its range in the source', () => {

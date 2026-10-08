@@ -17,6 +17,7 @@ import {
 import { DASH_GLYPH } from '../../../src/shared/dash.ts';
 import { at, gaijiOf, issuesOf } from '../ast/_shape.ts';
 import { CLUSTERS, D, TSUJI } from '../_kana.ts';
+import { inLinearTime } from '../_timing.ts';
 
 /** The rows of `src`: parsed (with the cover's `values`, when given), then laid out. */
 const rowsOf = (src: string, opts?: { dash?: DashMode; values?: ValueLookup | undefined }): Row[] =>
@@ -226,6 +227,16 @@ test('禁則: 追い出し looks through zero-width units to the next real unit 
   assert.deepEqual(klines('「あい［＃「あ」に「ママ」の注記］」', 3), ['「あ', 'い」']);
   assert.deepEqual(klines('「あい［＃「あ」に「ママ」の注記］」', 3, 'relaxed'), ['「あ', 'い」']);
   assert.deepEqual(klines('ああ［＃謎の注記］」', 2), ['あ', 'あ」']);
+  // A run of comments is one gap: the walk lands as it does past a single comment.
+  assert.deepEqual(klines('ああ［＃x］［＃y］［＃z］」', 2), ['あ', 'あ」']);
+  assert.deepEqual(klines('「あい［＃x］［＃y］［＃z］」', 3), ['「あ', 'い」']);
+  assert.deepEqual(klines('ああ「［＃x］［＃y］い', 3), ['ああ', '「い']);
+});
+
+test('禁則: 追い出し over a long run of comments takes linear time (issue #182)', () => {
+  const src = `${'」'.repeat(40)}${'［＃注記］'.repeat(2000)}`.repeat(5);
+  const lines = inLinearTime('追い出し over comments', () => klines(src, 40));
+  assert.deepEqual(lines, klines('」'.repeat(5 * 40), 40)); // the comments change no break
 });
 
 test('禁則: the no-empty guard keeps the first REAL unit, not a leading comment', () => {
