@@ -7,6 +7,7 @@ import type { CodeAction, Diagnostic, Range, TextEdit } from 'vscode-languageser
 
 import { buildCodeActions } from '../../../src/server/lint/codeActions.ts';
 import type { LintFinding } from '../../../src/server/lint/engine.ts';
+import type { SyncedTarget } from '../../../src/server/targets.ts';
 
 const URI = 'file:///x.jpnov';
 
@@ -14,9 +15,9 @@ function range(l1: number, c1: number, l2: number, c2: number): Range {
   return { start: { line: l1, character: c1 }, end: { line: l2, character: c2 } };
 }
 
-function finding(r: Range, code: string, fixNewText?: string): LintFinding {
+function finding(r: Range, code: string, fixNewText?: string, within: SyncedTarget[] = []): LintFinding {
   const diagnostic: Diagnostic = { range: r, message: `msg:${code}`, severity: 2, source: 'jpnov', data: { code } };
-  return fixNewText !== undefined ? { diagnostic, fix: { range: r, newText: fixNewText } } : { diagnostic };
+  return fixNewText === undefined ? { diagnostic } : { diagnostic, fix: { range: r, newText: fixNewText, within } };
 }
 
 function editsOf(action: CodeAction): TextEdit[] {
@@ -83,5 +84,33 @@ test('fix-all bundles every fixable edit and drops overlaps', () => {
   assert.deepEqual(editsOf(fixAll), [
     { range: range(0, 1, 0, 2), newText: 'ア' },
     { range: range(0, 5, 0, 6), newText: 'が' },
+  ]);
+});
+
+// なに!?だ!?［＃「なに!?だ!?」に傍点］: the 「…」 sits at 12..18, each pair is 2..4 and 5..7 of it.
+const TARGET = range(0, 12, 0, 18);
+const within = (start: number, end: number, newText: string): SyncedTarget => ({ range: TARGET, text: 'なに!?だ!?', start, end, newText });
+
+test('a quick-fix carries the edit of the 「…」 its fix lands inside', () => {
+  const f = finding(range(0, 3, 0, 5), 'lint.common.questionExclamationMarks', '⁉', [within(2, 4, '⁉')]);
+  const [quickFix] = buildCodeActions(URI, [f], range(0, 3, 0, 3), [CodeActionKind.QuickFix]);
+  assert.ok(quickFix);
+  assert.deepEqual(editsOf(quickFix), [
+    { range: range(0, 3, 0, 5), newText: '⁉' },
+    { range: TARGET, newText: 'なに⁉だ!?' },
+  ]);
+});
+
+test('fix-all rewrites a 「…」 once from every fix it kept, and a fix inside that 「…」 gives way', () => {
+  const first = finding(range(0, 3, 0, 5), 'lint.common.questionExclamationMarks', '⁉', [within(2, 4, '⁉')]);
+  const second = finding(range(0, 6, 0, 8), 'lint.common.questionExclamationMarks', '⁉', [within(5, 7, '⁉')]);
+  const dropped = finding(range(0, 3, 0, 5), 'lint.common.exclamationRun', '！？', [within(2, 4, '！？')]); // overlaps `first`
+  const inside = finding(range(0, 14, 0, 16), 'lint.common.noNfd', 'ab'); // inside the 「…」
+  const [fixAll] = buildCodeActions(URI, [inside, second, first, dropped], range(0, 0, 0, 30), [CodeActionKind.SourceFixAll]);
+  assert.ok(fixAll);
+  assert.deepEqual(editsOf(fixAll), [
+    { range: range(0, 3, 0, 5), newText: '⁉' },
+    { range: range(0, 6, 0, 8), newText: '⁉' },
+    { range: TARGET, newText: 'なに⁉だ⁉' },
   ]);
 });

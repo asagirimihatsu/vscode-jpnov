@@ -87,6 +87,19 @@ test('an unmatched 《 stays text; nothing pairs across a line break', () => {
   ]);
 });
 
+test('an implicit base of any length is found whole, and the text before a 《 is read once', () => {
+  for (const base of ['漢'.repeat(63), '漢'.repeat(64), '漢'.repeat(65), '漢'.repeat(500), `${'あ'.repeat(70)}\u3099`, '𠮷'.repeat(40)]) {
+    const src = `。${base}《よみ》`;
+    assert.deepEqual(shape(src), ['text 。', `base ${base}`, 'rubyReading 《よみ》'], String(base.length));
+  }
+  // A cluster cut at a stretch's edge never ends the base: 64 code units back lands inside this 𠮷.
+  const astral = `。${'漢'.repeat(63)}𠮷${'漢'.repeat(30)}《よみ》`;
+  assert.deepEqual(shape(astral).slice(1), [`base ${'漢'.repeat(63)}𠮷${'漢'.repeat(30)}`, 'rubyReading 《よみ》']);
+  const started = performance.now();
+  scan('。《!?》'.repeat(20_000));
+  assert.ok(performance.now() - started < 2_000, 'a line of readings with no base is read in linear time');
+});
+
 /** An explicit base may hold annotations; a ｜ that meets no reading on its line comes out as typed. */
 const EXPLICIT_CASES: readonly [string, string[]][] = [
   ['｜山田［＃「山田」に傍点］《やまだ》', ['rubyMark ｜', 'text 山田', 'emphasisPostfix ［＃「山田」に傍点］', 'rubyReading 《やまだ》']],

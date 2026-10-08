@@ -12,7 +12,8 @@ import { parse } from '../../../src/shared/ast/parse.ts';
 import type { RawLintConfigWire } from '../../../src/shared/protocol.ts';
 import { D } from '../../shared/_kana.ts';
 import { manuscripts } from '../../shared/ast/_fuzz.ts';
-import { contentOf } from '../../shared/ast/_shape.ts';
+import { eligibleTargets } from '../../../src/server/targets.ts';
+import { contentOf, isPostfix, nodesIn } from '../../shared/ast/_shape.ts';
 import { applyFixAll, lintFindings } from '../helpers.ts';
 
 const KEY = 'jpnov.lint.common.questionExclamationMarks';
@@ -170,8 +171,19 @@ test('tcy: a pair that an annotation takes one mark of is flagged without a fix,
   }
 });
 
-test('fullWidth: a pair an annotation names is replaced like any other, and the annotation then misses its target', () => {
-  for (const src of ['なに!?［＃「なに!?」に傍点］', 'なに!?［＃「に!」に傍点］', '王都!?［＃「都!」は大見出し］']) {
+test('fullWidth: a pair an annotation names whole is replaced in the body and in the 「…」 together', () => {
+  for (const [src, out] of [
+    ['なに!?［＃「なに!?」に傍点］', 'なに⁉［＃「なに⁉」に傍点］'],
+    ['王都!?［＃「王都!?」は大見出し］', '王都⁉［＃「王都⁉」は大見出し］'],
+  ] as const) {
+    assert.deepEqual(lint(src, FULL), [{ code: CODE, args: ['!?', '⁉'], text: '!?', fix: '⁉' }], src);
+    assert.equal(fixed(src, FULL), out);
+    assert.deepEqual(parse(out).issues, [], src);
+  }
+});
+
+test('fullWidth: a pair an annotation takes one mark of is replaced like any other, and the annotation then misses its target', () => {
+  for (const src of ['なに!?［＃「に!」に傍点］', '王都!?［＃「都!」は大見出し］']) {
     assert.deepEqual(lint(src, FULL), [{ code: CODE, args: ['!?', '⁉'], text: '!?', fix: '⁉' }], src);
     const out = fixed(src, FULL);
     assert.equal(out, src.replace('!?', '⁉'));
@@ -222,13 +234,25 @@ test('tcy, over any manuscript: the fixes leave nothing to fix, and no annotatio
   }
 });
 
-test('fullWidth, over any manuscript: the fixes leave nothing to report, and all they cost is an annotation its target', () => {
+test('fullWidth, over any manuscript: the fixes leave nothing to report, and an annotation naming a pair whole keeps its target', () => {
   const others = (src: string): string[] => parse(src).issues.map((issue) => issue.kind).filter((kind) => kind !== 'postfixTargetMissing');
+  const whole = /(?<![!?])[!?]{2}(?![!?])/;
   for (const src of manuscripts()) {
+    const before = parse(src);
     const out = fixed(src, FULL);
+    const after = parse(out);
     assert.deepEqual(lint(out, FULL), [], JSON.stringify(src));
     assert.deepEqual(others(out), others(src), JSON.stringify(src));
-    assert.ok(parse(out).issues.length >= parse(src).issues.length, JSON.stringify(src));
+    assert.ok(after.issues.length >= before.issues.length, JSON.stringify(src));
+    // A 「…」 written as the body it bound to, holding a pair whole, is rewritten with the body.
+    const eligible = new Set(before.lines.flatMap((line) => eligibleTargets(before, src, line.index)).map((target) => target.node));
+    const postfixesAfter = nodesIn(after).filter(isPostfix);
+    nodesIn(before).filter(isPostfix).forEach((node, i) => {
+      if (eligible.has(node) && whole.test(node.target.text)) {
+        const later = postfixesAfter[i];
+        assert.ok(later !== undefined && after.bound.has(later), `${JSON.stringify(src)} — ${node.text} lost its target`);
+      }
+    });
   }
 });
 

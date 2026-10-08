@@ -156,6 +156,22 @@ export class MarkdownString {
     this.value += s;
     return this;
   }
+
+  /** As VS Code: the markdown-special characters of `s` escaped. */
+  appendText(s: string): this {
+    this.value += s.replace(/[\\`*_{}[\]()#+\-.!~]/g, '\\$&');
+    return this;
+  }
+}
+
+/** As VS Code: one content becomes the one-element list. */
+export class Hover {
+  readonly contents: MarkdownString[];
+  readonly range: Range | undefined;
+  constructor(contents: MarkdownString, range?: Range) {
+    this.contents = [contents];
+    this.range = range;
+  }
 }
 
 export const ViewColumn = { One: 1, Two: 2, Three: 3, Beside: -2 } as const;
@@ -241,6 +257,8 @@ export interface RecordedInputBox {
 
 export interface MockState {
   textDocuments: FakeTextDocument[];
+  /** Hover providers registered via `languages.registerHoverProvider`, with their selector. */
+  hoverProviders: { selector: unknown; provider: unknown }[];
   panels: FakeWebviewPanel[];
   registeredCommands: Map<string, (...args: unknown[]) => unknown>;
   /** `commands.executeCommand` invocations, so tests can assert dispatched jpbook.* / vscode.open. */
@@ -324,6 +342,7 @@ export interface MockState {
 export function createMockState(): MockState {
   return {
     textDocuments: [],
+    hoverProviders: [],
     panels: [],
     registeredCommands: new Map(),
     executedCommands: [],
@@ -694,10 +713,21 @@ export function buildVscode(state: MockState): Record<string, unknown> {
     },
   };
 
+  const languages = {
+    registerHoverProvider(selector: unknown, provider: unknown): Disposable {
+      const entry = { selector, provider };
+      state.hoverProviders.push(entry);
+      return new Disposable(() => {
+        state.hoverProviders = state.hoverProviders.filter((p) => p !== entry);
+      });
+    },
+  };
+
   return {
     window,
     workspace,
     commands,
+    languages,
     l10n,
     env: {
       language: 'en',
@@ -718,6 +748,7 @@ export function buildVscode(state: MockState): Record<string, unknown> {
     WorkspaceEdit,
     ThemeColor,
     MarkdownString,
+    Hover,
     Disposable,
     EventEmitter,
     CancellationTokenSource,

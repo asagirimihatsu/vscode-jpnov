@@ -102,6 +102,48 @@ export function renderMessage(msg: LocalizableMessage): string {
     case 'syntax.indentTooLarge':
       return vscode.l10n.t('字下げ is too large (keep it to {0} or less for it to take effect)', s(0));
     // prose lint (kept byte-identical to renderEnglish).
+    case 'hover.postfix':
+      return vscode.l10n.t('{0} (forward reference)', s(0));
+    case 'hover.rubyLeft':
+      return vscode.l10n.t('Left ruby: {0} (forward reference)', s(0));
+    case 'hover.spanStart':
+      return vscode.l10n.t('{0} start (start/end form)', s(0));
+    case 'hover.spanEnd':
+      return vscode.l10n.t('{0} end (start/end form)', s(0));
+    case 'hover.blockStart':
+      return vscode.l10n.t('{0} start (block form)', s(0));
+    case 'hover.blockEnd':
+      return vscode.l10n.t('{0} end (block form)', s(0));
+    case 'hover.indent':
+      return vscode.l10n.t('Indent by {0} (this line)', s(0));
+    case 'hover.pageBreak':
+      return vscode.l10n.t('Page break');
+    case 'hover.value':
+      return vscode.l10n.t('Shows the value of "{0}" (the book file sets it)', s(0));
+    case 'hover.gaiji':
+      return vscode.l10n.t('External character: {0}', s(0));
+    case 'hover.comment':
+      return vscode.l10n.t('Unrecognized annotation (not in the output)');
+    case 'hover.broken':
+      return vscode.l10n.t('Unclosed annotation (prints as typed)');
+    case 'hover.ruby':
+      return vscode.l10n.t('Ruby: {0}', s(0));
+    case 'hover.rubyBase':
+      return vscode.l10n.t('Base: {0}', s(0));
+    case 'hover.target':
+      return vscode.l10n.t('Target: {0}', s(0));
+    case 'hover.targetMissing':
+      return vscode.l10n.t('Target not found');
+    case 'hover.pairEnd':
+      return vscode.l10n.t('Ends at {0} (line {1})', s(0), s(1));
+    case 'hover.pairStart':
+      return vscode.l10n.t('Starts at {0} (line {1})', s(0), s(1));
+    case 'hover.endMissing':
+      return vscode.l10n.t('No end annotation');
+    case 'hover.startMissing':
+      return vscode.l10n.t('No start annotation');
+    case 'hover.holds':
+      return vscode.l10n.t('Holds: {0}', s(0));
     case 'lint.common.sentenceLength':
       return vscode.l10n.t('this sentence is too long');
     case 'lint.common.maxTen':

@@ -14,12 +14,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import type { CodeAction } from 'vscode-languageserver/node';
+import type { CodeAction, DocumentHighlight, WorkspaceEdit } from 'vscode-languageserver/node';
 
 import { HEADER_BAND, PREVIEW_MARGIN_LINES, fitPaper } from '../../src/shared/compiler/geometry.ts';
 import { LINE_PITCHES } from '../../src/shared/config/types.ts';
 import type {
   BuildResult,
+  HoverResult,
   HtmlSettings,
   ListBooksResult,
   PreviewSettings,
@@ -139,6 +140,48 @@ test('a half-width pair is flagged, fixed by the code action, and then set in on
     { range: { start: { line: 0, character: pair }, end: { line: 0, character: text.length } }, newText: fixed.slice(pair) },
   ]);
   assert.ok((await render(fixed)).includes('<span class="tcy">!?</span>'), 'the written annotation combines the pair');
+});
+
+test('the annotation features answer over the wire: hover, highlight, rename, and a fix that keeps the 「…」', async () => {
+  const uri = 'file:///e2e/annotations.jpnov';
+  const text = `${CHAPTER_TEXT}なに!?［＃「なに!?」に傍点］\n`;
+  const lines = text.split('\n');
+  const at = (line: number, needle: string, into = 0): { line: number; character: number } => {
+    const character = lines[line]?.indexOf(needle) ?? -1;
+    assert.ok(character >= 0, `no ${needle} on line ${String(line)}`);
+    return { line, character: character + into };
+  };
+  conn().notify('jpnov/lintConfigChanged', { lintConfig: { 'jpnov.lint.common.questionExclamationMarks': 'fullWidth' } });
+  conn().notify('textDocument/didOpen', { textDocument: { uri, languageId: 'jpnov', version: 1, text } });
+  try {
+    const hover = await conn().request<HoverResult | null>('jpnov/hover', { uri, position: at(2, '縦中横') });
+    assert.ok(hover);
+    assert.deepEqual(hover.lines, [{ code: 'hover.postfix', args: ['縦中横'] }, { code: 'hover.target', args: ['!?'] }]);
+    assert.ok(hover.link?.endsWith('#tatechu_yoko'));
+    assert.equal(await conn().request<HoverResult | null>('jpnov/hover', { uri, position: at(4, '本文') }), null);
+
+    const lit = await conn().request<DocumentHighlight[]>('textDocument/documentHighlight', { textDocument: { uri }, position: at(1, '縦中横') });
+    assert.deepEqual(lit.map((h) => lines[h.range.start.line]?.slice(h.range.start.character, h.range.end.character)), ['［＃縦中横］', '12', '［＃縦中横終わり］']);
+
+    const prepared = await conn().request<{ range: { start: { character: number }; end: { character: number } }; placeholder: string } | null>(
+      'textDocument/prepareRename', { textDocument: { uri }, position: at(2, '!?', 1) },
+    );
+    assert.deepEqual(prepared, { range: { start: at(2, '!?'), end: at(2, '!?', 2) }, placeholder: '!?' });
+    const renamed = await conn().request<WorkspaceEdit | null>('textDocument/rename', { textDocument: { uri }, position: at(2, '!?', 1), newName: '⁉' });
+    assert.deepEqual(renamed?.changes?.[uri]?.map((e) => e.newText), ['⁉', '⁉']);
+    assert.equal(await conn().request<unknown>('textDocument/prepareRename', { textDocument: { uri }, position: at(4, '本文') }), null);
+
+    const actions = await conn().request<CodeAction[]>('textDocument/codeAction', {
+      textDocument: { uri },
+      range: { start: at(5, 'なに'), end: at(5, '傍点') },
+      context: { diagnostics: [], only: ['source.fixAll'] },
+    });
+    const edits = actions.flatMap((action) => action.edit?.changes?.[uri] ?? []);
+    assert.deepEqual(edits.map((e) => e.newText), ['⁉', 'なに⁉']);
+  } finally {
+    conn().notify('textDocument/didClose', { textDocument: { uri } });
+    conn().notify('jpnov/lintConfigChanged', { lintConfig: {} });
+  }
 });
 
 test('jpnov/listBooks + jpnov/build round-trip a real workspace over the wire', async () => {

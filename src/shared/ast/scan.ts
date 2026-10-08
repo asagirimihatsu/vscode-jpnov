@@ -68,20 +68,29 @@ function classOf(cp: number): CharClass {
  * itself means no base.
  */
 function implicitBaseStart(src: string, floor: number, end: number): number {
-  const clusters = graphemes(src.slice(floor, end)).reverse();
   const classOfHead = (cluster: string): CharClass => classOf(cluster.codePointAt(0) ?? 0);
-  const cls = classOfHead(clusters[0] ?? '');
-  if (cls === null) {
-    return end;
-  }
-  let start = end;
-  for (const cluster of clusters) {
-    if (classOfHead(cluster) !== cls) {
-      break;
+  // Read back in stretches, each twice the last: a base is short, the text before it may not be
+  // (a line of readings with no base would read its whole head at every 《). The first cluster
+  // of a stretch may be cut: the walk is trusted only where it ends before it.
+  let want = 64;
+  for (;;) {
+    const from = Math.max(floor, end - want);
+    const clusters = graphemes(src.slice(from, end)).reverse();
+    const cls = classOfHead(clusters[0] ?? '');
+    if (cls === null) {
+      return end;
     }
-    start -= cluster.length;
+    let start = end;
+    let k = 0;
+    while (k < clusters.length && classOfHead(clusters[k] ?? '') === cls) {
+      start -= clusters[k]?.length ?? 0;
+      k += 1;
+    }
+    if (from === floor || k < clusters.length - 1) {
+      return start;
+    }
+    want *= 2;
   }
-  return start;
 }
 
 // Lines

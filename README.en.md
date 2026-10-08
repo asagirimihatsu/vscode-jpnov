@@ -25,6 +25,8 @@ No AI anywhere in the writing path (see [No-AI policy](#no-ai-policy)).
   lints, quick fixes and a fix-all action.
 - **Cast & keyword highlighting** — semantic colouring of character names and
   coined terms in narration.
+- **Annotation help** — hover an annotation for what it does and what it
+  applies to; F2 renames a forward-ref target together with the text it names.
 
 ![VS Code while writing: the Books view on the left, an annotated chapter in the middle, the vertical preview on the right](docs/images/vscode-workspace.png)
 
@@ -202,11 +204,22 @@ that holds both marks (`!!` → `‼`, `??` → `⁇`, `?!` → `⁈`, `!?` → 
 writes the annotation. The rule skips a run of three or more marks, and a pair
 inside a ruby (its base, its reading, the base of a left ruby) or inside a
 `《…》` that made no ruby. Under `fullWidth`, an annotation that names the pair
-(`［＃「なに!?」に傍点］`) no longer finds its target once the pair is replaced,
-and the editor reports that annotation. Under `tcy`, where another annotation's
-target takes only one mark of a pair, the rule flags the pair and offers no
-fix: once annotated, the pair is one character, and the other annotation would
-have no effect.
+whole (`［＃「なに!?」に傍点］`) is rewritten with it (`［＃「なに⁉」に傍点］`);
+one that takes only one mark of the pair (`［＃「に!」に傍点］`) is left as
+written and reported, since its target is gone. Under `tcy`, where another
+annotation's target takes only one mark of a pair, the rule flags the pair and
+offers no fix: once annotated, the pair is one character, and the other
+annotation would have no effect.
+
+**Hover, highlight and rename.** Hovering an annotation shows what it does and
+what it applies to: the text a forward-ref form bound to, or the start / end it
+pairs with (with its line), with a link to the Aozora Bunko page for that kind.
+Placing the cursor on an annotation highlights its target or its partner, and
+the cursor on the text highlights the annotations bound over it. F2 on a
+forward-ref target (`言葉［＃「言葉」に傍点］`, on either `言葉`) renames the
+text and every `「…」` naming it together; it is offered only where the `「…」`
+is written exactly as the text it bound to (no ruby, annotation, value or 外字
+inside the range, kana composed alike), otherwise the editor says so.
 
 **外字注記** (external-character annotations) are recognised for six characters. In
 body text, `※` directly followed by one of these annotations is one character:
@@ -512,6 +525,11 @@ counts as one run — the checks see the text the way a reader will.
 - **Stricter checks are opt-in.** Length/run limits (`sentenceLength`,
   `maxTen`, `maxKanjiRun`, `arabicDigits`), blank lines in a row
   (`blankRun`, auto-fixable), the `！？`-pair style, and the ruby-kana rule.
+
+A fix that lands inside text a forward-ref annotation names (`なに！と［＃「なに！と」に傍点］`,
+where `exclamationSpace` inserts a space) rewrites the annotation's `「…」` with
+it, so the annotation keeps its target; a fix that reaches across the edge of
+that text leaves the `「…」` as written, and the annotation is reported.
 
 Syntax problems (an unclosed `［＃` annotation, a dangling block end, a ruby
 with no base or no reading) are always reported, independent of lint settings.
