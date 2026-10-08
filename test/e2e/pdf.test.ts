@@ -107,10 +107,10 @@ async function printPdf(browserPath: string, html: string, prefix: string): Prom
     [...printToPdfArgs(pathToFileURL(htmlPath).href, pdfPath, profileDir), ...ciFlags],
     { stdio: 'ignore', detached: true },
   );
-  const deadline = Date.now() + 90_000;
+  const deadline = performance.now() + 90_000;
   let lastSize = -1;
   try {
-    while (Date.now() < deadline) {
+    while (performance.now() < deadline) {
       await delay(200);
       const size = await stat(pdfPath).then((s) => s.size, () => -1);
       if (size > 0 && size === lastSize) {
