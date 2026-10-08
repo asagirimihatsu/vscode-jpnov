@@ -1,12 +1,12 @@
 /**
  * The lint walker: one pass over the AST that yields one {@link LintLine} per source line. It
- * owns the dialogue stack and the piece/sentinel bookkeeping; the line's 字下げ and 見出し are
- * the AST's.
+ * drives the shared dialogue stack and owns the piece/sentinel bookkeeping; the line's 字下げ and
+ * 見出し are the AST's.
  *
  * Semantics (each guarded by walker.test.ts):
- *   - The dialogue stack is driven from PROSE characters only, exactly as in semanticTokens.ts —
- *     Aozora's ［＃「対象」に傍点］ carries its 「対象」 inside an annotation node, so it can never
- *     be mistaken for a quote (the Aozora trap).
+ *   - The dialogue stack is dialogue.ts's, shared with the highlighter, and is driven from PROSE
+ *     characters only — Aozora's ［＃「対象」に傍点］ carries its 「対象」 inside an annotation
+ *     node, so it can never be mistaken for a quote (the Aozora trap).
  *   - A broken ［＃ (unclosed) contributes no prose; only a scan of the source slices (noNfd) sees
  *     inside it.
  *   - Outer extents: an opener (［＃傍点］, ［＃縦中横］, a ruby's ｜) pulls the next piece's
@@ -26,6 +26,7 @@
  */
 import type { Ast, SyntaxNode } from '../../shared/ast/nodes.ts';
 import { spanChannel } from '../../shared/ast/notation.ts';
+import { DialogueStack } from '../dialogue.ts';
 
 import type { LintLine, Piece, ProseUnit, ProseView, SourceSlice } from './types.ts';
 
@@ -62,9 +63,6 @@ const EXTENT_ROLE: Record<SyntaxNode['kind'], ExtentRole> = {
   valueField: 'attach',
   gaiji: 'attach',
 };
-
-/** The dialogue corners: the only characters that change the depth. */
-const CORNERS = /[「『」』]/g;
 
 /** The pending key of a ruby's ｜, dropped by its 《reading》 (see LineBuilder.reading). */
 const RUBY_KEY = 'ruby';
@@ -273,57 +271,11 @@ function slicesOf(nodes: readonly SyntaxNode[]): SourceSlice[] {
  */
 export function* walkLines(ast: Ast): Generator<LintLine, void, undefined> {
   // Cross-line state (the "big state machine").
-  const stack: ('」' | '』')[] = []; // dialogue nesting, by expected closer
+  const dialogue = new DialogueStack();
   let placeheld = false; // has the current top-level utterance emitted its 〇 yet?
   let serial = 0; // increments per top-level utterance (dialogue separator bookkeeping)
   const live = new Set<string>(); // the channels a span start opened and no end has closed
   let builder = new LineBuilder();
-
-  /** Pushes a stretch of utterance interior, the utterance's single 〇 before its first unit. */
-  const interior = (stretch: string, at: number): void => {
-    if (!placeheld) {
-      builder.closePiece(serial); // the 〇 sits between the depth-0 piece and the interior
-      builder.narrPlan.push({ kind: 'sentinel', src: at });
-      placeheld = true;
-    }
-    builder.push(stretch, at, stack.length, serial);
-  };
-
-  /** Pushes a stretch of prose holding no corner. */
-  const plain = (stretch: string, at: number): void => {
-    if (stack.length === 0) {
-      builder.push(stretch, at, 0, serial);
-    } else {
-      interior(stretch, at);
-    }
-  };
-
-  /** Routes one corner through the dialogue stack (same discipline as semanticTokens.ts: only a
-   *  stack-matched closer leaves the utterance; a mismatched one is ordinary prose). */
-  const corner = (ch: string, at: number): void => {
-    if (ch === '「' || ch === '『') {
-      const closer = ch === '「' ? '」' : '』';
-      if (stack.length === 0) {
-        builder.push(ch, at, 0, serial); // top-level opening corner stays 地の文
-        serial += 1;
-        placeheld = false; // a fresh interior begins; its 〇 is emitted lazily
-      } else {
-        interior(ch, at);
-      }
-      stack.push(closer);
-      return;
-    }
-    if (ch === stack[stack.length - 1]) {
-      stack.pop();
-      if (stack.length === 0) {
-        builder.push(ch, at, 0, serial); // top-level closing corner stays 地の文
-      } else {
-        interior(ch, at);
-      }
-      return;
-    }
-    plain(ch, at);
-  };
 
   for (const line of ast.lines) {
     for (const node of line.syntax) {
@@ -336,22 +288,21 @@ export function* walkLines(ast: Ast): Generator<LintLine, void, undefined> {
         }
       }
       switch (node.kind) {
-        case 'text': { // a ruby base too: it is prose
-          const { text } = node;
-          let from = 0;
-          CORNERS.lastIndex = 0;
-          for (let m = CORNERS.exec(text); m !== null; m = CORNERS.exec(text)) {
-            if (m.index > from) {
-              plain(text.slice(from, m.index), node.span.start + from);
+        case 'text': // a ruby base too: it is prose
+          for (const seg of dialogue.feed(node.text)) {
+            const at = node.span.start + seg.from;
+            if (seg.depth > 0 && !placeheld) {
+              builder.closePiece(serial); // the 〇 sits between the depth-0 piece and the interior
+              builder.narrPlan.push({ kind: 'sentinel', src: at });
+              placeheld = true;
             }
-            corner(m[0], node.span.start + m.index);
-            from = m.index + 1;
-          }
-          if (from < text.length) {
-            plain(text.slice(from), node.span.start + from);
+            builder.push(node.text.slice(seg.from, seg.to), at, seg.depth, serial);
+            if (seg.kind === 'open' && seg.depth === 0) {
+              serial += 1; // a new top-level utterance; its 〇 is emitted lazily
+              placeheld = false;
+            }
           }
           break;
-        }
         case 'rubyMark': // opened above; the base nodes follow as themselves
           break;
         case 'rubyReading': // the base pieces are already pushed
@@ -383,7 +334,7 @@ export function* walkLines(ast: Ast): Generator<LintLine, void, undefined> {
       source: slicesOf(line.syntax),
       indent: line.indent,
       heading: line.heading,
-      openDepthAtEnd: stack.length,
+      openDepthAtEnd: dialogue.depth,
     });
     builder = new LineBuilder();
   }

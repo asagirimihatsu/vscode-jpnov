@@ -4,10 +4,10 @@
  * over the reconstructed body-text runs. A ruby BASE is body text and flows into its run (only the
  * ｜《》 markers and the reading are holes), so okurigana-split ruby (立《た》ち) still recognises.
  *
- * Dialogue 「」『』 is tracked by a STACK as body text is appended — NEVER by scanning the raw
- * source: ［＃「対象」に傍点］ reuses 「」 as an emphasis-target delimiter, which a raw scan would
- * miscount. The stack lives at document scope (Aozora dialogue may span lines); dialogue content
- * is masked from the recognizer.
+ * Dialogue 「」『』 is tracked by the STACK of dialogue.ts (shared with the lint walker) as body
+ * text is appended — NEVER by scanning the raw source: ［＃「対象」に傍点］ reuses 「」 as an
+ * emphasis-target delimiter, which a raw scan would miscount. The stack lives at document scope
+ * (Aozora dialogue may span lines); dialogue content is masked from the recognizer.
  *
  * Colouring is driven by TWO tables: {@link HIGHLIGHTS} (the DISTINCT lsp values form the legend
  * and the protocol indices derive from it — reference kinds by name via {@link tokenTypeIndex},
@@ -18,6 +18,7 @@ import { SemanticTokensBuilder } from 'vscode-languageserver/node';
 
 import type { PartRole, RolePart, Syntax, SyntaxNode } from '../shared/ast/nodes.ts';
 
+import { DialogueStack } from './dialogue.ts';
 import type { Recognizer } from './highlight/recognizer.ts';
 
 /**
@@ -94,15 +95,6 @@ const JOINED: Partial<Record<SyntaxNode['kind'], readonly (readonly PartRole[])[
   valueField: [['scaffold', 'corner'], ['corner', 'scaffold']],
 };
 
-/** Opening dialogue corner brackets mapped to the closer that pops them. */
-const DIALOGUE_CLOSER = new Map<string, string>([
-  ['「', '」'],
-  ['『', '』'],
-]);
-
-/** The dialogue corners: the only characters of body text that read as markup. */
-export const CORNERS = /[「『」』]/g;
-
 interface TokenSpan {
   readonly start: number; // source UTF-16 offset
   readonly len: number;
@@ -158,9 +150,9 @@ export function buildSemanticTokens(syntax: Syntax, recognizer: Recognizer | und
   let spoken: RunRange[] = [];
   let spokenFrom = -1; // where the open dialogue range starts in the run; -1 in narration
 
-  // Dialogue nesting, by expected closer. Document-scoped so it persists across run flushes (a 「…」
-  // may span lines); driven ONLY from body text in appendBody (never from raw src — see file header).
-  const dialogue: string[] = [];
+  // Document-scoped so it persists across run flushes (a 「…」 may span lines); driven ONLY from
+  // body text in appendBody (never from raw src — see file header).
+  const dialogue = new DialogueStack();
 
   const mark = (start: number, len: number, type: TokenType): void => {
     if (len > 0) {
@@ -197,30 +189,27 @@ export function buildSemanticTokens(syntax: Syntax, recognizer: Recognizer | und
     runText = '';
     stretches = [];
     spoken = [];
-    spokenFrom = dialogue.length > 0 ? 0 : -1;
+    spokenFrom = dialogue.depth > 0 ? 0 : -1;
   };
 
   /** Append body text [srcStart, …) to the current run, tracking dialogue. */
   const appendBody = (text: string, srcStart: number): void => {
     const base = runText.length;
-    CORNERS.lastIndex = 0;
-    for (let m = CORNERS.exec(text); m !== null; m = CORNERS.exec(text)) {
-      const closer = DIALOGUE_CLOSER.get(m[0]);
-      if (closer !== undefined) {
-        if (dialogue.length === 0) {
-          spokenFrom = base + m.index; // the opening corner is inside
+    for (const seg of dialogue.feed(text)) {
+      if (seg.kind === 'prose') {
+        continue; // prose, a mismatched closer included, keeps its default colour
+      }
+      mark(srcStart + seg.from, 1, 'marker'); // 「 『 and a matching 」 』
+      if (seg.depth > 0) {
+        continue; // nested: the outer utterance's range is what masks
+      }
+      if (seg.kind === 'open') {
+        spokenFrom = base + seg.from; // the opening corner is inside
+      } else {
+        if (recognizer !== undefined) {
+          spoken.push({ from: spokenFrom, to: base + seg.from }); // the closing corner is outside
         }
-        dialogue.push(closer);
-        mark(srcStart + m.index, 1, 'marker'); // opening 「 / 『
-      } else if (m[0] === dialogue[dialogue.length - 1]) {
-        dialogue.pop();
-        if (dialogue.length === 0 && recognizer !== undefined) {
-          spoken.push({ from: spokenFrom, to: base + m.index }); // the closing corner is outside
-        }
-        if (dialogue.length === 0) {
-          spokenFrom = -1;
-        }
-        mark(srcStart + m.index, 1, 'marker'); // matching closing 」 / 』 (a lone/mismatched closer stays default text)
+        spokenFrom = -1;
       }
     }
     if (recognizer === undefined) {

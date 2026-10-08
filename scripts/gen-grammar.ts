@@ -37,7 +37,8 @@ import {
   hasBlockForm,
   hasLeftSide,
 } from '../src/shared/ast/notation.ts';
-import { CORNERS, partHighlight } from '../src/server/semanticTokens.ts';
+import { CORNERS } from '../src/server/dialogue.ts';
+import { partHighlight } from '../src/server/semanticTokens.ts';
 
 import { runCli, writeIfChanged } from './write.ts';
 
