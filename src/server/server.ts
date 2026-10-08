@@ -14,7 +14,9 @@
 import {
   CodeActionKind,
   createConnection,
+  ErrorCodes,
   ProposedFeatures,
+  ResponseError,
   TextDocuments,
   TextDocumentSyncKind,
 } from 'vscode-languageserver/node';
@@ -102,7 +104,7 @@ const context: ServerContext = {
 const documents = new TextDocuments(TextDocument);
 documents.listen(connection);
 
-// One parse per open manuscript and version, shared by the three editor features below.
+// One parse per open manuscript and version, shared by the editor features and the preview below.
 const parsed = createParseCache();
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
@@ -207,15 +209,19 @@ connection.onRequest(
     handleListBooks(context, params ?? { projectDirs: {} }),
 );
 
-// Preview: render one file's live buffer to a standalone HTML document. Strings only.
-// charsPerLine, 禁則, and display chrome all ride the request's settings snapshot
-// (re-resolved here — the wire payload is untrusted).
+// Preview: render the editor's parse of one open .jpnov (its live buffer, synced ahead of this
+// request) to a standalone HTML document. charsPerLine, 禁則, and display chrome all ride the
+// request's settings snapshot (re-resolved here — the wire payload is untrusted).
 connection.onRequest(
   RenderFileRequest,
   (params: RenderFileParams): RenderFileResult => {
+    const doc = documents.get(params.uri);
+    if (doc?.languageId !== 'jpnov') {
+      throw new ResponseError(ErrorCodes.InvalidParams, `${params.uri} is not an open .jpnov`);
+    }
     const settings = resolvePreviewSettings(params.settings);
     return {
-      html: renderPreview(params.text, { ...settings, chrome: settings }),
+      html: renderPreview(parsed.astOf(doc), { ...settings, chrome: settings }),
     };
   },
 );

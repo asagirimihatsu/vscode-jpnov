@@ -9,6 +9,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync,
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parse } from '../src/shared/ast/parse.ts';
 import { renderBook } from '../src/shared/compiler/document.ts';
 import { renderPreview } from '../src/shared/compiler/preview.ts';
 import { BUILD_CHROME_DEFAULT } from '../src/shared/config/settings.ts';
@@ -124,7 +125,7 @@ const shots: Shot[] = [
     name: 'notation',
     mode: 'screenshot',
     // linePitch 2: 見本に左ルビがある — 既定 1.5 では隣の行に重なる
-    html: renderPreview(NOTATION, previewOpts({ charsPerLine: 9, linePitch: 2 })),
+    html: renderPreview(parse(NOTATION), previewOpts({ charsPerLine: 9, linePitch: 2 })),
     style: PAPER,
     w: 1080,
     h: 620,
@@ -133,7 +134,7 @@ const shots: Shot[] = [
   {
     name: 'kinsoku-off',
     mode: 'screenshot',
-    html: renderPreview(KINSOKU, previewOpts({ kinsoku: 'none' })),
+    html: renderPreview(parse(KINSOKU), previewOpts({ kinsoku: 'none' })),
     style: PAPER,
     w: 500, // 最小幅ちょうど。撮影後に左余白を crop
     h: 640,
@@ -142,7 +143,7 @@ const shots: Shot[] = [
   {
     name: 'kinsoku-on',
     mode: 'screenshot',
-    html: renderPreview(KINSOKU, previewOpts()),
+    html: renderPreview(parse(KINSOKU), previewOpts()),
     style: PAPER,
     w: 500,
     h: 640,

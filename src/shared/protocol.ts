@@ -371,10 +371,12 @@ export interface ListBooksResult {
 
 export const RenderFileRequest = 'jpnov/renderFile';
 
-/** `text` is the live dirty buffer of the previewed file; `settings` the client's snapshot. */
+/**
+ * `uri` is an open document the client synced over textDocument/didOpen: the server renders its
+ * own copy (the live dirty buffer) from the editor's parse. `settings` is the client's snapshot.
+ */
 export interface RenderFileParams {
   readonly uri: string;
-  readonly text: string;
   readonly settings: PreviewSettings;
 }
 

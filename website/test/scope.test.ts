@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { parse } from '../../src/shared/ast/parse.ts';
 import { renderBook } from '../../src/shared/compiler/document.ts';
 import { EDGE_INSET, fitPaper, HEADER_BAND, LINENUM_BAND } from '../../src/shared/compiler/geometry.ts';
 import { renderPreview } from '../../src/shared/compiler/preview.ts';
@@ -12,7 +13,7 @@ const SRC = '　物語《ものがたり》が始まる。\n　覚悟［＃「�
 const LEAKS = ['html{', 'body{', ':root{', '@page', '@media', '--vscode-', 'position:fixed', '<script', 'onclick='];
 const UNIT = /\d(?:rem|vh)\b/;
 
-const preview = (): string => renderPreview(SRC, { ...LAYOUT_DEFAULT, charsPerLine: 20, chrome: { lineNumbers: true, edgeLine: 'red' } });
+const preview = (): string => renderPreview(parse(SRC), { ...LAYOUT_DEFAULT, charsPerLine: 20, chrome: { lineNumbers: true, edgeLine: 'red' } });
 const book = (): string => renderBook({
   books: [{ files: [{ name: 'a.jpnov', src: SRC }], title: '作品名', author: 'ペンネーム', cover: { files: [{ name: 'c.jpnov', src: '［＃５字下げ］［＃ここに「タイトル」の値を表示］\n' }] } }],
   ...LAYOUT_DEFAULT,

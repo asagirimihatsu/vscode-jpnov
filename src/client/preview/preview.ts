@@ -40,8 +40,8 @@ import { buildPreviewSettings } from '../renderConfig.ts';
 import { LOADING_CSS, PREVIEW_JS, WIDGET_CSS } from './webviewBundle.generated.ts';
 
 /**
- * Trailing-edge debounce for edit-driven re-renders. Every keystroke otherwise ships the whole
- * buffer to the server and swaps the full webview DOM; 120ms coalesces a typing burst into one
+ * Trailing-edge debounce for edit-driven re-renders. Every keystroke otherwise renders the whole
+ * document and swaps the full webview DOM; 120ms coalesces a typing burst into one
  * render while staying under the ~200ms "feels live" bar. Only the edit path is debounced —
  * open/adopt/editor-switch renders stay immediate.
  */
@@ -431,8 +431,8 @@ export class Preview {
       panel.webview.onDidReceiveMessage((message: unknown) => {
         this.onWebviewMessage(message);
       }),
-      // Re-render on every edit to the file currently shown (live dirty buffer); the trailing render
-      // reads the document's CURRENT text and re-checks that the panel still shows it.
+      // Re-render on every edit to the file currently shown; the server draws its synced copy (the
+      // live dirty buffer), and the trailing render re-checks that the panel still shows the file.
       vscode.workspace.onDidChangeTextDocument((e) => {
         if (e.document.uri.toString() === this.currentDocUri) {
           this.scheduleRender();
@@ -500,7 +500,7 @@ export class Preview {
     for (const [key, override] of this.layoutOverride) {
       settings[key] = override.value;
     }
-    const params: RenderFileParams = { uri, text: doc.getText(), settings };
+    const params: RenderFileParams = { uri, settings };
     // Sampled now: what this render lays out is what its widget must show, whatever changes meanwhile.
     const layout = this.layoutInit(base, resolvePreviewSettings(settings), this.layoutOverride.size > 0, focus);
 

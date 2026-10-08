@@ -75,8 +75,8 @@ The text build prints the nodes.
 
 The editor side of the server keeps one scan and one resolve per document
 version (`src/server/parsed.ts`). The highlighter reads the nodes; the syntax
-diagnostics and the lint read the AST. The preview and the builds parse on their
-own, from the text the client supplies.
+diagnostics, the lint and the preview read the AST. The builds parse on their
+own, from the files they read through `jpnov/readText`, with the book's values.
 
 The outputs:
 
