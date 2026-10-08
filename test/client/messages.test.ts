@@ -55,6 +55,8 @@ const ARGS: Record<MsgCode, readonly (string | number)[]> = {
   'syntax.danglingBlockEnd': [],
   'syntax.unterminatedSpan': [],
   'syntax.danglingSpanEnd': [],
+  'syntax.spanAlreadyOpen': ['太字'],
+  'syntax.spanFormMismatch': ['［＃ここで太字終わり］'],
   'syntax.postfixTargetMissing': ['対象'],
   'syntax.unterminatedTcy': [],
   'syntax.danglingTcyEnd': [],

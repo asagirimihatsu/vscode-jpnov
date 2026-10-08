@@ -40,13 +40,16 @@ import type {
   ValueFieldNode,
   ValueLookup,
 } from './nodes.ts';
-import { ANNOTATION_CLOSE, ANNOTATION_OPEN, spanChannel, valueOf } from './notation.ts';
+import { endAnnotation, innerOf, spanChannel, spanMark, valueOf } from './notation.ts';
 import { bySource } from './span.ts';
 
 /**
  * What carries from one line to the next. `open` holds one slot per channel, never a stack: a
- * start replaces a still-open start of its channel, an end clears the channel whatever its form,
- * and the channels overlap freely.
+ * start replaces a still-open start of its channel (a finding, unless a 字下げ of another count:
+ * the notation's own way to run blocks together, https://www.aozora.gr.jp/annotation/layout_2.html)
+ * — except a start setting what is already set, which does nothing and leaves the slot to the
+ * earlier start, so the next end pairs with that one; an end clears the channel whatever its
+ * form (a form unlike the start's is a finding, not a mismatch), and the channels overlap freely.
  */
 interface Flow {
   marks: Marks;
@@ -87,9 +90,13 @@ function isBlockForm(node: SpanOpenerNode | SpanCloserNode): boolean {
   return node.kind === 'indentBlockStart' || node.kind === 'indentBlockEnd' || node.block === true;
 }
 
-/** The text between ［＃ and ］ of an annotation, verbatim. */
-function innerOf(node: SyntaxNode): string {
-  return node.text.slice(ANNOTATION_OPEN.length, node.text.length - ANNOTATION_CLOSE.length);
+/**
+ * True iff `line` puts no column into the flow: a block directive sits on it and it shows nothing
+ * but comments. Read by the layout (such a line is skipped) and by the editor (removing the
+ * directive alone would leave a line that paints).
+ */
+export function paintsNothing(line: Line): boolean {
+  return line.blockDirective && line.content.every((item) => item.kind === 'comment');
 }
 
 /** The mark a decoration sets on its channel. */
@@ -314,7 +321,7 @@ class LineResolver {
       if (judged) {
         this.ledger.issues.push({ kind: 'postfixTargetMissing', span: node.target.span, target: node.target.text });
       }
-      cells.push({ kind: 'comment', inner: displayText(innerOf(node)), span: node.span });
+      cells.push({ kind: 'comment', inner: displayText(innerOf(node.text)), span: node.span });
     };
     if (m === null || first === undefined || last === undefined) {
       miss();
@@ -359,8 +366,21 @@ class LineResolver {
   }
 
   private openSpan(node: SpanOpenerNode): void {
-    const { flow } = this;
-    flow.open.set(spanChannel(node), node);
+    const { flow, ledger } = this;
+    const channel = spanChannel(node);
+    this.blockDirective ||= isBlockForm(node);
+    const prev = flow.open.get(channel);
+    if (prev !== undefined) {
+      const mark = spanMark(prev);
+      const redundant = mark === spanMark(node); // the same mark set again: the flow would not change
+      if (redundant || channel !== 'indent') {
+        ledger.issues.push({ kind: 'spanAlreadyOpen', span: node.span, mark, redundant });
+      }
+      if (redundant) {
+        return; // sets what is set: neither the slot nor the flow changes
+      }
+    }
+    flow.open.set(channel, node);
     switch (node.kind) {
       case 'indentBlockStart':
         flow.indent = node.amount; // the following lines; this one keeps its indent
@@ -369,7 +389,7 @@ class LineResolver {
         flow.marks = withMark(flow.marks, node.channel, markOf(node));
         break;
       case 'headingSpanStart':
-        // One slot for the three levels: a re-open is a level change. The inline form marks
+        // One slot for the three levels: a re-open is a level change (reported above). The inline form marks
         // THIS line too; the block form the following ones only.
         flow.heading = node.level;
         if (node.block !== true) {
@@ -377,7 +397,6 @@ class LineResolver {
         }
         break;
     }
-    this.blockDirective ||= isBlockForm(node);
   }
 
   private closeSpan(node: SpanCloserNode): void {
@@ -389,6 +408,11 @@ class LineResolver {
     } else {
       flow.open.delete(channel);
       pair(ledger.pairs, opener, node);
+      if (isBlockForm(opener) !== isBlockForm(node)) {
+        // The end respelled in the start's form, its keyword as written.
+        const expected = endAnnotation(spanMark(node), isBlockForm(opener));
+        ledger.issues.push({ kind: 'spanFormMismatch', span: node.span, expected });
+      }
     }
     switch (node.kind) {
       case 'indentBlockEnd':

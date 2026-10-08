@@ -1,22 +1,22 @@
 /**
- * Pure builder turning {@link LintFinding}s into LSP code actions: a quick-fix per fixable finding
+ * Pure builder turning {@link Finding}s (syntax and lint alike) into LSP code actions: a quick-fix per fixable finding
  * overlapping the requested range, plus one "fix all" bundling every fixable finding in the document.
  *
  * Titles are English here (the vscode-free server cannot localize); the client's `provideCodeActions`
  * middleware swaps in the localized text — a quick-fix reuses its diagnostic's localized message, the
  * fix-all is recognized by its `source.fixAll` kind.
  *
- * A fix that lands inside a 対象文字列 brings the edit of that 「…」 with it (`LintFix.within`,
+ * A fix that lands inside a 対象文字列 brings the edit of that 「…」 with it (`Fix.within`,
  * merged by `mergedEdits`): the quick-fix carries both, and the fix-all rewrites each 「…」 once,
  * from the fixes it kept. Relative imports (native test loader).
  */
 import { CodeActionKind } from 'vscode-languageserver/node';
 import type { CodeAction, Position, Range } from 'vscode-languageserver/node';
 
+import type { Finding, Fix } from '../diagnostics.ts';
 import { comparePositions, mergedEdits, rangesOverlap } from '../targets.ts';
-import type { LintFinding, LintFix } from './engine.ts';
 
-type FixableFinding = LintFinding & { readonly fix: LintFix };
+type FixableFinding = Finding & { readonly fix: Fix };
 
 const FIX_ALL_TITLE = 'Fix all auto-fixable problems (Japanese Novel)';
 
@@ -72,7 +72,7 @@ function wants(only: readonly string[] | undefined, kind: string): boolean {
  */
 export function buildCodeActions(
   uri: string,
-  findings: readonly LintFinding[],
+  findings: readonly Finding[],
   requestedRange: Range,
   only: readonly string[] | undefined,
 ): CodeAction[] {

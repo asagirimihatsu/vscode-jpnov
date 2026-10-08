@@ -16,8 +16,8 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parse } from '../../src/shared/ast/parse.ts';
 import { selectRules } from '../../src/shared/lint/select.ts';
 import { buildCodeActions } from '../../src/server/lint/codeActions.ts';
+import type { Finding } from '../../src/server/diagnostics.ts';
 import { computeLintFindings } from '../../src/server/lint/engine.ts';
-import type { LintFinding } from '../../src/server/lint/engine.ts';
 import { mergedEdits } from '../../src/server/targets.ts';
 import type { RawLintConfigWire } from '../../src/shared/protocol.ts';
 import { createHighlightStore } from '../../src/server/highlight/vocabulary.ts';
@@ -143,7 +143,7 @@ export interface LintEdit {
 }
 
 /** `src` as an open document, and its lint findings under `raw`. */
-export function lintFindings(src: string, raw: RawLintConfigWire): { doc: TextDocument; findings: LintFinding[] } {
+export function lintFindings(src: string, raw: RawLintConfigWire): { doc: TextDocument; findings: Finding[] } {
   const doc = TextDocument.create('mem://x.jpnov', 'jpnov', 1, src);
   return { doc, findings: computeLintFindings(doc, parse(src), selectRules(raw)) };
 }
@@ -163,11 +163,15 @@ export function applyLintFixes(src: string, raw: RawLintConfigWire): { out: stri
   return { out, edits };
 }
 
-/** The source after the editor's fix-all under `raw`: the `source.fixAll` action's edits, applied as
- *  LSP applies them (overlapping fixes dropped, unlike {@link applyLintFixes}). */
-export function applyFixAll(src: string, raw: RawLintConfigWire): string {
-  const { doc, findings } = lintFindings(src, raw);
-  const whole = { start: doc.positionAt(0), end: doc.positionAt(src.length) };
+/** `doc` after the `source.fixAll` action over `findings`, applied as LSP applies it (overlapping fixes dropped). */
+export function fixAllOf(doc: TextDocument, findings: readonly Finding[]): string {
+  const whole = { start: doc.positionAt(0), end: doc.positionAt(doc.getText().length) };
   const [action] = buildCodeActions(doc.uri, findings, whole, [CodeActionKind.SourceFixAll]);
   return TextDocument.applyEdits(doc, action?.edit?.changes?.[doc.uri] ?? []);
+}
+
+/** The source after the editor's fix-all under `raw` (unlike {@link applyLintFixes}, overlapping fixes are dropped). */
+export function applyFixAll(src: string, raw: RawLintConfigWire): string {
+  const { doc, findings } = lintFindings(src, raw);
+  return fixAllOf(doc, findings);
 }

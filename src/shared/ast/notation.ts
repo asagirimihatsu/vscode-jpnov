@@ -116,6 +116,27 @@ export function spanChannel(node: SpanOpenerNode | SpanCloserNode): SpanChannel 
   }
 }
 
+/** The mark a decoration spells: its variant, with 左に before a left-side one. */
+export function markOf(node: { readonly variant: string; readonly left: boolean }): string {
+  return `${node.left ? LEFT_SHORT : ''}${node.variant}`;
+}
+
+/** What a span start or end names, as its keyword: ２字下げ (字下げ for the end), 太字, 左に傍線, 大見出し. */
+export function spanMark(node: SpanOpenerNode | SpanCloserNode): string {
+  switch (node.kind) {
+    case 'indentBlockStart':
+      return `${fullWidthDigits(node.amount)}${INDENT}`;
+    case 'indentBlockEnd':
+      return INDENT;
+    case 'headingSpanStart':
+    case 'headingSpanEnd':
+      return headingLiteralOf(node.level);
+    case 'emphasisSpanStart':
+    case 'emphasisSpanEnd':
+      return markOf(node);
+  }
+}
+
 /** The three 見出し literals; level = index + 1 (https://www.aozora.gr.jp/annotation/heading.html). */
 export const HEADING_LITERALS = ['大見出し', '中見出し', '小見出し'] as const;
 
@@ -172,6 +193,16 @@ export function valueOf(name: string, values: ValueLookup | undefined): string {
 /** `inner` wrapped as a ［＃…］ annotation. */
 export function annotation(inner: string): string {
   return `${ANNOTATION_OPEN}${inner}${ANNOTATION_CLOSE}`;
+}
+
+/** What a closed ［＃…］ holds between its brackets, verbatim: the inverse of {@link annotation}. */
+export function innerOf(annotation: string): string {
+  return annotation.slice(ANNOTATION_OPEN.length, annotation.length - ANNOTATION_CLOSE.length);
+}
+
+/** The end annotation of `mark`: ［＃ここでmark終わり］ in the block form, ［＃mark終わり］ in the inline one. */
+export function endAnnotation(mark: string, block: boolean): string {
+  return annotation(`${block ? BLOCK_TO : ''}${mark}${SPAN_END}`);
 }
 
 /** The value display annotation for `name`. */
@@ -263,8 +294,8 @@ export type ClosingAnnotations =
  */
 export function closingAnnotations(opener: SpanOpenerNode): ClosingAnnotations {
   const spell = (name: string): { readonly block: string; readonly inline: string } => ({
-    block: annotation(`${BLOCK_TO}${name}${SPAN_END}`),
-    inline: annotation(`${name}${SPAN_END}`),
+    block: endAnnotation(name, true),
+    inline: endAnnotation(name, false),
   });
   switch (opener.kind) {
     case 'indentBlockStart':
@@ -272,7 +303,7 @@ export function closingAnnotations(opener: SpanOpenerNode): ClosingAnnotations {
     case 'headingSpanStart':
       return spell(headingLiteralOf(opener.level));
     case 'emphasisSpanStart': {
-      const forms = spell(`${opener.left ? LEFT_SHORT : ''}${opener.variant}`);
+      const forms = spell(markOf(opener));
       return hasBlockForm(opener.variant) ? forms : { inline: forms.inline };
     }
   }

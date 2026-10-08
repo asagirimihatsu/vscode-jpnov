@@ -75,15 +75,15 @@ test('balanced pairs are clean: channels overlap freely, a re-open replaces its 
   for (const src of [
     '［＃ここから太字］\nA\n［＃ここで太字終わり］',
     '［＃ここから２字下げ］\n［＃ここから太字］\nA\n［＃ここで太字終わり］\n［＃ここで字下げ終わり］',
-    '［＃ここから２字下げ］\n［＃ここから４字下げ］\nA\n［＃ここで字下げ終わり］', // last-wins
-    // Mixed forms pair: the end clears the channel whichever form it takes.
+    '［＃ここから２字下げ］\n［＃ここから４字下げ］\nA\n［＃ここで字下げ終わり］', // last-wins: the notation's own form
+    // Mixed forms pair: the end clears the channel whichever form it takes (a finding of its own, below).
     '［＃太字］A［＃ここで太字終わり］',
     '［＃ここから太字］\nA\n［＃太字終わり］',
     '［＃傍点］A［＃傍点終わり］',
     // Channels pair, not variants; the left side is the same channel.
     '［＃傍点］A［＃白ゴマ傍点終わり］',
     '［＃左に傍点］A［＃傍点終わり］',
-    // The three 見出し levels share ONE channel.
+    // The three 見出し levels share ONE channel (a re-open is reported on its own, below).
     '［＃ここから大見出し］\nA\n［＃ここで大見出し終わり］',
     '［＃ここから２字下げ］\n［＃ここから大見出し］\nA\n［＃ここで大見出し終わり］\n［＃ここで字下げ終わり］',
     '［＃ここから大見出し］\n［＃ここから中見出し］\nA\n［＃ここで小見出し終わり］',
@@ -91,6 +91,77 @@ test('balanced pairs are clean: channels overlap freely, a re-open replaces its 
     '［＃縦中横］12［＃縦中横終わり］',
   ]) {
     assert.deepEqual(spans(src), [], JSON.stringify(src));
+  }
+});
+
+test('an end of the other form than its start is reported over the end, and still pairs', () => {
+  const mixed: readonly [src: string, closer: string, expected: string][] = [
+    ['［＃ここから太字］\nA\n［＃太字終わり］', '［＃太字終わり］', '［＃ここで太字終わり］'],
+    ['［＃太字］A［＃ここで太字終わり］', '［＃ここで太字終わり］', '［＃太字終わり］'],
+    ['［＃ここから斜体］\nA［＃斜体終わり］B', '［＃斜体終わり］', '［＃ここで斜体終わり］'],
+    // The three 見出し levels share one channel: the level is not this finding's object, so the
+    // end keeps its keyword and changes form alone.
+    ['［＃ここから大見出し］\nA\n［＃小見出し終わり］', '［＃小見出し終わり］', '［＃ここで小見出し終わり］'],
+    ['［＃中見出し］A\n［＃ここで中見出し終わり］', '［＃ここで中見出し終わり］', '［＃中見出し終わり］'],
+  ];
+  for (const [src, closer, expected] of mixed) {
+    assert.deepEqual(issuesOf(src, 'spanFormMismatch'), [{ kind: 'spanFormMismatch', span: at(src, closer), expected }], src);
+    assert.deepEqual(spans(src), [], src);
+    assert.deepEqual(pairsOf(src).map(([text, span]) => [text, span === null]), [[src.slice(0, src.indexOf('］') + 1), false], [closer, false]], src);
+  }
+  // Matched forms, the channels with one form only, and a dangling end report nothing here.
+  for (const src of [
+    '［＃ここから太字］\nA\n［＃ここで太字終わり］',
+    '［＃太字］A［＃太字終わり］',
+    '［＃傍点］A［＃白ゴマ傍点終わり］',
+    '［＃ここから２字下げ］\nA\n［＃ここで字下げ終わり］',
+    '［＃ここで太字終わり］',
+  ]) {
+    assert.deepEqual(issuesOf(src, 'spanFormMismatch'), [], src);
+  }
+});
+
+test('a start while its channel is in effect is reported over the start; a 字下げ of another count is the notation', () => {
+  const again = (src: string): Issue[] => issuesOf(src, 'spanAlreadyOpen');
+  const reported: readonly [src: string, start: string, mark: string, redundant: boolean][] = [
+    ['［＃ここから太字］［＃太字］A［＃太字終わり］［＃ここで太字終わり］', '［＃太字］', '太字', true],
+    ['［＃ここから太字］\n［＃ここから太字］\nA\n［＃ここで太字終わり］', '［＃ここから太字］', '太字', true],
+    ['［＃ここから２字下げ］\n［＃ここから２字下げ］\nA\n［＃ここで字下げ終わり］', '［＃ここから２字下げ］', '２字下げ', true],
+    ['［＃傍点］A［＃傍点］B［＃傍点終わり］', '［＃傍点］', '傍点', true],
+    // What is set changes: reported, and not redundant.
+    ['［＃ここから大見出し］\n［＃ここから中見出し］\nA\n［＃ここで小見出し終わり］', '［＃ここから中見出し］', '大見出し', false],
+    ['［＃傍点］A［＃丸傍点］B［＃傍点終わり］', '［＃丸傍点］', '傍点', false],
+    ['［＃傍点］A［＃左に傍点］B［＃傍点終わり］', '［＃左に傍点］', '傍点', false],
+  ];
+  for (const [src, start, mark, redundant] of reported) {
+    const begin = src.lastIndexOf(start); // the later one is the start reported
+    assert.deepEqual(again(src), [{ kind: 'spanAlreadyOpen', span: { start: begin, end: begin + start.length }, mark, redundant }], src);
+  }
+  // A redundant start does nothing: the slot stays with the earlier start, which the next end
+  // pairs with; the redundant one pairs with nothing. A start setting another replaces it.
+  const kept = '［＃ここから太字］［＃太字］A［＃太字終わり］［＃ここで太字終わり］';
+  assert.deepEqual(pairsOf(kept), [
+    ['［＃ここから太字］', at(kept, '［＃太字終わり］')],
+    ['［＃太字］', null],
+    ['［＃太字終わり］', at(kept, '［＃ここから太字］')],
+    ['［＃ここで太字終わり］', null],
+  ]);
+  assert.deepEqual(issuesOf(kept).map((issue) => issue.kind), ['spanAlreadyOpen', 'spanFormMismatch', 'danglingSpanEnd']);
+  const replaced = '［＃傍点］A［＃丸傍点］B［＃傍点終わり］';
+  assert.deepEqual(pairsOf(replaced), [
+    ['［＃傍点］', null],
+    ['［＃丸傍点］', at(replaced, '［＃傍点終わり］')],
+    ['［＃傍点終わり］', at(replaced, '［＃丸傍点］')],
+  ]);
+  for (const src of [
+    // Blocks of different counts run together with one 終わり (https://www.aozora.gr.jp/annotation/layout_2.html).
+    '［＃ここから２字下げ］\n［＃ここから４字下げ］\nA\n［＃ここで字下げ終わり］',
+    '［＃太字］A［＃太字終わり］［＃太字］B［＃太字終わり］', // closed, then opened again
+    '［＃太字］A［＃斜体］B［＃斜体終わり］［＃太字終わり］', // another channel
+    '［＃傍点］A［＃傍線］B［＃傍線終わり］［＃傍点終わり］',
+    '［＃縦中横］12［＃縦中横終わり］［＃縦中横］34［＃縦中横終わり］',
+  ]) {
+    assert.deepEqual(again(src), [], src);
   }
 });
 

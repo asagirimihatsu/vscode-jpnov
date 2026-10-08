@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 
 import type { Ast, Chars, Held, Inline, Issue, PairedNode, PostfixNode, Span, SyntaxNode, ValueLookup } from '../../../src/shared/ast/nodes.ts';
-import { ANNOTATION_CLOSE, ANNOTATION_OPEN, BLOCK_FROM, EMPHASIS_VARIANTS, gaijiAnnotation, indentAnnotation } from '../../../src/shared/ast/notation.ts';
+import { ANNOTATION_OPEN, BLOCK_FROM, EMPHASIS_VARIANTS, gaijiAnnotation, indentAnnotation, innerOf, markOf } from '../../../src/shared/ast/notation.ts';
 import type { Channel } from '../../../src/shared/ast/notation.ts';
 import { parse } from '../../../src/shared/ast/parse.ts';
 import { scan } from '../../../src/shared/ast/scan.ts';
@@ -20,10 +20,7 @@ export function variantsByChannel(): Record<Channel, readonly string[]> {
   return out;
 }
 
-/** What `annotation` holds between ［＃ and ］. */
-export function innerOf(annotation: string): string {
-  return annotation.slice(ANNOTATION_OPEN.length, -ANNOTATION_CLOSE.length);
-}
+export { innerOf };
 
 /** `annotation` as a block opener: ［＃…］ as ［＃ここから…］. */
 export function blockOf(annotation: string): string {
@@ -132,7 +129,7 @@ export function issuesOf(src: string, ...only: Issue['kind'][]): Issue[] {
 function inlineLabel(item: Inline): string {
   const marks = item.kind === 'comment'
     ? ''
-    : Object.entries(item.marks).map(([channel, mark]) => ` ${channel}=${mark.left ? '左に' : ''}${mark.variant}`).join('');
+    : Object.entries(item.marks).map(([channel, mark]) => ` ${channel}=${markOf(mark)}`).join('');
   switch (item.kind) {
     case 'chars':
       return `${item.origin === 'prose' ? 'chars' : item.origin} ${item.text}${marks}`;
