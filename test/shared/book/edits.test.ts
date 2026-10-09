@@ -151,6 +151,9 @@ test('appendEntries(chapters) appends at EOF and skips already-listed paths', ()
 
 test('appendEntries(chapters) returns null when everything is already listed', () => {
   assert.equal(appendEntries('a.jpnov\n', 'chapters', ['a.jpnov']), null);
+  // Listed as `./a.jpnov`: the same file, so nothing is new (#86).
+  assert.equal(appendEntries('./a.jpnov\n', 'chapters', ['a.jpnov']), null);
+  assert.deepEqual([...listedEntries(parseJpbook('./a.jpnov\n').lines, 'chapters')], ['a.jpnov']);
 });
 
 test('appendEntries(chapters) handles a document without a trailing newline', () => {

@@ -15,8 +15,9 @@ test('normalizeFileInput appends the suffix and normalizes separators', () => {
     ['src//my-chapter', 'src/my-chapter.jpnov'],
     ['./src/./my-chapter/', 'src/my-chapter.jpnov'],
     ['第一章', '第一章.jpnov'],
-    // The suffix is exact-case; any other spelling is part of the stem.
-    ['x.JPNOV', 'x.JPNOV.jpnov'],
+    // The suffix counts in any letter case and stays as typed (the parser takes it the same way).
+    ['x.JPNOV', 'x.JPNOV'],
+    ['x.Jpnov', 'x.Jpnov'],
     ['  src/ch  ', 'src/ch.jpnov'],
   ];
   for (const [raw, rel] of cases) {

@@ -54,6 +54,14 @@ test('見出し rows become real hN (大=1→h1), one per row, and feed the segm
   assert.equal(first.heading, '序章');
 });
 
+test('a blank line inside a 見出し block keeps its column as <hN><br/></hN> (#86)', () => {
+  assert.equal(
+    body('［＃ここから大見出し］\n序章\n\n副題\n［＃ここで大見出し終わり］\n本文'),
+    '<h1>序章</h1><h1><br/></h1><h1>副題</h1><p>本文</p>',
+  );
+  assert.equal(body('［＃大見出し］\n序章\n［＃大見出し終わり］'), '<h1><br/></h1><h1>序章</h1>');
+});
+
 test('a blank 見出し leaves the segment label to the next one', () => {
   // Half-width, full-width, and a character no output carries: nothing of the heading shows.
   for (const blank of BLANKS) {

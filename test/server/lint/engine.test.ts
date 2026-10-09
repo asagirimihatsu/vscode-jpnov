@@ -793,6 +793,18 @@ test('shiftJisSafe off reports nothing', () => {
   assert.deepEqual(lint('𠮷😀', { 'jpnov.lint.common.shiftJisSafe': false }), []);
 });
 
+test('shiftJisSafe still reports under a positional finding on the same character (#86)', () => {
+  // 字下げ flags the first character and 句点 the last: they say nothing about the character itself.
+  assert.deepEqual(lint('♥彼は笑った。', { ...SJIS, ...INDENT }), [
+    { code: 'lint.common.shiftJisSafe', text: '♥' },
+    { code: 'lint.narration.indent', text: '♥' },
+  ]);
+  assert.deepEqual(lint('　彼は笑った♥', { ...SJIS, 'jpnov.lint.narration.endPeriod': true }), [
+    { code: 'lint.common.shiftJisSafe', text: '♥' },
+    { code: 'lint.narration.endPeriod', text: '♥' },
+  ]);
+});
+
 test('shiftJisSafe stays quiet where an always-on hygiene rule already reports', () => {
   // All three ship ON, and what they flag has no Shift JIS cell of its own, so without the
   // engine's range de-dup every default-configuration user would see two warnings on one character.

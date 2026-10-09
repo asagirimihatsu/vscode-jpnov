@@ -278,6 +278,14 @@ test('chapterGlue suppression covers the 見出し span/block openers too', () =
     glue('前章', '［＃ここから２字下げ］\n本文', '＊', 8),
     '\n［＃３字下げ］＊\n\n',
   );
+  // Lines that show no text (a directive, a comment, blanks) are passed over on the way to the 見出し (#86).
+  assert.equal(glue('前章', '［＃ここから２字下げ］\n第二章［＃「第二章」は大見出し］\n本文', '＊', 8), '\n');
+  assert.equal(glue('前章', '［＃メモ］\n\n第二章［＃「第二章」は大見出し］\n本文', '＊', 8), '\n');
+  assert.equal(glue('前章', '［＃メモ］\n［＃ここから大見出し］\n第二章\n［＃ここで大見出し終わり］', '＊', 8), '\n');
+  // The same probe reaches a ［＃改ページ］ behind a comment line: the page break separates, no divider.
+  assert.equal(glue('前章', '［＃メモ］\n［＃改ページ］\n次章', '＊', 8), '\n');
+  assert.equal(glue('前章\n［＃改ページ］\n［＃メモ］', '次章', '＊', 8), '\n');
+  assert.equal(glue('前章', '［＃メモ］\nか\n第二章［＃「第二章」は大見出し］', '＊', 8), '\n［＃３字下げ］＊\n\n');
 });
 
 test('chapterGlue suppression at ［＃改ページ］ junctions keeps the blank line', () => {
@@ -411,6 +419,7 @@ test('dual invariant: per-file render + glue == rendering the concatenated .txt'
   const matrix: BookInput[] = [
     two('あ\n\nい', 'か', '＊'), // divider + author blanks
     two('あ', '第二章［＃「第二章」は大見出し］\n本文', '＊'), // heading suppression
+    two('あ', '［＃ここから２字下げ］\n第二章［＃「第二章」は大見出し］\n本文', '＊'), // heading behind a directive line
     two('あ\n［＃改ページ］', '\nか', '＊'), // page-break suppression
     two('あ', 'か'), // no divider configured
     two('あ', 'か', '［＃３字下げ］◇'), // indented divider

@@ -10,6 +10,7 @@
 import { test, mock, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { fullWidthDigits, INDENT_MAX } from '../../src/shared/ast/notation.ts';
 import { FURNITURE_ALIGNS } from '../../src/shared/compiler/chrome.ts';
 import { buildVscode, createMockState, doc, FakeQuickPick, FileType, resetMockState, Uri } from './_vscodeMock.ts';
 
@@ -338,11 +339,13 @@ async function runEditMeta(metaKey: string): Promise<number> {
 /** What the panel's dialog answers: a quick pick's entry (see `FakeQuickPick`) or an input box's text; `undefined` = Esc. */
 type Answer = { readonly picked: unknown } | { readonly typed: string | undefined };
 
-function answer(given: Answer): void {
-  if ('picked' in given) {
-    state.quickPickQueue.push(given.picked);
-  } else {
-    state.inputBoxQueue.push(given.typed);
+function answer(...given: Answer[]): void {
+  for (const one of given) {
+    if ('picked' in one) {
+      state.quickPickQueue.push(one.picked);
+    } else {
+      state.inputBoxQueue.push(one.typed);
+    }
   }
 }
 
@@ -351,7 +354,7 @@ test('editMeta edits the lines of ONE key and saves the book', async () => {
     readonly range: [number, number, number, number];
     readonly newText: string;
   }
-  const cases: readonly (readonly [name: string, text: string, key: string, given: Answer, edits: readonly Planned[]])[] = [
+  const cases: readonly (readonly [name: string, text: string, key: string, given: Answer | readonly Answer[], edits: readonly Planned[]])[] = [
     [
       'an emptied input box deletes the line',
       '---\ntitle: 作品名\nheader: 作品名　一\n---\na.jpnov\n', 'title', { typed: '' },
@@ -388,6 +391,12 @@ test('editMeta edits the lines of ONE key and saves the book', async () => {
       [{ range: [2, 0, 3, 0], newText: '' }],
     ],
     [
+      'an indented divider is written with its 字下げ (full-width digits accepted)',
+      '---\ntitle: 作品名\ndivider: ＊\n---\n', 'divider',
+      [{ picked: { label: '＊', pick: 'preset' } }, { picked: { label: 'Indented', indented: true } }, { typed: '３' }],
+      [{ range: [2, 0, 2, 10], newText: 'divider: ［＃３字下げ］＊' }],
+    ],
+    [
       'a picked alignment replaces the rejected line',
       '---\nfooterAlign: bottom\n---\n', 'footerAlign', { picked: { label: 'Left', description: 'left', value: 'left' } },
       [{ range: [1, 0, 1, 19], newText: 'footerAlign: left' }],
@@ -406,10 +415,24 @@ test('editMeta edits the lines of ONE key and saves the book', async () => {
   ];
   for (const [name, text, key, given, edits] of cases) {
     reseed(text);
-    answer(given);
+    answer(...[given].flat());
     const saves = await runEditMeta(key);
     assert.deepEqual(state.appliedEdits, edits.map((e) => ({ uri: BOOK, ...e })), name);
     assert.equal(saves, 1, name);
+  }
+});
+
+test('the divider 字下げ box takes 1-99 only: the line head is not on offer (#86)', async () => {
+  reseed('---\ntitle: 作品名\ndivider: ＊\n---\n');
+  answer({ picked: { label: '＊', pick: 'preset' } }, { picked: { label: 'Indented', indented: true } }, { typed: undefined });
+  assert.equal(await runEditMeta('divider'), 0);
+  const validate = state.inputBoxCalls.at(-1)?.options?.validateInput;
+  assert.ok(validate);
+  for (const ok of ['1', '３', String(INDENT_MAX), fullWidthDigits(INDENT_MAX), ' 5 ']) {
+    assert.equal(validate(ok), null, ok);
+  }
+  for (const bad of ['0', '００', String(INDENT_MAX + 1), '', 'a', '-1']) {
+    assert.equal(validate(bad), `Enter a number (1-${String(INDENT_MAX)})`, bad);
   }
 });
 

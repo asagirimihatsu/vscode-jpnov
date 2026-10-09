@@ -50,11 +50,12 @@ import type { LineRule, RuleContext } from './types.ts';
  *  - `raw`  — a pure scanner over the DOCUMENT SOURCE, run once per document. For rules that must
  *             see what the prose views drop (annotation interiors — a 左ルビ reading appears in no
  *             view but reaches a built `.txt`); a `line` rule can read
- *             `LintLine.source` for that too.
+ *             `LintLine.source` for that too. `yieldsTo` names the `line` rules whose finding over
+ *             the same characters makes this one redundant (the engine drops it there).
  */
 export type RuleImpl =
   | { readonly kind: 'line'; readonly create: (ctx: RuleContext) => LineRule }
-  | { readonly kind: 'raw'; readonly scan: PreScan };
+  | { readonly kind: 'raw'; readonly scan: PreScan; readonly yieldsTo: readonly CatalogId[] };
 
 function line(create: (ctx: RuleContext) => LineRule): RuleImpl {
   return { kind: 'line', create };
@@ -80,7 +81,8 @@ export const RULE_IMPL: Record<CatalogId, RuleImpl> = {
   noNfd: line(nfdRule),
   noZeroWidth: line(zeroWidthRule),
   noControlChar: line(controlCharRule),
-  shiftJisSafe: { kind: 'raw', scan: shiftJisSafeScan },
+  // What these three flag has no Shift JIS cell of its own: one warning per character, theirs.
+  shiftJisSafe: { kind: 'raw', scan: shiftJisSafeScan, yieldsTo: ['noZeroWidth', 'noNfd', 'noControlChar'] },
   noHalfWidthSpace: line(viewScan(halfWidthSpaceScan, 'prose')),
   noStrayLetter: line(strayLetterRule),
   minusPosition: line(viewScan(minusPositionScan, 'prose')),

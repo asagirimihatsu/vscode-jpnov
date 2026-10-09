@@ -11,6 +11,7 @@ import { posix } from 'node:path';
 
 import * as vscode from 'vscode';
 
+import { INDENT_MAX } from '#/shared/ast/notation.ts';
 import { COVER_TEMPLATE, normalizeFileInput, type FileInputError } from '#/shared/book/create.ts';
 import {
   appendEntries,
@@ -25,6 +26,7 @@ import type { TextReplace } from '#/shared/book/edits.ts';
 import {
   composeDividerValue,
   DIVIDER_PRESETS,
+  entryIdentity,
   isAlignKey,
   parseDividerValue,
   parseJpbook,
@@ -221,7 +223,7 @@ function pickFiles(
   listed: ReadonlySet<string>,
   wording: { placeholder: string; create: string },
 ): Promise<PickedFiles | undefined> {
-  const candidates = onDisk.filter((rel) => !listed.has(rel)).map((rel): FileItem => {
+  const candidates = onDisk.filter((rel) => !listed.has(entryIdentity(rel))).map((rel): FileItem => {
     const { name, dir } = splitRelPath(rel);
     return dir === '' ? { label: name, role: 'existing', rel } : { label: name, description: dir, role: 'existing', rel };
   });
@@ -245,7 +247,7 @@ function pickFiles(
     if (!parsed.ok) {
       return parsed.error === 'empty' ? null : row(raw, 'info', raw, fileNameError(parsed.error));
     }
-    if (listed.has(parsed.rel) && exists.has(parsed.rel)) {
+    if (listed.has(entryIdentity(parsed.rel)) && exists.has(parsed.rel)) {
       return row(parsed.rel, 'info', parsed.rel, vscode.l10n.t('Already in this book'));
     }
     // On disk and unlisted: its candidate row shows through the filter. Parked: listed already.
@@ -541,18 +543,22 @@ async function pickDivider(current: string | undefined): Promise<string | undefi
   if (!posPick.indented) {
     return mark;
   }
+  // IME-friendly: full-width digits are accepted and normalized — the composed annotation is
+  // written in full-width either way. 0 would mean the line head, which the divider never offers.
+  const indentOf = (v: string): number | null => {
+    const digits = v.trim().replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0));
+    const n = Number(digits);
+    return /^[0-9]+$/.test(digits) && n >= 1 && n <= INDENT_MAX ? n : null;
+  };
   const amount = await vscode.window.showInputBox({
     prompt: vscode.l10n.t('Indent (full-width cells)'),
-    value: String(parsed?.indent ?? 3),
-    validateInput: (v) => (/^[0-9０-９]{1,2}$/.test(v.trim()) ? null : vscode.l10n.t('Enter a number (0-99)')),
+    value: String(Math.max(parsed?.indent ?? 3, 1)), // a written ０字下げ prefills the smallest offer
+    validateInput: (v) => (indentOf(v) === null ? vscode.l10n.t('Enter a number (1-{0})', INDENT_MAX) : null),
   });
   if (amount === undefined) {
     return undefined;
   }
-  // IME-friendly: full-width digits are accepted here and normalized — the composed
-  // annotation is written in full-width either way.
-  const digits = amount.trim().replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0));
-  return composeDividerValue(mark, Number(digits));
+  return composeDividerValue(mark, indentOf(amount));
 }
 
 /** The panel's answer for a key: dismissed (`undefined`), or the value to set — `undefined` = back to unwritten. */

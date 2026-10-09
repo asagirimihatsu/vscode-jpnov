@@ -18,7 +18,9 @@
  *
  * A `raw` rule can restate a prose rule's finding over the same characters (an unencodable
  * character that is ALSO decomposed, invisible, …). The prose rule is the more specific one and
- * often carries a fix, so it keeps that range — same-range raw findings are dropped.
+ * often carries a fix, so it keeps that range — the raw finding is dropped where a rule it
+ * `yieldsTo` already reports. Other rules sharing a range (字下げ on a first character) say
+ * something else and hide nothing.
  *
  * Relative imports only (native test loader). The vscode-free invariant holds: nothing here
  * imports `vscode`; `selection` arrives as plain data from `select.ts`.
@@ -35,7 +37,7 @@ import { diagnostic, finding } from '../diagnostics.ts';
 import type { Finding, Fix } from '../diagnostics.ts';
 import { TargetIndex, rangeKey, rangeOf } from '../targets.ts';
 import { RULE_IMPL } from './modules.ts';
-import type { PreScan } from './prescan.ts';
+import type { RuleImpl } from './modules.ts';
 import type { FixSpec, LineRule, ProseUnit } from './types.ts';
 import { walkLines } from './walker.ts';
 
@@ -93,11 +95,13 @@ export function computeLintFindings(doc: TextDocument, ast: Ast, selection: Rule
   const targets = new TargetIndex(ast, text);
   const prose: Finding[] = [];
   const instances: LineRule[] = [];
-  const rawRules: { readonly rule: ActiveRule; readonly scan: PreScan }[] = [];
+  const rawRules: { readonly rule: ActiveRule; readonly impl: Extract<RuleImpl, { kind: 'raw' }> }[] = [];
+  /** `${rule id}\n${range}` of each prose finding, for the raw rules yielding to that rule. */
+  const taken = new Set<string>();
   for (const rule of selection) {
     const impl = RULE_IMPL[rule.id];
     if (impl.kind === 'raw') {
-      rawRules.push({ rule, scan: impl.scan });
+      rawRules.push({ rule, impl });
       continue;
     }
     instances.push(
@@ -109,6 +113,7 @@ export function computeLintFindings(doc: TextDocument, ast: Ast, selection: Rule
           const message = extra?.message ?? { code: rule.code };
           const fix = extra?.fix === undefined ? undefined : materializeFix(extra.fix, doc, targets);
           prose.push(finding(diagnostic(range, message, WARNING), fix));
+          taken.add(`${rule.id}\n${rangeKey(range)}`);
         },
       }),
     );
@@ -125,12 +130,12 @@ export function computeLintFindings(doc: TextDocument, ast: Ast, selection: Rule
     }
   }
 
-  const taken = new Set(prose.map((f) => rangeKey(f.diagnostic.range)));
   const raw: Finding[] = [];
-  for (const { rule, scan } of rawRules) {
-    for (const span of scan(text, rule.options)) {
+  for (const { rule, impl } of rawRules) {
+    for (const span of impl.scan(text, rule.options)) {
       const range = rangeOf(doc, span);
-      if (taken.has(rangeKey(range))) {
+      const key = rangeKey(range);
+      if (impl.yieldsTo.some((id) => taken.has(`${id}\n${key}`))) {
         continue;
       }
       raw.push(finding(diagnostic(range, span.message ?? { code: rule.code }, WARNING), undefined));
