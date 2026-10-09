@@ -3,6 +3,7 @@
  * new-book prompt): one typed path becomes a root-relative `.jpnov` / `.jpbook` entry. vscode-free.
  */
 import { isAbsoluteLocation } from '../config/validate.ts';
+import { pathSegments } from './jpbook.ts';
 
 /**
  * Starter content of a cover file created from the panel: README's 応募用の表紙 sample,
@@ -18,7 +19,8 @@ export type FileInputError = 'empty' | 'absolute' | 'escapes' | 'badName';
 
 /**
  * A typed path (`src/my-chapter`, either separator) normalized into a root-relative file
- * path: segments collapsed, `suffix` appended when missing, NFC. Rejects what the `.jpbook`
+ * path: segments collapsed, `suffix` appended when missing (one already typed counts in any
+ * letter case and stays as typed), NFC. Rejects what the `.jpbook`
  * grammar or a filesystem would: absolute/home/scheme locations, `..` segments, and
  * per-segment the Windows-forbidden character set or leading/trailing dots and
  * whitespace (dotfiles would be invisible to the chapter picker).
@@ -34,7 +36,7 @@ export function normalizeFileInput(
   if (trimmed.startsWith('~') || isAbsoluteLocation(trimmed)) {
     return { ok: false, error: 'absolute' };
   }
-  const segments = trimmed.split(/[\\/]/u).filter((s) => s !== '' && s !== '.');
+  const segments = pathSegments(trimmed);
   if (segments.some((s) => s === '..')) {
     return { ok: false, error: 'escapes' };
   }
@@ -42,7 +44,8 @@ export function normalizeFileInput(
   if (last === undefined) {
     return { ok: false, error: 'empty' };
   }
-  const stem = last.endsWith(suffix) ? last.slice(0, -suffix.length) : last;
+  const suffixed = last.toLowerCase().endsWith(suffix);
+  const stem = suffixed ? last.slice(0, -suffix.length) : last;
   if (stem === '') {
     return { ok: false, error: 'empty' };
   }
@@ -51,5 +54,5 @@ export function normalizeFileInput(
       return { ok: false, error: 'badName' };
     }
   }
-  return { ok: true, rel: [...segments, `${stem}${suffix}`].join('/') };
+  return { ok: true, rel: [...segments, suffixed ? last : last + suffix].join('/') };
 }

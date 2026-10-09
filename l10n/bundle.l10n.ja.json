@@ -46,7 +46,7 @@
   "Indented": "字下げ",
   "Position of the divider in its line": "区切り記号の位置",
   "Indent (full-width cells)": "字下げの字数",
-  "Enter a number (0-99)": "0〜99 の数値を入力してください",
+  "Enter a number (1-{0})": "1〜{0} の数値を入力してください",
   "Pick chapter files to add, or type a name to create a new one": "追加する章ファイルを選択するか、新しい章のファイル名を入力",
   "Pick cover page files to add, or type a name to create a new one": "追加する表紙ファイルを選択するか、新しい表紙のファイル名を入力",
   "Create a new chapter": "新しい章を作成",

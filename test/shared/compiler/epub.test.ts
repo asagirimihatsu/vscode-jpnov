@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { strFromU8, unzipSync } from 'fflate';
 
 import type { BookInput } from '../../../src/shared/compiler/document.ts';
-import { epubMembers } from '../../../src/shared/compiler/epub.ts';
+import { chapterStem, epubMembers } from '../../../src/shared/compiler/epub.ts';
 import { ocfZip } from '../../../src/shared/compiler/ocf.ts';
 import { BLANKS } from '../_kana.ts';
 import { assertWellFormedXml, assertXmlChars } from '../xml.ts';
@@ -261,4 +261,10 @@ test('CRLF chapters yield the same members as their LF twins', () => {
     files: TWO_CHAPTERS.files.map((f) => ({ ...f, src: f.src.replaceAll('\n', '\r\n') })),
   };
   assert.deepEqual(members(crlf), members(TWO_CHAPTERS));
+});
+
+test('chapterStem drops the directories and the .jpnov extension in any letter case (#86)', () => {
+  assert.equal(chapterStem('vol1/第一章.jpnov'), '第一章');
+  assert.equal(chapterStem('第一章.JPNOV'), '第一章');
+  assert.equal(chapterStem('readme'), 'readme');
 });

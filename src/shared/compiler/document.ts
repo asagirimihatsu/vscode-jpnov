@@ -7,7 +7,7 @@ import type { DashMode, KinsokuMode, LinePitch } from '../config/types.ts';
 import type { BuildChrome } from './chrome.ts';
 import { emrProbe, stylesheet } from './css.ts';
 import type { PaperOrientation, PaperSize } from './geometry.ts';
-import { buildRows, paginate, pagesToHtml, rowShape, type DisplayLine, type RenderPage, type Row } from './layout.ts';
+import { buildRows, paginate, pagesToHtml, type DisplayLine, type RenderPage, type Row } from './layout.ts';
 
 /** 400字詰め原稿用紙 (20 字 × 20 行): the grid ［＃ここに「原稿用紙換算枚数」の値を表示］
  *  re-flows the body on. Tests derive from this, never write 20. */
@@ -41,35 +41,38 @@ export interface BookInput {
 /** A book with its title decided: an EPUB must carry one (dc:title). */
 export type TitledBook = BookInput & { readonly title: string };
 
-/** The first (or last) line of a chapter holding anything but white space; null when none. */
-function boundaryLine(ast: Ast, edge: 'first' | 'last'): Line | null {
-  const lines = edge === 'first' ? ast.lines : ast.lines.toReversed();
-  return lines.find((line) => line.syntax.some((node) => node.kind !== 'text' || node.text.trim() !== '')) ?? null;
+/** True iff a 見出し opens on this line (block or inline form). */
+function opensHeading(line: Line): boolean {
+  return line.syntax.some((node) => node.kind === 'headingSpanStart');
 }
 
-/**
- * True iff the chapter opens with a 見出し: its first non-blank line is a heading, or paints
- * nothing and opens one.
- */
+/** Only comments and white space: nothing of the line shows (a lone directive has no content at all). */
+function blankContent(line: Line): boolean {
+  return line.content.every((item) => item.kind === 'comment' || (item.kind === 'chars' && item.text.trim() === ''));
+}
+
+/** A line that shows nothing at a chapter edge: no ［＃改ページ］, no 見出し on or opened by it, blank content. */
+function showsNothing(line: Line): boolean {
+  return !line.pageBreak && line.heading === undefined && !opensHeading(line) && blankContent(line);
+}
+
+/** The first (or last) line of a chapter that shows something; null when none does. */
+function edgeLine(ast: Ast, edge: 'first' | 'last'): Line | null {
+  const shows = (line: Line): boolean => !showsNothing(line);
+  return (edge === 'first' ? ast.lines.find(shows) : ast.lines.findLast(shows)) ?? null;
+}
+
+/** True iff the chapter opens with a 見出し: its first shown line is a heading, or paints nothing
+ *  and opens one (a leading ［＃ここから２字下げ］ or comment line is passed over). */
 function opensWithHeading(ast: Ast): boolean {
-  const line = boundaryLine(ast, 'first');
-  if (line === null) {
-    return false;
-  }
-  const shape = rowShape(line, true);
-  if (shape.line) {
-    return line.heading !== undefined;
-  }
-  return !shape.pagebreak && line.syntax.some((node) => node.kind === 'headingSpanStart');
+  const line = edgeLine(ast, 'first');
+  return line !== null && (line.heading !== undefined || (!line.pageBreak && opensHeading(line)));
 }
 
 /** True iff the chapter's junction side reaches a ［＃改ページ］ before (first) / after (last) content. */
 function pageBreakAt(ast: Ast, edge: 'first' | 'last'): boolean {
-  const line = boundaryLine(ast, edge);
-  if (line === null) {
-    return false;
-  }
-  return edge === 'first' ? !rowShape(line, true).line && line.pageBreak : line.pageBreak;
+  const line = edgeLine(ast, edge);
+  return line !== null && line.pageBreak && (edge === 'last' || blankContent(line));
 }
 
 /**

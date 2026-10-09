@@ -10,6 +10,7 @@
 import {
   COVER_KEY,
   coverPathOf,
+  entryIdentity,
   entryPathOf,
   FRONT_MATTER_KEYS,
   isCover,
@@ -174,9 +175,10 @@ export function entryKeyOf(pl: ParsedLine): string {
   return entryPathOf(pl)?.value ?? pl.value;
 }
 
-/** Paths already in `list` (a cover item's path excludes its marker) — the set GUI adds dedupe against. */
+/** The {@link entryIdentity} of each path already in `list` (a cover item's path excludes its marker) —
+ *  the set GUI adds dedupe against, by the same identity. */
 export function listedEntries(lines: readonly ParsedLine[], list: EntryList): Set<string> {
-  return new Set(lines.filter(isEntryOf(list)).map(entryKeyOf));
+  return new Set(lines.filter(isEntryOf(list)).map((pl) => entryIdentity(entryKeyOf(pl))));
 }
 
 /**
@@ -189,7 +191,7 @@ export function appendEntries(text: string, list: EntryList, rels: readonly stri
   const parsed = parseJpbook(text);
   const eol = eolOf(text);
   const listed = listedEntries(parsed.lines, list);
-  const fresh = rels.filter((rel) => !listed.has(rel));
+  const fresh = rels.filter((rel) => !listed.has(entryIdentity(rel)));
   if (fresh.length === 0) {
     return null;
   }

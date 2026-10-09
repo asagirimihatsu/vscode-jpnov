@@ -46,7 +46,7 @@ function bookIdentifier(outRel: string): string {
  *  has no 見出し; a blank one gives way to the spine id. */
 export function chapterStem(fileName: string): string {
   const base = fileName.split('/').pop() ?? fileName;
-  return base.endsWith('.jpnov') ? base.slice(0, -'.jpnov'.length) : base;
+  return base.replace(/\.jpnov$/i, '');
 }
 
 /** `s` as the package shows it, or null when nothing of it would show. Metadata never passes

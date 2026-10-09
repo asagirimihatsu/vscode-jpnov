@@ -100,8 +100,8 @@ function bindInsepRuns(units: readonly Unit[]): Unit[] {
  * breaks collapse (no empty segment — mirroring flowToHtml's lazily-opened segments). A line
  * row becomes `<p>` — or `<hN>` for a 見出し row (大=1→h1; one hN PER ROW: a block-form
  * heading spans rows, but Row carries no form, and merging could fuse two adjacent independent
- * headings). A row with no real cells (blank or comment-only line) becomes `<p>…<br/></p>` so
- * the blank column survives reader margin handling. `charsPerLine` caps the 字下げ
+ * headings). A row with no real cells (blank or comment-only line) gets a `<br/>` inside its
+ * `<p>` or `<hN>` so the blank column survives reader margin handling. `charsPerLine` caps the 字下げ
  * ({@link effectiveIndent}). `used` is the on-demand class sink.
  * `dash` translates the configured dash inside nav labels too — the body units arrive already
  * translated from {@link buildRows}.
@@ -136,19 +136,14 @@ export function reflowSegments(
       used.add(`indent-${String(indent)}`);
     }
     const inner = emitUnits(bindInsepRuns(row.units.map(reflowUnit)), used);
-    if (row.heading !== undefined) {
-      if (heading === null) {
-        const raw = row.units.map((u) => u.text).join('');
-        const text = want === undefined ? raw : raw.replaceAll(want, DASH_GLYPH);
-        heading = nonBlank(text);
-      }
-      const tag = `h${String(row.heading)}`;
-      body += `<${tag}${classAttr}>${inner}</${tag}>`;
-    } else if (row.units.every((u) => u.cells === 0)) {
-      body += `<p${classAttr}>${inner}<br/></p>`;
-    } else {
-      body += `<p${classAttr}>${inner}</p>`;
+    if (row.heading !== undefined && heading === null) {
+      const raw = row.units.map((u) => u.text).join('');
+      const text = want === undefined ? raw : raw.replaceAll(want, DASH_GLYPH);
+      heading = nonBlank(text);
     }
+    const tag = row.heading === undefined ? 'p' : `h${String(row.heading)}`;
+    const br = row.units.every((u) => u.cells === 0) ? '<br/>' : '';
+    body += `<${tag}${classAttr}>${inner}${br}</${tag}>`;
   }
   close();
   return segments;

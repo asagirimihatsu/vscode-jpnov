@@ -28,15 +28,15 @@ test('diagnoseJpbook flags missing / directory / backslash / non-.jpnov as Error
   await using ws = await makeTmpWorkspace();
   await writeUnder(ws.dir, 'src/ok.jpnov', 'x');
   await writeUnder(ws.dir, 'adir.jpnov/keep', 'x'); // makes adir.jpnov a directory
-  const text = ['src/ok.jpnov', 'missing.jpnov', 'adir.jpnov', 'sub\\bad.jpnov', 'note.md', 'src/ok.jpnov'].join('\n');
+  const text = ['src/ok.jpnov', 'missing.jpnov', 'adir.jpnov', 'sub\\bad.jpnov', 'note.md', 'src/ok.jpnov', './src/ok.jpnov'].join('\n');
 
   const diags = await diagnoseJpbook(ws.uri, parseJpbook(text));
   // The localized text lives client-side; each diagnostic carries its {code,args} in `.data`.
   const codes = diags.map((d) => (d.data as { code: string }).code);
 
-  assert.equal(diags.length, 5, 'src/ok.jpnov (first) produces no diagnostic');
+  assert.equal(diags.length, 6, 'src/ok.jpnov (first) produces no diagnostic');
   assert.equal(diags.filter((d) => d.severity === DiagnosticSeverity.Error).length, 4);
-  assert.equal(diags.filter((d) => d.severity === DiagnosticSeverity.Warning).length, 1);
+  assert.equal(diags.filter((d) => d.severity === DiagnosticSeverity.Warning).length, 2); // the repeat, and its ./ spelling
   assert.ok(codes.includes('jpbook.fileNotFound')); // missing.jpnov
   assert.ok(codes.includes('jpbook.entryIsDirectory')); // adir.jpnov
   assert.ok(codes.includes('jpbook.backslashSeparator')); // sub\bad.jpnov

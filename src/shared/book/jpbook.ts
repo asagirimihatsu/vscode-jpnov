@@ -217,6 +217,26 @@ export function colonIndex(value: string): number {
 
 const FENCE = '---';
 
+/** True iff `name` carries the manuscript extension, in any letter case (as the editor and the
+ *  chapter picker match it). */
+export function hasJpnovExt(name: string): boolean {
+  return /\.jpnov$/i.test(name);
+}
+
+/** The segments of a relative path, either separator; `.` and empty ones (`a//b`, a trailing `/`) dropped. */
+export function pathSegments(path: string): string[] {
+  return path.split(/[\\/]+/).filter((seg) => seg !== '' && seg !== '.');
+}
+
+/**
+ * The identity of an entry path: `./` and empty segments collapsed, NFC. `./a.jpnov` and
+ * `a.jpnov` name one file, so they are one entry; the value as written stays what the line
+ * shows and the build reads.
+ */
+export function entryIdentity(path: string): string {
+  return pathSegments(path.normalize('NFC')).join('/');
+}
+
 /**
  * Parses raw `.jpbook` text into one {@link ParsedLine} per source line plus the collected
  * {@link JpbookMeta}. CRLF-safe; blank lines are skipped everywhere; interior whitespace is
@@ -224,12 +244,22 @@ const FENCE = '---';
  * line; inside it, duplicate keys keep the FIRST valid line (an empty value included), and an
  * unclosed block turns the opening fence into an Error (the remaining lines still parse as
  * metadata). A `cover` list survives blank lines and closes at any other metadata line or the
- * fence. Chapter and cover paths must be backslash-free `.jpnov`; later exact repeats are
- * `'duplicate'`/`'coverDuplicate'`, the two lists deduping independently. Never throws.
+ * fence. Chapter and cover paths must be backslash-free `.jpnov` (any letter case); later
+ * repeats of a path (by {@link entryIdentity}) are `'duplicate'`/`'coverDuplicate'`, the two lists
+ * deduping independently. Never throws.
  */
 export function parseJpbook(text: string): ParsedJpbook {
   const seen = new Set<string>();
   const seenCovers = new Set<string>();
+  /** Records `path` in `seen` by its identity; true when it was there already. */
+  const repeated = (seen: Set<string>, path: string): boolean => {
+    const key = entryIdentity(path);
+    if (seen.has(key)) {
+      return true;
+    }
+    seen.add(key);
+    return false;
+  };
   // Keys a valid line already took: an empty `title:` takes its key without filling `meta`.
   const takenKeys = new Set<MetaKey>();
   const lines: ParsedLine[] = [];
@@ -248,14 +278,10 @@ export function parseJpbook(text: string): ParsedJpbook {
     if (path.includes('\\')) {
       return { error: { code: 'jpbook.backslashSeparator', args: [line] } };
     }
-    if (!path.endsWith('.jpnov')) {
+    if (!hasJpnovExt(path)) {
       return { error: { code: 'jpbook.notJpnov', args: [line] } };
     }
-    if (seenCovers.has(path)) {
-      return 'coverDuplicate';
-    }
-    seenCovers.add(path);
-    return 'coverEntry';
+    return repeated(seenCovers, path) ? 'coverDuplicate' : 'coverEntry';
   };
 
   const coverItemKind = (value: string): JpbookLineKind => {
@@ -315,14 +341,10 @@ export function parseJpbook(text: string): ParsedJpbook {
     if (value.includes('\\')) {
       return { error: { code: 'jpbook.backslashSeparator', args: [value] } };
     }
-    if (!value.endsWith('.jpnov')) {
+    if (!hasJpnovExt(value)) {
       return { error: { code: 'jpbook.notJpnov', args: [value] } };
     }
-    if (seen.has(value)) {
-      return 'duplicate';
-    }
-    seen.add(value);
-    return 'ok';
+    return repeated(seen, value) ? 'duplicate' : 'ok';
   };
 
   const rawLines = text.split('\n');
@@ -477,7 +499,7 @@ export function composeDividerValue(mark: string, indent: number | null): string
  * caller via the output-path map).
  */
 export function jpbookOutRel(jpbookRel: string): string {
-  const segments = jpbookRel.split(/[\\/]+/).filter((seg) => seg !== '' && seg !== '.');
+  const segments = pathSegments(jpbookRel);
   const last = (segments.pop() ?? '').replace(/\.jpbook$/i, '');
   if (!(last === 'index' && segments.length > 0)) {
     segments.push(last);
@@ -529,7 +551,7 @@ export function completeEntryLine(
       const lower = entry.name.toLowerCase();
       return !entry.name.startsWith('.') &&
         !lower.endsWith('.jpbook') &&
-        (entry.isDir || lower.endsWith('.jpnov')) &&
+        (entry.isDir || hasJpnovExt(entry.name)) &&
         lower.startsWith(seg);
     })
     .slice(0, cap)

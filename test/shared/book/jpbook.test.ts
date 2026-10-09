@@ -7,6 +7,7 @@ import {
   composeDividerValue,
   COVER_ITEM_MARKS,
   coverPathOf,
+  entryIdentity,
   firstErrorOf,
   FRONT_MATTER_KEYS,
   isCover,
@@ -86,8 +87,23 @@ test('parseJpbook rejects non-.jpnov entries', () => {
   assert.deepEqual(l.kind, { error: { code: 'jpbook.notJpnov', args: ['note.md'] } });
 });
 
+test('parseJpbook takes the .jpnov extension in any letter case (#86)', () => {
+  assert.deepEqual(kinds('a.JPNOV\nb.Jpnov'), ['ok', 'ok']);
+  assert.deepEqual(kinds('---\ncover:\n- c.JPNOV\n---\n'), ['fence', 'cover', 'coverEntry', 'fence', 'blank']);
+});
+
 test('parseJpbook marks later exact repeats as duplicate; first stays ok', () => {
   assert.deepEqual(kinds('a.jpnov\nb.jpnov\na.jpnov'), ['ok', 'ok', 'duplicate']);
+});
+
+test('parseJpbook dedupes by entryIdentity: ./, empty segments and NFC name one file (#86)', () => {
+  assert.deepEqual(kinds('a.jpnov\n./a.jpnov\nb//c.jpnov\nb/c.jpnov\nが.jpnov\nが.jpnov'), [
+    'ok', 'duplicate', 'ok', 'duplicate', 'ok', 'duplicate',
+  ]);
+  assert.deepEqual(kinds('---\ncover:\n- c.jpnov\n- ./c.jpnov\n---\n'), ['fence', 'cover', 'coverEntry', 'coverDuplicate', 'fence', 'blank']);
+  // The line keeps its value as written; only the identity folds.
+  assert.equal(parseJpbook('./a.jpnov').lines[0]?.value, './a.jpnov');
+  assert.equal(entryIdentity('./b//c.jpnov'), 'b/c.jpnov');
 });
 
 // --- parseJpbook: front matter ----------------------------------------------
